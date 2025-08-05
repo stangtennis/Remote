@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase Remote Desktop Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #3ECF8E;
+        }
+        .container {
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #3ECF8E;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #32A874;
+        }
+        #output {
+            background-color: #f4f4f4;
+            padding: 15px;
+            border-radius: 5px;
+            min-height: 100px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>Supabase Remote Desktop Demo</h1>
+    
+    <div class="container">
+        <h2>Configuration</h2>
+        <form id="configForm">
+            <div>
+                <label for="supabaseUrl">Supabase URL:</label>
+                <input type="text" id="supabaseUrl" style="width: 100%; margin: 5px 0;" 
+                    placeholder="https://your-project-ref.supabase.co">
+            </div>
+            <div>
+                <label for="supabaseKey">Supabase Anon Key:</label>
+                <input type="text" id="supabaseKey" style="width: 100%; margin: 5px 0;" 
+                    placeholder="your-anon-key">
+            </div>
+            <div>
+                <label for="tableName">Table Name:</label>
+                <input type="text" id="tableName" style="width: 100%; margin: 5px 0;" 
+                    placeholder="your_table">
+            </div>
+            <button type="button" id="connectBtn">Test Connection</button>
+        </form>
+    </div>
+
+    <div class="container">
+        <h2>Output</h2>
+        <div id="output">Results will appear here...</div>
+    </div>
+
+    <script>
+        document.getElementById('connectBtn').addEventListener('click', async function() {
+            const outputDiv = document.getElementById('output');
+            const supabaseUrl = document.getElementById('supabaseUrl').value;
+            const supabaseKey = document.getElementById('supabaseKey').value;
+            const tableName = document.getElementById('tableName').value;
+            
+            if (!supabaseUrl || !supabaseKey || !tableName) {
+                outputDiv.innerText = 'Error: Please fill in all fields';
+                return;
+            }
+            
+            try {
+                outputDiv.innerText = 'Connecting to Supabase...';
+                
+                // Create a Supabase client
+                const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+                
+                // Test the connection
+                const { data, error } = await supabase.from(tableName).select('*').limit(5);
+                
+                if (error) {
+                    outputDiv.innerText = `Error connecting to Supabase:\n${JSON.stringify(error, null, 2)}`;
+                } else {
+                    outputDiv.innerText = `Successfully connected to Supabase!\nData:\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (err) {
+                outputDiv.innerText = `Unexpected error:\n${err.message}`;
+                console.error(err);
+            }
+        });
+    </script>
+</body>
+</html>
