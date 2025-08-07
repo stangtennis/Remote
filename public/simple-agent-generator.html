@@ -213,29 +213,108 @@ class RealRemoteAgent {
     }
 
     async registerDevice() {
-        console.log('📝 Registering device...');
-        const deviceInfo = {
-            device_id: this.deviceId,
-            device_name: this.deviceName,
-            organization_id: this.orgId,
-            platform: this.platform,
-            status: 'online',
-            last_seen: new Date().toISOString(),
-            capabilities: {
-                screen_capture: true,
-                input_control: true,
-                file_transfer: false
-            }
-        };
-
         try {
+            // Initialize Supabase client if not already initialized
+            if (!this.supabase) {
+                this.supabase = createClient(this.supabaseUrl, this.supabaseKey);
+                console.log('✅ Supabase client initialized');
+            }
+            
+            // Generate a unique access key if needed
+            const accessKey = require('crypto').randomBytes(16).toString('hex');
+            
+            // Create device data that matches the schema
+            const deviceData = {
+                device_id: this.deviceId, // Use our generated device ID
+                device_name: this.deviceName,
+                device_type: 'desktop',
+                operating_system: \`${os.platform()} ${os.release()}\`,
+                ip_address: this.getLocalIP(),
+                status: 'online',
+                last_seen: new Date().toISOString(),
+                access_key: accessKey,
+                metadata: JSON.stringify({
+                    hostname: os.hostname(),
+                    platform: os.platform(),
+                    release: os.release(),
+                    arch: os.arch(),
+                    cpus: os.cpus().length,
+                    memory: Math.round(os.totalmem() / (1024 * 1024 * 1024)) + 'GB'
+                })
+            };
+            
+            console.log('📝 Registering device with data:', JSON.stringify(deviceData, null, 2));
+            
+            // First, try to update device presence
+            const { data: presenceData, error: presenceError } = await this.supabase
+                .from('device_presence')
+                .upsert({
+                    device_id: this.deviceId,
+                    status: 'online',
+                    last_seen: new Date().toISOString(),
+                    connection_info: JSON.stringify({
+                        ip: this.getLocalIP(),
+                        connection_type: 'supabase_realtime'
+                    }),
+                    metadata: JSON.stringify({
+                        agent_version: '4.1.0',
+                        global_edition: true
+                    })
+                })
+                .select();
+                
+            if (presenceError) {
+                console.warn('⚠️ Device presence update failed:', presenceError.message);
+                // Continue anyway - might be a permissions issue but we can still try the device registration
+            } else {
+                console.log('✅ Device presence updated successfully');
+            }
+            
+            // Then register/update the device in remote_devices table
             const { data, error } = await this.supabase
-                .from('devices')
-                .upsert(deviceInfo, { onConflict: 'device_id' });
-            if (error) throw error;
-            console.log('✅ Device registered');
+                .from('remote_devices')
+                .upsert({
+                    device_id: this.deviceId,
+                    device_name: this.deviceName,
+                    device_type: 'desktop',
+                    operating_system: \`${os.platform()} ${os.release()}\`,
+                    ip_address: this.getLocalIP(),
+                    status: 'online',
+                    last_seen: new Date().toISOString(),
+                    metadata: deviceData.metadata
+                })
+                .select();
+            
+            if (error) {
+                console.error('❌ Failed to register device:', error.message);
+                console.warn('⚠️ Registration response:', error.status || 'Unknown');
+                
+                // If we get a 401, it might be an authentication issue with the table
+                // Let's try a simpler approach with just a GET request to verify connectivity
+                const testResponse = await this.supabase
+                    .from('remote_devices')
+                    .select('count')
+                    .limit(1);
+                    
+                if (testResponse.error) {
+                    console.error('❌ Test query also failed:', testResponse.error.message);
+                } else {
+                    console.log('✅ Test query succeeded, but registration failed. Likely a schema mismatch.');
+                }
+                
+                // Continue anyway - the presence table update might be sufficient
+                console.log('⚠️ Continuing with Supabase Realtime connection despite registration issues');
+            } else {
+                console.log('✅ Device registered successfully with Supabase');
+            }
+            
+            return data || { device_id: this.deviceId };
+            
         } catch (error) {
-            console.error('❌ Registration failed:', error);
+            console.error('❌ Error in device registration:', error.message);
+            console.warn('⚠️ Registration response:', error.status || 'Unknown');
+            console.log('⚠️ Continuing with Supabase Realtime connection despite registration issues');
+            return { device_id: this.deviceId };
         }
     }
 

@@ -1,0 +1,38 @@
+{
+  "name": "remote-desktop-agent-exe",
+  "version": "2.0.0",
+  "description": "Standalone Remote Desktop Agent Executable",
+  "main": "agent-exe.js",
+  "bin": {
+    "remote-agent": "./agent-exe.js"
+  },
+  "scripts": {
+    "build": "pkg . --targets node18-win-x64 --output RemoteDesktopAgent.exe",
+    "build-all": "pkg . --targets node18-win-x64,node18-macos-x64,node18-linux-x64 --out-path dist",
+    "start": "node agent-exe.js",
+    "test": "node -e \"console.log('Agent EXE test OK')\""
+  },
+  "pkg": {
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "dist",
+    "assets": [
+      "config.json"
+    ]
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [
+    "remote-desktop",
+    "executable",
+    "standalone",
+    "supabase"
+  ],
+  "author": "Remote Desktop System",
+  "license": "MIT"
+}

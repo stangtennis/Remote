@@ -1,0 +1,11 @@
+{
+  "supabaseUrl": "https://ptrtibzwokjcjjxvjpin.supabase.co",
+  "supabaseKey": "REDACTED_JWT",
+  "websocketHost": "localhost",
+  "websocketPort": 3001,
+  "heartbeatInterval": 30000,
+  "reconnectDelay": 5000,
+  "organizationId": "default",
+  "autoStart": true,
+  "showConsole": true
+}
