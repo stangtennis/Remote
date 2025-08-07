@@ -1,9 +1,9 @@
 // Import the Supabase client
 const { createClient } = require('@supabase/supabase-js');
 
-// Supabase project URL and anon key (replace with your own values)
-const supabaseUrl = 'YOUR_SUPABASE_PROJECT_URL';
-const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
+// Supabase project URL and anon key
+const supabaseUrl = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
+const supabaseKey = 'sb_publishable_OwJ04BrJ6gZZ57fSeT-q5Q_mSsVaNia';
 
 // Create a Supabase client
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -11,8 +11,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Example function to test the connection
 async function testConnection() {
   try {
-    // You'll need to replace 'your_table' with an actual table in your Supabase project
-    const { data, error } = await supabase.from('your_table').select('*').limit(5);
+    // Query the remote_users table
+    const { data, error } = await supabase.from('remote_users').select('*').limit(5);
     
     if (error) {
       console.error('Error connecting to Supabase:', error);
@@ -25,8 +25,8 @@ async function testConnection() {
   }
 }
 
-// Uncomment to test the connection
-// testConnection();
+// Test the connection
+testConnection();
 
 // Export the Supabase client for use in other files
 module.exports = { supabase };

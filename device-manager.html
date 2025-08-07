@@ -210,20 +210,25 @@
 
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script>
-        console.log('🖥️ Supabase-hosted Device Manager loaded');
+        console.log('Supabase-hosted Device Manager loaded');
         
         // Initialize Supabase client
         const SUPABASE_URL = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjI5NzI4NjQsImV4cCI6MjAzODU0ODg2NH0.YEUuAhBnrCJaOFjXlzOIkqvgFuAoNjvXJWaVNFBNOPE';
         
         const { createClient } = supabase;
         const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         
-        let devices = [];
-        let currentFilter = 'all';
-        let searchTerm = '';
+        console.log('Supabase client initialized');
         
-        // DOM elements
+        // Variables
+        let devices = [];
+        let searchTerm = '';
+        let currentFilter = 'all';
+        let activeChannels = {}; // Track active Realtime channels
+        let activeDeviceId = null; // Currently selected device for control
+        
+        // DOM Elements
         const loadingState = document.getElementById('loadingState');
         const devicesGrid = document.getElementById('devicesGrid');
         const emptyState = document.getElementById('emptyState');
@@ -234,7 +239,7 @@
         // Load devices from Supabase
         async function loadDevices() {
             try {
-                console.log('📡 Loading devices from Supabase...');
+                console.log('Loading devices from Supabase...');
                 
                 const { data, error } = await supabaseClient
                     .from('remote_devices')
@@ -242,19 +247,19 @@
                     .order('last_seen', { ascending: false });
                 
                 if (error) {
-                    console.error('❌ Error loading devices:', error);
+                    console.error('Error loading devices:', error);
                     showEmptyState();
                     return;
                 }
                 
                 devices = data || [];
-                console.log(`✅ Loaded ${devices.length} devices`);
+                console.log(`Loaded ${devices.length} devices`);
                 
                 updateStats();
                 renderDevices();
                 
             } catch (err) {
-                console.error('❌ Connection error:', err);
+                console.error('Connection error:', err);
                 showEmptyState();
             }
         }
@@ -322,7 +327,7 @@
                     <div class="device-header">
                         <div class="device-name">${device.device_name || 'Unknown Device'}</div>
                         <div class="status-badge ${isOnline ? 'online' : 'offline'}">
-                            ${isOnline ? '🟢 Online' : '🔴 Offline'}
+                            ${isOnline ? 'Online' : 'Offline'}
                         </div>
                     </div>
                     
@@ -347,13 +352,13 @@
                     
                     <div class="device-actions">
                         <button class="action-btn btn-primary" data-action="connect" data-device-id="${device.id}" ${!isOnline ? 'disabled' : ''}>
-                            🖥️ Connect
+                            Connect
                         </button>
                         <button class="action-btn btn-secondary" data-action="info" data-device-id="${device.id}">
-                            ℹ️ Info
+                            Info
                         </button>
                         <button class="action-btn btn-danger" data-action="remove" data-device-id="${device.id}">
-                            🗑️ Remove
+                            Remove
                         </button>
                     </div>
                 </div>
@@ -386,10 +391,52 @@
             }
         }
         
-        // Connect to device
-        function connectToDevice(device) {
-            console.log('🖥️ Connecting to device:', device.device_name);
-            alert(`🖥️ Connecting to ${device.device_name}...\n\nThis would open a remote desktop session in a production system.`);
+        // Connect to device using Supabase Realtime
+        async function connectToDevice(device) {
+            console.log('Connecting to device:', device.device_name);
+            
+            // Set as active device
+            activeDeviceId = device.id;
+            
+            try {
+                // Create a unique session ID
+                const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+                
+                // Subscribe to device's response channel if not already subscribed
+                if (!activeChannels[device.id]) {
+                    const channelName = `device-${device.id}`;
+                    
+                    activeChannels[device.id] = supabaseClient
+                        .channel(channelName)
+                        .on('broadcast', { event: 'response' }, (payload) => {
+                            console.log('Received response from device:', payload);
+                            handleDeviceResponse(payload.payload);
+                        })
+                        .subscribe((status) => {
+                            console.log(`Channel ${channelName} status:`, status);
+                        });
+                        
+                    console.log(`Subscribed to device channel: ${channelName}`);
+                }
+                
+                // Send connect command via Supabase Realtime
+                await sendDeviceCommand(device.id, {
+                    type: 'start_session',
+                    sessionId: sessionId,
+                    controllerInfo: {
+                        id: 'admin_' + Math.random().toString(36).substring(2, 9),
+                        name: 'Admin Dashboard',
+                        timestamp: Date.now()
+                    }
+                });
+                
+                // Open remote control window
+                window.open(`remote-control.html?deviceId=${device.id}&sessionId=${sessionId}`, '_blank');
+                
+            } catch (error) {
+                console.error('Error connecting to device:', error);
+                alert(`Failed to connect to ${device.device_name}. Error: ${error.message}`);
+            }
         }
         
         // Show device info
@@ -457,32 +504,131 @@ Device Information:
             });
         });
         
-        // Real-time updates
+        // Handle device responses from Supabase Realtime
+        function handleDeviceResponse(response) {
+            console.log('📥 Device response:', response.type);
+            
+            switch (response.type) {
+                case 'screen_frame':
+                    // Would handle screen frame updates in remote control window
+                    console.log('📺 Received screen frame from device');
+                    break;
+                    
+                case 'heartbeat':
+                    console.log('💓 Received heartbeat from device:', response.deviceName);
+                    // Update device status without full reload
+                    updateDeviceStatus(response.deviceId, 'online');
+                    break;
+                    
+                case 'system_info':
+                    console.log('ℹ️ Received system info from device:', response.data);
+                    break;
+                    
+                default:
+                    console.log('📩 Received response:', response);
+            }
+        }
+        
+        // Send command to device via Supabase Realtime
+        async function sendDeviceCommand(deviceId, command) {
+            try {
+                const channelName = `device-${deviceId}`;
+                
+                // Add metadata to command
+                const commandPayload = {
+                    ...command,
+                    sender: 'admin_dashboard',
+                    timestamp: Date.now()
+                };
+                
+                // Send command via Supabase Realtime broadcast
+                await supabaseClient
+                    .channel(channelName)
+                    .send({
+                        type: 'broadcast',
+                        event: 'command',
+                        payload: commandPayload
+                    });
+                    
+                console.log('📤 Command sent to device:', command.type);
+                return true;
+            } catch (error) {
+                console.error('❌ Error sending command:', error);
+                throw error;
+            }
+        }
+        
+        // Update device status without full reload
+        function updateDeviceStatus(deviceId, status) {
+            // Find device in current list
+            const deviceIndex = devices.findIndex(d => d.id === deviceId);
+            if (deviceIndex >= 0) {
+                devices[deviceIndex].status = status;
+                devices[deviceIndex].last_seen = new Date().toISOString();
+                
+                // Update UI for this device
+                const deviceCard = document.querySelector(`[data-device-id="${deviceId}"]`);
+                if (deviceCard) {
+                    const statusBadge = deviceCard.querySelector('.status-badge');
+                    if (statusBadge) {
+                        statusBadge.textContent = status === 'online' ? 'Online' : 'Offline';
+                        statusBadge.className = `status-badge ${status}`;
+                    }
+                    
+                    // Update card border
+                    deviceCard.className = `device-card ${status}`;
+                }
+                
+                // Update stats
+                updateStats();
+            }
+        }
+        
+        // Real-time updates for database changes
         function setupRealTimeUpdates() {
             const subscription = supabaseClient
                 .channel('device-updates')
                 .on('postgres_changes', 
                     { event: '*', schema: 'public', table: 'remote_devices' }, 
                     (payload) => {
-                        console.log('🔄 Real-time update received:', payload);
-                        loadDevices(); // Reload devices on any change
+                        console.log('🔄 Real-time database update received:', payload);
+                        loadDevices(); // Reload devices on database change
                     }
                 )
                 .subscribe();
             
-            console.log('📡 Real-time updates enabled');
+            console.log('📡 Real-time database updates enabled');
+            
+            // Also subscribe to global commands channel
+            supabaseClient
+                .channel('admin-dashboard')
+                .on('broadcast', { event: 'notification' }, (payload) => {
+                    console.log('📢 Admin notification received:', payload);
+                    // Could show notifications to admin
+                })
+                .subscribe();
         }
         
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadDevices();
             setupRealTimeUpdates();
+            addActionListeners();
             
             // Refresh devices every 30 seconds
             setInterval(loadDevices, 30000);
+            
+            // Clean up channels when leaving page
+            window.addEventListener('beforeunload', () => {
+                Object.values(activeChannels).forEach(channel => {
+                    if (channel && channel.unsubscribe) {
+                        channel.unsubscribe();
+                    }
+                });
+            });
         });
         
-        console.log('✅ Device Manager initialized with Supabase integration');
+        console.log('✅ Device Manager initialized with Supabase Realtime integration');
     </script>
 </body>
 </html>

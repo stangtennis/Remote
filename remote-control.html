@@ -245,25 +245,36 @@
     <script>
         // Supabase configuration
         const supabaseUrl = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjI5NzI4NjQsImV4cCI6MjAzODU0ODg2NH0.YEUuAhBnrCJaOFjXlzOIkqvgFuAoNjvXJWaVNFBNOPE';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk';
         const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
         // Global state
         let selectedDevice = null;
         let activeSession = null;
-        let websocket = null;
+        let realtimeChannel = null;
         let devices = [];
+        let sessionId = null;
+        let deviceId = null;
 
         // Initialize dashboard
-        async function initializeDashboard() {
-            try {
-                logMessage('Initializing remote control dashboard...', 'info');
-                await loadDevices();
-                connectWebSocket();
-                startDeviceMonitoring();
-                logMessage('Dashboard ready for remote control', 'success');
-            } catch (error) {
-                logMessage(`Initialization error: ${error.message}`, 'error');
+        function initializeDashboard() {
+            logMessage('Dashboard initialized', 'info');
+            logMessage('Connecting to Supabase backend...', 'info');
+            
+            // Load devices
+            loadDevices();
+            
+            // Start device monitoring
+            startDeviceMonitoring();
+            
+            // Parse URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            deviceId = urlParams.get('deviceId');
+            sessionId = urlParams.get('sessionId');
+            
+            if (deviceId && sessionId) {
+                logMessage(`Auto-connecting to device ${deviceId}`, 'info');
+                connectToDevice(deviceId, sessionId);
             }
         }
 
@@ -330,43 +341,85 @@
             logMessage(`Selected device: ${selectedDevice.device_name}`, 'info');
         }
 
-        // Connect to WebSocket server
-        function connectWebSocket() {
+        // Connect to device using Supabase Realtime
+        async function connectToDevice(deviceId, sessionId = null) {
             try {
-                websocket = new WebSocket('ws://localhost:3002');
+                // Find device in list
+                const device = devices.find(d => d.id === deviceId);
+                if (!device) {
+                    logMessage(`Device ${deviceId} not found`, 'error');
+                    return;
+                }
                 
-                websocket.onopen = () => {
-                    logMessage('Connected to WebSocket server', 'success');
-                };
-
-                websocket.onmessage = (event) => {
-                    try {
-                        const message = JSON.parse(event.data);
-                        handleWebSocketMessage(message);
-                    } catch (error) {
-                        logMessage(`WebSocket message error: ${error.message}`, 'error');
-                    }
-                };
-
-                websocket.onclose = () => {
-                    logMessage('WebSocket connection lost - attempting reconnect...', 'error');
-                    setTimeout(connectWebSocket, 5000);
-                };
-
-                websocket.onerror = (error) => {
-                    logMessage('WebSocket error occurred', 'error');
-                };
+                // Update selected device
+                selectedDevice = device;
+                updateSelectedDeviceUI();
+                
+                // Generate session ID if not provided
+                if (!sessionId) {
+                    sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+                }
+                
+                // Create Supabase Realtime channel for this device
+                logMessage(`Connecting to device ${device.device_name} via Supabase Realtime...`, 'info');
+                
+                const channelName = `device-${deviceId}`;
+                
+                // Subscribe to device's response channel
+                realtimeChannel = supabase
+                    .channel(channelName)
+                    .on('broadcast', { event: 'response' }, (payload) => {
+                        logMessage(`Received response from device`, 'info');
+                        handleMessage(payload.payload);
+                    })
+                    .subscribe((status) => {
+                        logMessage(`Supabase Realtime channel status: ${status}`, 'info');
+                        
+                        if (status === 'SUBSCRIBED') {
+                            // Create session
+                            activeSession = {
+                                id: sessionId,
+                                deviceId: deviceId,
+                                deviceName: device.device_name,
+                                startTime: new Date(),
+                                status: 'connecting'
+                            };
+                            
+                            // Update UI
+                            updateSessionInfo();
+                            enableControls();
+                            
+                            // Send initial command
+                            sendCommand({
+                                type: 'start_session',
+                                deviceId: deviceId,
+                                sessionId: sessionId
+                            });
+                            
+                            logMessage(`Session ${sessionId} created`, 'success');
+                        }
+                    });
+                
+                // Update device status in database
+                await supabase
+                    .from('remote_devices')
+                    .update({ 
+                        is_online: true,
+                        last_seen: new Date().toISOString()
+                    })
+                    .eq('id', deviceId);
+                
             } catch (error) {
-                logMessage(`WebSocket connection failed: ${error.message}`, 'error');
+                logMessage(`Failed to connect: ${error.message}`, 'error');
             }
         }
 
-        // Handle WebSocket messages
-        function handleWebSocketMessage(message) {
+        // Handle message from device
+        function handleMessage(message) {
             switch (message.type) {
                 case 'screen_frame':
                     if (activeSession && message.sessionId === activeSession.id) {
-                        displayScreenFrame(message.data);
+                        updateScreenFrame(message.data);
                     }
                     break;
                 case 'session_response':
@@ -383,9 +436,87 @@
             }
         }
 
+        // Update screen frame
+        function updateScreenFrame(imageData) {
+            const screenViewer = document.getElementById('screenViewer');
+            
+            // Create image if it doesn't exist
+            let screenImage = screenViewer.querySelector('.screen-image');
+            if (!screenImage) {
+                screenImage = document.createElement('img');
+                screenImage.className = 'screen-image';
+                screenViewer.innerHTML = '';
+                screenViewer.appendChild(screenImage);
+                
+                // Add click event listener for mouse control
+                screenImage.addEventListener('click', (e) => {
+                    if (!activeSession) return;
+                    
+                    const rect = screenImage.getBoundingClientRect();
+                    const scaleX = screenImage.naturalWidth / rect.width;
+                    const scaleY = screenImage.naturalHeight / rect.height;
+                    
+                    const x = Math.round((e.clientX - rect.left) * scaleX);
+                    const y = Math.round((e.clientY - rect.top) * scaleY);
+                    
+                    sendCommand({
+                        type: 'mouse_input',
+                        x: x,
+                        y: y,
+                        button: 'left',
+                        action: 'click'
+                    });
+                    
+                    logMessage(`Mouse click at (${x}, ${y})`, 'info');
+                });
+            }
+            
+            // Update image source
+            screenImage.src = imageData;
+        }
+
+        // Enable/disable control buttons
+        function enableControlButtons(enabled) {
+            const buttons = ['captureBtn', 'ctrlAltDelBtn', 'fileManagerBtn', 'sendTextBtn', 'mouseClickBtn', 'rightClickBtn'];
+            const inputs = ['textInput', 'mouseX', 'mouseY'];
+            
+            function enableControls() {
+                document.getElementById('textInput').disabled = false;
+                document.getElementById('sendTextBtn').disabled = false;
+                document.getElementById('mouseX').disabled = false;
+                document.getElementById('mouseY').disabled = false;
+                document.getElementById('mouseClickBtn').disabled = false;
+                document.getElementById('rightClickBtn').disabled = false;
+                document.getElementById('ctrlAltDelBtn').disabled = false;
+                document.getElementById('captureBtn').disabled = false;
+                document.getElementById('fileManagerBtn').disabled = false;
+                document.getElementById('sessionInfo').style.display = 'block';
+                logMessage('Remote control enabled', 'success');
+            }
+            
+            function disableControls() {
+                document.getElementById('textInput').disabled = true;
+                document.getElementById('sendTextBtn').disabled = true;
+                document.getElementById('mouseX').disabled = true;
+                document.getElementById('mouseY').disabled = true;
+                document.getElementById('mouseClickBtn').disabled = true;
+                document.getElementById('rightClickBtn').disabled = true;
+                document.getElementById('ctrlAltDelBtn').disabled = true;
+                document.getElementById('captureBtn').disabled = true;
+                document.getElementById('fileManagerBtn').disabled = true;
+                logMessage('Remote control disabled', 'info');
+            }
+            
+            if (enabled) {
+                enableControls();
+            } else {
+                disableControls();
+            }
+        }
+
         // Start remote session
         function startRemoteSession() {
-            if (!selectedDevice || !websocket) return;
+            if (!selectedDevice) return;
 
             const sessionId = 'session_' + Date.now();
             activeSession = {
@@ -396,17 +527,6 @@
                 status: 'starting'
             };
 
-            // Send start session command
-            websocket.send(JSON.stringify({
-                type: 'start_session',
-                sessionId: sessionId,
-                deviceId: selectedDevice.device_id,
-                controller: {
-                    name: 'Dashboard User',
-                    timestamp: Date.now()
-                }
-            }));
-
             // Update UI
             document.getElementById('startSessionBtn').disabled = true;
             document.getElementById('endSessionBtn').disabled = false;
@@ -414,16 +534,20 @@
             showSessionInfo();
             
             logMessage(`Starting remote session with ${selectedDevice.device_name}`, 'info');
+            
+            // Connect to device
+            connectToDevice(selectedDevice.device_id, sessionId);
         }
 
         // End remote session
         function endRemoteSession() {
-            if (!activeSession || !websocket) return;
+            if (!activeSession) return;
 
-            websocket.send(JSON.stringify({
+            // Send end session command
+            sendCommand({
                 type: 'end_session',
                 sessionId: activeSession.id
-            }));
+            });
 
             // Update UI
             document.getElementById('startSessionBtn').disabled = false;
@@ -448,35 +572,6 @@
                 logMessage(`Session error: ${message.message || 'Unknown error'}`, 'error');
                 endRemoteSession();
             }
-        }
-
-        // Display screen frame
-        function displayScreenFrame(frameData) {
-            const screenViewer = document.getElementById('screenViewer');
-            
-            // For now, show placeholder since we're using mock data
-            screenViewer.innerHTML = `
-                <div class="screen-placeholder">
-                    📺 Live Screen Feed Active<br>
-                    <small>Resolution: ${frameData.width}x${frameData.height}</small><br>
-                    <small>Format: ${frameData.format}</small><br>
-                    <small>Updated: ${new Date(frameData.timestamp).toLocaleTimeString()}</small>
-                </div>
-            `;
-        }
-
-        // Enable/disable control buttons
-        function enableControlButtons(enabled) {
-            const buttons = ['captureBtn', 'ctrlAltDelBtn', 'fileManagerBtn', 'sendTextBtn', 'mouseClickBtn', 'rightClickBtn'];
-            const inputs = ['textInput', 'mouseX', 'mouseY'];
-            
-            buttons.forEach(id => {
-                document.getElementById(id).disabled = !enabled;
-            });
-            
-            inputs.forEach(id => {
-                document.getElementById(id).disabled = !enabled;
-            });
         }
 
         // Show/hide session info
@@ -510,33 +605,67 @@
             `;
         }
 
+        // Send command to device via Supabase Realtime
+        async function sendCommand(command) {
+            try {
+                if (!activeSession || !realtimeChannel || !deviceId) {
+                    logMessage('Cannot send command: No active session', 'error');
+                    return;
+                }
+                
+                // Add metadata to command
+                const commandPayload = {
+                    ...command,
+                    sender: 'remote_control',
+                    sessionId: sessionId,
+                    timestamp: Date.now()
+                };
+                
+                // Send command via Supabase Realtime broadcast
+                await supabase
+                    .channel(`device-${deviceId}`)
+                    .send({
+                        type: 'broadcast',
+                        event: 'command',
+                        payload: commandPayload
+                    });
+                    
+                logMessage(`Command sent: ${command.type}`, 'info');
+                return true;
+            } catch (error) {
+                logMessage(`Error sending command: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
         // Control functions
         function captureScreen() {
-            if (!activeSession || !websocket) return;
+            if (!activeSession) return;
+            sendCommand({
+                type: 'capture_screen'
+            });
             logMessage('Capturing screen...', 'info');
         }
 
         function sendCtrlAltDel() {
-            if (!activeSession || !websocket) return;
-            
-            websocket.send(JSON.stringify({
+            if (!activeSession) return;
+            sendCommand({
                 type: 'keyboard_input',
                 key: 'ctrl+alt+del',
                 action: 'press'
-            }));
-            
+            });
             logMessage('Sent Ctrl+Alt+Del', 'info');
         }
 
         function sendText() {
             const textInput = document.getElementById('textInput');
-            if (!activeSession || !websocket || !textInput.value) return;
+            if (!activeSession || !textInput.value) return;
             
-            websocket.send(JSON.stringify({
+            sendCommand({
                 type: 'keyboard_input',
                 key: textInput.value,
                 action: 'type'
-            }));
+            });
             
             logMessage(`Sent text: ${textInput.value}`, 'info');
             textInput.value = '';
@@ -546,15 +675,15 @@
             const x = document.getElementById('mouseX').value;
             const y = document.getElementById('mouseY').value;
             
-            if (!activeSession || !websocket || !x || !y) return;
+            if (!activeSession || !x || !y) return;
             
-            websocket.send(JSON.stringify({
+            sendCommand({
                 type: 'mouse_input',
                 x: parseInt(x),
                 y: parseInt(y),
                 button: 'left',
                 action: 'click'
-            }));
+            });
             
             logMessage(`Mouse click at (${x}, ${y})`, 'info');
         }
@@ -563,15 +692,15 @@
             const x = document.getElementById('mouseX').value;
             const y = document.getElementById('mouseY').value;
             
-            if (!activeSession || !websocket || !x || !y) return;
+            if (!activeSession || !x || !y) return;
             
-            websocket.send(JSON.stringify({
+            sendCommand({
                 type: 'mouse_input',
                 x: parseInt(x),
                 y: parseInt(y),
                 button: 'right',
                 action: 'click'
-            }));
+            });
             
             logMessage(`Right click at (${x}, ${y})`, 'info');
         }
