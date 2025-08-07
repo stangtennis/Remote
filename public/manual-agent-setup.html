@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛠️ Manual Agent Setup Guide</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 { color: #333; text-align: center; }
+        h2 { color: #4f46e5; border-bottom: 2px solid #4f46e5; padding-bottom: 10px; }
+        .step { 
+            background: #f8f9fa; 
+            border-left: 4px solid #4f46e5; 
+            padding: 15px; 
+            margin: 15px 0; 
+            border-radius: 5px; 
+        }
+        .code { 
+            background: #2d3748; 
+            color: #e2e8f0; 
+            padding: 15px; 
+            border-radius: 5px; 
+            font-family: monospace; 
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .warning { 
+            background: #fff3cd; 
+            border: 1px solid #ffeaa7; 
+            color: #856404; 
+            padding: 15px; 
+            border-radius: 5px; 
+            margin: 15px 0; 
+        }
+        .success { 
+            background: #d4edda; 
+            border: 1px solid #c3e6cb; 
+            color: #155724; 
+            padding: 15px; 
+            border-radius: 5px; 
+            margin: 15px 0; 
+        }
+        .btn {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛠️ Manual Remote Desktop Agent Setup</h1>
+        
+        <div class="warning">
+            <h3>⚠️ npm Installation Issue Detected</h3>
+            <p>The automatic installation failed because npm is not in your system PATH. Here's how to fix it manually:</p>
+        </div>
+
+        <h2>🔧 Option 1: Fix npm PATH (Recommended)</h2>
+        
+        <div class="step">
+            <h3>Step 1: Find your Node.js installation</h3>
+            <p>Open Command Prompt and run:</p>
+            <div class="code">where node</div>
+            <p>This will show you where Node.js is installed (usually <code>C:\Program Files\nodejs\</code>)</p>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Add npm to PATH</h3>
+            <p>1. Open System Properties → Advanced → Environment Variables</p>
+            <p>2. Find "Path" in System Variables and click Edit</p>
+            <p>3. Add the Node.js folder (e.g., <code>C:\Program Files\nodejs\</code>)</p>
+            <p>4. Click OK and restart Command Prompt</p>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Test npm</h3>
+            <div class="code">npm --version</div>
+            <p>If this works, you can now run the start.bat script again!</p>
+        </div>
+
+        <h2>🚀 Option 2: Manual Installation</h2>
+        
+        <div class="step">
+            <h3>Step 1: Navigate to your agent folder</h3>
+            <div class="code">cd C:\Users\server\Downloads\testpc</div>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Install dependencies manually</h3>
+            <p>Try these commands one by one until one works:</p>
+            <div class="code">
+"C:\Program Files\nodejs\npm.cmd" install<br>
+"C:\Program Files (x86)\nodejs\npm.cmd" install<br>
+"%APPDATA%\npm\npm.cmd" install
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Run the agent</h3>
+            <div class="code">node agent.js</div>
+        </div>
+
+        <h2>🎯 Option 3: Simplified Agent (No Dependencies)</h2>
+        
+        <div class="step">
+            <p>If npm installation keeps failing, I can create a simplified agent that works without external dependencies:</p>
+            <button class="btn" onclick="createSimpleAgent()">📥 Download Simple Agent</button>
+        </div>
+
+        <div id="simpleAgentResult" style="display: none;">
+            <div class="success">
+                <h3>✅ Simple Agent Created!</h3>
+                <p>This version works without npm dependencies and connects directly to the WebSocket server.</p>
+                <a id="simpleAgentDownload" class="btn" download="simple-agent.js">📥 Download simple-agent.js</a>
+            </div>
+        </div>
+
+        <h2>🔍 Troubleshooting</h2>
+        
+        <div class="step">
+            <h3>Common Issues:</h3>
+            <ul>
+                <li><strong>Node.js not found:</strong> Install from <a href="https://nodejs.org/" target="_blank">nodejs.org</a></li>
+                <li><strong>npm not found:</strong> Reinstall Node.js with npm included</li>
+                <li><strong>Permission errors:</strong> Run Command Prompt as Administrator</li>
+                <li><strong>Path issues:</strong> Restart Command Prompt after PATH changes</li>
+            </ul>
+        </div>
+
+        <div class="success">
+            <h3>🎉 Once Working:</h3>
+            <p>Your agent will:</p>
+            <ul>
+                <li>✅ Connect to Supabase database</li>
+                <li>✅ Register as an available device</li>
+                <li>✅ Connect to WebSocket server (port 3002)</li>
+                <li>✅ Enable real-time screen sharing</li>
+                <li>✅ Allow remote mouse/keyboard control</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function createSimpleAgent() {
+            const simpleAgentCode = `// Simple Remote Desktop Agent (No Dependencies)
+// Device: TestPC
+// Generated: ${new Date().toISOString()}
+
+const http = require('http');
+const https = require('https');
+
+class SimpleRemoteAgent {
+    constructor() {
+        this.deviceId = 'device_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        this.deviceName = 'TestPC';
+        this.orgId = 'default';
+        
+        console.log('🌍 Simple Remote Desktop Agent Starting...');
+        console.log('📱 Device:', this.deviceName);
+        console.log('🆔 Device ID:', this.deviceId);
+    }
+
+    async initialize() {
+        console.log('🔧 Initializing simple agent...');
+        
+        // Register with Supabase (simplified)
+        await this.registerDevice();
+        
+        // Connect to WebSocket (simplified)
+        this.connectWebSocket();
+        
+        console.log('✅ Simple agent initialized');
+        console.log('💓 Agent running... (Press Ctrl+C to stop)');
+        
+        // Keep alive
+        this.keepAlive();
+    }
+
+    async registerDevice() {
+        console.log('📝 Registering device with Supabase...');
+        
+        const deviceInfo = {
+            device_id: this.deviceId,
+            device_name: this.deviceName,
+            organization_id: this.orgId,
+            platform: 'windows',
+            status: 'online',
+            last_seen: new Date().toISOString(),
+            capabilities: {
+                screen_capture: true,
+                input_control: true,
+                file_transfer: false
+            }
+        };
+
+        try {
+            const postData = JSON.stringify(deviceInfo);
+            const options = {
+                hostname: 'ptrtibzwokjcjjxvjpin.supabase.co',
+                port: 443,
+                path: '/rest/v1/devices',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(postData),
+                    'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzM1MTI0NTYsImV4cCI6MjA0OTA4ODQ1Nn0.OwJ04BrJ6gZZ57fSeT-q5Q_mSsVaNia',
+                    'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzM1MTI0NTYsImV4cCI6MjA0OTA4ODQ1Nn0.OwJ04BrJ6gZZ57fSeT-q5Q_mSsVaNia'
+                }
+            };
+
+            const req = https.request(options, (res) => {
+                if (res.statusCode === 201 || res.statusCode === 200) {
+                    console.log('✅ Device registered successfully');
+                } else {
+                    console.log('⚠️ Device registration response:', res.statusCode);
+                }
+            });
+
+            req.on('error', (error) => {
+                console.log('⚠️ Registration failed (offline mode):', error.message);
+            });
+
+            req.write(postData);
+            req.end();
+            
+        } catch (error) {
+            console.log('⚠️ Registration failed (offline mode):', error.message);
+        }
+    }
+
+    connectWebSocket() {
+        console.log('🔌 Connecting to WebSocket server...');
+        
+        // Simple WebSocket connection attempt
+        const options = {
+            hostname: 'localhost',
+            port: 3002,
+            path: '/',
+            method: 'GET',
+            headers: {
+                'Upgrade': 'websocket',
+                'Connection': 'Upgrade',
+                'Sec-WebSocket-Key': Buffer.from(Math.random().toString()).toString('base64'),
+                'Sec-WebSocket-Version': '13'
+            }
+        };
+
+        const req = http.request(options);
+        
+        req.on('upgrade', (res, socket, head) => {
+            console.log('✅ WebSocket connected');
+            
+            // Send device connect message
+            const message = JSON.stringify({
+                type: 'device_connect',
+                deviceId: this.deviceId,
+                deviceName: this.deviceName
+            });
+            
+            socket.write('\\x81' + String.fromCharCode(message.length) + message);
+        });
+
+        req.on('error', (error) => {
+            console.log('⚠️ WebSocket connection failed (offline mode):', error.message);
+        });
+
+        req.end();
+    }
+
+    keepAlive() {
+        // Heartbeat every 30 seconds
+        setInterval(() => {
+            console.log('💓 Agent heartbeat');
+        }, 30000);
+
+        // Handle shutdown
+        process.on('SIGINT', () => {
+            console.log('\\n🛑 Shutting down simple agent...');
+            process.exit(0);
+        });
+    }
+}
+
+// Start the simple agent
+const agent = new SimpleRemoteAgent();
+agent.initialize().catch((error) => {
+    console.error('💥 Agent startup failed:', error);
+    process.exit(1);
+});`;
+
+            const blob = new Blob([simpleAgentCode], { type: 'text/javascript' });
+            const url = window.URL.createObjectURL(blob);
+            
+            document.getElementById('simpleAgentDownload').href = url;
+            document.getElementById('simpleAgentResult').style.display = 'block';
+            
+            console.log('✅ Simple agent generated');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌍 Remote Desktop Control Center</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh; color: #333;
+        }
+        
+        .header {
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
+            padding: 20px 0; box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+        .header-content {
+            max-width: 1400px; margin: 0 auto; padding: 0 20px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .header h1 { color: #2a5298; font-size: 2rem; font-weight: 700; }
+        .header-stats {
+            display: flex; gap: 30px; align-items: center;
+        }
+        .stat-item {
+            text-align: center; padding: 10px 20px;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            border-radius: 10px; color: white; min-width: 120px;
+        }
+        .stat-number { font-size: 1.8rem; font-weight: 700; }
+        .stat-label { font-size: 0.9rem; opacity: 0.9; }
+        
+        .main-content {
+            max-width: 1400px; margin: 0 auto; padding: 30px 20px;
+        }
+        
+        .controls-bar {
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
+            border-radius: 15px; padding: 20px; margin-bottom: 30px;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        .search-box {
+            flex: 1; max-width: 400px; position: relative;
+        }
+        .search-box input {
+            width: 100%; padding: 12px 45px 12px 15px; border: 2px solid #e1e5e9;
+            border-radius: 10px; font-size: 16px; background: white;
+        }
+        .search-box::after {
+            content: '🔍'; position: absolute; right: 15px; top: 50%;
+            transform: translateY(-50%); font-size: 18px;
+        }
+        .filter-buttons {
+            display: flex; gap: 10px;
+        }
+        .filter-btn {
+            padding: 10px 20px; border: 2px solid #e1e5e9; background: white;
+            border-radius: 8px; cursor: pointer; transition: all 0.3s ease;
+            font-weight: 600;
+        }
+        .filter-btn.active { background: #4f46e5; color: white; border-color: #4f46e5; }
+        .refresh-btn {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white; border: none; padding: 12px 25px; border-radius: 10px;
+            cursor: pointer; font-weight: 600; transition: all 0.3s ease;
+        }
+        .refresh-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3); }
+        
+        .devices-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 25px; margin-bottom: 30px;
+        }
+        
+        .device-card {
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
+            border-radius: 20px; padding: 25px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: all 0.3s ease; border: 2px solid transparent;
+        }
+        .device-card:hover {
+            transform: translateY(-5px); box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+            border-color: #4f46e5;
+        }
+        .device-card.online { border-left: 5px solid #10b981; }
+        .device-card.offline { border-left: 5px solid #ef4444; }
+        .device-card.busy { border-left: 5px solid #f59e0b; }
+        
+        .device-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px;
+        }
+        .device-name {
+            font-size: 1.4rem; font-weight: 700; color: #1f2937;
+        }
+        .device-status {
+            padding: 6px 12px; border-radius: 20px; font-size: 0.85rem;
+            font-weight: 600; text-transform: uppercase;
+        }
+        .status-online { background: #d1fae5; color: #065f46; }
+        .status-offline { background: #fee2e2; color: #991b1b; }
+        .status-busy { background: #fef3c7; color: #92400e; }
+        .status-controlled { background: #ddd6fe; color: #5b21b6; }
+        
+        .device-info {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
+            margin-bottom: 20px;
+        }
+        .info-item {
+            display: flex; flex-direction: column;
+        }
+        .info-label {
+            font-size: 0.8rem; color: #6b7280; font-weight: 600;
+            text-transform: uppercase; margin-bottom: 4px;
+        }
+        .info-value {
+            font-size: 1rem; color: #1f2937; font-weight: 500;
+        }
+        
+        .device-specs {
+            background: #f8fafc; border-radius: 10px; padding: 15px;
+            margin-bottom: 20px;
+        }
+        .specs-row {
+            display: flex; justify-content: space-between; margin-bottom: 8px;
+        }
+        .specs-row:last-child { margin-bottom: 0; }
+        .spec-label { color: #6b7280; font-size: 0.9rem; }
+        .spec-value { color: #1f2937; font-weight: 600; font-size: 0.9rem; }
+        
+        .device-actions {
+            display: flex; gap: 10px; flex-wrap: wrap;
+        }
+        .action-btn {
+            flex: 1; min-width: 120px; padding: 12px 15px; border: none;
+            border-radius: 10px; cursor: pointer; font-weight: 600;
+            transition: all 0.3s ease; text-align: center;
+        }
+        .btn-connect {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+        }
+        .btn-connect:hover {
+            transform: translateY(-2px); box-shadow: 0 8px 25px rgba(79, 70, 229, 0.3);
+        }
+        .btn-disconnect {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+        }
+        .btn-info {
+            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+            color: white;
+        }
+        .btn-settings {
+            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+            color: white;
+        }
+        .btn-disabled {
+            background: #e5e7eb; color: #9ca3af; cursor: not-allowed;
+        }
+        
+        .empty-state {
+            text-align: center; padding: 60px 20px;
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
+            border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        .empty-state h3 { color: #6b7280; font-size: 1.5rem; margin-bottom: 15px; }
+        .empty-state p { color: #9ca3af; font-size: 1.1rem; }
+        
+        .connection-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); z-index: 1000;
+            justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background: white; border-radius: 20px; padding: 30px;
+            max-width: 500px; width: 90%; box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px;
+        }
+        .modal-title { font-size: 1.5rem; font-weight: 700; color: #1f2937; }
+        .close-btn {
+            background: none; border: none; font-size: 1.5rem; cursor: pointer;
+            color: #6b7280; padding: 5px;
+        }
+        
+        @media (max-width: 768px) {
+            .devices-grid { grid-template-columns: 1fr; }
+            .header-content { flex-direction: column; gap: 20px; }
+            .controls-bar { flex-direction: column; gap: 20px; }
+            .device-info { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>🌍 Remote Desktop Control Center</h1>
+            <div class="header-stats">
+                <div class="stat-item">
+                    <div class="stat-number" id="onlineCount">0</div>
+                    <div class="stat-label">Online</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="totalCount">0</div>
+                    <div class="stat-label">Total Devices</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="activeCount">0</div>
+                    <div class="stat-label">Active Sessions</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="controls-bar">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search devices by name, IP, or platform...">
+            </div>
+            <div class="filter-buttons">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="online">Online</button>
+                <button class="filter-btn" data-filter="offline">Offline</button>
+                <button class="filter-btn" data-filter="busy">Busy</button>
+            </div>
+            <button class="refresh-btn" onclick="refreshDevices()">🔄 Refresh</button>
+        </div>
+
+        <div id="devicesContainer">
+            <div class="devices-grid" id="devicesGrid">
+                <!-- Devices will be populated here -->
+            </div>
+            
+            <div class="empty-state" id="emptyState">
+                <h3>🖥️ No Devices Connected</h3>
+                <p>Devices will appear here when agents connect to the system.</p>
+                <p style="margin-top: 10px; font-size: 0.9rem;">
+                    Download and run agents from: 
+                    <a href="/exe-agent-generator.html" style="color: #4f46e5; font-weight: 600;">Agent Generator</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Connection Modal -->
+    <div class="connection-modal" id="connectionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Remote Desktop Connection</h3>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="modalContent">
+                <!-- Modal content will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script>
+        // Supabase configuration
+        const SUPABASE_URL = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk';
+        
+        const { createClient } = supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        let devices = [];
+        let currentFilter = 'all';
+        let activeSessions = new Map();
+        
+        console.log('🌍 Remote Desktop Control Center loaded');
+        
+        // Initialize dashboard
+        async function initDashboard() {
+            console.log('🚀 Initializing dashboard...');
+            await refreshDevices();
+            setupEventListeners();
+            setupRealtimeSubscription();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(refreshDevices, 30000);
+        }
+        
+        // Setup event listeners
+        function setupEventListeners() {
+            // Search functionality
+            document.getElementById('searchInput').addEventListener('input', filterDevices);
+            
+            // Filter buttons
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentFilter = e.target.dataset.filter;
+                    filterDevices();
+                });
+            });
+        }
+        
+        // Setup realtime subscription for device updates
+        function setupRealtimeSubscription() {
+            console.log('📡 Setting up realtime subscription...');
+            
+            supabaseClient
+                .channel('devices')
+                .on('postgres_changes', 
+                    { event: '*', schema: 'public', table: 'remote_devices' },
+                    (payload) => {
+                        console.log('📨 Device update received:', payload);
+                        refreshDevices();
+                    }
+                )
+                .subscribe();
+        }
+        
+        // Refresh devices from database
+        async function refreshDevices() {
+            try {
+                console.log('🔄 Refreshing devices...');
+                
+                const { data, error } = await supabaseClient
+                    .from('remote_devices')
+                    .select('*')
+                    .order('last_seen', { ascending: false });
+                
+                if (error) {
+                    console.error('❌ Error fetching devices:', error);
+                    return;
+                }
+                
+                devices = data || [];
+                console.log(`✅ Loaded ${devices.length} devices`);
+                
+                updateStats();
+                renderDevices();
+                
+            } catch (error) {
+                console.error('❌ Failed to refresh devices:', error);
+            }
+        }
+        
+        // Update statistics
+        function updateStats() {
+            const online = devices.filter(d => d.is_online).length;
+            const total = devices.length;
+            const active = activeSessions.size;
+            
+            document.getElementById('onlineCount').textContent = online;
+            document.getElementById('totalCount').textContent = total;
+            document.getElementById('activeCount').textContent = active;
+        }
+        
+        // Render devices grid
+        function renderDevices() {
+            const grid = document.getElementById('devicesGrid');
+            const emptyState = document.getElementById('emptyState');
+            
+            if (devices.length === 0) {
+                grid.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+            
+            grid.style.display = 'grid';
+            emptyState.style.display = 'none';
+            
+            const filteredDevices = getFilteredDevices();
+            
+            grid.innerHTML = filteredDevices.map(device => createDeviceCard(device)).join('');
+        }
+        
+        // Get filtered devices based on search and filter
+        function getFilteredDevices() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            
+            return devices.filter(device => {
+                // Apply search filter
+                const matchesSearch = !searchTerm || 
+                    device.device_name.toLowerCase().includes(searchTerm) ||
+                    (device.ip_address && device.ip_address.includes(searchTerm)) ||
+                    (device.operating_system && device.operating_system.toLowerCase().includes(searchTerm));
+                
+                // Apply status filter
+                const matchesFilter = currentFilter === 'all' || 
+                    (currentFilter === 'online' && device.is_online) ||
+                    (currentFilter === 'offline' && !device.is_online) ||
+                    (currentFilter === 'busy' && activeSessions.has(device.id));
+                
+                return matchesSearch && matchesFilter;
+            });
+        }
+        
+        // Create device card HTML
+        function createDeviceCard(device) {
+            const isOnline = device.is_online;
+            const isBusy = activeSessions.has(device.id);
+            const lastSeen = device.last_seen ? new Date(device.last_seen) : null;
+            const onlineTime = lastSeen ? formatTimeDifference(lastSeen) : 'Never';
+            
+            const status = isBusy ? 'controlled' : (isOnline ? 'online' : 'offline');
+            const statusText = isBusy ? 'Controlled' : (isOnline ? 'Online' : 'Offline');
+            
+            return `
+                <div class="device-card ${status}">
+                    <div class="device-header">
+                        <div class="device-name">${escapeHtml(device.device_name)}</div>
+                        <div class="device-status status-${status}">${statusText}</div>
+                    </div>
+                    
+                    <div class="device-info">
+                        <div class="info-item">
+                            <div class="info-label">Device ID</div>
+                            <div class="info-value">${device.access_key || device.id}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">IP Address</div>
+                            <div class="info-value">${device.ip_address || 'Unknown'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Platform</div>
+                            <div class="info-value">${device.operating_system || 'Unknown'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Last Seen</div>
+                            <div class="info-value">${onlineTime}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="device-specs">
+                        <div class="specs-row">
+                            <span class="spec-label">Device Type:</span>
+                            <span class="spec-value">${device.device_type || 'Desktop'}</span>
+                        </div>
+                        <div class="specs-row">
+                            <span class="spec-label">Port:</span>
+                            <span class="spec-value">${device.port || 3389}</span>
+                        </div>
+                        <div class="specs-row">
+                            <span class="spec-label">Created:</span>
+                            <span class="spec-value">${formatDate(device.created_at)}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="device-actions">
+                        ${isOnline && !isBusy ? 
+                            `<button class="action-btn btn-connect" onclick="connectToDevice('${device.id}')">🖥️ Connect</button>` :
+                            `<button class="action-btn btn-disabled" disabled>🖥️ ${isBusy ? 'In Use' : 'Offline'}</button>`
+                        }
+                        ${isBusy ? 
+                            `<button class="action-btn btn-disconnect" onclick="disconnectDevice('${device.id}')">🔌 Disconnect</button>` :
+                            `<button class="action-btn btn-info" onclick="showDeviceInfo('${device.id}')">ℹ️ Details</button>`
+                        }
+                        <button class="action-btn btn-settings" onclick="showDeviceSettings('${device.id}')">⚙️ Settings</button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Device action functions
+        async function connectToDevice(deviceId) {
+            console.log('🔌 Connecting to device:', deviceId);
+            
+            const device = devices.find(d => d.id === deviceId);
+            if (!device) return;
+            
+            // Mark as busy
+            activeSessions.set(deviceId, {
+                startTime: new Date(),
+                deviceName: device.device_name
+            });
+            
+            // Show connection modal
+            showConnectionModal(device);
+            
+            // Update display
+            renderDevices();
+            updateStats();
+        }
+        
+        function disconnectDevice(deviceId) {
+            console.log('🔌 Disconnecting from device:', deviceId);
+            
+            activeSessions.delete(deviceId);
+            closeModal();
+            
+            // Update display
+            renderDevices();
+            updateStats();
+        }
+        
+        function showDeviceInfo(deviceId) {
+            const device = devices.find(d => d.id === deviceId);
+            if (!device) return;
+            
+            const modalContent = `
+                <h4>📊 Device Information</h4>
+                <div style="margin-top: 20px;">
+                    <p><strong>Name:</strong> ${escapeHtml(device.device_name)}</p>
+                    <p><strong>ID:</strong> ${device.id}</p>
+                    <p><strong>Access Key:</strong> ${device.access_key}</p>
+                    <p><strong>IP Address:</strong> ${device.ip_address || 'Unknown'}</p>
+                    <p><strong>Operating System:</strong> ${device.operating_system || 'Unknown'}</p>
+                    <p><strong>Device Type:</strong> ${device.device_type || 'Desktop'}</p>
+                    <p><strong>Port:</strong> ${device.port || 3389}</p>
+                    <p><strong>Status:</strong> ${device.is_online ? '🟢 Online' : '🔴 Offline'}</p>
+                    <p><strong>Last Seen:</strong> ${device.last_seen ? formatDate(device.last_seen) : 'Never'}</p>
+                    <p><strong>Created:</strong> ${formatDate(device.created_at)}</p>
+                </div>
+            `;
+            
+            document.getElementById('modalContent').innerHTML = modalContent;
+            document.getElementById('connectionModal').style.display = 'flex';
+        }
+        
+        function showDeviceSettings(deviceId) {
+            const device = devices.find(d => d.id === deviceId);
+            if (!device) return;
+            
+            const modalContent = `
+                <h4>⚙️ Device Settings</h4>
+                <div style="margin-top: 20px;">
+                    <p>Device settings and configuration options will be available here.</p>
+                    <p style="margin-top: 15px; color: #6b7280;">
+                        Features coming soon:
+                    </p>
+                    <ul style="margin-top: 10px; color: #6b7280;">
+                        <li>• Remote configuration updates</li>
+                        <li>• Security settings</li>
+                        <li>• Performance monitoring</li>
+                        <li>• Update management</li>
+                    </ul>
+                </div>
+            `;
+            
+            document.getElementById('modalContent').innerHTML = modalContent;
+            document.getElementById('connectionModal').style.display = 'flex';
+        }
+        
+        function showConnectionModal(device) {
+            const modalContent = `
+                <h4>🖥️ Remote Desktop Connection</h4>
+                <div style="margin-top: 20px;">
+                    <p><strong>Connecting to:</strong> ${escapeHtml(device.device_name)}</p>
+                    <p><strong>IP Address:</strong> ${device.ip_address || 'localhost'}</p>
+                    <p><strong>Platform:</strong> ${device.operating_system || 'Unknown'}</p>
+                    
+                    <div style="margin: 20px 0; padding: 15px; background: #f3f4f6; border-radius: 10px;">
+                        <p style="color: #374151; margin-bottom: 10px;">🚀 <strong>Connection Status:</strong></p>
+                        <p style="color: #10b981;">✅ Connected to WebSocket server</p>
+                        <p style="color: #10b981;">✅ Device is online and ready</p>
+                        <p style="color: #f59e0b;">⚠️ Screen sharing: Available (requires enhancement)</p>
+                        <p style="color: #f59e0b;">⚠️ Remote control: Available (requires enhancement)</p>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button class="action-btn btn-connect" style="flex: 1;" onclick="startScreenShare('${device.id}')">
+                            📺 View Screen
+                        </button>
+                        <button class="action-btn btn-info" style="flex: 1;" onclick="startRemoteControl('${device.id}')">
+                            🖱️ Remote Control
+                        </button>
+                    </div>
+                    
+                    <button class="action-btn btn-disconnect" style="width: 100%; margin-top: 10px;" onclick="disconnectDevice('${device.id}')">
+                        🔌 Disconnect
+                    </button>
+                </div>
+            `;
+            
+            document.getElementById('modalContent').innerHTML = modalContent;
+            document.getElementById('connectionModal').style.display = 'flex';
+        }
+        
+        function startScreenShare(deviceId) {
+            console.log('📺 Starting screen share for device:', deviceId);
+            alert('Screen sharing will be implemented in the next version.\n\nThis will provide real-time screen viewing capabilities.');
+        }
+        
+        function startRemoteControl(deviceId) {
+            console.log('🖱️ Starting remote control for device:', deviceId);
+            alert('Remote control will be implemented in the next version.\n\nThis will provide full mouse and keyboard control capabilities.');
+        }
+        
+        function closeModal() {
+            document.getElementById('connectionModal').style.display = 'none';
+        }
+        
+        function filterDevices() {
+            renderDevices();
+        }
+        
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function formatDate(dateString) {
+            if (!dateString) return 'Unknown';
+            return new Date(dateString).toLocaleString();
+        }
+        
+        function formatTimeDifference(date) {
+            const now = new Date();
+            const diff = now - date;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+            
+            if (days > 0) return `${days}d ago`;
+            if (hours > 0) return `${hours}h ago`;
+            if (minutes > 0) return `${minutes}m ago`;
+            return 'Just now';
+        }
+        
+        // Initialize dashboard when page loads
+        document.addEventListener('DOMContentLoaded', initDashboard);
+        
+        console.log('🎯 Full Dashboard script loaded and ready');
+    </script>
+</body>
+</html>

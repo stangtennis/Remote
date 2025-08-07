@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌍 Supabase Remote Desktop Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .test-section {
+            margin-bottom: 40px;
+            padding: 30px;
+            border: 2px solid #f0f0f0;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+        
+        .test-section h2 {
+            color: #2196F3;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status {
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .btn {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #1976D2;
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .btn.success {
+            background: #4CAF50;
+        }
+        
+        .btn.success:hover {
+            background: #45a049;
+        }
+        
+        .form-group {
+            margin: 15px 0;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        .device-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .device-card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .device-card h3 {
+            margin-top: 0;
+            color: #2196F3;
+        }
+        
+        .device-info {
+            margin: 10px 0;
+        }
+        
+        .device-info strong {
+            color: #666;
+        }
+        
+        .online {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        
+        .offline {
+            color: #f44336;
+            font-weight: bold;
+        }
+        
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        
+        .progress {
+            width: 100%;
+            height: 20px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌍 Supabase Remote Desktop System</h1>
+            <p>Global Agent Distribution & Management Test</p>
+        </div>
+        
+        <div class="content">
+            <!-- Connection Test -->
+            <div class="test-section">
+                <h2>🔌 Supabase Connection Test</h2>
+                <p>Testing global connectivity to Supabase backend</p>
+                <div id="connection-status" class="status info">Initializing...</div>
+                <button id="test-connection" class="btn">Test Connection</button>
+                <div id="connection-details" class="code-block" style="display: none;"></div>
+            </div>
+            
+            <!-- Database Test -->
+            <div class="test-section">
+                <h2>🗄️ Database Schema Test</h2>
+                <p>Verifying all required tables and functions exist</p>
+                <div id="database-status" class="status info">Ready to test</div>
+                <button id="test-database" class="btn">Test Database Schema</button>
+                <div id="database-results" class="code-block" style="display: none;"></div>
+            </div>
+            
+            <!-- Agent Generation Test -->
+            <div class="test-section">
+                <h2>🚀 Agent Generation Test</h2>
+                <p>Test the agent builder system (simulated without Edge Function)</p>
+                <div class="form-group">
+                    <label for="test-platform">Platform:</label>
+                    <select id="test-platform">
+                        <option value="windows">🪟 Windows</option>
+                        <option value="macos">🍎 macOS</option>
+                        <option value="linux">🐧 Linux</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="test-device-name">Device Name:</label>
+                    <input type="text" id="test-device-name" placeholder="Test Device" value="Test Device">
+                </div>
+                <div id="agent-status" class="status info">Ready to generate</div>
+                <button id="generate-test-agent" class="btn success">Generate Test Agent</button>
+                <div id="agent-output" class="code-block" style="display: none;"></div>
+            </div>
+            
+            <!-- Device Registration Test -->
+            <div class="test-section">
+                <h2>📱 Device Registration Test</h2>
+                <p>Simulate device registration and presence tracking</p>
+                <div id="registration-status" class="status info">Ready to register</div>
+                <button id="register-test-device" class="btn">Register Test Device</button>
+                <div id="registration-details" class="code-block" style="display: none;"></div>
+            </div>
+            
+            <!-- Live Devices -->
+            <div class="test-section">
+                <h2>🌐 Live Devices</h2>
+                <p>Real-time view of connected devices</p>
+                <div id="devices-status" class="status info">Loading devices...</div>
+                <button id="refresh-devices" class="btn">Refresh Devices</button>
+                <div id="devices-list" class="device-list"></div>
+            </div>
+            
+            <!-- Real-time Test -->
+            <div class="test-section">
+                <h2>⚡ Real-time Updates Test</h2>
+                <p>Testing Supabase Realtime subscriptions</p>
+                <div id="realtime-status" class="status info">Setting up subscriptions...</div>
+                <button id="test-realtime" class="btn">Start Real-time Test</button>
+                <div id="realtime-log" class="code-block" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase Client -->
+    <script type="module">
+        import { createClient } from 'https://cdn.skypack.dev/@supabase/supabase-js@2';
+        
+        // Initialize Supabase client
+        const supabase = createClient(
+            'https://ptrtibzwokjcjjxvjpin.supabase.co',
+            'sb_publishable_OwJ04BrJ6gZZ57fSeT-q5Q_mSsVaNia'
+        );
+        
+        console.log('🌍 Supabase client initialized');
+        
+        // Test functions
+        async function testConnection() {
+            const statusEl = document.getElementById('connection-status');
+            const detailsEl = document.getElementById('connection-details');
+            
+            statusEl.textContent = 'Testing connection...';
+            statusEl.className = 'status info';
+            
+            try {
+                const start = Date.now();
+                const { data, error } = await supabase
+                    .from('remote_devices')
+                    .select('count')
+                    .limit(1);
+                    
+                const duration = Date.now() - start;
+                
+                if (error) throw error;
+                
+                statusEl.textContent = `✅ Connected successfully (${duration}ms)`;
+                statusEl.className = 'status success';
+                
+                detailsEl.textContent = `Connection Details:
+URL: https://ptrtibzwokjcjjxvjpin.supabase.co
+Response Time: ${duration}ms
+Status: Connected
+Timestamp: ${new Date().toISOString()}`;
+                detailsEl.style.display = 'block';
+                
+            } catch (error) {
+                statusEl.textContent = `❌ Connection failed: ${error.message}`;
+                statusEl.className = 'status error';
+                
+                detailsEl.textContent = `Error Details:
+${error.message}
+${error.stack || ''}`;
+                detailsEl.style.display = 'block';
+            }
+        }
+        
+        async function testDatabase() {
+            const statusEl = document.getElementById('database-status');
+            const resultsEl = document.getElementById('database-results');
+            
+            statusEl.textContent = 'Testing database schema...';
+            statusEl.className = 'status info';
+            
+            const tables = [
+                'remote_devices',
+                'device_presence', 
+                'remote_sessions',
+                'connection_logs',
+                'device_permissions'
+            ];
+            
+            let results = 'Database Schema Test Results:\n\n';
+            let allPassed = true;
+            
+            for (const table of tables) {
+                try {
+                    const { data, error } = await supabase
+                        .from(table)
+                        .select('*')
+                        .limit(1);
+                        
+                    if (error) throw error;
+                    
+                    results += `✅ ${table}: OK\n`;
+                } catch (error) {
+                    results += `❌ ${table}: ${error.message}\n`;
+                    allPassed = false;
+                }
+            }
+            
+            if (allPassed) {
+                statusEl.textContent = '✅ All database tables accessible';
+                statusEl.className = 'status success';
+            } else {
+                statusEl.textContent = '⚠️ Some database issues found';
+                statusEl.className = 'status error';
+            }
+            
+            resultsEl.textContent = results;
+            resultsEl.style.display = 'block';
+        }
+        
+        async function generateTestAgent() {
+            const statusEl = document.getElementById('agent-status');
+            const outputEl = document.getElementById('agent-output');
+            const platform = document.getElementById('test-platform').value;
+            const deviceName = document.getElementById('test-device-name').value;
+            
+            statusEl.textContent = 'Generating test agent...';
+            statusEl.className = 'status info';
+            
+            try {
+                // Simulate agent generation (since Edge Function may not be deployed yet)
+                const agentConfig = {
+                    platform,
+                    deviceName,
+                    deviceId: Math.floor(100000000 + Math.random() * 900000000).toString(),
+                    supabaseUrl: 'https://ptrtibzwokjcjjxvjpin.supabase.co',
+                    supabaseKey: 'sb_publishable_OwJ04BrJ6gZZ57fSeT-q5Q_mSsVaNia',
+                    generatedAt: new Date().toISOString()
+                };
+                
+                // Simulate delay
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                statusEl.textContent = `✅ Test agent generated for ${platform}`;
+                statusEl.className = 'status success';
+                
+                outputEl.textContent = `Generated Agent Configuration:
+Platform: ${agentConfig.platform}
+Device Name: ${agentConfig.deviceName}
+Device ID: ${agentConfig.deviceId}
+Supabase URL: ${agentConfig.supabaseUrl}
+Generated: ${agentConfig.generatedAt}
+
+Note: This is a simulated generation. 
+To test with real Edge Function, deploy agent-builder to Supabase.`;
+                outputEl.style.display = 'block';
+                
+            } catch (error) {
+                statusEl.textContent = `❌ Agent generation failed: ${error.message}`;
+                statusEl.className = 'status error';
+            }
+        }
+        
+        async function registerTestDevice() {
+            const statusEl = document.getElementById('registration-status');
+            const detailsEl = document.getElementById('registration-details');
+            
+            statusEl.textContent = 'Registering test device...';
+            statusEl.className = 'status info';
+            
+            try {
+                const deviceId = Math.floor(100000000 + Math.random() * 900000000).toString();
+                const deviceInfo = {
+                    device_id: deviceId,
+                    device_name: 'Test Device - ' + new Date().toLocaleTimeString(),
+                    operating_system: 'Test OS',
+                    status: 'online',
+                    last_seen: new Date().toISOString(),
+                    metadata: {
+                        test: true,
+                        generated_at: new Date().toISOString()
+                    }
+                };
+                
+                const { data, error } = await supabase
+                    .from('remote_devices')
+                    .insert(deviceInfo)
+                    .select()
+                    .single();
+                    
+                if (error) throw error;
+                
+                // Also update presence
+                await supabase
+                    .from('device_presence')
+                    .upsert({
+                        device_id: deviceId,
+                        status: 'online',
+                        last_seen: new Date().toISOString(),
+                        metadata: { test: true }
+                    });
+                
+                statusEl.textContent = `✅ Test device registered: ${deviceId}`;
+                statusEl.className = 'status success';
+                
+                detailsEl.textContent = `Registration Details:
+Device ID: ${deviceId}
+Device Name: ${deviceInfo.device_name}
+Status: ${deviceInfo.status}
+Registered: ${deviceInfo.last_seen}
+
+The device should now appear in the live devices list.`;
+                detailsEl.style.display = 'block';
+                
+                // Refresh devices list
+                loadDevices();
+                
+            } catch (error) {
+                statusEl.textContent = `❌ Registration failed: ${error.message}`;
+                statusEl.className = 'status error';
+                
+                detailsEl.textContent = `Error: ${error.message}`;
+                detailsEl.style.display = 'block';
+            }
+        }
+        
+        async function loadDevices() {
+            const statusEl = document.getElementById('devices-status');
+            const listEl = document.getElementById('devices-list');
+            
+            statusEl.textContent = 'Loading devices...';
+            statusEl.className = 'status info';
+            
+            try {
+                const { data: devices, error } = await supabase
+                    .from('remote_devices')
+                    .select(`
+                        *,
+                        device_presence(status, last_seen)
+                    `)
+                    .order('last_seen', { ascending: false })
+                    .limit(10);
+                    
+                if (error) throw error;
+                
+                statusEl.textContent = `✅ Loaded ${devices.length} devices`;
+                statusEl.className = 'status success';
+                
+                listEl.innerHTML = devices.map(device => `
+                    <div class="device-card">
+                        <h3>${device.device_name}</h3>
+                        <div class="device-info">
+                            <strong>ID:</strong> ${device.device_id}
+                        </div>
+                        <div class="device-info">
+                            <strong>OS:</strong> ${device.operating_system}
+                        </div>
+                        <div class="device-info">
+                            <strong>Status:</strong> 
+                            <span class="${device.status === 'online' ? 'online' : 'offline'}">
+                                ${device.status}
+                            </span>
+                        </div>
+                        <div class="device-info">
+                            <strong>Last Seen:</strong> ${new Date(device.last_seen).toLocaleString()}
+                        </div>
+                        ${device.metadata?.test ? '<div class="device-info"><strong>Type:</strong> Test Device</div>' : ''}
+                    </div>
+                `).join('');
+                
+            } catch (error) {
+                statusEl.textContent = `❌ Failed to load devices: ${error.message}`;
+                statusEl.className = 'status error';
+                listEl.innerHTML = '';
+            }
+        }
+        
+        async function testRealtime() {
+            const statusEl = document.getElementById('realtime-status');
+            const logEl = document.getElementById('realtime-log');
+            
+            statusEl.textContent = 'Setting up real-time subscriptions...';
+            statusEl.className = 'status info';
+            
+            let log = 'Real-time Test Log:\n\n';
+            
+            try {
+                // Subscribe to device changes
+                const channel = supabase
+                    .channel('test_devices')
+                    .on('postgres_changes', {
+                        event: '*',
+                        schema: 'public',
+                        table: 'remote_devices'
+                    }, (payload) => {
+                        const timestamp = new Date().toLocaleTimeString();
+                        log += `[${timestamp}] Device ${payload.eventType}: ${payload.new?.device_name || payload.old?.device_name}\n`;
+                        logEl.textContent = log;
+                        logEl.scrollTop = logEl.scrollHeight;
+                    })
+                    .subscribe();
+                
+                statusEl.textContent = '✅ Real-time subscriptions active';
+                statusEl.className = 'status success';
+                
+                log += `[${new Date().toLocaleTimeString()}] Subscribed to device changes\n`;
+                log += 'Try registering a test device to see real-time updates...\n\n';
+                
+                logEl.textContent = log;
+                logEl.style.display = 'block';
+                
+            } catch (error) {
+                statusEl.textContent = `❌ Real-time setup failed: ${error.message}`;
+                statusEl.className = 'status error';
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('test-connection').addEventListener('click', testConnection);
+        document.getElementById('test-database').addEventListener('click', testDatabase);
+        document.getElementById('generate-test-agent').addEventListener('click', generateTestAgent);
+        document.getElementById('register-test-device').addEventListener('click', registerTestDevice);
+        document.getElementById('refresh-devices').addEventListener('click', loadDevices);
+        document.getElementById('test-realtime').addEventListener('click', testRealtime);
+        
+        // Auto-run connection test on load
+        window.addEventListener('load', () => {
+            testConnection();
+            loadDevices();
+        });
+        
+        console.log('🧪 Supabase test page loaded and ready');
+    </script>
+</body>
+</html>

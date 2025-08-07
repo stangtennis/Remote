@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌍 Simple Agent Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        .btn {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .btn:hover {
+            background: #3730a3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .download-btn {
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        .code-preview {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 15px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌍 Simple Agent Generator</h1>
+        
+        <div class="form-group">
+            <label for="deviceName">Device Name:</label>
+            <input type="text" id="deviceName" placeholder="e.g., MyTestPC" value="TestPC">
+        </div>
+        
+        <div class="form-group">
+            <label for="platform">Platform:</label>
+            <select id="platform">
+                <option value="windows">Windows (.bat)</option>
+                <option value="macos">macOS (.sh)</option>
+                <option value="linux">Linux (.sh)</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="orgId">Organization ID:</label>
+            <input type="text" id="orgId" placeholder="default" value="default">
+        </div>
+        
+        <button class="btn" onclick="generateAgent()">🚀 Generate Agent</button>
+        
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        console.log('Simple Agent Generator loaded');
+        
+        function generateAgent() {
+            console.log('Generate button clicked');
+            
+            const deviceName = document.getElementById('deviceName').value || 'TestPC';
+            const platform = document.getElementById('platform').value;
+            const orgId = document.getElementById('orgId').value || 'default';
+            const result = document.getElementById('result');
+            
+            console.log('Generating agent for:', { deviceName, platform, orgId });
+            
+            try {
+                // Generate the real Node.js agent
+                const agentContent = generateRealAgent(deviceName, platform, orgId);
+                const packageContent = generatePackageJson(deviceName);
+                const startScript = generateStartScript(deviceName, platform);
+                
+                // Create downloads for all files
+                createAgentDownloads(deviceName, platform, agentContent, packageContent, startScript, result);
+                
+                console.log('✅ Real agent generated successfully');
+                
+            } catch (error) {
+                console.error('❌ Agent generation failed:', error);
+                result.className = 'result error';
+                result.innerHTML = `<h3>❌ Error: ${error.message}</h3>`;
+                result.style.display = 'block';
+            }
+        }
+        
+        function generateRealAgent(deviceName, platform, orgId) {
+            return `#!/usr/bin/env node
+
+/**
+ * Real Remote Desktop Agent
+ * Device: ${deviceName}
+ * Platform: ${platform}
+ * Organization: ${orgId}
+ * Generated: ${new Date().toISOString()}
+ */
+
+const { createClient } = require('@supabase/supabase-js');
+const WebSocket = require('ws');
+const screenshot = require('screenshot-desktop');
+const robot = require('robotjs');
+const os = require('os');
+
+class RealRemoteAgent {
+    constructor() {
+        this.deviceId = this.generateDeviceId();
+        this.deviceName = '${deviceName}';
+        this.orgId = '${orgId}';
+        this.platform = '${platform}';
+        this.isConnected = false;
+        this.isStreaming = false;
+        
+        // Supabase configuration
+        this.supabaseUrl = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
+        this.supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzM1MTI0NTYsImV4cCI6MjA0OTA4ODQ1Nn0.OwJ04BrJ6gZZ57fSeT-q5Q_mSsVaNia';
+        
+        console.log('🌍 Real Remote Desktop Agent Starting...');
+        console.log('📱 Device:', this.deviceName);
+        console.log('🏢 Organization:', this.orgId);
+        console.log('💻 Platform:', this.platform);
+    }
+
+    generateDeviceId() {
+        return 'device_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+    }
+
+    async initialize() {
+        try {
+            console.log('🔧 Initializing agent...');
+            await this.initializeSupabase();
+            await this.registerDevice();
+            await this.startWebSocketConnection();
+            this.setupScreenCapture();
+            this.setupInputControl();
+            console.log('✅ Agent initialized successfully');
+            this.keepAlive();
+        } catch (error) {
+            console.error('❌ Initialization failed:', error);
+            process.exit(1);
+        }
+    }
+
+    async initializeSupabase() {
+        console.log('📡 Connecting to Supabase...');
+        this.supabase = createClient(this.supabaseUrl, this.supabaseKey);
+        console.log('✅ Supabase connected');
+    }
+
+    async registerDevice() {
+        console.log('📝 Registering device...');
+        const deviceInfo = {
+            device_id: this.deviceId,
+            device_name: this.deviceName,
+            organization_id: this.orgId,
+            platform: this.platform,
+            status: 'online',
+            last_seen: new Date().toISOString(),
+            capabilities: {
+                screen_capture: true,
+                input_control: true,
+                file_transfer: false
+            }
+        };
+
+        try {
+            const { data, error } = await this.supabase
+                .from('devices')
+                .upsert(deviceInfo, { onConflict: 'device_id' });
+            if (error) throw error;
+            console.log('✅ Device registered');
+        } catch (error) {
+            console.error('❌ Registration failed:', error);
+        }
+    }
+
+    async startWebSocketConnection() {
+        console.log('🔌 Connecting to WebSocket...');
+        try {
+            this.websocket = new WebSocket('ws://localhost:3002');
+            
+            this.websocket.on('open', () => {
+                console.log('✅ WebSocket connected');
+                this.websocket.send(JSON.stringify({
+                    type: 'device_connect',
+                    deviceId: this.deviceId,
+                    deviceName: this.deviceName
+                }));
+            });
+
+            this.websocket.on('message', (data) => {
+                const message = JSON.parse(data.toString());
+                this.handleMessage(message);
+            });
+
+            this.websocket.on('error', (error) => {
+                console.error('❌ WebSocket error:', error);
+            });
+        } catch (error) {
+            console.log('⚠️ WebSocket server not available');
+        }
+    }
+
+    handleMessage(message) {
+        switch (message.type) {
+            case 'start_screen_share':
+                this.startScreenShare();
+                break;
+            case 'stop_screen_share':
+                this.stopScreenShare();
+                break;
+            case 'mouse_move':
+                robot.moveMouse(message.data.x, message.data.y);
+                break;
+            case 'mouse_click':
+                robot.mouseClick(message.data.button || 'left');
+                break;
+            case 'key_press':
+                if (message.data.key) {
+                    robot.keyTap(message.data.key);
+                }
+                break;
+        }
+    }
+
+    setupScreenCapture() {
+        console.log('📸 Screen capture ready');
+    }
+
+    setupInputControl() {
+        console.log('🖱️ Input control ready');
+    }
+
+    startScreenShare() {
+        if (this.isStreaming) return;
+        console.log('🎥 Starting screen share...');
+        this.isStreaming = true;
+        
+        this.streamInterval = setInterval(async () => {
+            try {
+                const img = await screenshot({ format: 'png' });
+                const base64 = img.toString('base64');
+                
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    this.websocket.send(JSON.stringify({
+                        type: 'screen_frame',
+                        data: base64,
+                        timestamp: Date.now()
+                    }));
+                }
+            } catch (error) {
+                console.error('❌ Screen capture error:', error);
+            }
+        }, 100); // 10 FPS
+    }
+
+    stopScreenShare() {
+        console.log('⏹️ Stopping screen share...');
+        this.isStreaming = false;
+        if (this.streamInterval) {
+            clearInterval(this.streamInterval);
+            this.streamInterval = null;
+        }
+    }
+
+    keepAlive() {
+        setInterval(async () => {
+            try {
+                await this.supabase
+                    .from('devices')
+                    .update({ last_seen: new Date().toISOString() })
+                    .eq('device_id', this.deviceId);
+            } catch (error) {
+                console.error('❌ Heartbeat failed:', error);
+            }
+        }, 30000);
+
+        process.on('SIGINT', async () => {
+            console.log('\n🛑 Shutting down...');
+            try {
+                await this.supabase
+                    .from('devices')
+                    .update({ status: 'offline' })
+                    .eq('device_id', this.deviceId);
+            } catch (error) {}
+            process.exit(0);
+        });
+
+        console.log('💓 Agent running... (Press Ctrl+C to stop)');
+    }
+}
+
+// Start the agent
+if (require.main === module) {
+    const agent = new RealRemoteAgent();
+    agent.initialize();
+}
+
+module.exports = RealRemoteAgent;`;
+        }
+
+        function generatePackageJson(deviceName) {
+            return `{
+  "name": "remote-desktop-agent-${deviceName.toLowerCase().replace(/[^a-z0-9]/g, '-')}",
+  "version": "2.0.0",
+  "description": "Real Remote Desktop Agent with screen capture and input control",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js",
+    "test": "node -e \"console.log('Agent test OK')\""
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "ws": "^8.16.0",
+    "screenshot-desktop": "^1.15.0",
+    "robotjs": "^0.6.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": ["remote-desktop", "screen-capture", "input-control"],
+  "author": "Remote Desktop System",
+  "license": "MIT"
+}`;
+        }
+
+        function generateStartScript(deviceName, platform) {
+            if (platform === 'windows') {
+                return `@echo off
+echo 🌍 Remote Desktop Agent Setup
+echo Device: ${deviceName}
+echo.
+
+REM Check Node.js
+node --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ❌ Node.js not found. Install from: https://nodejs.org/
+    pause
+    exit /b 1
+)
+
+echo ✅ Node.js found
+echo 📦 Installing dependencies...
+
+REM Try different npm paths
+where npm >nul 2>&1
+if %errorlevel% equ 0 (
+    npm install
+) else (
+    echo ⚠️ npm not in PATH, trying alternative locations...
+    if exist "%ProgramFiles%\nodejs\npm.cmd" (
+        "%ProgramFiles%\nodejs\npm.cmd" install
+    ) else if exist "%ProgramFiles(x86)%\nodejs\npm.cmd" (
+        "%ProgramFiles(x86)%\nodejs\npm.cmd" install
+    ) else if exist "%APPDATA%\npm\npm.cmd" (
+        "%APPDATA%\npm\npm.cmd" install
+    ) else (
+        echo ❌ npm not found. Please install Node.js with npm from: https://nodejs.org/
+        echo Or manually run: npm install
+        pause
+        exit /b 1
+    )
+)
+
+if %errorlevel% neq 0 (
+    echo ❌ Dependency installation failed
+    echo 💡 Try manually running: npm install
+    pause
+    exit /b 1
+)
+
+echo ✅ Dependencies installed
+echo 🚀 Starting agent...
+node agent.js
+pause`;
+            } else {
+                return `#!/bin/bash
+echo "🌍 Remote Desktop Agent Setup"
+echo "Device: ${deviceName}"
+echo ""
+
+# Check Node.js
+if ! command -v node &> /dev/null; then
+    echo "❌ Node.js not found. Install from: https://nodejs.org/"
+    exit 1
+fi
+
+echo "✅ Node.js found"
+echo "📦 Installing dependencies..."
+npm install
+
+if [ $? -ne 0 ]; then
+    echo "❌ Dependency installation failed"
+    exit 1
+fi
+
+echo "✅ Dependencies installed"
+echo "🚀 Starting agent..."
+node agent.js`;
+            }
+        }
+
+        function createAgentDownloads(deviceName, platform, agentContent, packageContent, startScript, result) {
+            const cleanName = deviceName.replace(/[^a-zA-Z0-9]/g, '_');
+            
+            // Create blobs for each file
+            const agentBlob = new Blob([agentContent], { type: 'text/javascript' });
+            const packageBlob = new Blob([packageContent], { type: 'application/json' });
+            const startBlob = new Blob([startScript], { type: 'text/plain' });
+            
+            // Create URLs
+            const agentUrl = window.URL.createObjectURL(agentBlob);
+            const packageUrl = window.URL.createObjectURL(packageBlob);
+            const startUrl = window.URL.createObjectURL(startBlob);
+            
+            const startExt = platform === 'windows' ? '.bat' : '.sh';
+            
+            result.className = 'result success';
+            result.innerHTML = `
+                <h3>✅ Real Remote Desktop Agent Generated!</h3>
+                <p>Your ${platform} agent with <strong>real remote control features</strong> is ready!</p>
+                
+                <h4>📥 Download Files:</h4>
+                <a href="${agentUrl}" download="agent.js" class="download-btn">
+                    📄 Download agent.js
+                </a>
+                <a href="${packageUrl}" download="package.json" class="download-btn">
+                    📦 Download package.json
+                </a>
+                <a href="${startUrl}" download="start${startExt}" class="download-btn">
+                    🚀 Download start${startExt}
+                </a>
+                
+                <h4>🛠️ Setup Instructions:</h4>
+                <ol>
+                    <li>Download all three files</li>
+                    <li>Create a new folder for the agent</li>
+                    <li>Put all files in the folder</li>
+                    <li>Run the start script (start${startExt})</li>
+                    <li>The agent will install dependencies and connect!</li>
+                </ol>
+                
+                <h4>🎯 Features:</h4>
+                <ul>
+                    <li>✅ Real screen capture</li>
+                    <li>✅ Mouse and keyboard control</li>
+                    <li>✅ Supabase integration</li>
+                    <li>✅ WebSocket communication</li>
+                    <li>✅ Device registration</li>
+                </ul>
+                
+                <div class="code-preview">${agentContent.substring(0, 1000)}...</div>
+            `;
+            result.style.display = 'block';
+        }
+
+        // Test that JavaScript is working
+        console.log('JavaScript is working properly');
+    </script>
+</body>
+</html>
