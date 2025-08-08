@@ -206,11 +206,11 @@
                     result.className = 'result success';
                     result.innerHTML = `
                         <h3>🎉 Standalone Windows Agent Ready!</h3>
-                        <p>Your <strong>37MB executable</strong> is ready for download. No installation required!</p>
+                        <p>Your <strong>38.9MB executable</strong> is ready for download. No installation required!</p>
                         
                         <div style="text-align: center; margin: 20px 0;">
                             <a href="RemoteDesktopAgent.exe" download class="download-btn">
-                                📥 Download RemoteDesktopAgent v4.1.0 (37MB)
+                                📥 Download RemoteDesktopAgent v4.2.0 (38.9MB)
                             </a>
                         </div>
                         
@@ -229,7 +229,7 @@
                             <h3>✨ What the Agent Does:</h3>
                             <ol>
                                 <li>🔧 <strong>Auto-detects</strong> computer name and system info</li>
-                                <li>📡 <strong>Connects</strong> to Supabase database automatically</li>
+                                <li>📡 <strong>Connects</strong> to Supabase database automatically with enhanced authentication</li>
                                 <li>🔌 <strong>Joins</strong> the WebSocket server for real-time communication</li>
                                 <li>💓 <strong>Sends heartbeats</strong> every 30 seconds to stay online</li>
                                 <li>🎯 <strong>Ready</strong> to accept remote control sessions</li>
@@ -241,27 +241,30 @@
                             <h3>🎯 Expected Output When Running:</h3>
                             <div style="background: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 5px; font-family: monospace; margin: 10px 0;">
 ╔══════════════════════════════════════════════════════════════╗<br>
-║                🌍 Remote Desktop Agent                        ║<br>
-║                   Standalone Edition                         ║<br>
+║                🌍 Supabase Realtime Agent                   ║<br>
+║                   Global Edition v4.2.0                     ║<br>
 ╠══════════════════════════════════════════════════════════════╣<br>
 ║ Device Name: ${deviceName || 'YOUR-COMPUTER-NAME'}                                ║<br>
 ║ Device ID:   device_abc123_1234567890                       ║<br>
 ║ Platform:    win32                                           ║<br>
-║ Version:     2.0.0                                           ║<br>
+║ Version:     4.2.0 - Supabase Realtime                      ║<br>
 ╚══════════════════════════════════════════════════════════════╝<br>
 <br>
-🔧 Initializing Remote Desktop Agent...<br>
+🔧 Initializing Supabase Realtime Agent...<br>
+📋 Configuration loaded<br>
 📡 Connecting to Supabase backend...<br>
-✅ Device registered with Supabase<br>
-🔌 Connecting to real-time server...<br>
-✅ Connected to WebSocket server<br>
-✅ WebSocket handshake successful<br>
-📤 Device registered with real-time server<br>
-✅ Remote Desktop Agent is now ONLINE<br>
+✅ Supabase client initialized with auth headers<br>
+✅ Device registered successfully with Supabase<br>
+🔌 Connecting to Supabase Realtime...<br>
+✅ Connected to Supabase Realtime<br>
+🔔 Subscribed to device commands channel<br>
+📡 Real-time communication established<br>
+✅ Supabase Realtime Agent is now ONLINE<br>
 🎯 Ready to accept remote control sessions<br>
 <br>
 💡 This window must stay open for remote access<br>
-📊 Status: CONNECTED - Device visible in dashboard
+📊 Status: CONNECTED - Device visible in dashboard<br>
+🌍 Global connectivity via Supabase Realtime
                             </div>
                         </div>
                         
@@ -279,7 +282,7 @@
                     result.innerHTML = `
                         <h3>🚧 Coming Soon!</h3>
                         <p>${platform} executable agents are in development.</p>
-                        <p>Currently available: Windows EXE (37MB standalone executable)</p>
+                        <p>Currently available: Windows EXE (38.9MB standalone executable)</p>
                         <p>Please select Windows for now, or check back later for ${platform} support.</p>
                     `;
                     result.style.display = 'block';
