@@ -36,6 +36,22 @@ A modern, serverless remote desktop application built with Supabase Realtime and
 - Automatic reconnection handling
 - Connection quality adaptation
 
+## 📦 Agent Deployment
+
+### Current Agent Status
+- **Version**: v4.3.0 (38.9MB)
+- **Status**: ✅ Production Ready
+- **Download**: [RemoteDesktopAgent.exe](https://ptrtibzwokjcjjxvjpin.supabase.co/storage/v1/object/public/agents/RemoteDesktopAgent.exe)
+- **Authentication**: ✅ Fixed (Supabase client integration)
+
+### Quick Upload
+```bash
+# Upload new agent version
+cmd /c upload-working.bat
+```
+
+📚 **[Complete Deployment Guide →](AGENT_DEPLOYMENT.md)**
+
 ## Technology Stack
 
 - **Backend**: Supabase Edge Functions, Node.js
@@ -44,6 +60,7 @@ A modern, serverless remote desktop application built with Supabase Realtime and
 - **Frontend**: Vanilla JavaScript, HTML5, CSS3
 - **Authentication**: Supabase Auth
 - **Storage**: Supabase Storage
+- **Agent Distribution**: Automated upload via REST API
 - **Styling**: Modern CSS with CSS Grid and Flexbox
 
 ## Project Structure
