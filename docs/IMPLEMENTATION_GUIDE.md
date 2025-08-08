@@ -184,7 +184,7 @@ export async function handler(req) {
 # Static HTML files accessible globally
 
 # Client executables built and available
-RemoteDesktopAgent.exe   # Windows executable (37MB)
+RemoteDesktopAgent.exe   # Windows executable (38.9MB) - v4.2.0 with enhanced authentication
 
 # GitHub repository updated with latest code
 git push origin main

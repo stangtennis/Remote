@@ -28,6 +28,12 @@ class SupabaseRealtimeAgent {
         this.supabaseUrl = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
         this.supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk';
         
+        // Additional headers for authentication
+        this.authHeaders = {
+            'apikey': this.supabaseKey,
+            'Authorization': `Bearer ${this.supabaseKey}`
+        };
+        
         this.displayBanner();
     }
 
@@ -115,8 +121,16 @@ class SupabaseRealtimeAgent {
         try {
             // Initialize Supabase client if not already initialized
             if (!this.supabaseClient) {
-                this.supabaseClient = createClient(this.supabaseUrl, this.supabaseKey);
-                console.log('✅ Supabase client initialized');
+                this.supabaseClient = createClient(this.supabaseUrl, this.supabaseKey, {
+                    auth: {
+                        persistSession: false,
+                        autoRefreshToken: true
+                    },
+                    global: {
+                        headers: this.authHeaders
+                    }
+                });
+                console.log('✅ Supabase client initialized with auth headers');
             }
             
             // Generate a unique access key if needed
@@ -144,24 +158,38 @@ class SupabaseRealtimeAgent {
             
             console.log('📝 Registering device with data:', JSON.stringify(deviceData, null, 2));
             
-            // First, try to update device presence
-            const { data: presenceData, error: presenceError } = await this.supabaseClient
-                .from('device_presence')
-                .upsert({
-                    device_id: this.deviceId,
-                    status: 'online',
-                    last_seen: new Date().toISOString(),
-                    connection_info: JSON.stringify({
-                        ip: this.getLocalIP(),
-                        connection_type: 'supabase_realtime'
-                    }),
-                    metadata: JSON.stringify({
-                        agent_version: '4.1.0',
-                        global_edition: true
+            // First, try to update device presence using REST API directly
+            let presenceData = null;
+            let presenceError = null;
+            try {
+                const presenceResponse = await fetch(`${this.supabaseUrl}/rest/v1/device_presence`, {
+                    method: 'POST',
+                    headers: {
+                        ...this.authHeaders,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'resolution=merge-duplicates'
+                    },
+                    body: JSON.stringify({
+                        device_id: this.deviceId,
+                        status: 'online',
+                        last_seen: new Date().toISOString(),
+                        connection_info: JSON.stringify({
+                            ip: this.getLocalIP(),
+                            connection_type: 'supabase_realtime'
+                        }),
+                        metadata: JSON.stringify({
+                            agent_version: '4.1.0',
+                            global_edition: true
+                        })
                     })
-                })
-                .select();
+                });
                 
+                presenceData = presenceResponse.ok ? await presenceResponse.json() : null;
+                presenceError = !presenceResponse.ok ? { status: presenceResponse.status, message: await presenceResponse.text() } : null;
+            } catch (err) {
+                presenceError = { message: err.message };
+            }
+            
             if (presenceError) {
                 console.warn('⚠️ Device presence update failed:', presenceError.message);
                 // Continue anyway - might be a permissions issue but we can still try the device registration
@@ -169,11 +197,16 @@ class SupabaseRealtimeAgent {
                 console.log('✅ Device presence updated successfully');
             }
             
-            // Then register/update the device in remote_devices table
-            const { data, error } = await this.supabaseClient
-                .from('remote_devices')
-                .upsert({
-                    device_id: this.deviceId,
+            // Then register/update the device in remote_devices table using REST API directly
+            const deviceResponse = await fetch(`${this.supabaseUrl}/rest/v1/remote_devices`, {
+                method: 'POST',
+                headers: {
+                    ...this.authHeaders,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'resolution=merge-duplicates'
+                },
+                body: JSON.stringify({
+                    id: this.deviceId,  // Use id instead of device_id to match schema
                     device_name: this.deviceName,
                     device_type: 'desktop',
                     operating_system: `${os.platform()} ${os.release()}`,
@@ -182,7 +215,10 @@ class SupabaseRealtimeAgent {
                     last_seen: new Date().toISOString(),
                     metadata: deviceData.metadata
                 })
-                .select();
+            });
+            
+            const data = deviceResponse.ok ? await deviceResponse.json() : null;
+            const error = !deviceResponse.ok ? { status: deviceResponse.status, message: await deviceResponse.text() } : null;
             
             if (error) {
                 console.error('❌ Failed to register device:', error.message);
@@ -190,13 +226,16 @@ class SupabaseRealtimeAgent {
                 
                 // If we get a 401, it might be an authentication issue with the table
                 // Let's try a simpler approach with just a GET request to verify connectivity
-                const testResponse = await this.supabaseClient
-                    .from('remote_devices')
-                    .select('count')
-                    .limit(1);
+                const testResponse = await fetch(`${this.supabaseUrl}/rest/v1/remote_devices?select=count&limit=1`, {
+                    method: 'GET',
+                    headers: this.authHeaders
+                });
+                
+                const testData = testResponse.ok ? await testResponse.json() : null;
+                const testError = !testResponse.ok ? { status: testResponse.status, message: await testResponse.text() } : null;
                     
-                if (testResponse.error) {
-                    console.error('❌ Test query also failed:', testResponse.error.message);
+                if (testError) {
+                    console.error('❌ Test query also failed:', testError.message);
                 } else {
                     console.log('✅ Test query succeeded, but registration failed. Likely a schema mismatch.');
                 }
@@ -489,15 +528,21 @@ class SupabaseRealtimeAgent {
                 connectionType: 'supabase_realtime'
             });
             
-            // Also update the database record directly
-            if (this.supabaseClient) {
-                await this.supabaseClient
-                    .from('remote_devices')
-                    .update({
+            // Also update the database record directly using REST API
+            try {
+                await fetch(`${this.supabaseUrl}/rest/v1/remote_devices?id=eq.${this.deviceId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        ...this.authHeaders,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
                         last_seen: new Date().toISOString(),
                         status: 'online'
                     })
-                    .eq('id', this.deviceId);
+                });
+            } catch (error) {
+                console.error('❌ Error updating heartbeat status:', error.message);
             }
             
             console.log('💓 Heartbeat sent via Supabase Realtime');
@@ -536,21 +581,23 @@ class SupabaseRealtimeAgent {
                 await this.endSession(this.activeSession.id);
             }
             
-            // Update device status to offline
-            if (this.supabaseClient) {
-                try {
-                    await this.supabaseClient
-                        .from('remote_devices')
-                        .update({
-                            status: 'offline',
-                            last_seen: new Date().toISOString()
-                        })
-                        .eq('id', this.deviceId);
-                        
-                    console.log('✅ Device status updated to offline');
-                } catch (error) {
-                    console.error('❌ Error updating device status:', error.message);
-                }
+            // Update device status to offline using REST API
+            try {
+                await fetch(`${this.supabaseUrl}/rest/v1/remote_devices?id=eq.${this.deviceId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        ...this.authHeaders,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        status: 'offline',
+                        last_seen: new Date().toISOString()
+                    })
+                });
+                
+                console.log('✅ Device status updated to offline');
+            } catch (error) {
+                console.error('❌ Error updating device status:', error.message);
             }
             
             // Unsubscribe from Realtime channels
