@@ -158,18 +158,13 @@ class SupabaseRealtimeAgent {
             
             console.log('📝 Registering device with data:', JSON.stringify(deviceData, null, 2));
             
-            // First, try to update device presence using REST API directly
+            // First, try to update device presence using Supabase client directly
             let presenceData = null;
             let presenceError = null;
             try {
-                const presenceResponse = await fetch(`${this.supabaseUrl}/rest/v1/device_presence`, {
-                    method: 'POST',
-                    headers: {
-                        ...this.authHeaders,
-                        'Content-Type': 'application/json',
-                        'Prefer': 'resolution=merge-duplicates'
-                    },
-                    body: JSON.stringify({
+                const { data, error } = await this.supabaseClient
+                    .from('device_presence')
+                    .upsert({
                         device_id: this.deviceId,
                         status: 'online',
                         last_seen: new Date().toISOString(),
@@ -178,14 +173,14 @@ class SupabaseRealtimeAgent {
                             connection_type: 'supabase_realtime'
                         }),
                         metadata: JSON.stringify({
-                            agent_version: '4.1.0',
+                            agent_version: '4.2.0',
                             global_edition: true
                         })
                     })
-                });
+                    .select();
                 
-                presenceData = presenceResponse.ok ? await presenceResponse.json() : null;
-                presenceError = !presenceResponse.ok ? { status: presenceResponse.status, message: await presenceResponse.text() } : null;
+                presenceData = data;
+                presenceError = error;
             } catch (err) {
                 presenceError = { message: err.message };
             }
@@ -197,15 +192,10 @@ class SupabaseRealtimeAgent {
                 console.log('✅ Device presence updated successfully');
             }
             
-            // Then register/update the device in remote_devices table using REST API directly
-            const deviceResponse = await fetch(`${this.supabaseUrl}/rest/v1/remote_devices`, {
-                method: 'POST',
-                headers: {
-                    ...this.authHeaders,
-                    'Content-Type': 'application/json',
-                    'Prefer': 'resolution=merge-duplicates'
-                },
-                body: JSON.stringify({
+            // Then register/update the device in remote_devices table using Supabase client
+            const { data, error } = await this.supabaseClient
+                .from('remote_devices')
+                .upsert({
                     id: this.deviceId,  // Use id instead of device_id to match schema
                     device_name: this.deviceName,
                     device_type: 'desktop',
@@ -215,10 +205,7 @@ class SupabaseRealtimeAgent {
                     last_seen: new Date().toISOString(),
                     metadata: deviceData.metadata
                 })
-            });
-            
-            const data = deviceResponse.ok ? await deviceResponse.json() : null;
-            const error = !deviceResponse.ok ? { status: deviceResponse.status, message: await deviceResponse.text() } : null;
+                .select();
             
             if (error) {
                 console.error('❌ Failed to register device:', error.message);
@@ -226,13 +213,10 @@ class SupabaseRealtimeAgent {
                 
                 // If we get a 401, it might be an authentication issue with the table
                 // Let's try a simpler approach with just a GET request to verify connectivity
-                const testResponse = await fetch(`${this.supabaseUrl}/rest/v1/remote_devices?select=count&limit=1`, {
-                    method: 'GET',
-                    headers: this.authHeaders
-                });
-                
-                const testData = testResponse.ok ? await testResponse.json() : null;
-                const testError = !testResponse.ok ? { status: testResponse.status, message: await testResponse.text() } : null;
+                const { data: testData, error: testError } = await this.supabaseClient
+                    .from('remote_devices')
+                    .select('count')
+                    .limit(1);
                     
                 if (testError) {
                     console.error('❌ Test query also failed:', testError.message);
@@ -528,19 +512,15 @@ class SupabaseRealtimeAgent {
                 connectionType: 'supabase_realtime'
             });
             
-            // Also update the database record directly using REST API
+            // Also update the database record directly using Supabase client
             try {
-                await fetch(`${this.supabaseUrl}/rest/v1/remote_devices?id=eq.${this.deviceId}`, {
-                    method: 'PATCH',
-                    headers: {
-                        ...this.authHeaders,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
+                await this.supabaseClient
+                    .from('remote_devices')
+                    .update({
                         last_seen: new Date().toISOString(),
                         status: 'online'
                     })
-                });
+                    .eq('id', this.deviceId);
             } catch (error) {
                 console.error('❌ Error updating heartbeat status:', error.message);
             }
@@ -581,19 +561,15 @@ class SupabaseRealtimeAgent {
                 await this.endSession(this.activeSession.id);
             }
             
-            // Update device status to offline using REST API
+            // Update device status to offline using Supabase client
             try {
-                await fetch(`${this.supabaseUrl}/rest/v1/remote_devices?id=eq.${this.deviceId}`, {
-                    method: 'PATCH',
-                    headers: {
-                        ...this.authHeaders,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
+                await this.supabaseClient
+                    .from('remote_devices')
+                    .update({
                         status: 'offline',
                         last_seen: new Date().toISOString()
                     })
-                });
+                    .eq('id', this.deviceId);
                 
                 console.log('✅ Device status updated to offline');
             } catch (error) {
