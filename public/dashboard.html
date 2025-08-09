@@ -281,7 +281,8 @@
         const SUPABASE_URL = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
         const SUPABASE_ANON_KEY = 'REDACTED_JWT';
         
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const { createClient } = supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         
         let devices = [];
         let activeDevice = null;
