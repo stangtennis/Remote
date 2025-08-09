@@ -287,12 +287,19 @@
         let activeDevice = null;
         let activeSession = null;
         
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
+        // Initialize dashboard
+        console.log('Dashboard script loading...');
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing dashboard...');
             logActivity('Dashboard initialized');
+            console.log('Starting dashboard initialization...');
+            initializeSupabase();
             loadDevices();
-            setupRealTimeUpdates();
+            initializeScreen();
+            
+            // Auto-refresh devices every 30 seconds
             setInterval(loadDevices, 30000);
+            console.log('Dashboard initialization complete');
         });
         
         // Load devices
@@ -737,7 +744,7 @@
                 const x = (e.clientX - rect.left) * scaleX;
                 const y = (e.clientY - rect.top) * scaleY;
                 
-                sendCommand({ type: 'mouse_click', x: Math.round(x), y: Math.round(y), button: 'left' });
+                sendCommand({ type: 'mouse_input', x: Math.round(x), y: Math.round(y), button: 'left', action: 'click' });
                 logActivity(`Mouse click at (${Math.round(x)}, ${Math.round(y)})`);
             });
             
