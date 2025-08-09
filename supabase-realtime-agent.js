@@ -12,6 +12,8 @@ const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+const ProfessionalScreenCapture = require('./lib/screen-capture');
+const ProfessionalInputControl = require('./lib/input-control');
 
 class SupabaseRealtimeAgent {
     constructor() {
@@ -29,6 +31,12 @@ class SupabaseRealtimeAgent {
         this.fileTransferManager = null;
         this.activeTransfers = new Map();
         this.transferChannel = null;
+        
+        // Professional screen capture (initialized after setup)
+        this.screenCapture = null;
+        
+        // Professional input control (initialized after setup)
+        this.inputControl = null;
         
         // Supabase configuration
         this.supabaseUrl = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
@@ -129,7 +137,7 @@ class SupabaseRealtimeAgent {
             
             // Set up remote control capabilities
             console.log('🛠️ Setting up remote control capabilities...');
-            this.setupRemoteControlCapabilities();
+            await this.setupRemoteControlCapabilities();
             
             // Initialize file transfer manager
             console.log('📁 Setting up file transfer capabilities...');
@@ -457,138 +465,145 @@ class SupabaseRealtimeAgent {
         }
     }
 
-    setupRemoteControlCapabilities() {
-        // Set up screen capture capability
-        this.setupScreenCapture();
+    async setupRemoteControlCapabilities() {
+        // Set up screen capture capability (now async with real native capture)
+        await this.setupScreenCapture();
         
-        // Set up input control capability
-        this.setupInputControl();
+        // Set up input control capability (now async with real native input)
+        await this.setupInputControl();
         
         // Set up file transfer capability
         this.setupFileTransfer();
         
-        // Set up session management
+        // Set up session management capability
         this.setupSessionManagement();
     }
 
-    setupScreenCapture() {
-        // Enhanced screen capture implementation with system information
-        this.captureScreen = () => {
-            try {
-                // Get actual screen resolution from system
-                const screenWidth = process.platform === 'win32' ? 1920 : 1920; // Could use native modules for real resolution
-                const screenHeight = process.platform === 'win32' ? 1080 : 1080;
-                
-                // Generate a more realistic mock screenshot with system info
+    async setupScreenCapture() {
+        console.log('🎥 Initializing Professional Screen Capture...');
+        
+        try {
+            // Initialize professional screen capture with optimized settings
+            this.screenCapture = new ProfessionalScreenCapture({
+                quality: 80,        // JPEG quality for balance of quality/bandwidth
+                maxWidth: 1920,     // Max resolution width
+                maxHeight: 1080,    // Max resolution height
+                frameRate: 10,      // Target 10 FPS for real-time streaming
+                compression: true   // Enable compression for bandwidth optimization
+            });
+            
+            // Initialize displays and test capture
+            const initialized = await this.screenCapture.initialize();
+            if (!initialized) {
+                throw new Error('Failed to initialize screen capture displays');
+            }
+            
+            // Replace mock captureScreen with real implementation
+            this.captureScreen = async () => {
+                try {
+                    // Capture real screen using professional module
+                    const base64ImageData = await this.screenCapture.captureScreenAuto();
+                    
+                    // Return compatible format for existing dashboard
+                    const screenData = {
+                        timestamp: Date.now(),
+                        width: this.screenCapture.maxWidth,
+                        height: this.screenCapture.maxHeight,
+                        format: 'jpeg',
+                        platform: os.platform(),
+                        hostname: os.hostname(),
+                        data: base64ImageData, // Real base64 image data
+                        quality: this.screenCapture.quality,
+                        compression: 'jpeg',
+                        stats: this.screenCapture.getStats()
+                    };
+                    
+                    // Log performance stats periodically
+                    const stats = this.screenCapture.getStats();
+                    if (stats.totalFrames % 30 === 0) {
+                        console.log(`📊 Screen Capture: ${stats.totalFrames} frames, ${stats.averageFPS.toFixed(1)} FPS`);
+                    }
+                    
+                    return screenData;
+                    
+                } catch (error) {
+                    console.error('❌ Professional screen capture error:', error.message);
+                    
+                    // Fallback to error placeholder
+                    return {
+                        timestamp: Date.now(),
+                        width: 1920,
+                        height: 1080,
+                        format: 'jpeg',
+                        platform: os.platform(),
+                        data: await this.screenCapture.createErrorPlaceholder(),
+                        error: error.message
+                    };
+                }
+            };
+            
+            console.log('✅ Professional Screen Capture initialized successfully');
+            
+        } catch (error) {
+            console.error('❌ Failed to initialize Professional Screen Capture:', error.message);
+            console.log('🔄 Falling back to basic screen capture...');
+            
+            // Fallback to basic implementation if native modules fail
+            this.captureScreen = () => {
                 const screenData = {
-                    timestamp: Date.now(),
-                    width: screenWidth,
-                    height: screenHeight,
-                    format: 'jpeg',
-                    platform: os.platform(),
-                    hostname: os.hostname(),
-                    // In production, this would be actual screenshot data from native modules like screenshot-desktop
-                    data: `screenshot_${Date.now()}_${screenWidth}x${screenHeight}_base64_placeholder`,
-                    quality: 80,
-                    compression: 'jpeg'
-                };
-                
-                console.log(`📸 Screen captured: ${screenWidth}x${screenHeight} on ${os.platform()}`);
-                return screenData;
-                
-            } catch (error) {
-                console.error('❌ Screen capture error:', error.message);
-                return {
                     timestamp: Date.now(),
                     width: 1920,
                     height: 1080,
                     format: 'jpeg',
-                    data: 'error_capturing_screen',
-                    error: error.message
+                    platform: os.platform(),
+                    hostname: os.hostname(),
+                    data: 'data:image/svg+xml;base64,' + Buffer.from(
+                        `<svg width="1920" height="1080" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="100%" height="100%" fill="#1a1a1a"/>
+                            <text x="50%" y="45%" text-anchor="middle" fill="#ff6b6b" font-family="Arial" font-size="48">
+                                Screen Capture Unavailable
+                            </text>
+                            <text x="50%" y="55%" text-anchor="middle" fill="#888" font-family="Arial" font-size="24">
+                                Native modules not available - ${error.message}
+                            </text>
+                        </svg>`
+                    ).toString('base64'),
+                    quality: 80,
+                    compression: 'svg',
+                    fallback: true
                 };
-            }
-        };
-    }
-
-    setupInputControl() {
-        // Enhanced input control implementation with validation and logging
-        this.handleMouseInput = (x, y, button, action) => {
-            try {
-                // Validate coordinates
-                if (typeof x !== 'number' || typeof y !== 'number' || x < 0 || y < 0) {
-                    throw new Error('Invalid mouse coordinates');
-                }
-                
-                // Validate button
-                const validButtons = ['left', 'right', 'middle'];
-                if (!validButtons.includes(button)) {
-                    throw new Error('Invalid mouse button');
-                }
-                
-                // Validate action
-                const validActions = ['click', 'down', 'up', 'move', 'drag'];
-                if (!validActions.includes(action)) {
-                    throw new Error('Invalid mouse action');
-                }
-                
-                console.log(`🖱️ Mouse ${action}: (${x}, ${y}) button: ${button} on ${os.platform()}`);
-                
-                // In production, this would use native modules like robotjs:
-                // robot.moveMouse(x, y);
-                // robot.mouseClick(button);
                 
                 return { 
                     success: true, 
-                    message: `Mouse ${action} executed at (${x}, ${y})`,
+                    message: `Mock mouse ${action} at (${x}, ${y}) - Native input unavailable`,
                     timestamp: Date.now(),
-                    platform: os.platform()
+                    platform: os.platform(),
+                    fallback: true
                 };
-                
-            } catch (error) {
-                console.error('❌ Mouse input error:', error.message);
-                return { 
-                    success: false, 
-                    error: error.message,
-                    timestamp: Date.now()
-                };
-            }
-        };
+            };
 
-        this.handleKeyboardInput = (key, action) => {
-            try {
-                // Validate action
-                const validActions = ['keydown', 'keyup', 'keypress', 'type'];
-                if (!validActions.includes(action)) {
-                    throw new Error('Invalid keyboard action');
-                }
-                
-                // Validate key
-                if (typeof key !== 'string' || key.length === 0) {
-                    throw new Error('Invalid key input');
-                }
-                
-                console.log(`⌨️ Keyboard ${action}: "${key}" on ${os.platform()}`);
-                
-                // In production, this would use native modules like robotjs:
-                // robot.keyTap(key);
-                // robot.typeString(key);
-                
+            this.handleKeyboardInput = (key, action) => {
+                console.log(`⌨️ Mock Keyboard ${action}: '${key}'`);
                 return { 
                     success: true, 
-                    message: `Key ${action} executed: "${key}"`,
+                    message: `Mock keyboard ${action} for '${key}' - Native input unavailable`,
                     timestamp: Date.now(),
-                    platform: os.platform()
+                    platform: os.platform(),
+                    fallback: true
                 };
-                
-            } catch (error) {
-                console.error('❌ Keyboard input error:', error.message);
+            };
+            
+            this.handleSpecialKeys = (combination) => {
+                console.log(`⌨️ Mock Special Keys: ${combination}`);
                 return { 
-                    success: false, 
-                    error: error.message,
-                    timestamp: Date.now()
+                    success: true, 
+                    message: `Mock special keys ${combination} - Native input unavailable`,
+                    timestamp: Date.now(),
+                    platform: os.platform(),
+                    fallback: true
                 };
-            }
-        };
+            };
+        }
     }
 
     setupFileTransfer() {
