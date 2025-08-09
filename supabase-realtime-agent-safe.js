@@ -543,10 +543,18 @@ class SupabaseRealtimeAgent {
             if (this.activeSession) {
                 const screenData = this.captureScreen();
                 console.log('📸 Screen data captured, sending to dashboard...');
-                this.sendRealtimeResponse({
-                    type: 'screen_frame',
-                    sessionId: this.activeSession.id,
-                    data: screenData
+                
+                // Send screen frame with correct event type for dashboard
+                this.realtimeChannel.send({
+                    type: 'broadcast',
+                    event: 'screen_frame',
+                    payload: {
+                        type: 'screen_frame',
+                        sessionId: this.activeSession.id,
+                        data: screenData,
+                        deviceId: this.deviceId,
+                        timestamp: Date.now()
+                    }
                 });
             } else {
                 console.log('⚠️ No active session, skipping screen frame');
