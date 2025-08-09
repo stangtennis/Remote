@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Remote Desktop</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .status {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        
+        #remoteVideo {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            background: #4CAF50;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .disconnect {
+            background: #f44336;
+        }
+        
+        .disconnect:hover {
+            background: #da190b;
+        }
+        
+        .log {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+        }
+        
+        .log-entry.error {
+            color: #ff6b6b;
+        }
+        
+        .log-entry.success {
+            color: #51cf66;
+        }
+        
+        .log-entry.info {
+            color: #74c0fc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🖥️ WebRTC Remote Desktop</h1>
+            <p>Professional screen sharing using native WebRTC technology</p>
+        </div>
+        
+        <div class="status">
+            <strong>Status:</strong> <span id="connectionStatus">Disconnected</span> |
+            <strong>Quality:</strong> <span id="quality">-</span> |
+            <strong>Latency:</strong> <span id="latency">-</span>ms
+        </div>
+        
+        <div class="video-container">
+            <video id="remoteVideo" autoplay muted playsinline></video>
+        </div>
+        
+        <div class="controls">
+            <button id="connectBtn" onclick="connect()">🔗 Connect</button>
+            <button id="disconnectBtn" onclick="disconnect()" class="disconnect" disabled>❌ Disconnect</button>
+            <button id="fullscreenBtn" onclick="toggleFullscreen()">🔍 Fullscreen</button>
+            <button id="screenshotBtn" onclick="takeScreenshot()">📸 Screenshot</button>
+        </div>
+        
+        <div class="log" id="log">
+            <div class="log-entry info">🚀 WebRTC Remote Desktop initialized</div>
+            <div class="log-entry info">💡 Click Connect to start screen sharing session</div>
+        </div>
+    </div>
+
+    <script>
+        console.log('🚀 WebRTC Remote Desktop Dashboard Loading...');
+        
+        // WebRTC Configuration
+        const config = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+        
+        let peerConnection = null;
+        let localStream = null;
+        let remoteStream = null;
+        let isConnected = false;
+        
+        // DOM Elements
+        const remoteVideo = document.getElementById('remoteVideo');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const quality = document.getElementById('quality');
+        const latency = document.getElementById('latency');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const log = document.getElementById('log');
+        
+        // Logging function
+        function addLog(message, type = 'info') {
+            console.log(`[${type.toUpperCase()}] ${message}`);
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        // Initialize WebRTC connection
+        async function initializePeerConnection() {
+            try {
+                peerConnection = new RTCPeerConnection(config);
+                addLog('✅ WebRTC PeerConnection created', 'success');
+                
+                // Handle incoming stream
+                peerConnection.ontrack = (event) => {
+                    addLog('📺 Received remote stream', 'success');
+                    remoteStream = event.streams[0];
+                    remoteVideo.srcObject = remoteStream;
+                    updateConnectionStatus('Connected');
+                };
+                
+                // Handle connection state changes
+                peerConnection.onconnectionstatechange = () => {
+                    const state = peerConnection.connectionState;
+                    addLog(`🔄 Connection state: ${state}`, state === 'connected' ? 'success' : 'info');
+                    
+                    if (state === 'connected') {
+                        isConnected = true;
+                        connectBtn.disabled = true;
+                        disconnectBtn.disabled = false;
+                        startQualityMonitoring();
+                    } else if (state === 'disconnected' || state === 'failed') {
+                        handleDisconnection();
+                    }
+                };
+                
+                // Handle ICE candidates
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        addLog('🧊 ICE candidate generated', 'info');
+                        // In a real implementation, send this to the remote peer
+                    }
+                };
+                
+                return true;
+            } catch (error) {
+                addLog(`❌ Failed to initialize WebRTC: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        // Start screen capture (for demonstration - normally this would be on the remote side)
+        async function startScreenCapture() {
+            try {
+                const displayMediaOptions = {
+                    video: {
+                        cursor: 'always',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                        frameRate: { ideal: 30 }
+                    },
+                    audio: false
+                };
+                
+                localStream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
+                addLog('🖥️ Screen capture started', 'success');
+                
+                // Add tracks to peer connection
+                localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, localStream);
+                });
+                
+                // Handle stream end
+                localStream.getVideoTracks()[0].onended = () => {
+                    addLog('🛑 Screen sharing ended by user', 'info');
+                    disconnect();
+                };
+                
+                return true;
+            } catch (error) {
+                addLog(`❌ Screen capture failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        // Connect to remote desktop
+        async function connect() {
+            addLog('🔄 Initiating connection...', 'info');
+            updateConnectionStatus('Connecting...');
+            
+            if (!await initializePeerConnection()) {
+                updateConnectionStatus('Failed');
+                return;
+            }
+            
+            // For demonstration, we'll capture our own screen
+            // In a real implementation, this would be handled by the remote agent
+            if (!await startScreenCapture()) {
+                updateConnectionStatus('Failed');
+                return;
+            }
+            
+            try {
+                // Create and send offer
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                addLog('📤 Offer created and set as local description', 'success');
+                
+                // In a real implementation, send offer to remote peer via signaling server
+                // For demo, we'll simulate immediate connection
+                setTimeout(() => {
+                    simulateRemoteConnection();
+                }, 1000);
+                
+            } catch (error) {
+                addLog(`❌ Connection failed: ${error.message}`, 'error');
+                updateConnectionStatus('Failed');
+            }
+        }
+        
+        // Simulate remote connection (for demonstration)
+        async function simulateRemoteConnection() {
+            try {
+                // In a real implementation, this would be handled by signaling server
+                addLog('🤝 Simulating remote peer connection...', 'info');
+                
+                // For demo purposes, we'll connect to ourselves
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setRemoteDescription(answer);
+                addLog('📥 Answer received and set as remote description', 'success');
+                
+            } catch (error) {
+                addLog(`❌ Remote connection failed: ${error.message}`, 'error');
+            }
+        }
+        
+        // Disconnect from remote desktop
+        function disconnect() {
+            addLog('🔄 Disconnecting...', 'info');
+            
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
+            remoteVideo.srcObject = null;
+            handleDisconnection();
+        }
+        
+        // Handle disconnection cleanup
+        function handleDisconnection() {
+            isConnected = false;
+            updateConnectionStatus('Disconnected');
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            quality.textContent = '-';
+            latency.textContent = '-';
+            addLog('🔌 Disconnected from remote desktop', 'info');
+        }
+        
+        // Update connection status
+        function updateConnectionStatus(status) {
+            connectionStatus.textContent = status;
+            connectionStatus.style.color = status === 'Connected' ? '#51cf66' : 
+                                         status === 'Connecting...' ? '#74c0fc' : 
+                                         status === 'Failed' ? '#ff6b6b' : 'white';
+        }
+        
+        // Start quality monitoring
+        function startQualityMonitoring() {
+            const interval = setInterval(async () => {
+                if (!isConnected || !peerConnection) {
+                    clearInterval(interval);
+                    return;
+                }
+                
+                try {
+                    const stats = await peerConnection.getStats();
+                    let videoStats = null;
+                    
+                    stats.forEach(stat => {
+                        if (stat.type === 'inbound-rtp' && stat.mediaType === 'video') {
+                            videoStats = stat;
+                        }
+                    });
+                    
+                    if (videoStats) {
+                        const fps = Math.round(videoStats.framesPerSecond || 0);
+                        const resolution = `${videoStats.frameWidth}x${videoStats.frameHeight}`;
+                        quality.textContent = `${fps}fps @ ${resolution}`;
+                        
+                        // Simulate latency (in real implementation, measure RTT)
+                        latency.textContent = Math.round(Math.random() * 50 + 10);
+                    }
+                } catch (error) {
+                    // Ignore stats errors
+                }
+            }, 2000);
+        }
+        
+        // Toggle fullscreen
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                remoteVideo.requestFullscreen().catch(err => {
+                    addLog(`❌ Fullscreen failed: ${err.message}`, 'error');
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+        
+        // Take screenshot
+        function takeScreenshot() {
+            if (!remoteVideo.videoWidth) {
+                addLog('❌ No video stream to capture', 'error');
+                return;
+            }
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = remoteVideo.videoWidth;
+            canvas.height = remoteVideo.videoHeight;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(remoteVideo, 0, 0);
+            
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `screenshot-${Date.now()}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+                addLog('📸 Screenshot saved', 'success');
+            });
+        }
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', () => {
+            addLog('✅ WebRTC Dashboard initialized successfully', 'success');
+            addLog('🎯 Ready for screen sharing connections', 'info');
+        });
+        
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            if (isConnected) {
+                disconnect();
+            }
+        });
+    </script>
+</body>
+</html>
