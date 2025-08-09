@@ -921,11 +921,32 @@
         function setupScreenFrameListener() {
             if (!activeDevice) return;
             
-            const channel = supabaseClient.channel(`device-${activeDevice.id}`);
+            const channelName = `device-${activeDevice.id}`;
+            console.log('Setting up screen frame listener for channel:', channelName);
             
-            channel.on('broadcast', { event: 'screen_frame' }, (payload) => {
+            // Create new channel for screen frames
+            const screenChannel = supabaseClient.channel(channelName + '-screen');
+            
+            screenChannel.on('broadcast', { event: 'screen_frame' }, (payload) => {
+                console.log('Received screen frame:', payload);
                 if (payload.payload && payload.payload.data) {
                     displayScreenFrame(payload.payload.data);
+                } else if (payload.payload) {
+                    // Try direct data access
+                    displayScreenFrame(payload.payload);
+                }
+            }).subscribe((status) => {
+                console.log('Screen frame channel status:', status);
+            });
+            
+            // Also listen on the main device channel
+            const mainChannel = supabaseClient.channel(channelName);
+            mainChannel.on('broadcast', { event: 'screen_frame' }, (payload) => {
+                console.log('Received screen frame on main channel:', payload);
+                if (payload.payload && payload.payload.data) {
+                    displayScreenFrame(payload.payload.data);
+                } else if (payload.payload) {
+                    displayScreenFrame(payload.payload);
                 }
             }).subscribe();
         }
