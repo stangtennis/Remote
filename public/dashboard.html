@@ -135,8 +135,34 @@
         }
         
         .screen-area {
-            background: #000; border-radius: 10px; display: flex;
-            align-items: center; justify-content: center; color: white;
+            background: #000; border-radius: 10px; position: relative; color: white;
+        }
+        
+        .screen-controls {
+            position: absolute; top: 10px; right: 10px; z-index: 10;
+            display: flex; gap: 5px;
+        }
+        
+        .screen-btn {
+            background: rgba(0,0,0,0.7); border: none; color: white; padding: 8px;
+            border-radius: 6px; cursor: pointer; font-size: 1rem;
+        }
+        
+        .screen-btn:hover { background: rgba(0,0,0,0.9); }
+        
+        .screen-container {
+            width: 100%; height: 100%; display: flex; align-items: center; 
+            justify-content: center; position: relative; min-height: 400px;
+        }
+        
+        #remoteScreen {
+            border-radius: 8px; cursor: crosshair;
+        }
+        
+        .fullscreen-mode {
+            position: fixed !important; top: 0 !important; left: 0 !important;
+            width: 100vw !important; height: 100vh !important; z-index: 9999 !important;
+            background: #000 !important; border-radius: 0 !important;
         }
         
         .controls {
@@ -414,11 +440,19 @@
             document.getElementById('panelTitle').textContent = `Remote Control - ${activeDevice.device_name}`;
             document.getElementById('contentArea').innerHTML = `
                 <div class="remote-content">
-                    <div class="screen-area">
-                        <div style="text-align: center;">
-                            <div style="font-size: 3rem; margin-bottom: 10px;">📺</div>
-                            <div>Remote screen will appear here</div>
-                            <div style="margin-top: 10px; font-size: 0.9rem;">Click "Start Session" to begin</div>
+                    <div class="screen-area" id="screenArea">
+                        <div class="screen-controls">
+                            <button class="screen-btn" onclick="toggleFullscreen()" title="Full Screen">🔳</button>
+                            <button class="screen-btn" onclick="fitToWindow()" title="Fit to Window">📐</button>
+                            <button class="screen-btn" onclick="actualSize()" title="Actual Size">🔍</button>
+                        </div>
+                        <div class="screen-container" id="screenContainer">
+                            <canvas id="remoteScreen" style="max-width: 100%; max-height: 100%; background: #000;"></canvas>
+                            <div id="screenPlaceholder" style="text-align: center; color: white; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                                <div style="font-size: 3rem; margin-bottom: 10px;">📺</div>
+                                <div>Remote screen will appear here</div>
+                                <div style="margin-top: 10px; font-size: 0.9rem;">Click "Start Session" to begin</div>
+                            </div>
                         </div>
                     </div>
                     
@@ -482,6 +516,9 @@
                 const sessionId = 'session_' + Date.now();
                 activeSession = { id: sessionId, deviceId: activeDevice.id };
                 
+                // Set up screen frame listener for this device
+                setupScreenFrameListener();
+                
                 await sendCommand({
                     type: 'start_session',
                     sessionId: sessionId,
@@ -489,10 +526,27 @@
                 });
                 
                 logActivity('Session started');
+                initializeScreen();
                 
             } catch (error) {
                 logActivity(`Session error: ${error.message}`);
             }
+        }
+        
+        function setupScreenFrameListener() {
+            if (!activeDevice) return;
+            
+            const deviceChannel = `device-${activeDevice.id}`;
+            supabaseClient
+                .channel(deviceChannel)
+                .on('broadcast', { event: 'screen_frame' }, (payload) => {
+                    if (payload.payload && payload.payload.frameData) {
+                        displayScreenFrame(payload.payload.frameData);
+                    }
+                })
+                .subscribe();
+                
+            logActivity(`Screen frame listener set up for ${activeDevice.device_name}`);
         }
         
         async function endSession() {
@@ -659,6 +713,113 @@
             alert('File transfer completed!');
         }
         
+        // Screen display functions
+        let isFullscreen = false;
+        let screenCanvas = null;
+        let screenContext = null;
+        
+        function initializeScreen() {
+            screenCanvas = document.getElementById('remoteScreen');
+            if (screenCanvas) {
+                screenContext = screenCanvas.getContext('2d');
+                setupScreenEventListeners();
+            }
+        }
+        
+        function setupScreenEventListeners() {
+            if (!screenCanvas) return;
+            
+            // Mouse events for remote control
+            screenCanvas.addEventListener('click', (e) => {
+                const rect = screenCanvas.getBoundingClientRect();
+                const scaleX = screenCanvas.width / rect.width;
+                const scaleY = screenCanvas.height / rect.height;
+                const x = (e.clientX - rect.left) * scaleX;
+                const y = (e.clientY - rect.top) * scaleY;
+                
+                sendCommand({ type: 'mouse_click', x: Math.round(x), y: Math.round(y), button: 'left' });
+                logActivity(`Mouse click at (${Math.round(x)}, ${Math.round(y)})`);
+            });
+            
+            // Keyboard events
+            screenCanvas.addEventListener('keydown', (e) => {
+                e.preventDefault();
+                sendCommand({ type: 'key_press', key: e.key, code: e.code });
+                logActivity(`Key pressed: ${e.key}`);
+            });
+            
+            screenCanvas.tabIndex = 0; // Make canvas focusable
+        }
+        
+        function displayScreenFrame(frameData) {
+            if (!screenCanvas || !screenContext) {
+                initializeScreen();
+                if (!screenCanvas) return;
+            }
+            
+            const img = new Image();
+            img.onload = function() {
+                screenCanvas.width = img.width;
+                screenCanvas.height = img.height;
+                screenContext.drawImage(img, 0, 0);
+                
+                // Hide placeholder when first frame is displayed
+                const placeholder = document.getElementById('screenPlaceholder');
+                if (placeholder) {
+                    placeholder.style.display = 'none';
+                }
+            };
+            img.src = 'data:image/png;base64,' + frameData;
+        }
+        
+        function toggleFullscreen() {
+            const screenArea = document.getElementById('screenArea');
+            if (!screenArea) return;
+            
+            if (!isFullscreen) {
+                screenArea.classList.add('fullscreen-mode');
+                isFullscreen = true;
+                logActivity('Entered fullscreen mode');
+            } else {
+                screenArea.classList.remove('fullscreen-mode');
+                isFullscreen = false;
+                logActivity('Exited fullscreen mode');
+            }
+            
+            // Escape key to exit fullscreen
+            if (isFullscreen) {
+                document.addEventListener('keydown', handleEscapeKey);
+            } else {
+                document.removeEventListener('keydown', handleEscapeKey);
+            }
+        }
+        
+        function handleEscapeKey(e) {
+            if (e.key === 'Escape' && isFullscreen) {
+                toggleFullscreen();
+            }
+        }
+        
+        function fitToWindow() {
+            if (screenCanvas) {
+                screenCanvas.style.maxWidth = '100%';
+                screenCanvas.style.maxHeight = '100%';
+                screenCanvas.style.width = 'auto';
+                screenCanvas.style.height = 'auto';
+                logActivity('Screen fitted to window');
+            }
+        }
+        
+        function actualSize() {
+            if (screenCanvas) {
+                screenCanvas.style.maxWidth = 'none';
+                screenCanvas.style.maxHeight = 'none';
+                screenCanvas.style.width = screenCanvas.width + 'px';
+                screenCanvas.style.height = screenCanvas.height + 'px';
+                logActivity('Screen set to actual size');
+            }
+        }
+
         // Real-time updates
         function setupRealTimeUpdates() {
             supabaseClient
@@ -668,6 +829,19 @@
                     () => loadDevices()
                 )
                 .subscribe();
+                
+            // Listen for screen frames from active device
+            if (activeDevice) {
+                const deviceChannel = `device-${activeDevice.id}`;
+                supabaseClient
+                    .channel(deviceChannel)
+                    .on('broadcast', { event: 'screen_frame' }, (payload) => {
+                        if (payload.payload && payload.payload.frameData) {
+                            displayScreenFrame(payload.payload.frameData);
+                        }
+                    })
+                    .subscribe();
+            }
         }
         
         // Utility functions

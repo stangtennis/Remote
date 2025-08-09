@@ -142,19 +142,32 @@ async function initiateFileTransfer(req: Request, supabase: any) {
       )
     }
 
-    // Verify devices exist and are online
-    const { data: devices, error: deviceError } = await supabase
+    // Verify target device exists and is online (source can be 'dashboard')
+    let deviceQuery = supabase
       .from('remote_devices')
       .select('id, is_online, device_name')
-      .in('id', [transferRequest.sourceDeviceId, transferRequest.targetDeviceId])
 
-    if (deviceError || !devices || devices.length !== 2) {
+    if (transferRequest.sourceDeviceId === 'dashboard') {
+      // Dashboard to device transfer - only verify target device
+      deviceQuery = deviceQuery.eq('id', transferRequest.targetDeviceId)
+    } else if (transferRequest.targetDeviceId === 'dashboard') {
+      // Device to dashboard transfer - only verify source device  
+      deviceQuery = deviceQuery.eq('id', transferRequest.sourceDeviceId)
+    } else {
+      // Device to device transfer - verify both devices
+      deviceQuery = deviceQuery.in('id', [transferRequest.sourceDeviceId, transferRequest.targetDeviceId])
+    }
+
+    const { data: devices, error: deviceError } = await deviceQuery
+
+    if (deviceError || !devices || devices.length === 0) {
       return new Response(
         JSON.stringify({ error: 'Invalid device IDs' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
+    // Check if devices are online (skip dashboard)
     const offlineDevices = devices.filter(d => !d.is_online)
     if (offlineDevices.length > 0) {
       return new Response(
