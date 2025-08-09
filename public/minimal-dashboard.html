@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Minimal Dashboard Test</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Minimal Dashboard Test</h1>
+    <div id="status">Loading...</div>
+    
+    <script>
+        console.log('🚀 MINIMAL DASHBOARD JAVASCRIPT LOADING...');
+        
+        // Test basic JavaScript
+        document.getElementById('status').innerHTML = 'JavaScript is working!';
+        console.log('✅ Basic JavaScript working');
+        
+        // Test Supabase library
+        try {
+            console.log('🔧 Testing Supabase library...');
+            console.log('Supabase object:', typeof supabase);
+            
+            if (typeof supabase !== 'undefined') {
+                const { createClient } = supabase;
+                const client = createClient('https://ptrtibzwokjcjjxvjpin.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk');
+                console.log('✅ Supabase client created successfully');
+                document.getElementById('status').innerHTML = 'Supabase client working!';
+            } else {
+                console.error('❌ Supabase library not loaded');
+                document.getElementById('status').innerHTML = 'Supabase library failed to load';
+            }
+        } catch (error) {
+            console.error('❌ Supabase error:', error);
+            document.getElementById('status').innerHTML = 'Supabase error: ' + error.message;
+        }
+        
+        // Test DOM ready
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('✅ DOM Content Loaded');
+            document.getElementById('status').innerHTML += '<br>DOM Ready!';
+        });
+        
+        console.log('🎉 MINIMAL DASHBOARD SCRIPT COMPLETE');
+    </script>
+</body>
+</html>
