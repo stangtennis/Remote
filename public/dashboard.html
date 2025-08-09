@@ -281,8 +281,7 @@
         const SUPABASE_URL = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk';
         
-        const { createClient } = supabase;
-        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let supabaseClient;
         
         let devices = [];
         let activeDevice = null;
@@ -292,6 +291,17 @@
         console.log('Dashboard script loading...');
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM loaded, initializing dashboard...');
+            
+            // Initialize Supabase client after library is loaded
+            try {
+                const { createClient } = supabase;
+                supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log('Supabase client initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize Supabase client:', error);
+                return;
+            }
+            
             logActivity('Dashboard initialized');
             console.log('Starting dashboard initialization...');
             loadDevices();
