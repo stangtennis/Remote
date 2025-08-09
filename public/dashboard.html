@@ -610,7 +610,7 @@
             const x = parseInt(document.getElementById('mouseX').value) || 0;
             const y = parseInt(document.getElementById('mouseY').value) || 0;
             
-            await sendCommand({ type: 'mouse_click', x: x, y: y, button: button });
+            await sendCommand({ type: 'mouse_input', x: x, y: y, button: button, action: 'click' });
             logActivity(`Mouse ${button} click at (${x}, ${y})`);
         }
         
@@ -848,6 +848,95 @@
         function refreshDevices() {
             loadDevices();
             logActivity('Devices refreshed');
+        }
+        
+        // Missing remote control functions
+        async function startSession() {
+            if (!activeDevice) {
+                alert('Please select a device first');
+                return;
+            }
+            
+            const sessionId = 'session_' + Date.now();
+            activeSession = sessionId;
+            
+            await sendCommand({ 
+                type: 'start_session', 
+                sessionId: sessionId,
+                controller: { id: 'dashboard', name: 'Dashboard' }
+            });
+            
+            logActivity(`Started remote session: ${sessionId}`);
+            
+            // Start listening for screen frames
+            setupScreenFrameListener();
+        }
+        
+        async function endSession() {
+            if (!activeSession) return;
+            
+            await sendCommand({ 
+                type: 'end_session', 
+                sessionId: activeSession 
+            });
+            
+            logActivity(`Ended remote session: ${activeSession}`);
+            activeSession = null;
+        }
+        
+        async function captureScreen() {
+            if (!activeDevice) {
+                alert('Please select a device first');
+                return;
+            }
+            
+            await sendCommand({ type: 'capture_screen' });
+            logActivity('Screen capture requested');
+        }
+        
+        async function sendCommand(command) {
+            if (!activeDevice) return;
+            
+            try {
+                const channel = supabaseClient.channel(`device-${activeDevice.id}`);
+                
+                await channel.send({
+                    type: 'broadcast',
+                    event: 'command',
+                    payload: {
+                        ...command,
+                        timestamp: Date.now(),
+                        controller: { id: 'dashboard', name: 'Dashboard' }
+                    }
+                });
+                
+                console.log('Command sent:', command);
+                
+            } catch (error) {
+                console.error('Error sending command:', error);
+                logActivity(`Command error: ${error.message}`);
+            }
+        }
+        
+        function setupScreenFrameListener() {
+            if (!activeDevice) return;
+            
+            const channel = supabaseClient.channel(`device-${activeDevice.id}`);
+            
+            channel.on('broadcast', { event: 'screen_frame' }, (payload) => {
+                if (payload.payload && payload.payload.data) {
+                    displayScreenFrame(payload.payload.data);
+                }
+            }).subscribe();
+        }
+        
+        async function sendCtrlAltDel() {
+            await sendCommand({ 
+                type: 'keyboard_input', 
+                key: 'ctrl+alt+del', 
+                action: 'press' 
+            });
+            logActivity('Sent Ctrl+Alt+Del');
         }
         
         function logActivity(message) {
