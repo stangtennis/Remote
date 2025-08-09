@@ -924,31 +924,22 @@
             const channelName = `device-${activeDevice.id}`;
             console.log('Setting up screen frame listener for channel:', channelName);
             
-            // Create new channel for screen frames
-            const screenChannel = supabaseClient.channel(channelName + '-screen');
-            
-            screenChannel.on('broadcast', { event: 'screen_frame' }, (payload) => {
+            // Listen on the main device channel (matching working test dashboard)
+            const mainChannel = supabaseClient.channel(channelName);
+            mainChannel.on('broadcast', { event: 'screen_frame' }, (payload) => {
                 console.log('Received screen frame:', payload);
-                if (payload.payload && payload.payload.data) {
-                    displayScreenFrame(payload.payload.data);
-                } else if (payload.payload) {
-                    // Try direct data access
+                if (payload.payload) {
                     displayScreenFrame(payload.payload);
+                } else {
+                    displayScreenFrame(payload);
                 }
             }).subscribe((status) => {
                 console.log('Screen frame channel status:', status);
+                logActivity('Screen frame listener: ' + status);
             });
             
-            // Also listen on the main device channel
-            const mainChannel = supabaseClient.channel(channelName);
-            mainChannel.on('broadcast', { event: 'screen_frame' }, (payload) => {
-                console.log('Received screen frame on main channel:', payload);
-                if (payload.payload && payload.payload.data) {
-                    displayScreenFrame(payload.payload.data);
-                } else if (payload.payload) {
-                    displayScreenFrame(payload.payload);
-                }
-            }).subscribe();
+            // Setup mouse control for remote interaction
+            setupMouseControl();
         }
         
         async function sendCtrlAltDel() {
@@ -958,6 +949,64 @@
                 action: 'press' 
             });
             logActivity('Sent Ctrl+Alt+Del');
+        }
+        
+        function displayScreenFrame(data) {
+            console.log('Displaying screen frame:', data);
+            
+            const screenContainer = document.getElementById('screenContainer');
+            if (!screenContainer) {
+                console.error('Screen container not found');
+                return;
+            }
+            
+            // Create or get existing screen display
+            let screenDisplay = document.getElementById('screenDisplay');
+            if (!screenDisplay) {
+                screenDisplay = document.createElement('img');
+                screenDisplay.id = 'screenDisplay';
+                screenDisplay.style.cssText = 'width: 100%; height: auto; border: 1px solid #ccc; background: #000;';
+                screenContainer.appendChild(screenDisplay);
+            }
+            
+            // Handle different data formats
+            if (typeof data === 'string') {
+                screenDisplay.src = 'data:image/svg+xml;base64,' + data;
+            } else if (data && data.data) {
+                screenDisplay.src = 'data:image/svg+xml;base64,' + data.data;
+            } else {
+                console.error('Invalid screen frame data format:', data);
+            }
+            
+            logActivity('Screen frame displayed');
+        }
+        
+        // Mouse input handling for remote control
+        function handleMouseClick(event) {
+            if (!activeDevice || !activeSession) return;
+            
+            const rect = event.target.getBoundingClientRect();
+            const x = Math.round((event.clientX - rect.left) / rect.width * 1920); // Assume 1920x1080 target
+            const y = Math.round((event.clientY - rect.top) / rect.height * 1080);
+            
+            sendCommand({
+                type: 'mouse_input',
+                x: x,
+                y: y,
+                button: event.button === 0 ? 'left' : event.button === 2 ? 'right' : 'middle',
+                action: 'click'
+            });
+            
+            logActivity(`Mouse click at (${x}, ${y})`);
+        }
+        
+        // Add mouse event listeners to screen display
+        function setupMouseControl() {
+            const screenContainer = document.getElementById('screenContainer');
+            if (screenContainer) {
+                screenContainer.addEventListener('click', handleMouseClick);
+                screenContainer.addEventListener('contextmenu', (e) => e.preventDefault());
+            }
         }
         
         function logActivity(message) {
