@@ -364,23 +364,28 @@
         }
         
         // Device actions
-        function selectDevice(deviceId) {
-            activeDevice = devices.find(d => d.id === deviceId);
-            if (activeDevice) {
-                showRemoteControl();
-                renderDevices();
-                logActivity(`Selected: ${activeDevice.device_name}`);
-            }
+        function selectDevice(device) {
+            activeDevice = device;
+            logActivity(`📱 Selected device: ${device.device_name} (ID: ${device.id})`);
+            updateDeviceActions();
+            updateRemoteControlPanel();
+            updateFileTransferPanel();
         }
         
         function connectDevice(deviceId) {
-            selectDevice(deviceId);
-            startSession();
+            const device = devices.find(d => d.id === deviceId);
+            if (device) {
+                selectDevice(device);
+                startSession();
+            }
         }
         
         function transferFile(deviceId) {
-            selectDevice(deviceId);
-            showFileTransfer();
+            const device = devices.find(d => d.id === deviceId);
+            if (device) {
+                selectDevice(device);
+                showFileTransfer();
+            }
         }
         
         async function removeDevice(deviceId) {
@@ -560,6 +565,17 @@
             try {
                 logActivity(`Starting file transfer: ${file.name}`);
                 
+                // Validate device is selected and has valid ID
+                if (!activeDevice) {
+                    throw new Error('No device selected');
+                }
+                
+                if (!activeDevice.id) {
+                    throw new Error('Selected device has no ID');
+                }
+                
+                logActivity(`Target device: ${activeDevice.device_name} (ID: ${activeDevice.id})`);
+                
                 const response = await fetch('https://ptrtibzwokjcjjxvjpin.supabase.co/functions/v1/file-transfer/api/initiate-transfer', {
                     method: 'POST',
                     headers: {
@@ -576,6 +592,14 @@
                         transferType: 'upload'
                     })
                 });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    logActivity(`❌ Transfer initiation failed: ${errorData.error || response.statusText}`);
+                    logActivity(`Response status: ${response.status}`);
+                    logActivity(`Device ID sent: ${activeDevice.id}`);
+                    throw new Error(`Transfer failed: ${errorData.error || response.statusText}`);
+                }
                 
                 const result = await response.json();
                 
