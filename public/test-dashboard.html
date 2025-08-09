@@ -17,7 +17,7 @@
         const SUPABASE_URL = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk';
         
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         console.log('Supabase client created');
         
         let deviceId = '4238907b-59ee-e8fc-8ae1-b24bcb287527'; // Your device ID
@@ -37,7 +37,7 @@
             console.log('Start session clicked');
             
             const sessionId = 'test_session_' + Date.now();
-            const channel = supabase.channel(`device-${deviceId}`);
+            const channel = supabaseClient.channel(`device-${deviceId}`);
             
             // Listen for screen frames
             channel.on('broadcast', { event: 'screen_frame' }, (payload) => {
