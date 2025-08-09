@@ -211,37 +211,29 @@ class SupabaseRealtimeAgent {
 
     getCompatibilityScreenData() {
         const timestamp = new Date().toLocaleTimeString();
-        return {
-            timestamp: Date.now(),
-            width: 1920,
-            height: 1080,
-            format: 'jpeg',
-            platform: os.platform(),
-            hostname: os.hostname(),
-            data: 'data:image/svg+xml;base64,' + Buffer.from(
-                `<svg width="1920" height="1080" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="100%" height="100%" fill="#1a1a1a"/>
-                    <text x="50%" y="35%" text-anchor="middle" fill="#4a9eff" font-family="Arial" font-size="56">
-                        Remote Desktop Agent
-                    </text>
-                    <text x="50%" y="45%" text-anchor="middle" fill="#888" font-family="Arial" font-size="36">
-                        Compatibility Mode
-                    </text>
-                    <text x="50%" y="55%" text-anchor="middle" fill="#666" font-family="Arial" font-size="24">
-                        Native screen capture unavailable
-                    </text>
-                    <text x="50%" y="65%" text-anchor="middle" fill="#444" font-family="Arial" font-size="20">
-                        Agent running - ${timestamp}
-                    </text>
-                    <text x="50%" y="75%" text-anchor="middle" fill="#333" font-family="Arial" font-size="16">
-                        Device ID: ${this.deviceId}
-                    </text>
-                </svg>`
-            ).toString('base64'),
-            quality: 80,
-            compression: 'svg',
-            compatibility: true
-        };
+        // Return just the base64 data without data URL prefix for dashboard compatibility
+        const svgBase64 = Buffer.from(
+            `<svg width="1920" height="1080" xmlns="http://www.w3.org/2000/svg">
+                <rect width="100%" height="100%" fill="#1a1a1a"/>
+                <text x="50%" y="35%" text-anchor="middle" fill="#4a9eff" font-family="Arial" font-size="56">
+                    Remote Desktop Agent
+                </text>
+                <text x="50%" y="45%" text-anchor="middle" fill="#888" font-family="Arial" font-size="36">
+                    Compatibility Mode
+                </text>
+                <text x="50%" y="55%" text-anchor="middle" fill="#666" font-family="Arial" font-size="24">
+                    Native screen capture unavailable
+                </text>
+                <text x="50%" y="65%" text-anchor="middle" fill="#444" font-family="Arial" font-size="20">
+                    Agent running - ${timestamp}
+                </text>
+                <text x="50%" y="75%" text-anchor="middle" fill="#333" font-family="Arial" font-size="16">
+                    Device ID: ${this.deviceId}
+                </text>
+            </svg>`
+        ).toString('base64');
+        
+        return svgBase64; // Return just base64 data, dashboard will add data URL prefix
     }
 
     async setupInputControl() {
@@ -522,7 +514,9 @@ class SupabaseRealtimeAgent {
                 status: 'active'
             };
             
+            console.log('🔧 Calling startScreenCapture()...');
             this.startScreenCapture();
+            console.log('✅ startScreenCapture() called');
             return { success: true, sessionId: sessionId };
         };
 
@@ -535,19 +529,31 @@ class SupabaseRealtimeAgent {
     }
 
     startScreenCapture() {
-        if (this.screenCaptureInterval) return;
+        console.log('🔧 startScreenCapture() method called');
+        console.log('🔧 Current screenCaptureInterval:', this.screenCaptureInterval);
+        
+        if (this.screenCaptureInterval) {
+            console.log('⚠️ Screen capture already running, skipping...');
+            return;
+        }
         
         console.log('📸 Starting screen capture streaming via Supabase Realtime...');
         this.screenCaptureInterval = setInterval(() => {
+            console.log('📸 Sending screen frame...');
             if (this.activeSession) {
                 const screenData = this.captureScreen();
+                console.log('📸 Screen data captured, sending to dashboard...');
                 this.sendRealtimeResponse({
                     type: 'screen_frame',
                     sessionId: this.activeSession.id,
                     data: screenData
                 });
+            } else {
+                console.log('⚠️ No active session, skipping screen frame');
             }
-        }, 100); // 10 FPS
+        }, 1000); // 1 FPS for debugging
+        
+        console.log('✅ Screen capture interval started with ID:', this.screenCaptureInterval);
     }
 
     stopScreenCapture() {
