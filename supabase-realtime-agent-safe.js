@@ -439,6 +439,34 @@ class SupabaseRealtimeAgent {
                     }
                     break;
 
+                case 'send_text':
+                    if (this.activeSession) {
+                        console.log(`⌨️ Sending text: "${command.text}"`);
+                        // Type each character in the text
+                        for (const char of command.text) {
+                            const keyResult = this.handleKeyboardInput(char, 'type');
+                        }
+                        this.sendRealtimeResponse({
+                            type: 'input_response',
+                            success: true,
+                            message: `Text sent: "${command.text}"`
+                        });
+                    }
+                    break;
+
+                case 'capture_screen':
+                    if (this.activeSession) {
+                        const screenData = this.captureScreen();
+                        this.sendRealtimeResponse({
+                            type: 'screen_frame',
+                            sessionId: this.activeSession.id,
+                            data: screenData
+                        });
+                    } else {
+                        console.log('⚠️ Screen capture requested but no active session');
+                    }
+                    break;
+
                 case 'ping':
                     this.sendRealtimeResponse({ type: 'pong', timestamp: Date.now() });
                     break;
