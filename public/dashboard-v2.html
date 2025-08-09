@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Remote Desktop Dashboard v2</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>🌍 Remote Desktop Dashboard v2</h1>
+    <div id="status">Loading...</div>
+    <div id="devices"></div>
+    <div id="screen-container"></div>
+    
+    <script>
+        console.log('🚀 DASHBOARD V2 JAVASCRIPT EXECUTING!');
+        
+        // Supabase configuration
+        const SUPABASE_URL = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk';
+        
+        let supabaseClient;
+        let activeDevice = null;
+        let activeSession = null;
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('✅ DOM LOADED - INITIALIZING DASHBOARD V2');
+            
+            try {
+                const { createClient } = supabase;
+                supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log('✅ SUPABASE CLIENT CREATED');
+                document.getElementById('status').innerHTML = 'Supabase connected!';
+                
+                loadDevices();
+                
+            } catch (error) {
+                console.error('❌ SUPABASE ERROR:', error);
+                document.getElementById('status').innerHTML = 'Error: ' + error.message;
+            }
+        });
+        
+        async function loadDevices() {
+            console.log('🔍 LOADING DEVICES...');
+            try {
+                const { data, error } = await supabaseClient
+                    .from('remote_devices')
+                    .select('*')
+                    .order('last_seen', { ascending: false });
+                
+                if (error) throw error;
+                
+                console.log('✅ DEVICES LOADED:', data);
+                
+                const deviceList = document.getElementById('devices');
+                deviceList.innerHTML = '<h3>Connected Devices:</h3>';
+                
+                if (data && data.length > 0) {
+                    data.forEach(device => {
+                        const deviceDiv = document.createElement('div');
+                        deviceDiv.innerHTML = `
+                            <div style="border: 1px solid #ccc; margin: 10px; padding: 10px;">
+                                <strong>${device.device_name}</strong> (${device.platform})
+                                <br>Status: ${device.is_online ? 'Online' : 'Offline'}
+                                <br>IP: ${device.ip_address}
+                                <br><button onclick="connectToDevice('${device.id}', '${device.device_name}')">Connect</button>
+                            </div>
+                        `;
+                        deviceList.appendChild(deviceDiv);
+                    });
+                } else {
+                    deviceList.innerHTML += '<p>No devices found</p>';
+                }
+                
+            } catch (error) {
+                console.error('❌ LOAD DEVICES ERROR:', error);
+                document.getElementById('devices').innerHTML = 'Error loading devices: ' + error.message;
+            }
+        }
+        
+        async function connectToDevice(deviceId, deviceName) {
+            console.log('🔗 CONNECTING TO DEVICE:', deviceId, deviceName);
+            
+            activeDevice = { id: deviceId, name: deviceName };
+            activeSession = 'session_' + Date.now();
+            
+            document.getElementById('status').innerHTML = `Connected to ${deviceName}`;
+            
+            // Start session
+            const channel = supabaseClient.channel(`device-${deviceId}`);
+            
+            // Listen for screen frames
+            channel.on('broadcast', { event: 'screen_frame' }, (payload) => {
+                console.log('📸 RECEIVED SCREEN FRAME');
+                displayScreenFrame(payload.payload);
+            }).subscribe();
+            
+            // Send start session command
+            await channel.send({
+                type: 'broadcast',
+                event: 'command',
+                payload: {
+                    type: 'start_session',
+                    sessionId: activeSession,
+                    timestamp: Date.now(),
+                    controller: { id: 'dashboard-v2', name: 'Dashboard v2' }
+                }
+            });
+            
+            console.log('✅ SESSION STARTED:', activeSession);
+        }
+        
+        function displayScreenFrame(data) {
+            console.log('🖼️ DISPLAYING SCREEN FRAME');
+            
+            const container = document.getElementById('screen-container');
+            let img = document.getElementById('screen-img');
+            
+            if (!img) {
+                img = document.createElement('img');
+                img.id = 'screen-img';
+                img.style.cssText = 'width: 100%; max-width: 800px; border: 2px solid #4f46e5;';
+                container.appendChild(img);
+            }
+            
+            if (typeof data === 'string') {
+                img.src = 'data:image/svg+xml;base64,' + data;
+            } else if (data && data.data) {
+                img.src = 'data:image/svg+xml;base64,' + data.data;
+            }
+        }
+        
+        console.log('🎉 DASHBOARD V2 SCRIPT COMPLETE');
+    </script>
+</body>
+</html>
