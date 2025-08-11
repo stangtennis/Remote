@@ -11,7 +11,16 @@ const https = require('https');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
+const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
+
+// Try to load WebSocket module (will fallback gracefully if not available)
+let WebSocket;
+try {
+    WebSocket = require('ws');
+} catch (error) {
+    console.log('⚠️ WebSocket module not available, WebSocket features disabled');
+}
 
 class StandaloneAgent {
     constructor() {
@@ -40,11 +49,15 @@ class StandaloneAgent {
         // Initialize native modules for real control
         this.initializeNativeModules();
         
-        // Web server for direct control
-        this.webServer = null;
+        // WebSocket servers for remote control (HTTP and HTTPS)
+        this.httpServer = null;
+        this.httpsServer = null;
         this.wsServer = null;
+        this.wssServer = null;
         this.connectedClients = new Set();
         this.screenShareInterval = null;
+        this.httpPort = 8080;
+        this.httpsPort = 8443;
         
         this.displayBanner();
     }
@@ -343,6 +356,9 @@ class StandaloneAgent {
             this.setupRemoteControlCapabilities();
             this.setupFileTransfer();
             this.setupSessionManagement();
+            
+            // Start WebSocket servers (HTTP and HTTPS)
+            await this.startWebSocketServers();
             
             // Start heartbeat
             this.startHeartbeat();
@@ -718,6 +734,220 @@ class StandaloneAgent {
             console.error('❌ Cleanup error:', error.message);
         }
     }
+
+    // Generate self-signed certificate for WSS
+    generateSelfSignedCert() {
+        try {
+            const certDir = path.join(__dirname, 'certs');
+            
+            // Create certs directory if it doesn't exist
+            if (!fs.existsSync(certDir)) {
+                fs.mkdirSync(certDir, { recursive: true });
+            }
+            
+            const keyPath = path.join(certDir, 'key.pem');
+            const certPath = path.join(certDir, 'cert.pem');
+            
+            // Check if certificates already exist
+            if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+                console.log('🔒 Using existing SSL certificates');
+                return { keyPath, certPath };
+            }
+            
+            // Generate self-signed certificate using OpenSSL (if available)
+            try {
+                const { execSync } = require('child_process');
+                const opensslCmd = `openssl req -x509 -newkey rsa:2048 -keyout "${keyPath}" -out "${certPath}" -days 365 -nodes -subj "/C=US/ST=State/L=City/O=RemoteDesktop/CN=localhost"`;
+                execSync(opensslCmd, { stdio: 'ignore' });
+                console.log('🔒 Generated new SSL certificates with OpenSSL');
+                return { keyPath, certPath };
+            } catch (opensslError) {
+                // Fallback: Create basic self-signed cert with Node.js crypto
+                console.log('⚠️ OpenSSL not available, creating basic self-signed certificate');
+                
+                const { generateKeyPairSync } = require('crypto');
+                const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+                    modulusLength: 2048,
+                    publicKeyEncoding: { type: 'spki', format: 'pem' },
+                    privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+                });
+                
+                // Create a basic certificate (this is simplified)
+                fs.writeFileSync(keyPath, privateKey);
+                fs.writeFileSync(certPath, publicKey);
+                
+                console.log('🔒 Generated basic SSL certificates');
+                return { keyPath, certPath };
+            }
+        } catch (error) {
+            console.error('❌ Certificate generation failed:', error.message);
+            return null;
+        }
+    }
+
+    // Start WebSocket servers (both WS and WSS)
+    async startWebSocketServers() {
+        if (!WebSocket) {
+            console.log('⚠️ WebSocket module not available, skipping WebSocket servers');
+            return;
+        }
+        
+        try {
+            // Start HTTP WebSocket server (port 8080)
+            this.httpServer = http.createServer();
+            this.wsServer = new WebSocket.Server({ server: this.httpServer });
+            
+            this.httpServer.listen(this.httpPort, () => {
+                console.log(`🌐 HTTP WebSocket server listening on port ${this.httpPort}`);
+            });
+            
+            // Setup WebSocket handlers for HTTP server
+            this.setupWebSocketHandlers(this.wsServer, 'WS');
+            
+            // Try to start HTTPS WebSocket server (port 8443)
+            const certs = this.generateSelfSignedCert();
+            if (certs && fs.existsSync(certs.keyPath) && fs.existsSync(certs.certPath)) {
+                try {
+                    const httpsOptions = {
+                        key: fs.readFileSync(certs.keyPath),
+                        cert: fs.readFileSync(certs.certPath)
+                    };
+                    
+                    this.httpsServer = https.createServer(httpsOptions);
+                    this.wssServer = new WebSocket.Server({ server: this.httpsServer });
+                    
+                    this.httpsServer.listen(this.httpsPort, () => {
+                        console.log(`🔒 HTTPS WebSocket server (WSS) listening on port ${this.httpsPort}`);
+                    });
+                    
+                    // Setup WebSocket handlers for HTTPS server
+                    this.setupWebSocketHandlers(this.wssServer, 'WSS');
+                } catch (httpsError) {
+                    console.log('⚠️ HTTPS server failed, using HTTP only:', httpsError.message);
+                }
+            } else {
+                console.log('⚠️ SSL certificates not available, using HTTP WebSocket only');
+            }
+            
+        } catch (error) {
+            console.error('❌ WebSocket server startup failed:', error.message);
+        }
+    }
+
+    // Setup WebSocket connection handlers
+    setupWebSocketHandlers(wsServer, serverType) {
+    wsServer.on('connection', (ws, req) => {
+        const clientIP = req.socket.remoteAddress;
+        console.log(`🔌 ${serverType} client connected from ${clientIP}`);
+        
+        this.connectedClients.add(ws);
+        
+        // Send welcome message
+        ws.send(JSON.stringify({
+            type: 'welcome',
+            deviceId: this.deviceId,
+            deviceName: this.deviceName,
+            serverType: serverType
+        }));
+        
+        // Handle incoming messages
+        ws.on('message', async (data) => {
+            try {
+                const message = JSON.parse(data.toString());
+                await this.handleWebSocketMessage(ws, message);
+            } catch (error) {
+                console.error('❌ WebSocket message error:', error.message);
+            }
+        });
+        
+        // Handle client disconnect
+        ws.on('close', () => {
+            console.log(`🔌 ${serverType} client disconnected`);
+            this.connectedClients.delete(ws);
+            
+            // Stop screen sharing if no clients connected
+            if (this.connectedClients.size === 0) {
+                this.stopScreenSharing();
+            }
+        });
+        
+        ws.on('error', (error) => {
+            console.error(`❌ ${serverType} WebSocket error:`, error.message);
+            this.connectedClients.delete(ws);
+        });
+    });
+}
+
+// Handle WebSocket messages from dashboard
+async handleWebSocketMessage(ws, message) {
+    console.log(`📨 WebSocket message: ${message.type}`);
+    
+    switch (message.type) {
+        case 'start-screen-share':
+            this.startScreenSharing();
+            break;
+            
+        case 'stop-screen-share':
+            this.stopScreenSharing();
+            break;
+            
+        case 'mouse-move':
+            await this.handleRealMouseMove(message.x, message.y);
+            break;
+            
+        case 'mouse-click':
+            await this.handleRealMouseClick(message.x, message.y, message.button || 'left');
+            break;
+            
+        case 'keyboard':
+            await this.handleRealKeyboard(message.key);
+            break;
+            
+        default:
+            console.log(`❓ Unknown WebSocket message type: ${message.type}`);
+    }
+}
+
+// Start screen sharing
+startScreenSharing() {
+    if (this.screenShareInterval) {
+        console.log('📺 Screen sharing already active');
+        return;
+    }
+    
+    console.log('📺 Starting screen sharing...');
+    
+    this.screenShareInterval = setInterval(async () => {
+        try {
+            const screenshot = await this.takeScreenshot();
+            const base64Data = screenshot.toString('base64');
+            
+            // Send to all connected clients
+            const message = JSON.stringify({
+                type: 'screen-frame',
+                data: base64Data
+            });
+            
+            this.connectedClients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(message);
+                }
+            });
+        } catch (error) {
+            console.error('❌ Screen sharing error:', error.message);
+        }
+    }, 100); // 10 FPS
+}
+
+// Stop screen sharing
+stopScreenSharing() {
+    if (this.screenShareInterval) {
+        clearInterval(this.screenShareInterval);
+        this.screenShareInterval = null;
+        console.log('⏹️ Screen sharing stopped');
+    }
+}
+
 }
 
 // Start the Standalone Agent
