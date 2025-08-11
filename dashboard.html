@@ -249,8 +249,14 @@
                 return;
             }
             
-            const wsUrl = `ws://${selectedDevice.local_ip}:${selectedDevice.local_port}`;
+            // Auto-detect secure connection based on dashboard protocol
+            const isHTTPS = window.location.protocol === 'https:';
+            const wsProtocol = isHTTPS ? 'wss' : 'ws';
+            const wsPort = isHTTPS ? 8443 : selectedDevice.local_port || 8080;
+            const wsUrl = `${wsProtocol}://${selectedDevice.local_ip}:${wsPort}`;
+            
             log(`🔌 Connecting to ${selectedDevice.device_name} at ${wsUrl}...`);
+            log(`🔒 Using ${isHTTPS ? 'secure (WSS)' : 'standard (WS)'} connection`);
             
             updateConnectionStatus('connecting');
             
