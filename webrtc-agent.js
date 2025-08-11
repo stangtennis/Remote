@@ -1,5 +1,4 @@
 const WebSocket = require('ws');
-const { createRequire } = require('module');
 
 console.log('🚀 Starting WebRTC Remote Desktop Agent...');
 
@@ -8,9 +7,9 @@ let ProfessionalScreenCapture = null;
 let ProfessionalInputControl = null;
 
 try {
-    const screenshotDesktop = createRequire(import.meta.url)('screenshot-desktop');
-    const sharp = createRequire(import.meta.url)('sharp');
-    const robotjs = createRequire(import.meta.url)('robotjs');
+    const screenshotDesktop = require('screenshot-desktop');
+    const sharp = require('sharp');
+    const robotjs = require('robotjs');
     
     ProfessionalScreenCapture = { screenshotDesktop, sharp };
     ProfessionalInputControl = { robotjs };
@@ -187,7 +186,7 @@ class WebRTCAgent {
     }
     
     connectToSignalingServer() {
-        const serverUrl = process.env.SIGNALING_SERVER || 'ws://localhost:8080';
+        const serverUrl = process.env.SIGNALING_SERVER || 'ws://localhost:8081';
         console.log(`🔗 Connecting to signaling server: ${serverUrl}`);
         
         this.ws = new WebSocket(serverUrl);

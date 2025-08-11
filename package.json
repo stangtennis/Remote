@@ -5,9 +5,16 @@
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
+    "agent": "node supabase-realtime-agent.js",
     "webrtc-server": "node webrtc-signaling-server.js",
     "webrtc-agent": "node webrtc-agent.js",
     "dev": "nodemon app.js",
+    "build-production": "pkg production-agent.js --targets node18-win-x64 --output RemoteDesktopAgent.exe",
+    "build-standalone": "pkg standalone-agent.js --targets node18-win-x64 --output StandaloneAgent.exe",
+    "build-client": "pkg production-client.js --targets node18-win-x64 --output RemoteDesktopClient.exe",
+    "build-stable": "pkg stable-client.js --targets node18-win-x64 --output StableRemoteClient.exe",
+    "build-complete": "pkg complete-standalone-agent.js --targets node18-win-x64 --output CompleteRemoteAgent.exe",
+    "build-all": "pkg supabase-realtime-agent.js --targets node18-win-x64,node18-linux-x64,node18-macos-x64 --out-path dist/",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -32,6 +39,16 @@
     "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.2",
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "scripts": [
+      "supabase-realtime-agent.js"
+    ],
+    "assets": [
+      "lib/**/*"
+    ],
+    "outputPath": "dist/"
   }
 }
