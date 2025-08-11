@@ -252,8 +252,9 @@
             // Auto-detect secure connection based on dashboard protocol
             const isHTTPS = window.location.protocol === 'https:';
             const wsProtocol = isHTTPS ? 'wss' : 'ws';
-            const wsPort = isHTTPS ? 8443 : selectedDevice.local_port || 8080;
-            const wsUrl = `${wsProtocol}://${selectedDevice.local_ip}:${wsPort}`;
+            const wsPort = isHTTPS ? 8443 : 8080;
+            // Use localhost for local agent connection
+            const wsUrl = `${wsProtocol}://localhost:${wsPort}`;
             
             log(`🔌 Connecting to ${selectedDevice.device_name} at ${wsUrl}...`);
             log(`🔒 Using ${isHTTPS ? 'secure (WSS)' : 'standard (WS)'} connection`);
@@ -319,7 +320,7 @@
         function startScreenShare() {
             if (!isConnected) return;
             
-            ws.send(JSON.stringify({ type: 'start-screen-share' }));
+            ws.send(JSON.stringify({ type: 'start-screen' }));
             isScreenSharing = true;
             document.getElementById('screenBtn').disabled = true;
             document.getElementById('stopBtn').disabled = false;
@@ -330,7 +331,7 @@
         function stopScreenShare() {
             if (!isConnected) return;
             
-            ws.send(JSON.stringify({ type: 'stop-screen-share' }));
+            ws.send(JSON.stringify({ type: 'stop-screen' }));
             isScreenSharing = false;
             document.getElementById('screenBtn').disabled = false;
             document.getElementById('stopBtn').disabled = true;
