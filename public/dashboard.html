@@ -281,7 +281,7 @@
             };
             
             ws.onerror = function(error) {
-                log('❌ WebSocket error: ' + error.message);
+                log('❌ WebSocket error: Connection failed - check if device is accessible');
                 disconnect();
             };
         }
