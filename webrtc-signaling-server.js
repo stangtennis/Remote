@@ -279,7 +279,7 @@ function generateRoomId() {
 }
 
 // Start server
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8081;
 server.listen(PORT, () => {
     console.log(`🌐 WebRTC Signaling Server running on http://localhost:${PORT}`);
     console.log(`📱 Dashboard available at: http://localhost:${PORT}/webrtc-dashboard.html`);

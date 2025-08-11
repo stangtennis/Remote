@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎮 Direct Remote Control Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; margin: 0; padding: 20px; min-height: 100vh;
+        }
+        
+        .container { max-width: 1200px; margin: 0 auto; }
+        
+        .header {
+            text-align: center; margin-bottom: 30px;
+            background: rgba(255,255,255,0.1); padding: 20px;
+            border-radius: 15px; backdrop-filter: blur(10px);
+        }
+        
+        .connection-panel {
+            background: rgba(255,255,255,0.1); padding: 20px; border-radius: 15px;
+            margin-bottom: 20px; backdrop-filter: blur(10px);
+        }
+        
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; margin-bottom: 5px; font-weight: 600; }
+        .input-group input {
+            width: 100%; padding: 12px; border: none; border-radius: 8px;
+            font-size: 1rem; background: rgba(255,255,255,0.9); color: #333;
+        }
+        
+        .btn {
+            padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer;
+            font-weight: 600; font-size: 1rem; margin: 5px; transition: all 0.3s;
+        }
+        
+        .btn-primary { background: #4f46e5; color: white; }
+        .btn-primary:hover { background: #3730a3; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .status-panel {
+            background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px;
+            margin-bottom: 20px; font-family: monospace; font-size: 0.9rem;
+        }
+        
+        .screen-container {
+            background: #000; border-radius: 15px; padding: 20px;
+            min-height: 400px; display: flex; align-items: center; justify-content: center;
+            margin-bottom: 20px;
+        }
+        
+        .screen-canvas { max-width: 100%; max-height: 100%; cursor: crosshair; }
+        
+        .no-screen {
+            color: #888; text-align: center; font-size: 1.2rem;
+        }
+        
+        .logs {
+            background: rgba(0,0,0,0.5); padding: 15px; border-radius: 10px;
+            height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;
+        }
+        
+        .log-entry { margin-bottom: 5px; opacity: 0.9; }
+        .log-success { color: #10b981; }
+        .log-error { color: #ef4444; }
+        .log-info { color: #3b82f6; }
+        .log-warning { color: #f59e0b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎮 Direct Remote Control Test</h1>
+            <p>Connect directly to your StableRemoteClient.exe</p>
+        </div>
+        
+        <div class="connection-panel">
+            <div class="input-group">
+                <label for="remoteIP">Remote PC IP Address:</label>
+                <input type="text" id="remoteIP" placeholder="e.g., 192.168.1.100" />
+            </div>
+            
+            <div class="input-group">
+                <label for="remotePort">Port:</label>
+                <input type="text" id="remotePort" value="8080" />
+            </div>
+            
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn btn-primary" onclick="testConnection()" id="testBtn">
+                    🔍 Test Connection
+                </button>
+                <button class="btn btn-success" onclick="connectToDevice()" id="connectBtn" disabled>
+                    🔗 Connect
+                </button>
+                <button class="btn btn-primary" onclick="startScreenShare()" id="screenBtn" disabled>
+                    📺 Start Screen Share
+                </button>
+                <button class="btn btn-danger" onclick="disconnect()" id="disconnectBtn" disabled>
+                    🔌 Disconnect
+                </button>
+            </div>
+        </div>
+        
+        <div class="status-panel" id="statusPanel">
+            <strong>Status:</strong> <span id="connectionStatus">Not connected</span>
+        </div>
+        
+        <div class="screen-container" id="screenContainer">
+            <div class="no-screen" id="noScreen">
+                📺 No screen sharing active<br>
+                <small>Enter remote PC IP and connect</small>
+            </div>
+            <canvas id="screenCanvas" class="screen-canvas" style="display: none;"></canvas>
+        </div>
+        
+        <div class="logs" id="logs">
+            <div class="log-entry log-info">🚀 Direct connection tester ready</div>
+        </div>
+    </div>
+
+    <script>
+        let websocket = null;
+        let isConnected = false;
+        let screenCanvas = null;
+        let screenContext = null;
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            screenCanvas = document.getElementById('screenCanvas');
+            screenContext = screenCanvas.getContext('2d');
+            setupMouseEvents();
+            log('🚀 Direct connection tester initialized', 'info');
+        });
+        
+        // Test connection to remote PC
+        async function testConnection() {
+            const ip = document.getElementById('remoteIP').value.trim();
+            const port = document.getElementById('remotePort').value.trim();
+            
+            if (!ip) {
+                log('❌ Please enter remote PC IP address', 'error');
+                return;
+            }
+            
+            try {
+                log(`🔍 Testing connection to ${ip}:${port}...`, 'info');
+                
+                // Test API endpoint
+                const response = await fetch(`http://${ip}:${port}/api/status`);
+                const data = await response.json();
+                
+                log(`✅ Connection successful!`, 'success');
+                log(`📱 Device: ${data.hostname} (${data.deviceId})`, 'info');
+                log(`💻 Platform: ${data.platform}`, 'info');
+                log(`⏱️ Uptime: ${Math.round(data.uptime)}s`, 'info');
+                
+                document.getElementById('connectBtn').disabled = false;
+                updateStatus(`Ready to connect to ${data.hostname}`);
+                
+            } catch (error) {
+                log(`❌ Connection failed: ${error.message}`, 'error');
+                log(`💡 Make sure the remote PC is running StableRemoteClient.exe`, 'warning');
+            }
+        }
+        
+        // Connect via WebSocket
+        function connectToDevice() {
+            const ip = document.getElementById('remoteIP').value.trim();
+            const port = document.getElementById('remotePort').value.trim();
+            
+            try {
+                log(`🔗 Connecting to WebSocket at ${ip}:${port}...`, 'info');
+                
+                websocket = new WebSocket(`ws://${ip}:${port}`);
+                
+                websocket.onopen = () => {
+                    log('✅ WebSocket connected successfully', 'success');
+                    isConnected = true;
+                    updateStatus('Connected');
+                    updateButtons();
+                };
+                
+                websocket.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        handleMessage(message);
+                    } catch (error) {
+                        log(`❌ Invalid message: ${error.message}`, 'error');
+                    }
+                };
+                
+                websocket.onclose = () => {
+                    log('🔌 WebSocket disconnected', 'warning');
+                    isConnected = false;
+                    updateStatus('Disconnected');
+                    updateButtons();
+                };
+                
+                websocket.onerror = (error) => {
+                    log(`❌ WebSocket error: ${error.message}`, 'error');
+                };
+                
+            } catch (error) {
+                log(`❌ Failed to connect: ${error.message}`, 'error');
+            }
+        }
+        
+        // Handle messages from remote PC
+        function handleMessage(message) {
+            switch (message.type) {
+                case 'screen-frame':
+                    displayScreenFrame(message.data, message.width, message.height);
+                    break;
+                    
+                default:
+                    log(`📨 Received: ${message.type}`, 'info');
+            }
+        }
+        
+        // Display screen frame
+        function displayScreenFrame(frameData, width, height) {
+            try {
+                const img = new Image();
+                img.onload = () => {
+                    screenCanvas.width = width || img.width;
+                    screenCanvas.height = height || img.height;
+                    screenContext.drawImage(img, 0, 0);
+                };
+                img.src = `data:image/jpeg;base64,${frameData}`;
+                
+                // Show canvas
+                document.getElementById('noScreen').style.display = 'none';
+                document.getElementById('screenCanvas').style.display = 'block';
+                
+            } catch (error) {
+                log(`❌ Screen frame error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Start screen sharing
+        function startScreenShare() {
+            if (!isConnected) {
+                log('❌ Not connected to remote PC', 'error');
+                return;
+            }
+            
+            log('📺 Requesting screen sharing...', 'info');
+            
+            websocket.send(JSON.stringify({
+                type: 'start-screen-share'
+            }));
+        }
+        
+        // Setup mouse events for remote control
+        function setupMouseEvents() {
+            screenCanvas.addEventListener('mousemove', (e) => {
+                if (isConnected) {
+                    const rect = screenCanvas.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) * (screenCanvas.width / rect.width);
+                    const y = (e.clientY - rect.top) * (screenCanvas.height / rect.height);
+                    
+                    websocket.send(JSON.stringify({
+                        type: 'mouse-move',
+                        x: Math.round(x),
+                        y: Math.round(y)
+                    }));
+                }
+            });
+            
+            screenCanvas.addEventListener('click', (e) => {
+                if (isConnected) {
+                    const rect = screenCanvas.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) * (screenCanvas.width / rect.width);
+                    const y = (e.clientY - rect.top) * (screenCanvas.height / rect.height);
+                    
+                    websocket.send(JSON.stringify({
+                        type: 'mouse-click',
+                        x: Math.round(x),
+                        y: Math.round(y),
+                        button: 'left'
+                    }));
+                    
+                    log(`🖱️ Mouse click at (${Math.round(x)}, ${Math.round(y)})`, 'info');
+                }
+            });
+        }
+        
+        // Disconnect
+        function disconnect() {
+            if (websocket) {
+                websocket.close();
+                websocket = null;
+            }
+            
+            isConnected = false;
+            document.getElementById('noScreen').style.display = 'block';
+            document.getElementById('screenCanvas').style.display = 'none';
+            updateStatus('Disconnected');
+            updateButtons();
+        }
+        
+        // Utility functions
+        function updateStatus(status) {
+            document.getElementById('connectionStatus').textContent = status;
+        }
+        
+        function updateButtons() {
+            document.getElementById('connectBtn').disabled = isConnected;
+            document.getElementById('screenBtn').disabled = !isConnected;
+            document.getElementById('disconnectBtn').disabled = !isConnected;
+        }
+        
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logs.appendChild(logEntry);
+            logs.scrollTop = logs.scrollHeight;
+            
+            // Keep only last 50 log entries
+            while (logs.children.length > 50) {
+                logs.removeChild(logs.firstChild);
+            }
+            
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            if (websocket) {
+                websocket.close();
+            }
+        });
+    </script>
+</body>
+</html>
