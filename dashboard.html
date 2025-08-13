@@ -264,15 +264,16 @@
             
             // Auto-detect secure connection based on dashboard protocol
             const isHTTPS = window.location.protocol === 'https:';
-            const wsProtocol = isHTTPS ? 'wss' : 'ws';
+            // TEMPORARY FIX: Force WS connection since agent doesn't support WSS yet
+            const wsProtocol = 'ws'; // isHTTPS ? 'wss' : 'ws';
             
             // Use device's actual IP and port for global connectivity
             const deviceIP = selectedDevice.local_ip || 'localhost';
-            const devicePort = selectedDevice.local_port || (isHTTPS ? 8443 : 8080);
+            const devicePort = selectedDevice.local_port || 8080; // (isHTTPS ? 8443 : 8080);
             const wsUrl = `${wsProtocol}://${deviceIP}:${devicePort}`;
             
             log(`🔌 Connecting to ${selectedDevice.device_name} at ${wsUrl}...`);
-            log(`🔒 Using ${isHTTPS ? 'secure (WSS)' : 'standard (WS)'} connection`);
+            log(`🔒 Using ${wsProtocol.toUpperCase()} connection (agent compatibility mode)`);
             
             updateConnectionStatus('connecting');
             
