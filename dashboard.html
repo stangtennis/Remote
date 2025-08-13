@@ -177,16 +177,29 @@
                     .order('last_seen', { ascending: false });
                 
                 if (error) {
-                    log('❌ Error loading devices: ' + error.message);
+                    log('❌ Failed to load devices: ' + error.message);
                     return;
                 }
                 
-                devices = data || [];
+                // Filter out stale devices (inactive for > 5 minutes)
+                const now = Date.now();
+                const fiveMinutesAgo = now - (5 * 60 * 1000);
+                
+                devices = (data || []).map(device => {
+                    const lastSeenTime = new Date(device.last_seen).getTime();
+                    const isActuallyOnline = device.is_online && lastSeenTime > fiveMinutesAgo;
+                    
+                    return {
+                        ...device,
+                        is_online: isActuallyOnline // Override stale online status
+                    };
+                });
+                
                 updateDeviceList();
                 updateStats();
-                log(`📱 Loaded ${devices.length} devices`);
+                
             } catch (error) {
-                log('❌ Failed to load devices: ' + error.message);
+                log('❌ Error loading devices: ' + error.message);
             }
         }
         
