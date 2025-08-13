@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Remote Desktop Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .device-list {
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .device {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .device-info {
+            flex-grow: 1;
+        }
+        .device-name {
+            font-weight: bold;
+            font-size: 18px;
+            color: #333;
+        }
+        .device-id {
+            color: #666;
+            font-size: 12px;
+            font-family: monospace;
+        }
+        .device-status {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+        .btn-success:hover {
+            background-color: #1e7e34;
+        }
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .btn-warning:hover {
+            background-color: #e0a800;
+        }
+        .screen-container {
+            margin-top: 20px;
+            text-align: center;
+        }
+        #screenDisplay {
+            max-width: 100%;
+            border: 2px solid #dee2e6;
+            border-radius: 5px;
+            display: none;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        @keyframes flash {
+            0% { background-color: #d4edda; }
+            50% { background-color: #28a745; color: white; }
+            100% { background-color: #d4edda; }
+        }
+        
+        .connection-test {
+            background: #e7f3ff;
+            border: 2px solid #007bff;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        .test-button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖥️ Local Remote Desktop Dashboard</h1>
+        
+        <div id="connectionStatus" class="status disconnected">
+            🔴 Disconnected from agent
+        </div>
+        
+        <div class="connection-test">
+            <h3>🔗 Connection Test</h3>
+            <p id="connectionTest">Testing connection...</p>
+            <button class="test-button" onclick="dashboard.testConnection()">Test Connection</button>
+            <button class="test-button" onclick="dashboard.testScreenShare()">Test Screen Share</button>
+        </div>
+        
+        <div class="device-list">
+            <h3>Available Devices</h3>
+            <div id="deviceList">
+                <p>Loading devices...</p>
+            </div>
+        </div>
+        
+        <div class="screen-container">
+            <img id="screenDisplay" alt="Remote Screen" />
+        </div>
+        
+        <div class="log" id="logContainer">
+            <div>🚀 Local Dashboard initialized</div>
+        </div>
+    </div>
+
+    <script>
+        class LocalDashboard {
+            constructor() {
+                this.ws = null;
+                this.devices = [];
+                this.selectedDevice = null;
+                this.isScreenSharing = false;
+                
+                this.init();
+            }
+            
+            init() {
+                this.log('🚀 Initializing Local Remote Desktop Dashboard...');
+                this.connectToAgent();
+            }
+            
+            connectToAgent() {
+                try {
+                    this.log('🔌 Connecting to agent at ws://localhost:8080...');
+                    this.ws = new WebSocket('ws://localhost:8080');
+                    
+                    this.ws.onopen = () => {
+                        this.log('✅ Connected to agent successfully');
+                        this.updateConnectionStatus(true);
+                        this.loadDevices();
+                        
+                        // Send immediate test message to confirm connection
+                        setTimeout(() => {
+                            this.sendMessage({
+                                type: 'ping',
+                                message: 'Dashboard connected successfully'
+                            });
+                        }, 500);
+                    };
+                    
+                    this.ws.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            this.handleMessage(data);
+                        } catch (error) {
+                            this.log(`❌ Failed to parse message: ${error.message}`);
+                        }
+                    };
+                    
+                    this.ws.onclose = () => {
+                        this.log('🔌 Disconnected from agent');
+                        this.updateConnectionStatus(false);
+                        
+                        // Attempt to reconnect after 5 seconds
+                        setTimeout(() => {
+                            this.log('🔄 Attempting to reconnect...');
+                            this.connectToAgent();
+                        }, 5000);
+                    };
+                    
+                    this.ws.onerror = (error) => {
+                        this.log(`❌ WebSocket error: ${error.message || 'Connection failed'}`);
+                    };
+                    
+                } catch (error) {
+                    this.log(`❌ Failed to connect: ${error.message}`);
+                }
+            }
+            
+            handleMessage(data) {
+                this.log(`📨 Received: ${data.type}`);
+                
+                switch (data.type) {
+                    case 'welcome':
+                        this.log(`🎉 Welcome: ${data.message}`);
+                        this.selectedDevice = {
+                            name: data.deviceName,
+                            id: 'local-agent',
+                            status: 'online'
+                        };
+                        this.updateDeviceList();
+                        break;
+                        
+                    case 'screen-frame':
+                        if (this.isScreenSharing) {
+                            this.displayScreenFrame(data.data);  // Fixed: use 'data' property instead of 'frame'
+                        }
+                        break;
+                        
+                    case 'error':
+                        this.log(`❌ Agent error: ${data.message}`);
+                        break;
+                        
+                    default:
+                        this.log(`📨 Unknown message type: ${data.type}`);
+                }
+            }
+            
+            loadDevices() {
+                // For local connection, we use the connected agent as our device
+                if (this.selectedDevice) {
+                    this.updateDeviceList();
+                }
+            }
+            
+            updateDeviceList() {
+                const deviceList = document.getElementById('deviceList');
+                
+                if (!this.selectedDevice) {
+                    deviceList.innerHTML = '<p>No devices connected</p>';
+                    return;
+                }
+                
+                deviceList.innerHTML = `
+                    <div class="device">
+                        <div class="device-info">
+                            <div class="device-name">${this.selectedDevice.name}</div>
+                            <div class="device-id">${this.selectedDevice.id}</div>
+                            <div class="device-status">🟢 Online</div>
+                        </div>
+                        <div class="controls">
+                            <button class="btn-primary" onclick="dashboard.connectToDevice()">Connect</button>
+                            <button class="btn-success" onclick="dashboard.startScreenShare()">Start Screen</button>
+                            <button class="btn-warning" onclick="dashboard.stopScreenShare()">Stop Screen</button>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            connectToDevice() {
+                this.log('🔗 Connecting to device...');
+                this.sendMessage({
+                    type: 'connect',
+                    deviceId: this.selectedDevice.id
+                });
+            }
+            
+            startScreenShare() {
+                this.log('📺 Starting screen share...');
+                this.isScreenSharing = true;
+                document.getElementById('screenDisplay').style.display = 'block';
+                
+                this.sendMessage({
+                    type: 'start-screen'
+                });
+            }
+            
+            stopScreenShare() {
+                this.log('⏹️ Stopping screen share...');
+                this.isScreenSharing = false;
+                document.getElementById('screenDisplay').style.display = 'none';
+                
+                this.sendMessage({
+                    type: 'stop-screen'
+                });
+            }
+            
+            displayScreenFrame(frameData) {
+                try {
+                    const screenDisplay = document.getElementById('screenDisplay');
+                    
+                    // Debug logging
+                    this.log(`🔍 Debug: frameData type: ${typeof frameData}, length: ${frameData ? frameData.length : 'null'}`);
+                    this.log(`🔍 Debug: screenDisplay found: ${screenDisplay ? 'yes' : 'no'}`);
+                    
+                    if (frameData && screenDisplay) {
+                        // Display the base64 encoded screen frame
+                        screenDisplay.src = `data:image/jpeg;base64,${frameData}`;
+                        screenDisplay.style.display = 'block';
+                        
+                        // Log successful frame display (but not too frequently)
+                        if (!this.lastFrameLog || Date.now() - this.lastFrameLog > 2000) {
+                            this.log('📺 Screen frame displayed successfully');
+                            this.lastFrameLog = Date.now();
+                        }
+                    } else {
+                        if (!frameData) {
+                            this.log('❌ Frame data is null/undefined');
+                        }
+                        if (!screenDisplay) {
+                            this.log('❌ Screen display element not found');
+                        }
+                    }
+                } catch (error) {
+                    this.log(`❌ Failed to display screen frame: ${error.message}`);
+                }
+            }
+            
+            sendMessage(message) {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify(message));
+                    this.log(`📤 Sent: ${message.type}`);
+                } else {
+                    this.log('❌ Cannot send message - not connected');
+                }
+            }
+            
+            updateConnectionStatus(connected) {
+                const statusElement = document.getElementById('connectionStatus');
+                if (connected) {
+                    statusElement.className = 'status connected';
+                    statusElement.innerHTML = '🟢 Connected to agent - Ready for remote control!';
+                    
+                    // Flash the status to make it more visible
+                    statusElement.style.animation = 'flash 2s ease-in-out';
+                    setTimeout(() => {
+                        statusElement.style.animation = '';
+                    }, 2000);
+                } else {
+                    statusElement.className = 'status disconnected';
+                    statusElement.innerHTML = '🔴 Disconnected from agent - Attempting to reconnect...';
+                }
+            }
+            
+            testConnection() {
+                this.log('🧪 Testing connection...');
+                const testElement = document.getElementById('connectionTest');
+                testElement.innerHTML = 'Testing connection...';
+                
+                this.sendMessage({
+                    type: 'ping',
+                    message: 'Connection test from dashboard'
+                });
+                
+                // Update test status
+                setTimeout(() => {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        testElement.innerHTML = '✅ Connection test successful! Agent is responding.';
+                        testElement.style.color = '#28a745';
+                    } else {
+                        testElement.innerHTML = '❌ Connection test failed! Agent not responding.';
+                        testElement.style.color = '#dc3545';
+                    }
+                }, 1000);
+            }
+            
+            testScreenShare() {
+                this.log('📺 Testing screen share...');
+                const testElement = document.getElementById('connectionTest');
+                testElement.innerHTML = 'Testing screen share...';
+                
+                // Start screen share for 3 seconds then stop
+                this.sendMessage({
+                    type: 'start-screen'
+                });
+                
+                setTimeout(() => {
+                    this.sendMessage({
+                        type: 'stop-screen'
+                    });
+                    testElement.innerHTML = '✅ Screen share test completed! Check agent logs.';
+                    testElement.style.color = '#28a745';
+                }, 3000);
+            }
+            
+            log(message) {
+                const logContainer = document.getElementById('logContainer');
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = document.createElement('div');
+                logEntry.textContent = `${timestamp}: ${message}`;
+                logContainer.appendChild(logEntry);
+                logContainer.scrollTop = logContainer.scrollHeight;
+                
+                console.log(message);
+            }
+        }
+        
+        // Initialize dashboard
+        const dashboard = new LocalDashboard();
+    </script>
+</body>
+</html>
