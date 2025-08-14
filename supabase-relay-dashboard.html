@@ -154,7 +154,28 @@
         // Supabase configuration
         const supabaseUrl = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk';
-        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        
+        // CRITICAL FIX: Proper Supabase client initialization with error handling
+        let supabase = null;
+        
+        function initializeSupabase() {
+            try {
+                console.log('🔌 Initializing Supabase client...');
+                
+                if (typeof window.supabase === 'undefined') {
+                    console.error('❌ Supabase library not loaded');
+                    return false;
+                }
+                
+                supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+                console.log('✅ Supabase client initialized successfully');
+                return true;
+                
+            } catch (error) {
+                console.error('❌ Supabase initialization failed:', error);
+                return false;
+            }
+        }
         
         // Global state
         let devices = [];
@@ -166,6 +187,12 @@
         // Initialize dashboard
         async function init() {
             log('🚀 Initializing Supabase Relay Dashboard...');
+            
+            // CRITICAL FIX: Initialize Supabase client first
+            if (!initializeSupabase()) {
+                log('❌ Failed to initialize Supabase client - dashboard cannot function');
+                return;
+            }
             
             await loadDevices();
             setupRealtimeUpdates();
