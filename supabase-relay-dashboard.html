@@ -5,20 +5,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🚀 Supabase Relay Remote Desktop Dashboard v3.0</title>
     
-    <!-- CRITICAL FIX: Multiple CDN sources for reliable Supabase library loading -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+    <!-- CRITICAL FIX: Direct inline script approach for reliable Supabase library loading -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" onload="console.log('✅ Supabase library loaded via CDN')" onerror="console.error('❌ CDN loading failed')"></script>
     <script>
-        // Fallback CDN if primary fails
-        if (typeof window.supabase === 'undefined') {
-            console.warn('⚠️ Primary Supabase CDN failed, loading fallback...');
-            const fallbackScript = document.createElement('script');
-            fallbackScript.src = 'https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';
-            fallbackScript.onload = () => console.log('✅ Fallback Supabase CDN loaded');
-            fallbackScript.onerror = () => console.error('❌ All Supabase CDNs failed');
-            document.head.appendChild(fallbackScript);
-        } else {
-            console.log('✅ Primary Supabase CDN loaded successfully');
+        // CRITICAL FIX: Immediate verification and fallback with retry logic
+        function ensureSupabaseLoaded() {
+            return new Promise((resolve, reject) => {
+                let attempts = 0;
+                const maxAttempts = 100; // 10 seconds max wait
+                
+                function checkSupabase() {
+                    attempts++;
+                    console.log(`🔍 Checking Supabase library... (${attempts}/${maxAttempts})`);
+                    
+                    if (typeof window.supabase !== 'undefined') {
+                        console.log('✅ Supabase library confirmed loaded');
+                        resolve(true);
+                        return;
+                    }
+                    
+                    if (attempts >= maxAttempts) {
+                        console.error('❌ Supabase library failed to load after 10 seconds');
+                        reject(new Error('Supabase library loading timeout'));
+                        return;
+                    }
+                    
+                    setTimeout(checkSupabase, 100);
+                }
+                
+                checkSupabase();
+            });
         }
+        
+        // Start checking immediately
+        ensureSupabaseLoaded().then(() => {
+            console.log('🚀 Supabase library ready - initializing dashboard...');
+            if (typeof initDashboard === 'function') {
+                initDashboard();
+            }
+        }).catch(error => {
+            console.error('❌ Failed to load Supabase library:', error);
+        });
     </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -204,48 +231,63 @@
         let isConnected = false;
         let isScreenSharing = false;
         
-        // Initialize dashboard with proper timing
-        async function init() {
-            log('🚀 Initializing Supabase Relay Dashboard...');
+        // CRITICAL FIX: Direct dashboard initialization function
+        async function initDashboard() {
+            console.log('🚀 Initializing Supabase Relay Dashboard...');
             
-            // CRITICAL FIX: Wait for Supabase library to load
-            let attempts = 0;
-            const maxAttempts = 50; // 5 seconds max wait
-            
-            while (typeof window.supabase === 'undefined' && attempts < maxAttempts) {
-                console.log(`⏳ Waiting for Supabase library... (${attempts + 1}/${maxAttempts})`);
-                await new Promise(resolve => setTimeout(resolve, 100));
-                attempts++;
-            }
-            
+            // Verify Supabase library is loaded
             if (typeof window.supabase === 'undefined') {
-                log('❌ Supabase library failed to load after 5 seconds');
+                console.error('❌ Supabase library not available during initialization');
                 return;
             }
             
-            // Initialize Supabase client
-            if (!initializeSupabase()) {
-                log('❌ Failed to initialize Supabase client - dashboard cannot function');
-                return;
+            // Initialize Supabase client directly
+            try {
+                console.log('🔌 Creating Supabase client...');
+                
+                const supabaseUrl = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
+                const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk';
+                
+                // Create client and assign to global variables
+                window.supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+                window.globalSupabase = window.supabaseClient; // Additional global reference
+                
+                console.log('✅ Supabase client created successfully');
+                console.log('🔍 Client type:', typeof window.supabaseClient);
+                
+                // Load devices and setup
+                await loadDevicesDirectly();
+                setupRealtimeUpdatesDirectly();
+                
+                console.log('✅ Dashboard initialized successfully');
+                
+            } catch (error) {
+                console.error('❌ Dashboard initialization failed:', error);
             }
-            
-            await loadDevices();
-            setupRealtimeUpdates();
-            
-            log('✅ Dashboard initialized successfully');
         }
         
-        // Load devices from Supabase
-        async function loadDevices() {
+        // Legacy initialization function (kept for compatibility)
+        async function init() {
+            console.log('🔄 Legacy init called - redirecting to initDashboard...');
+            await initDashboard();
+        }
+        
+        // CRITICAL FIX: Direct device loading using window.supabaseClient
+        async function loadDevicesDirectly() {
             try {
-                const { data, error } = await supabase
+                console.log('📡 Loading devices using direct Supabase client...');
+                
+                const { data, error } = await window.supabaseClient
                     .from('remote_devices')
                     .select('*')
                     .order('last_seen', { ascending: false });
                     
                 if (error) {
+                    console.error('❌ Device loading error:', error);
                     throw error;
                 }
+                
+                console.log('✅ Raw device data loaded:', data?.length || 0, 'devices');
                 
                 // Filter stale devices (inactive > 5 minutes)
                 const now = Date.now();
@@ -261,12 +303,21 @@
                     return true; // Show all devices, but mark stale ones as offline
                 });
                 
+                console.log('📊 Processed devices:', devices.length, 'total');
+                console.log('🟢 Online devices:', devices.filter(d => d.is_online).length);
+                
                 updateDeviceList();
                 updateStats();
                 
             } catch (error) {
-                log('❌ Error loading devices: ' + error.message);
+                console.error('❌ Error loading devices directly:', error.message);
             }
+        }
+        
+        // Legacy device loading function (kept for compatibility)
+        async function loadDevices() {
+            console.log('🔄 Legacy loadDevices called - redirecting to loadDevicesDirectly...');
+            await loadDevicesDirectly();
         }
         
         // Update device list UI
@@ -575,18 +626,33 @@
             }
         }
         
-        // Setup realtime updates for device list
+        // CRITICAL FIX: Direct realtime setup using window.supabaseClient
+        function setupRealtimeUpdatesDirectly() {
+            console.log('📡 Setting up realtime updates using direct Supabase client...');
+            
+            try {
+                const channel = window.supabaseClient
+                    .channel('remote_devices_changes')
+                    .on('postgres_changes', 
+                        { event: '*', schema: 'public', table: 'remote_devices' },
+                        (payload) => {
+                            console.log('📡 Device update received via realtime');
+                            loadDevicesDirectly();
+                        }
+                    )
+                    .subscribe();
+                    
+                console.log('✅ Realtime updates configured successfully');
+                
+            } catch (error) {
+                console.error('❌ Failed to setup realtime updates:', error);
+            }
+        }
+        
+        // Legacy realtime setup function (kept for compatibility)
         function setupRealtimeUpdates() {
-            const channel = supabase
-                .channel('remote_devices_changes')
-                .on('postgres_changes', 
-                    { event: '*', schema: 'public', table: 'remote_devices' },
-                    (payload) => {
-                        log('📡 Device update received');
-                        loadDevices();
-                    }
-                )
-                .subscribe();
+            console.log('🔄 Legacy setupRealtimeUpdates called - redirecting to setupRealtimeUpdatesDirectly...');
+            setupRealtimeUpdatesDirectly();
         }
         
         // Mouse control via Supabase Realtime
