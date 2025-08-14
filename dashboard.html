@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🚀 Complete Remote Desktop Dashboard v2.0 - Build 20250811-2016</title>
+    <title>🚀 Supabase Relay Remote Desktop Dashboard v3.0</title>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -51,6 +51,7 @@
         }
         .status-online { background: #10b981; color: white; }
         .status-offline { background: #ef4444; color: white; }
+        .status-relay { background: #8b5cf6; color: white; }
         
         .control-panel {
             background: white; border-radius: 15px; padding: 20px;
@@ -97,12 +98,20 @@
             padding: 15px; height: 150px; overflow-y: auto; font-family: monospace;
             font-size: 12px; margin-top: 20px;
         }
+        
+        .relay-indicator {
+            background: #8b5cf6; color: white; padding: 5px 10px; border-radius: 15px;
+            font-size: 0.8rem; margin-left: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚀 Complete Remote Desktop Dashboard v2.0</h1>
+            <h1>🚀 Supabase Relay Remote Desktop Dashboard v3.0</h1>
+            <div class="relay-indicator">
+                ☁️ Pure Cloud Relay
+            </div>
             <div id="stats">
                 <span id="deviceCount">Loading devices...</span>
             </div>
@@ -124,19 +133,13 @@
                 </div>
                 
                 <div class="controls">
-                    <button id="connectBtn" class="btn btn-primary" onclick="connectToDevice()">
-                        🔌 Connect
-                    </button>
-                    <button id="screenBtn" class="btn btn-success" onclick="startScreenShare()" disabled>
-                        📺 Start Screen Share
-                    </button>
-                    <button id="stopBtn" class="btn btn-danger" onclick="stopScreenShare()" disabled>
-                        ⏹️ Stop
-                    </button>
+                    <button id="connectBtn" class="btn btn-primary" onclick="connectToDevice()">Connect</button>
+                    <button id="screenBtn" class="btn btn-success" onclick="startScreenShare()" disabled>Start Screen</button>
+                    <button id="stopBtn" class="btn btn-danger" onclick="stopScreenShare()" disabled>Stop</button>
                 </div>
                 
                 <div class="screen-container">
-                    <canvas id="screen" class="screen" width="800" height="600"></canvas>
+                    <canvas id="screen" class="screen" style="display: none;"></canvas>
                     <div id="noScreen" class="no-screen">
                         Select a device and click Connect to start remote control
                     </div>
@@ -156,15 +159,17 @@
         // Global state
         let devices = [];
         let selectedDevice = null;
-        let ws = null;
+        let realtimeChannel = null;
         let isConnected = false;
         let isScreenSharing = false;
         
         // Initialize dashboard
         async function init() {
-            log('🚀 Initializing Complete Remote Desktop Dashboard...');
+            log('🚀 Initializing Supabase Relay Dashboard...');
+            
             await loadDevices();
             setupRealtimeUpdates();
+            
             log('✅ Dashboard initialized successfully');
         }
         
@@ -175,24 +180,23 @@
                     .from('remote_devices')
                     .select('*')
                     .order('last_seen', { ascending: false });
-                
+                    
                 if (error) {
-                    log('❌ Failed to load devices: ' + error.message);
-                    return;
+                    throw error;
                 }
                 
-                // Filter out stale devices (inactive for > 5 minutes)
+                // Filter stale devices (inactive > 5 minutes)
                 const now = Date.now();
-                const fiveMinutesAgo = now - (5 * 60 * 1000);
-                
-                devices = (data || []).map(device => {
-                    const lastSeenTime = new Date(device.last_seen).getTime();
-                    const isActuallyOnline = device.is_online && lastSeenTime > fiveMinutesAgo;
+                devices = data.filter(device => {
+                    const lastSeen = new Date(device.last_seen).getTime();
+                    const minutesAgo = (now - lastSeen) / (1000 * 60);
                     
-                    return {
-                        ...device,
-                        is_online: isActuallyOnline // Override stale online status
-                    };
+                    // Override is_online if device is stale
+                    if (minutesAgo > 5) {
+                        device.is_online = false;
+                    }
+                    
+                    return true; // Show all devices, but mark stale ones as offline
                 });
                 
                 updateDeviceList();
@@ -210,48 +214,64 @@
             if (devices.length === 0) {
                 deviceList.innerHTML = `
                     <div style="text-align: center; color: #6b7280; padding: 20px;">
-                        No devices found. Start an agent to see devices here.
+                        No devices found. Start a Supabase Relay Agent to see devices here.
                     </div>
                 `;
                 return;
             }
             
-            deviceList.innerHTML = devices.map(device => `
-                <div class="device-item ${selectedDevice?.device_id === device.device_id ? 'selected' : ''}" 
-                     onclick="selectDevice('${device.device_id}')">
-                    <div class="device-name">${device.device_name}</div>
-                    <div class="device-info">
-                        ${device.platform} • ${device.architecture}<br>
-                        ${device.local_ip}:${device.local_port}
+            deviceList.innerHTML = devices.map(device => {
+                const isRelay = device.mode === 'supabase-relay';
+                const statusClass = device.is_online ? 'status-online' : 'status-offline';
+                const statusText = device.is_online ? '🟢 Online' : '🔴 Offline';
+                const relayBadge = isRelay ? '<span class="status-relay">☁️ Relay</span>' : '';
+                
+                return `
+                    <div class="device-item ${selectedDevice?.device_id === device.device_id ? 'selected' : ''}" 
+                         onclick="selectDevice('${device.device_id}')">
+                        <div class="device-name">${device.device_name}</div>
+                        <div class="device-info">
+                            ${device.platform || 'unknown'} • ${device.architecture || 'unknown'}<br>
+                            Agent: ${device.agent_version || 'unknown'} • Mode: ${device.mode || 'legacy'}
+                        </div>
+                        <div class="device-status ${statusClass}">
+                            ${statusText} ${relayBadge}
+                        </div>
                     </div>
-                    <div class="device-status ${device.is_online ? 'status-online' : 'status-offline'}">
-                        ${device.is_online ? '🟢 Online' : '🔴 Offline'}
-                    </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
         
         // Update stats
         function updateStats() {
             const onlineCount = devices.filter(d => d.is_online).length;
-            document.getElementById('deviceCount').textContent = 
-                `${onlineCount}/${devices.length} devices online`;
+            document.getElementById('deviceCount').textContent = `${onlineCount} devices online`;
         }
         
         // Select device
         function selectDevice(deviceId) {
             selectedDevice = devices.find(d => d.device_id === deviceId);
             updateDeviceList();
-            log(`📱 Selected device: ${selectedDevice.device_name} (${selectedDevice.device_id})`);
             
-            // Disconnect if connected to different device
-            if (isConnected) {
-                disconnect();
+            if (selectedDevice) {
+                log(`📱 Selected device: ${selectedDevice.device_name} (${selectedDevice.device_id})`);
+                
+                // Enable/disable connect button based on device status and mode
+                const connectBtn = document.getElementById('connectBtn');
+                if (selectedDevice.is_online && selectedDevice.mode === 'supabase-relay') {
+                    connectBtn.disabled = false;
+                } else if (!selectedDevice.is_online) {
+                    connectBtn.disabled = true;
+                    log('⚠️ Device is offline - cannot connect');
+                } else if (selectedDevice.mode !== 'supabase-relay') {
+                    connectBtn.disabled = true;
+                    log('⚠️ Device uses legacy mode - only Supabase Relay agents supported');
+                }
             }
         }
         
-        // Connect to selected device
-        function connectToDevice() {
+        // Connect to selected device via Supabase Realtime
+        async function connectToDevice() {
             if (!selectedDevice) {
                 log('❌ No device selected');
                 return;
@@ -262,58 +282,108 @@
                 return;
             }
             
-            // Auto-detect secure connection based on dashboard protocol
-            const isHTTPS = window.location.protocol === 'https:';
-            // TEMPORARY FIX: Force WS connection since agent doesn't support WSS yet
-            const wsProtocol = 'ws'; // isHTTPS ? 'wss' : 'ws';
+            if (selectedDevice.mode !== 'supabase-relay') {
+                log('❌ Device must use Supabase Relay mode');
+                return;
+            }
             
-            // Use device's actual IP and port for global connectivity
-            const deviceIP = selectedDevice.local_ip || 'localhost';
-            const devicePort = selectedDevice.local_port || 8080; // (isHTTPS ? 8443 : 8080);
-            const wsUrl = `${wsProtocol}://${deviceIP}:${devicePort}`;
-            
-            log(`🔌 Connecting to ${selectedDevice.device_name} at ${wsUrl}...`);
-            log(`🔒 Using ${wsProtocol.toUpperCase()} connection (agent compatibility mode)`);
+            log(`🔌 Connecting to ${selectedDevice.device_name} via Supabase Realtime...`);
+            log('☁️ Using pure cloud relay - no direct IP connections');
             
             updateConnectionStatus('connecting');
             
-            ws = new WebSocket(wsUrl);
-            
-            ws.onopen = function() {
-                isConnected = true;
-                updateConnectionStatus('connected');
-                log(`✅ Connected to ${selectedDevice.device_name}`);
+            try {
+                // Create device-specific channel
+                const channelName = `device_${selectedDevice.device_id}`;
+                realtimeChannel = supabase.channel(channelName);
                 
-                // Enable controls
-                document.getElementById('connectBtn').disabled = true;
-                document.getElementById('screenBtn').disabled = false;
-            };
-            
-            ws.onmessage = function(event) {
-                try {
-                    const message = JSON.parse(event.data);
-                    handleMessage(message);
-                } catch (error) {
-                    log('❌ Message error: ' + error.message);
+                // Listen for responses from agent
+                realtimeChannel.on('broadcast', { event: 'response' }, (payload) => {
+                    console.log('📨 Received response:', payload);
+                    handleAgentResponse(payload.payload);
+                });
+                
+                // Subscribe to channel
+                const subscribeResponse = await realtimeChannel.subscribe((status) => {
+                    log(`📡 Realtime channel status: ${status}`);
+                    
+                    if (status === 'SUBSCRIBED') {
+                        log(`✅ Connected to ${selectedDevice.device_name} via Supabase Realtime`);
+                        isConnected = true;
+                        updateConnectionStatus('connected');
+                        
+                        // Enable controls
+                        document.getElementById('connectBtn').disabled = true;
+                        document.getElementById('screenBtn').disabled = false;
+                        document.getElementById('stopBtn').disabled = false;
+                        
+                        // Send ping to agent
+                        sendCommand('ping', { timestamp: Date.now() });
+                    }
+                });
+                
+                if (subscribeResponse !== 'ok') {
+                    throw new Error('Failed to subscribe to Realtime channel');
                 }
-            };
-            
-            ws.onclose = function() {
-                disconnect();
-                log(`🔌 Disconnected from ${selectedDevice.device_name}`);
-            };
-            
-            ws.onerror = function(error) {
-                log('❌ WebSocket error: Connection failed - check if device is accessible');
-                disconnect();
-            };
+                
+            } catch (error) {
+                log('❌ Connection failed: ' + error.message);
+                updateConnectionStatus('disconnected');
+            }
         }
         
-        // Handle incoming messages
-        function handleMessage(message) {
-            if (message.type === 'screen-frame') {
-                displayScreenFrame(message.data);
+        // Handle responses from agent
+        function handleAgentResponse(response) {
+            log(`📨 Agent response: ${response.type}`);
+            
+            switch (response.type) {
+                case 'pong':
+                    log('🏓 Pong received - connection verified');
+                    break;
+                    
+                case 'status':
+                    log(`📊 Agent status: ${response.data.status}`);
+                    break;
+                    
+                case 'screen_share_started':
+                    log('📺 Screen sharing started');
+                    isScreenSharing = true;
+                    break;
+                    
+                case 'screen_share_stopped':
+                    log('⏹️ Screen sharing stopped');
+                    isScreenSharing = false;
+                    break;
+                    
+                case 'screen_frame':
+                    displayScreenFrame(response.data.data);
+                    break;
+                    
+                default:
+                    log(`📨 Unknown response: ${response.type}`);
             }
+        }
+        
+        // Send command to agent via Supabase Realtime
+        function sendCommand(type, data = {}) {
+            if (!realtimeChannel) {
+                log('❌ Not connected to device');
+                return;
+            }
+            
+            const command = {
+                type,
+                data,
+                timestamp: Date.now()
+            };
+            
+            log(`📤 Sending command: ${type}`);
+            
+            realtimeChannel.send({
+                type: 'broadcast',
+                event: 'command',
+                payload: command
+            });
         }
         
         // Display screen frame
@@ -323,8 +393,11 @@
             const img = new Image();
             
             img.onload = function() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                
+                // Show canvas, hide placeholder
                 document.getElementById('noScreen').style.display = 'none';
                 canvas.style.display = 'block';
             };
@@ -334,23 +407,24 @@
         
         // Start screen sharing
         function startScreenShare() {
-            if (!isConnected) return;
+            if (!isConnected) {
+                log('❌ Not connected to device');
+                return;
+            }
             
-            ws.send(JSON.stringify({ type: 'start-screen' }));
-            isScreenSharing = true;
-            document.getElementById('screenBtn').disabled = true;
-            document.getElementById('stopBtn').disabled = false;
-            log('📺 Screen sharing started');
+            log('📺 Starting screen sharing via Supabase Realtime...');
+            sendCommand('start_screen_share');
         }
         
         // Stop screen sharing
         function stopScreenShare() {
-            if (!isConnected) return;
+            if (!isConnected) {
+                log('❌ Not connected to device');
+                return;
+            }
             
-            ws.send(JSON.stringify({ type: 'stop-screen' }));
-            isScreenSharing = false;
-            document.getElementById('screenBtn').disabled = false;
-            document.getElementById('stopBtn').disabled = true;
+            log('⏹️ Stopping screen sharing...');
+            sendCommand('stop_screen_share');
             
             // Clear screen
             const canvas = document.getElementById('screen');
@@ -358,15 +432,13 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             document.getElementById('noScreen').style.display = 'block';
             canvas.style.display = 'none';
-            
-            log('⏹️ Screen sharing stopped');
         }
         
         // Disconnect
         function disconnect() {
-            if (ws) {
-                ws.close();
-                ws = null;
+            if (realtimeChannel) {
+                realtimeChannel.unsubscribe();
+                realtimeChannel = null;
             }
             
             isConnected = false;
@@ -394,11 +466,11 @@
             switch (status) {
                 case 'connected':
                     statusEl.classList.add('status-connected');
-                    statusEl.textContent = `✅ Connected to ${selectedDevice.device_name}`;
+                    statusEl.textContent = `✅ Connected to ${selectedDevice.device_name} via Supabase Relay`;
                     break;
                 case 'connecting':
                     statusEl.classList.add('status-connecting');
-                    statusEl.textContent = '🔄 Connecting...';
+                    statusEl.textContent = '🔄 Connecting via Supabase Realtime...';
                     break;
                 default:
                     statusEl.classList.add('status-disconnected');
@@ -406,7 +478,7 @@
             }
         }
         
-        // Setup realtime updates
+        // Setup realtime updates for device list
         function setupRealtimeUpdates() {
             const channel = supabase
                 .channel('remote_devices_changes')
@@ -420,7 +492,7 @@
                 .subscribe();
         }
         
-        // Mouse control
+        // Mouse control via Supabase Realtime
         document.getElementById('screen').addEventListener('mousemove', function(e) {
             if (!isConnected || !isScreenSharing) return;
             
@@ -428,11 +500,7 @@
             const x = Math.round((e.clientX - rect.left) * (1280 / rect.width));
             const y = Math.round((e.clientY - rect.top) * (720 / rect.height));
             
-            ws.send(JSON.stringify({
-                type: 'mouse-move',
-                x: x,
-                y: y
-            }));
+            sendCommand('mouse_move', { x, y });
         });
         
         document.getElementById('screen').addEventListener('click', function(e) {
@@ -442,14 +510,9 @@
             const x = Math.round((e.clientX - rect.left) * (1280 / rect.width));
             const y = Math.round((e.clientY - rect.top) * (720 / rect.height));
             
-            ws.send(JSON.stringify({
-                type: 'mouse-click',
-                x: x,
-                y: y,
-                button: 'left'
-            }));
+            sendCommand('mouse_click', { x, y, button: 'left' });
             
-            log(`🖱️ Mouse clicked at (${x}, ${y})`);
+            log(`🖱️ Mouse clicked at (${x}, ${y}) via Supabase Relay`);
         });
         
         // Logging
