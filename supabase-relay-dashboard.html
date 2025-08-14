@@ -170,7 +170,7 @@
         const supabaseUrl = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk';
         
-        // CRITICAL FIX: Proper Supabase client initialization with error handling
+        // CRITICAL FIX: Proper Supabase client initialization with global scope access
         let supabase = null;
         
         function initializeSupabase() {
@@ -182,8 +182,13 @@
                     return false;
                 }
                 
+                // CRITICAL FIX: Assign to global variable AND window object for full accessibility
                 supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+                window.supabaseClient = supabase; // Also expose on window for debugging/testing
+                
                 console.log('✅ Supabase client initialized successfully');
+                console.log('🔍 Global supabase variable:', typeof supabase);
+                console.log('🔍 Window supabaseClient:', typeof window.supabaseClient);
                 return true;
                 
             } catch (error) {
