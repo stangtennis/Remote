@@ -4,7 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🚀 Supabase Relay Remote Desktop Dashboard v3.0</title>
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    
+    <!-- CRITICAL FIX: Multiple CDN sources for reliable Supabase library loading -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+    <script>
+        // Fallback CDN if primary fails
+        if (typeof window.supabase === 'undefined') {
+            console.warn('⚠️ Primary Supabase CDN failed, loading fallback...');
+            const fallbackScript = document.createElement('script');
+            fallbackScript.src = 'https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';
+            fallbackScript.onload = () => console.log('✅ Fallback Supabase CDN loaded');
+            fallbackScript.onerror = () => console.error('❌ All Supabase CDNs failed');
+            document.head.appendChild(fallbackScript);
+        } else {
+            console.log('✅ Primary Supabase CDN loaded successfully');
+        }
+    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -184,11 +199,26 @@
         let isConnected = false;
         let isScreenSharing = false;
         
-        // Initialize dashboard
+        // Initialize dashboard with proper timing
         async function init() {
             log('🚀 Initializing Supabase Relay Dashboard...');
             
-            // CRITICAL FIX: Initialize Supabase client first
+            // CRITICAL FIX: Wait for Supabase library to load
+            let attempts = 0;
+            const maxAttempts = 50; // 5 seconds max wait
+            
+            while (typeof window.supabase === 'undefined' && attempts < maxAttempts) {
+                console.log(`⏳ Waiting for Supabase library... (${attempts + 1}/${maxAttempts})`);
+                await new Promise(resolve => setTimeout(resolve, 100));
+                attempts++;
+            }
+            
+            if (typeof window.supabase === 'undefined') {
+                log('❌ Supabase library failed to load after 5 seconds');
+                return;
+            }
+            
+            // Initialize Supabase client
             if (!initializeSupabase()) {
                 log('❌ Failed to initialize Supabase client - dashboard cannot function');
                 return;
