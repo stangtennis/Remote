@@ -295,6 +295,7 @@
             try {
                 // Create device-specific channel
                 const channelName = `device_${selectedDevice.device_id}`;
+                console.log(`📡 Dashboard connecting to channel: ${channelName}`);
                 realtimeChannel = supabase.channel(channelName);
                 
                 // Listen for responses from agent
@@ -303,12 +304,17 @@
                     handleAgentResponse(payload.payload);
                 });
                 
-                // CRITICAL FIX: Listen for screen frames on separate channel
+                // CRITICAL FIX: Listen for screen frames on same channel
                 realtimeChannel.on('broadcast', { event: 'screen_frame' }, (payload) => {
                     console.log('📺 Received screen frame:', payload.payload?.data?.length || 'no data');
                     if (payload.payload?.data) {
                         displayScreenFrame(payload.payload.data);
                     }
+                });
+                
+                // ADDITIONAL FIX: Listen for all broadcast events for debugging
+                realtimeChannel.on('broadcast', { event: '*' }, (payload) => {
+                    console.log('🔍 All broadcast events:', payload);
                 });
                 
                 // Subscribe to channel
