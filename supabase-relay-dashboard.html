@@ -409,11 +409,33 @@
                 // Create device-specific channel
                 const channelName = `device_${selectedDevice.device_id}`;
                 console.log(`📡 Dashboard connecting to channel: ${channelName}`);
-                // CRITICAL FIX: Use window.supabaseClient instead of undefined supabase variable
-                const client = window.supabaseClient || window.globalSupabase;
-                if (!client) {
-                    throw new Error('Supabase client not initialized');
+                
+                // CRITICAL FIX: Multiple fallback approaches for Supabase client
+                let client = null;
+                
+                // Try multiple client sources
+                if (window.supabaseClient) {
+                    client = window.supabaseClient;
+                    console.log('✅ Using window.supabaseClient');
+                } else if (window.globalSupabase) {
+                    client = window.globalSupabase;
+                    console.log('✅ Using window.globalSupabase');
+                } else if (typeof window.supabase !== 'undefined') {
+                    // Create client on-demand if library is loaded
+                    const supabaseUrl = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
+                    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk';
+                    client = window.supabase.createClient(supabaseUrl, supabaseKey);
+                    window.supabaseClient = client; // Cache for future use
+                    console.log('✅ Created new Supabase client on-demand');
                 }
+                
+                if (!client) {
+                    throw new Error('Supabase client not available - library may not be loaded');
+                }
+                
+                console.log('🔍 Client type:', typeof client);
+                console.log('🔍 Client channel method:', typeof client.channel);
+                
                 realtimeChannel = client.channel(channelName);
                 
                 // Listen for responses from agent
