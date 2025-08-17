@@ -409,7 +409,12 @@
                 // Create device-specific channel
                 const channelName = `device_${selectedDevice.device_id}`;
                 console.log(`📡 Dashboard connecting to channel: ${channelName}`);
-                realtimeChannel = supabase.channel(channelName);
+                // CRITICAL FIX: Use window.supabaseClient instead of undefined supabase variable
+                const client = window.supabaseClient || window.globalSupabase;
+                if (!client) {
+                    throw new Error('Supabase client not initialized');
+                }
+                realtimeChannel = client.channel(channelName);
                 
                 // Listen for responses from agent
                 realtimeChannel.on('broadcast', { event: 'response' }, (payload) => {
