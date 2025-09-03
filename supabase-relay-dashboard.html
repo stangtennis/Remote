@@ -231,6 +231,9 @@
         let isConnected = false;
         let isScreenSharing = false;
         
+        // Chunk assembly storage: key `${device_id}:${frame_number}` -> { chunks: [], received: 0, chunkCount, ts }
+        const frameChunks = {};
+        
         // CRITICAL FIX: Direct dashboard initialization function
         async function initDashboard() {
             console.log('🚀 Initializing Supabase Relay Dashboard...');
@@ -258,6 +261,8 @@
                 // Load devices and setup
                 await loadDevicesDirectly();
                 setupRealtimeUpdatesDirectly();
+                // Periodic cleanup for stale/incomplete frame buffers
+                setInterval(cleanupFrameChunks, 15000);
                 
                 console.log('✅ Dashboard initialized successfully');
                 
@@ -449,11 +454,25 @@
                     console.log('📺 Received screen frame:', payload.payload?.data?.length || 'no data');
                     log(`📺 Screen frame received: ${payload.payload?.data?.length || 0} chars`);
                     if (payload.payload?.data) {
-                        displayScreenFrame(payload.payload.data);
+                        displayScreenFrame(payload.payload.data, payload.payload?.mime || 'image/png');
                     } else {
                         log('❌ Screen frame payload missing data field');
                         console.log('🔍 Full payload:', payload);
                     }
+                });
+                
+                // TeamViewer-style CHUNKED RELAY: listen for chunked frames
+                realtimeChannel.on('broadcast', { event: 'screen_frame_chunk' }, (payload) => {
+                    const ch = payload.payload || {};
+                    console.log('🧩 Received screen frame chunk:', {
+                        chunk_index: ch?.chunk_index,
+                        chunk_count: ch?.chunk_count,
+                        size: ch?.size,
+                        frame_id: ch?.frame_id,
+                        device_id: ch?.device_id
+                    });
+                    log(`🧩 Chunk ${(Number(ch?.chunk_index) || 0) + 1}/${ch?.chunk_count || 'unknown'} for frame #${ch?.frame_id ?? ch?.frame_number ?? 'unknown'}`);
+                    handleScreenFrameChunk(ch);
                 });
                 
                 // ADDITIONAL FIX: Listen for all broadcast events for debugging
@@ -462,7 +481,7 @@
                 });
                 
                 // Subscribe to channel
-                const subscribeResponse = await realtimeChannel.subscribe((status) => {
+                realtimeChannel.subscribe((status) => {
                     log(`📡 Realtime channel status: ${status}`);
                     
                     if (status === 'SUBSCRIBED') {
@@ -479,10 +498,6 @@
                         sendCommand('ping', { timestamp: Date.now() });
                     }
                 });
-                
-                if (subscribeResponse !== 'ok') {
-                    throw new Error('Failed to subscribe to Realtime channel');
-                }
                 
             } catch (error) {
                 log('❌ Connection failed: ' + error.message);
@@ -514,7 +529,7 @@
                     break;
                     
                 case 'screen_frame':
-                    displayScreenFrame(response.data.data);
+                    displayScreenFrame(response.data.data, response.data?.mime || 'image/png');
                     break;
                     
                 default:
@@ -545,7 +560,7 @@
         }
         
         // Display screen frame
-        function displayScreenFrame(base64Data) {
+        function displayScreenFrame(base64Data, mime) {
             console.log('🖼️ displayScreenFrame called with data length:', base64Data?.length || 'undefined');
             log(`🖼️ Processing screen frame (${base64Data?.length || 0} chars)`);
             
@@ -557,6 +572,7 @@
             const canvas = document.getElementById('screen');
             const ctx = canvas.getContext('2d');
             const img = new Image();
+            const mimeType = mime || 'image/png';
             
             img.onload = function() {
                 console.log('✅ Image loaded successfully:', img.width, 'x', img.height);
@@ -576,19 +592,84 @@
                 log('❌ Failed to load screen frame image');
             };
             
-            // Try different data formats
-            if (base64Data.startsWith('data:image/')) {
+            // Use explicit MIME type when building data URL
+            if (typeof base64Data === 'string' && base64Data.startsWith('data:image/')) {
                 img.src = base64Data;
             } else {
-                img.src = 'data:image/jpeg;base64,' + base64Data;
+                img.src = `data:${mimeType};base64,${base64Data}`;
+            }
+        }
+        
+        // Assemble chunked screen frames sent via Supabase Realtime
+        function handleScreenFrameChunk(chunk) {
+            try {
+                const frameId = Number.isFinite(Number(chunk.frame_id)) ? Number(chunk.frame_id) : Number(chunk.frame_number);
+                const chunkIndex = Number(chunk.chunk_index);
+                const chunkCount = Number(chunk.chunk_count);
+                const deviceId = chunk.device_id || (selectedDevice?.device_id || 'unknown');
+                if (Number.isNaN(frameId) || Number.isNaN(chunkIndex) || Number.isNaN(chunkCount)) {
+                    log('❌ Invalid chunk metadata');
+                    return;
+                }
+                const key = `${deviceId}:${frameId}`;
+                if (!frameChunks[key]) {
+                    frameChunks[key] = { chunks: new Array(chunkCount), received: 0, chunkCount, ts: Date.now(), mime: chunk.mime || 'image/png', width: chunk.width || null, height: chunk.height || null };
+                }
+                const entry = frameChunks[key];
+                // Reconcile if chunkCount changes
+                if (!entry.chunkCount || entry.chunkCount !== chunkCount) {
+                    entry.chunks = new Array(chunkCount);
+                    entry.chunkCount = chunkCount;
+                    entry.received = 0;
+                }
+                if (chunk.mime && !entry.mime) entry.mime = chunk.mime;
+                if (Number.isFinite(chunk.width) && !entry.width) entry.width = chunk.width;
+                if (Number.isFinite(chunk.height) && !entry.height) entry.height = chunk.height;
+                if (!entry.chunks[chunkIndex]) {
+                    entry.chunks[chunkIndex] = chunk.data || '';
+                    entry.received++;
+                }
+                entry.ts = Date.now();
+                
+                // Progress logging
+                log(`🧩 Chunk ${chunkIndex + 1}/${entry.chunkCount} for frame #${frameId}`);
+                
+                // Completed frame
+                if (entry.received === entry.chunkCount) {
+                    const base64 = entry.chunks.join('');
+                    delete frameChunks[key];
+                    log(`✅ Frame #${frameId} assembled (${entry.chunkCount} chunks, ${base64.length} chars)`);
+                    displayScreenFrame(base64, entry.mime || 'image/png');
+                }
+            } catch (err) {
+                console.error('❌ Chunk assembly error:', err);
+                log('❌ Chunk assembly error: ' + err.message);
+            }
+        }
+        
+        // Periodically clean up stale/incomplete frames
+        function cleanupFrameChunks() {
+            const now = Date.now();
+            let cleaned = 0;
+            for (const key in frameChunks) {
+                if (Object.prototype.hasOwnProperty.call(frameChunks, key)) {
+                    const entry = frameChunks[key];
+                    if (now - (entry.ts || 0) > 30000) { // 30s stale
+                        delete frameChunks[key];
+                        cleaned++;
+                    }
+                }
+            }
+            if (cleaned > 0) {
+                console.warn(`🧹 Cleaned ${cleaned} stale frame buffers`);
             }
         }
     
-    // Start screen sharing
-    function startScreenShare() {
-        if (!isConnected) {
-            log('❌ Not connected to device');
-            return;
+        // Start screen sharing
+        function startScreenShare() {
+            if (!isConnected) {
+                log('❌ Not connected to device');
+                return;
             }
             
             log('📺 Starting screen sharing via Supabase Realtime...');

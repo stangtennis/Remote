@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 LOCAL TEST - Supabase Relay Dashboard v3.1</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .devices-panel {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .device-card {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .device-card:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        .device-card.selected {
+            background: rgba(76, 175, 80, 0.3);
+            border: 2px solid #4CAF50;
+        }
+        .status-online {
+            background: #4CAF50;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        .status-offline {
+            background: #f44336;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        .control-panel {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+            transition: background 0.3s ease;
+        }
+        .btn:hover {
+            background: #45a049;
+        }
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .btn-danger {
+            background: #f44336;
+        }
+        .btn-danger:hover {
+            background: #da190b;
+        }
+        .screen-container {
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #screen {
+            max-width: 100%;
+            max-height: 600px;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+        }
+        .log-container {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .connection-status {
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+            text-align: center;
+            font-weight: bold;
+        }
+        .status-disconnected {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid #f44336;
+        }
+        .status-connecting {
+            background: rgba(255, 193, 7, 0.2);
+            border: 1px solid #ffc107;
+        }
+        .status-connected {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 LOCAL TEST - Supabase Relay Remote Desktop Dashboard v3.1</h1>
+            <div style="background: rgba(76, 175, 80, 0.2); padding: 8px 16px; border-radius: 20px; display: inline-block;">
+                ☁️ Pure Cloud Relay
+            </div>
+            <div style="float: right; background: rgba(255, 255, 255, 0.2); padding: 8px 16px; border-radius: 20px;">
+                <span id="deviceCount">0</span> devices online
+            </div>
+        </div>
+
+        <div class="devices-panel">
+            <h3>📱 Available Devices</h3>
+            <div id="devicesList">
+                <div style="text-align: center; color: #ccc; padding: 20px;">
+                    Loading devices...
+                </div>
+            </div>
+        </div>
+
+        <div class="control-panel">
+            <div class="connection-status status-disconnected" id="connectionStatus">
+                🔴 Not Connected
+            </div>
+            
+            <button class="btn" id="connectBtn" onclick="connectToDevice()" disabled>Connect</button>
+            <button class="btn" id="startScreenBtn" onclick="startScreenSharing()" disabled>Start Screen</button>
+            <button class="btn btn-danger" id="stopBtn" onclick="stopScreenSharing()" disabled>Stop</button>
+        </div>
+
+        <div class="screen-container">
+            <canvas id="screen" style="display: none;"></canvas>
+            <div id="screenPlaceholder" style="color: #ccc; font-size: 18px;">
+                Select a device and click Connect to start remote control
+            </div>
+        </div>
+
+        <div class="log-container" id="logContainer">
+            <div style="color: #4CAF50; font-weight: bold;">📋 Connection Log:</div>
+        </div>
+    </div>
+
+    <script>
+        // CRITICAL: ROBUST SUPABASE CLIENT INITIALIZATION
+        let supabaseClient = null;
+        let realtimeChannel = null;
+        let selectedDevice = null;
+        let isConnected = false;
+        let isScreenSharing = false;
+        // Chunk assembly for screen frames
+        const frameChunks = {}; // key: `${device_id}:${frame_id}` -> { chunks: [], received: 0, chunkCount: n, ts: <ms>, mime?, width?, height? }
+
+        // Initialize Supabase with multiple fallback approaches
+        async function initSupabase() {
+            try {
+                console.log('🚀 LOCAL TEST - Initializing Supabase client...');
+                
+                const supabaseUrl = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
+                const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk';
+                
+                // Create Supabase client
+                supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+                
+                // Store in multiple global locations for debugging
+                window.supabaseClient = supabaseClient;
+                window.globalSupabase = supabaseClient;
+                
+                console.log('✅ Supabase client created successfully');
+                console.log('🔍 Client type:', typeof supabaseClient);
+                console.log('🔍 Client channel method:', typeof supabaseClient.channel);
+                
+                log('✅ Supabase client initialized successfully');
+                
+                return true;
+            } catch (error) {
+                console.error('❌ Supabase initialization failed:', error);
+                log('❌ Supabase initialization failed: ' + error.message);
+                return false;
+            }
+        }
+
+        // Load devices from Supabase
+        async function loadDevices() {
+            try {
+                if (!supabaseClient) {
+                    throw new Error('Supabase client not initialized');
+                }
+
+                log('📡 Loading devices from Supabase...');
+                
+                const { data: devices, error } = await supabaseClient
+                    .from('remote_devices')
+                    .select('*')
+                    .eq('is_online', true)
+                    .order('last_seen', { ascending: false });
+
+                if (error) {
+                    throw error;
+                }
+
+                console.log('📱 Loaded devices:', devices);
+                displayDevices(devices || []);
+                
+                log(`📱 Loaded ${devices?.length || 0} online devices`);
+                
+            } catch (error) {
+                console.error('❌ Error loading devices:', error);
+                log('❌ Error loading devices: ' + error.message);
+            }
+        }
+
+        // Display devices in the UI
+        function displayDevices(devices) {
+            const devicesList = document.getElementById('devicesList');
+            const deviceCount = document.getElementById('deviceCount');
+            
+            deviceCount.textContent = devices.length;
+            
+            if (devices.length === 0) {
+                devicesList.innerHTML = '<div style="text-align: center; color: #ccc; padding: 20px;">No devices online</div>';
+                return;
+            }
+            
+            devicesList.innerHTML = devices.map(device => `
+                <div class="device-card" onclick="selectDevice('${device.device_id}', '${device.device_name}', '${device.ip_address}')">
+                    <div style="font-weight: bold; font-size: 16px;">${device.device_name}</div>
+                    <div style="font-size: 12px; opacity: 0.8;">${device.platform} • ${device.architecture}</div>
+                    <div style="font-size: 12px; opacity: 0.8;">Agent: ${device.agent_version} • Mode: ${device.connection_mode}</div>
+                    <div style="margin-top: 8px;">
+                        <span class="status-online">● Online</span>
+                        <span style="margin-left: 10px; font-size: 12px;">🕐 ${new Date(device.last_seen).toLocaleTimeString()}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Select a device
+        function selectDevice(deviceId, deviceName, ipAddress) {
+            selectedDevice = { device_id: deviceId, device_name: deviceName, ip_address: ipAddress };
+            
+            // Update UI
+            document.querySelectorAll('.device-card').forEach(card => card.classList.remove('selected'));
+            event.target.closest('.device-card').classList.add('selected');
+            
+            document.getElementById('connectBtn').disabled = false;
+            
+            log(`📱 Selected device: ${deviceName} (${deviceId})`);
+            console.log('📱 Selected device:', selectedDevice);
+        }
+
+        // Connect to selected device
+        async function connectToDevice() {
+            if (!selectedDevice) {
+                log('❌ No device selected');
+                return;
+            }
+
+            log(`🔌 Connecting to ${selectedDevice.device_name} via Supabase Realtime...`);
+            log('☁️ Using pure cloud relay - no direct IP connections');
+            
+            updateConnectionStatus('connecting');
+            
+            try {
+                // Create device-specific channel
+                const channelName = `device_${selectedDevice.device_id}`;
+                console.log(`📡 LOCAL TEST - Dashboard connecting to channel: ${channelName}`);
+                console.log(`🔍 Selected device ID: ${selectedDevice.device_id}`);
+                
+                // CRITICAL FIX: Multiple fallback approaches for Supabase client
+                let client = null;
+                
+                // Try multiple client sources
+                if (window.supabaseClient) {
+                    client = window.supabaseClient;
+                    console.log('✅ Using window.supabaseClient');
+                    log('✅ Using window.supabaseClient');
+                } else if (window.globalSupabase) {
+                    client = window.globalSupabase;
+                    console.log('✅ Using window.globalSupabase');
+                    log('✅ Using window.globalSupabase');
+                } else if (supabaseClient) {
+                    client = supabaseClient;
+                    console.log('✅ Using local supabaseClient');
+                    log('✅ Using local supabaseClient');
+                } else if (typeof window.supabase !== 'undefined') {
+                    // Create client on-demand if library is loaded
+                    const supabaseUrl = 'https://ptrtibzwokjcjjxvjpin.supabase.co';
+                    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0cnRpYnp3b2tqY2pqeHZqcGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MzE1NzEsImV4cCI6MjA3MDAwNzU3MX0.DPNxkQul1-13tqJ89mqYJAx7NSJjabOP4q8c6KgOnWk';
+                    client = window.supabase.createClient(supabaseUrl, supabaseKey);
+                    window.supabaseClient = client; // Cache for future use
+                    console.log('✅ Created new Supabase client on-demand');
+                    log('✅ Created new Supabase client on-demand');
+                }
+                
+                if (!client) {
+                    throw new Error('Supabase client not available - library may not be loaded');
+                }
+                
+                console.log('🔍 Client type:', typeof client);
+                console.log('🔍 Client channel method:', typeof client.channel);
+                log(`🔍 Client type: ${typeof client}, channel method: ${typeof client.channel}`);
+                
+                realtimeChannel = client.channel(channelName);
+                
+                // REMOVE SPECIFIC EVENT LISTENERS - USE ONLY ALL-EVENT LISTENER
+                // realtimeChannel.on('broadcast', { event: 'response' }, (payload) => {
+                //     console.log('📨 Received response:', payload);
+                //     handleAgentResponse(payload.payload);
+                // });
+                
+                // CRITICAL DEBUG: Listen for ALL events without filtering
+                realtimeChannel.on('*', (payload) => {
+                    console.log('🌟 ANY EVENT RECEIVED:', payload);
+                    log(`🌟 ANY EVENT: ${JSON.stringify(payload)}`);
+                });
+                
+                // ADDITIONAL DEBUG: Listen for postgres changes
+                realtimeChannel.on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+                    console.log('🗄️ POSTGRES CHANGE:', payload);
+                    log(`🗄️ DB Change: ${payload.eventType}`);
+                });
+                
+                // TEAMVIEWER CHUNKED RELAY: Listen for ALL broadcast events
+                realtimeChannel.on('broadcast', { event: '*' }, (payload) => {
+                    console.log('📡 ALL BROADCAST EVENT:', payload);
+                    log(`📡 Event: ${payload.event}, Type: ${payload.payload?.type || 'unknown'}, Size: ${payload.payload?.size || 'unknown'}`);
+                    
+                    // Handle chunked screen frames (TeamViewer approach)
+                    if (payload.event === 'screen_frame_chunk') {
+                        console.log('🧩 Received screen frame chunk:', {
+                            chunk_index: payload.payload?.chunk_index || 'unknown',
+                            chunk_count: payload.payload?.chunk_count || 'unknown',
+                            size: payload.payload?.size || 'unknown',
+                            frame_id: payload.payload?.frame_id ?? payload.payload?.frame_number ?? 'unknown'
+                        });
+                        log(`🧩 Chunk ${(payload.payload?.chunk_index || 0) + 1}/${payload.payload?.chunk_count || 'unknown'} for frame #${payload.payload?.frame_id ?? payload.payload?.frame_number ?? 'unknown'}: ${payload.payload?.size || 'unknown'} bytes`);
+                        
+                        handleScreenFrameChunk(payload.payload);
+                    }
+                    
+                    // Handle legacy screen frames
+                    if (payload.event === 'screen_frame') {
+                        console.log('🖼️ Received screen frame:', {
+                            size: payload.payload?.size || 'unknown',
+                            format: payload.payload?.format || 'unknown',
+                            timestamp: payload.payload?.timestamp || 'unknown',
+                            frame_id: payload.payload?.frame_id ?? payload.payload?.frame_number ?? 'unknown'
+                        });
+                        log(`🖼️ Screen frame received: ${payload.payload?.size || 'unknown'} bytes, frame #${payload.payload?.frame_id ?? payload.payload?.frame_number ?? 'unknown'}`);
+                        
+                        if (payload.payload?.data) {
+                            displayScreenFrame(payload.payload.data, payload.payload?.mime || 'image/png');
+                        }
+                    }
+                    
+                    // Handle responses
+                    if (payload.event === 'response') {
+                        console.log('📨 Received response:', payload);
+                        handleAgentResponse(payload.payload);
+                    }
+                });
+                
+                // ADDITIONAL FIX: Listen to postgres changes for debugging
+                realtimeChannel.on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+                    console.log('🗄️ POSTGRES CHANGE:', payload);
+                    log(`🗄️ DB Change: ${payload.eventType}`);
+                });
+                
+                // Subscribe to channel
+                const subscribeResult = await realtimeChannel.subscribe((status) => {
+                    console.log('📡 Channel subscription status:', status);
+                    log(`📡 Channel subscription: ${status}`);
+                    log(`📡 Subscribed to channel: ${channelName}`);
+                    
+                    if (status === 'SUBSCRIBED') {
+                        isConnected = true;
+                        updateConnectionStatus('connected');
+                        document.getElementById('startScreenBtn').disabled = false;
+                        log('✅ Successfully connected to device channel');
+                        
+                        // Send a test ping to verify channel communication
+                        setTimeout(() => {
+                            realtimeChannel.send({
+                                type: 'broadcast',
+                                event: 'command',
+                                payload: {
+                                    action: 'ping',
+                                    timestamp: Date.now()
+                                }
+                            });
+                            log('📤 Sent ping to test channel communication');
+                        }, 1000);
+                    }
+                });
+                
+                console.log('📡 Subscribe result:', subscribeResult);
+                
+            } catch (error) {
+                console.error('❌ Connection failed:', error);
+                log('❌ Connection failed: ' + error.message);
+                updateConnectionStatus('disconnected');
+            }
+        }
+
+        // Start screen sharing
+        async function startScreenSharing() {
+            if (!isConnected || !realtimeChannel) {
+                log('❌ Not connected to device');
+                return;
+            }
+
+            try {
+                log('🖥️ Requesting screen sharing from agent...');
+                
+                // Send start screen command to agent
+                const commandResult = await realtimeChannel.send({
+                    type: 'broadcast',
+                    event: 'command',
+                    payload: {
+                        action: 'start_screen',
+                        timestamp: Date.now()
+                    }
+                });
+                
+                console.log('📤 Start screen command sent:', commandResult);
+                
+                isScreenSharing = true;
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('startScreenBtn').disabled = true;
+                
+                // Show canvas
+                document.getElementById('screen').style.display = 'block';
+                document.getElementById('screenPlaceholder').style.display = 'none';
+                
+                log('✅ Screen sharing request sent to agent');
+                
+            } catch (error) {
+                console.error('❌ Failed to start screen sharing:', error);
+                log('❌ Failed to start screen sharing: ' + error.message);
+            }
+        }
+
+        // Stop screen sharing
+        async function stopScreenSharing() {
+            if (!isConnected || !realtimeChannel) {
+                log('❌ Not connected to device');
+                return;
+            }
+
+            try {
+                log('🛑 Stopping screen sharing...');
+                
+                // Send stop screen command to agent
+                const commandResult = await realtimeChannel.send({
+                    type: 'broadcast',
+                    event: 'command',
+                    payload: {
+                        action: 'stop_screen',
+                        timestamp: Date.now()
+                    }
+                });
+                
+                console.log('📤 Stop screen command sent:', commandResult);
+                
+                isScreenSharing = false;
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('startScreenBtn').disabled = false;
+                
+                // Hide canvas
+                document.getElementById('screen').style.display = 'none';
+                document.getElementById('screenPlaceholder').style.display = 'block';
+                
+                log('✅ Screen sharing stopped');
+                
+            } catch (error) {
+                console.error('❌ Failed to stop screen sharing:', error);
+                log('❌ Failed to stop screen sharing: ' + error.message);
+            }
+        }
+
+        // Handle agent responses
+        function handleAgentResponse(payload) {
+            console.log('🤖 Agent response:', payload);
+            log(`🤖 Agent: ${payload.message || JSON.stringify(payload)}`);
+            
+            // P2P CONNECTION: Check if agent provides direct connection info
+            if (payload.agent_ip && payload.websocket_port) {
+                console.log('🔗 P2P connection info received:', {
+                    ip: payload.agent_ip,
+                    ws_port: payload.websocket_port,
+                    wss_port: payload.wss_port
+                });
+                log(`🔗 P2P available: ${payload.agent_ip}:${payload.websocket_port}`);
+                
+                // Store P2P info for direct connection
+                if (selectedDevice) {
+                    selectedDevice.p2p_ip = payload.agent_ip;
+                    selectedDevice.p2p_ws_port = payload.websocket_port;
+                    selectedDevice.p2p_wss_port = payload.wss_port;
+                }
+                
+                // If screen sharing is active, switch to direct P2P connection
+                if (payload.type === 'screen_share_started' && payload.agent_ip) {
+                    log('🚀 Switching to direct P2P screen streaming...');
+                    connectDirectP2P(payload.agent_ip, payload.websocket_port);
+                }
+            }
+        }
+        
+        // Direct P2P connection for screen frames
+        let p2pWebSocket = null;
+        
+        function connectDirectP2P(agentIP, port) {
+            try {
+                const wsUrl = `ws://${agentIP}:${port}`;
+                log(`🔗 Connecting directly to agent: ${wsUrl}`);
+                
+                p2pWebSocket = new WebSocket(wsUrl);
+                
+                p2pWebSocket.onopen = function() {
+                    log('✅ Direct P2P connection established');
+                    // Request screen frames directly
+                    p2pWebSocket.send(JSON.stringify({
+                        action: 'start_screen_stream',
+                        timestamp: Date.now()
+                    }));
+                };
+                
+                p2pWebSocket.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'screen_frame') {
+                            console.log('🖼️ P2P Screen frame received:', data.size, 'bytes');
+                            log(`🖼️ P2P Screen frame: ${data.size} bytes, frame #${data.frame_number}`);
+                            displayScreenFrame(data.data);
+                        }
+                    } catch (error) {
+                        console.error('❌ P2P message parse error:', error);
+                    }
+                };
+                
+                p2pWebSocket.onerror = function(error) {
+                    console.error('❌ P2P WebSocket error:', error);
+                    log('❌ P2P connection failed, falling back to Supabase relay');
+                };
+                
+                p2pWebSocket.onclose = function() {
+                    log('🔌 P2P connection closed');
+                    p2pWebSocket = null;
+                };
+                
+            } catch (error) {
+                console.error('❌ Failed to establish P2P connection:', error);
+                log('❌ P2P connection failed: ' + error.message);
+            }
+        }
+
+        // Display screen frame
+        function displayScreenFrame(base64Data, mime) {
+            const canvas = document.getElementById('screen');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            const mimeType = mime || 'image/png';
+            
+            img.onload = function() {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                console.log('🖼️ Screen frame displayed:', img.width + 'x' + img.height);
+            };
+            
+            img.onerror = function(error) {
+                console.error('❌ Image load error:', error);
+                log('❌ Failed to display screen frame');
+            };
+            
+            // Handle base64 data
+            if (typeof base64Data === 'string' && base64Data.startsWith('data:image/')) {
+                img.src = base64Data;
+            } else {
+                img.src = `data:${mimeType};base64,${base64Data}`;
+            }
+        }
+
+        // Assemble chunked screen frames sent via Supabase Realtime
+        function handleScreenFrameChunk(chunk) {
+            try {
+                const frameId = Number.isFinite(Number(chunk.frame_id)) ? Number(chunk.frame_id) : Number(chunk.frame_number);
+                const chunkIndex = Number(chunk.chunk_index);
+                const chunkCount = Number(chunk.chunk_count);
+                const deviceId = chunk.device_id || (selectedDevice?.device_id || 'unknown');
+                if (Number.isNaN(frameId) || Number.isNaN(chunkIndex) || Number.isNaN(chunkCount)) {
+                    log('❌ Invalid chunk metadata');
+                    return;
+                }
+                const key = `${deviceId}:${frameId}`;
+                if (!frameChunks[key]) {
+                    frameChunks[key] = { chunks: new Array(chunkCount), received: 0, chunkCount, ts: Date.now(), mime: chunk.mime || 'image/png', width: chunk.width || null, height: chunk.height || null };
+                }
+                const entry = frameChunks[key];
+                // Reconcile if chunkCount changes
+                if (!entry.chunkCount || entry.chunkCount !== chunkCount) {
+                    entry.chunks = new Array(chunkCount);
+                    entry.chunkCount = chunkCount;
+                    entry.received = 0;
+                }
+                if (chunk.mime && !entry.mime) entry.mime = chunk.mime;
+                if (Number.isFinite(chunk.width) && !entry.width) entry.width = chunk.width;
+                if (Number.isFinite(chunk.height) && !entry.height) entry.height = chunk.height;
+                if (!entry.chunks[chunkIndex]) {
+                    entry.chunks[chunkIndex] = chunk.data || '';
+                    entry.received++;
+                }
+                entry.ts = Date.now();
+
+                // Progress logging
+                log(`🧩 Chunk ${chunkIndex + 1}/${entry.chunkCount} for frame #${frameId}`);
+
+                // Completed frame
+                if (entry.received === entry.chunkCount) {
+                    const base64 = entry.chunks.join('');
+                    delete frameChunks[key];
+                    log(`✅ Frame #${frameId} assembled (${entry.chunkCount} chunks, ${base64.length} chars)`);
+                    displayScreenFrame(base64, entry.mime || 'image/png');
+                }
+            } catch (err) {
+                console.error('❌ Chunk assembly error:', err);
+                log('❌ Chunk assembly error: ' + err.message);
+            }
+        }
+
+        // Periodically clean up stale/incomplete frames
+        function cleanupFrameChunks() {
+            const now = Date.now();
+            let cleaned = 0;
+            for (const key in frameChunks) {
+                if (Object.prototype.hasOwnProperty.call(frameChunks, key)) {
+                    const entry = frameChunks[key];
+                    if (now - (entry.ts || 0) > 30000) { // 30s stale
+                        delete frameChunks[key];
+                        cleaned++;
+                    }
+                }
+            }
+            if (cleaned > 0) {
+                console.warn(`🧹 Cleaned ${cleaned} stale frame buffers`);
+            }
+        }
+
+        // Update connection status
+        function updateConnectionStatus(status) {
+            const statusElement = document.getElementById('connectionStatus');
+            
+            switch (status) {
+                case 'disconnected':
+                    statusElement.className = 'connection-status status-disconnected';
+                    statusElement.innerHTML = '🔴 Not Connected';
+                    break;
+                case 'connecting':
+                    statusElement.className = 'connection-status status-connecting';
+                    statusElement.innerHTML = '🟡 Connecting to ' + (selectedDevice?.device_name || 'device') + '...';
+                    break;
+                case 'connected':
+                    statusElement.className = 'connection-status status-connected';
+                    statusElement.innerHTML = '🟢 Connected to ' + (selectedDevice?.device_name || 'device');
+                    break;
+            }
+        }
+
+        // Logging function
+        function log(message) {
+            const logContainer = document.getElementById('logContainer');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span style="color: #888;">${timestamp}</span> ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            
+            // Keep only last 50 log entries
+            while (logContainer.children.length > 51) { // +1 for header
+                logContainer.removeChild(logContainer.children[1]);
+            }
+        }
+
+        // Initialize dashboard
+        async function initDashboard() {
+            log('🚀 LOCAL TEST - Initializing dashboard...');
+            
+            const supabaseReady = await initSupabase();
+            if (supabaseReady) {
+                await loadDevices();
+                
+                // Refresh devices every 30 seconds
+                setInterval(loadDevices, 30000);
+                // Cleanup stale frame buffers every 15 seconds
+                setInterval(cleanupFrameChunks, 15000);
+            }
+        }
+
+        // Start dashboard when page loads
+        window.addEventListener('load', initDashboard);
+    </script>
+</body>
+</html>
