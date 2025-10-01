@@ -1,0 +1,55 @@
+# Supabase Configuration for Remote Desktop Application
+
+project_id = "mnqtdugcvfyenjuqruol"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+smtp_port = 54325
+pop3_port = 54326
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "https://stangtennis.github.io/Remote/"
+additional_redirect_urls = ["http://localhost:3000", "http://127.0.0.1:5500", "https://yourusername.github.io"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+
+[auth.external.google]
+enabled = false
+
+[auth.external.github]
+enabled = false
+
+# Edge Functions
+[functions.session-token]
+verify_jwt = true
+
+[functions.device-register]
+verify_jwt = false
+
+[functions.file-transfer]
+verify_jwt = true

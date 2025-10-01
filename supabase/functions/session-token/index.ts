@@ -1,105 +1,194 @@
-// Supabase Edge Function: session-token
-// Issues a short-lived remote control session with optional PIN and ICE config
-// Runtime: Deno on Supabase Edge Functions
+// session-token Edge Function
+// Purpose: Create a new remote session with token, PIN, and TURN credentials
 
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// CORS helper
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "*",
-};
-
-function jsonResponse(status: number, body: unknown, origin?: string) {
-  const headers = new Headers({ "Content-Type": "application/json", ...corsHeaders });
-  if (origin) headers.set("Access-Control-Allow-Origin", origin);
-  return new Response(JSON.stringify(body, null, 2), { status, headers });
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-function randomPin(): string {
-  const n = Math.floor(100000 + Math.random() * 900000);
-  return String(n);
+interface SessionRequest {
+  device_id: string;
+  use_pin?: boolean;
 }
 
-function randomToken(bytes = 24): string {
-  const arr = new Uint8Array(bytes);
-  crypto.getRandomValues(arr);
-  return btoa(String.fromCharCode(...arr)).replace(/[^a-zA-Z0-9]/g, "").slice(0, bytes * 2);
-}
-
-function getIceServers() {
-  const stunUrls = [
-    "stun:stun.l.google.com:19302",
-    "stun:global.stun.twilio.com:3478?transport=udp",
-  ];
-  const servers: any[] = [{ urls: stunUrls }];
-
-  const turnUrls = Deno.env.get("TURN_URLS"); // e.g. "turn:turn.example.com:3478,turns:turn.example.com:5349"
-  const turnUsername = Deno.env.get("TURN_USERNAME");
-  const turnCredential = Deno.env.get("TURN_CREDENTIAL");
-
-  if (turnUrls && turnUsername && turnCredential) {
-    const urls = turnUrls.split(",").map((s) => s.trim()).filter(Boolean);
-    servers.push({ urls, username: turnUsername, credential: turnCredential });
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
   }
-
-  return servers;
-}
-
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
-  const origin = req.headers.get("origin") || undefined;
 
   try {
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-    const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-      return jsonResponse(500, { error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env." }, origin);
+    // Get authenticated user
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      throw new Error('Missing authorization header')
     }
 
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-      auth: { persistSession: false },
-      global: { headers: { "X-Client-Info": "session-token-fn" } },
-    });
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: { Authorization: authHeader },
+        },
+      }
+    )
 
-    const body = await req.json().catch(() => ({}));
-    const device_id: string | undefined = body.device_id;
-    const created_by: string | undefined = body.created_by;
-    const ttl_seconds: number = Math.max(60, Math.min(60 * 60, Number(body.ttl_seconds) || 15 * 60));
-    const with_pin: boolean = Boolean(body.with_pin ?? false);
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseClient.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('Unauthorized')
+    }
+
+    // Parse request body
+    const { device_id, use_pin = true }: SessionRequest = await req.json()
 
     if (!device_id) {
-      return jsonResponse(400, { error: "device_id is required" }, origin);
+      throw new Error('device_id is required')
     }
 
-    const now = new Date();
-    const expires_at = new Date(now.getTime() + ttl_seconds * 1000).toISOString();
-    const pin = with_pin ? randomPin() : null;
-    const token = randomToken(24);
+    // Verify device exists and user owns it
+    const { data: device, error: deviceError } = await supabaseClient
+      .from('remote_devices')
+      .select('device_id, is_online, owner_id')
+      .eq('device_id', device_id)
+      .single()
 
-    const insertPayload: any = { created_by, pin, token, expires_at };
-    const { data, error } = await supabase
-      .from("remote_sessions")
-      .insert(insertPayload)
-      .select("id, status, pin, token, created_at, expires_at")
-      .single();
-
-    if (error) {
-      return jsonResponse(500, { error: error.message, code: error.code }, origin);
+    if (deviceError || !device) {
+      throw new Error('Device not found')
     }
 
-    const iceServers = getIceServers();
+    if (device.owner_id !== user.id) {
+      throw new Error('You do not own this device')
+    }
 
-    return jsonResponse(200, {
-      session: data,
-      iceServers,
-      ttl_seconds,
-    }, origin);
-  } catch (e) {
-    return jsonResponse(500, { error: String(e ?? "unknown error") }, origin);
+    if (!device.is_online) {
+      throw new Error('Device is offline')
+    }
+
+    // Generate session token (JWT-style random string)
+    const token = crypto.randomUUID() + '-' + Date.now()
+    
+    // Generate PIN (6 digits)
+    const pin = use_pin 
+      ? Math.floor(100000 + Math.random() * 900000).toString()
+      : null
+
+    // Session expires in 15 minutes
+    const expires_at = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+
+    // Create session
+    const { data: session, error: sessionError } = await supabaseClient
+      .from('remote_sessions')
+      .insert({
+        device_id,
+        created_by: user.id,
+        status: 'pending',
+        token,
+        pin,
+        expires_at,
+      })
+      .select()
+      .single()
+
+    if (sessionError) {
+      throw sessionError
+    }
+
+    // Get TURN credentials (Twilio example)
+    const turnConfig = await getTurnCredentials()
+
+    // Log audit event
+    await supabaseClient.rpc('log_audit_event', {
+      p_session_id: session.id,
+      p_device_id: device_id,
+      p_event: 'SESSION_CREATED',
+      p_details: { pin_used: use_pin },
+      p_severity: 'info',
+    })
+
+    return new Response(
+      JSON.stringify({
+        session_id: session.id,
+        token,
+        pin,
+        expires_at,
+        turn_config: turnConfig,
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
+    )
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      }
+    )
   }
-});
+})
+
+async function getTurnCredentials() {
+  const provider = Deno.env.get('TURN_PROVIDER') || 'twilio'
+
+  if (provider === 'twilio') {
+    // Twilio TURN credentials
+    const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')
+    const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')
+
+    if (!accountSid || !authToken) {
+      console.warn('TURN credentials not configured, returning STUN only')
+      return {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+        ],
+      }
+    }
+
+    try {
+      const response = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Tokens.json`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': 'Basic ' + btoa(`${accountSid}:${authToken}`),
+          },
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error('Failed to get Twilio TURN credentials')
+      }
+
+      const data = await response.json()
+      return { iceServers: data.ice_servers }
+    } catch (error) {
+      console.error('Error getting Twilio TURN credentials:', error)
+      // Fallback to STUN only
+      return {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+        ],
+      }
+    }
+  }
+
+  // Default STUN servers
+  return {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ],
+  }
+}
