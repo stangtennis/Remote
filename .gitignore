@@ -1,0 +1,59 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Supabase
+.supabase/
+supabase/.branches/
+supabase/.temp/
+
+# Go
+agent/remote-agent
+agent/remote-agent.exe
+agent/*.exe
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+go.sum
+
+# Build artifacts
+dist/
+build/
+*.zip
+*.tar.gz
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Code signing
+*.pfx
+*.p12
+*.pem
+*.key
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Node modules (if using any tooling)
+node_modules/
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini

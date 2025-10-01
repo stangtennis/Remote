@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Remote Desktop - Dashboard</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="dashboard-page">
+  <!-- Header -->
+  <header class="dashboard-header">
+    <div class="header-content">
+      <h1>🖥️ Remote Desktop</h1>
+      <div class="header-actions">
+        <span id="userEmail" class="user-info"></span>
+        <button id="logoutBtn" class="btn btn-secondary">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="dashboard-main">
+    <!-- Devices Section -->
+    <section class="devices-section">
+      <div class="section-header">
+        <h2>Your Devices</h2>
+        <button id="refreshDevicesBtn" class="btn btn-icon" title="Refresh">
+          🔄
+        </button>
+      </div>
+
+      <!-- Device List -->
+      <div id="devicesList" class="devices-list">
+        <!-- Devices will be inserted here -->
+      </div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="empty-state" style="display: none;">
+        <p>📱 No devices registered yet</p>
+        <p class="muted">Download and run the agent on a computer to get started</p>
+        <button class="btn btn-primary" id="downloadAgentBtn">Download Agent</button>
+      </div>
+
+      <!-- Loading State -->
+      <div id="loadingDevices" class="loading" style="display: none;">
+        <div class="spinner"></div>
+        <p>Loading devices...</p>
+      </div>
+    </section>
+
+    <!-- Active Session Section -->
+    <section class="session-section" id="sessionSection" style="display: none;">
+      <div class="section-header">
+        <h2>Active Session</h2>
+        <button id="endSessionBtn" class="btn btn-danger">End Session</button>
+      </div>
+
+      <!-- Session Info -->
+      <div class="session-info">
+        <div class="info-row">
+          <span class="label">Device:</span>
+          <span id="sessionDeviceName"></span>
+        </div>
+        <div class="info-row">
+          <span class="label">Status:</span>
+          <span id="sessionStatus" class="status-badge">Connecting...</span>
+        </div>
+        <div class="info-row">
+          <span class="label">PIN:</span>
+          <span id="sessionPin" class="pin-display"></span>
+        </div>
+      </div>
+
+      <!-- WebRTC Viewer -->
+      <div class="viewer-container">
+        <video id="remoteVideo" autoplay playsinline></video>
+        <canvas id="remoteCanvas"></canvas>
+        <div id="viewerOverlay" class="viewer-overlay">
+          <p>Waiting for connection...</p>
+        </div>
+      </div>
+
+      <!-- Connection Stats -->
+      <div class="stats-panel" id="statsPanel">
+        <button id="toggleStatsBtn" class="btn btn-icon">📊</button>
+        <div id="statsContent" style="display: none;">
+          <div class="stat-item">
+            <span class="stat-label">Connection:</span>
+            <span id="statConnectionType">-</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Bitrate:</span>
+            <span id="statBitrate">-</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">RTT:</span>
+            <span id="statRtt">-</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Packet Loss:</span>
+            <span id="statPacketLoss">-</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- PIN Modal -->
+  <div id="pinModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <h3>Enter PIN</h3>
+      <p>Enter the PIN displayed on the remote device:</p>
+      <input type="text" id="pinInput" class="pin-input" placeholder="000000" maxlength="6" pattern="[0-9]{6}">
+      <div class="modal-actions">
+        <button id="submitPinBtn" class="btn btn-primary">Connect</button>
+        <button id="cancelPinBtn" class="btn btn-secondary">Cancel</button>
+      </div>
+      <div id="pinError" class="error-message" style="display: none;"></div>
+    </div>
+  </div>
+
+  <!-- Approve Device Modal -->
+  <div id="approveModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <h3>Approve New Device</h3>
+      <p>A new device is requesting access:</p>
+      <div class="device-details" id="pendingDeviceDetails"></div>
+      <div class="modal-actions">
+        <button id="approveDeviceBtn" class="btn btn-primary">Approve</button>
+        <button id="rejectDeviceBtn" class="btn btn-danger">Reject</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/devices.js"></script>
+  <script src="js/webrtc.js"></script>
+  <script src="js/signaling.js"></script>
+</body>
+</html>
