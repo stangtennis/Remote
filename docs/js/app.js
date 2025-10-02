@@ -82,6 +82,14 @@ async function startSession(device) {
   currentDevice = device;
   
   try {
+    // Clean up any old pending sessions for this device first
+    console.log('🧹 Cleaning old pending sessions for device:', device.device_id);
+    await supabase
+      .from('remote_sessions')
+      .update({ status: 'expired' })
+      .eq('device_id', device.device_id)
+      .in('status', ['pending', 'active']);
+    
     // Call session-token Edge Function
     const { data, error } = await supabase.functions.invoke('session-token', {
       body: {
