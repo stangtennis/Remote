@@ -15,6 +15,7 @@ async function initWebRTC(session) {
     };
 
     peerConnection = new RTCPeerConnection(configuration);
+    window.peerConnection = peerConnection; // Expose globally for signaling module
 
     // Set up event handlers
     setupPeerConnectionHandlers();
