@@ -53,6 +53,7 @@ function setupPeerConnectionHandlers() {
   // ICE candidate handler
   peerConnection.onicecandidate = async (event) => {
     if (event.candidate) {
+      console.log('📤 Sending ICE candidate:', event.candidate.type, event.candidate.candidate);
       await sendSignal({
         session_id: window.currentSession.session_id,
         from: 'dashboard',
@@ -60,6 +61,16 @@ function setupPeerConnectionHandlers() {
         candidate: event.candidate
       });
     }
+  };
+
+  // ICE connection state handler
+  peerConnection.oniceconnectionstatechange = () => {
+    console.log('ICE connection state:', peerConnection.iceConnectionState);
+  };
+
+  // ICE gathering state handler
+  peerConnection.onicegatheringstatechange = () => {
+    console.log('ICE gathering state:', peerConnection.iceGatheringState);
   };
 
   // Connection state handler

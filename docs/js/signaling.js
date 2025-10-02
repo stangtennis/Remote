@@ -79,10 +79,11 @@ async function handleSignal(signal) {
       case 'ice':
         // Agent sent ICE candidate
         if (signal.payload.candidate) {
+          console.log('📥 Received ICE candidate from agent:', signal.payload.candidate.type || 'candidate');
           await peerConnection.addIceCandidate(
             new RTCIceCandidate(signal.payload.candidate)
           );
-          console.log('ICE candidate added');
+          console.log('✅ ICE candidate added successfully');
         }
         break;
 
