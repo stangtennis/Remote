@@ -20,6 +20,7 @@ type Session struct {
 }
 
 type SignalMessage struct {
+	ID        int    `json:"id"`
 	SessionID string `json:"session_id"`
 	FromSide  string `json:"from_side"`
 	MsgType   string `json:"msg_type"`
@@ -70,6 +71,8 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 	q.Add("device_id", "eq."+m.device.ID)
 	q.Add("status", "eq.pending")
 	q.Add("select", "*")
+	q.Add("order", "created_at.desc")
+	q.Add("limit", "1")
 	req.URL.RawQuery = q.Encode()
 
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -169,6 +172,7 @@ func (m *Manager) waitForOffer(sessionID string) {
 	defer ticker.Stop()
 
 	timeout := time.After(30 * time.Second)
+	processedIDs := make(map[int]bool)
 
 	for {
 		select {
@@ -182,6 +186,12 @@ func (m *Manager) waitForOffer(sessionID string) {
 			}
 
 			for _, sig := range signals {
+				// Skip already processed signals
+				if processedIDs[sig.ID] {
+					continue
+				}
+				processedIDs[sig.ID] = true
+
 				if sig.MsgType == "offer" {
 					log.Println("📨 Received offer from dashboard")
 					m.handleOffer(sessionID, sig)
@@ -228,6 +238,7 @@ func (m *Manager) handleOffer(sessionID string, sig SignalMessage) {
 func (m *Manager) listenForICE(sessionID string) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
+	processedIDs := make(map[int]bool)
 
 	for m.isStreaming || m.peerConnection.ConnectionState() == webrtc.PeerConnectionStateConnecting {
 		<-ticker.C
@@ -238,6 +249,12 @@ func (m *Manager) listenForICE(sessionID string) {
 		}
 
 		for _, sig := range signals {
+			// Skip already processed signals
+			if processedIDs[sig.ID] {
+				continue
+			}
+			processedIDs[sig.ID] = true
+
 			if sig.MsgType == "ice" && sig.Payload.Candidate != nil {
 				m.handleICECandidate(sig.Payload.Candidate)
 			}
