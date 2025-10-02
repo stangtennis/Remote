@@ -9,20 +9,20 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/device"
-	// "github.com/stangtennis/remote-agent/internal/input" // Disabled for now
+	"github.com/stangtennis/remote-agent/internal/input"
 	"github.com/stangtennis/remote-agent/internal/screen"
 )
 
 type Manager struct {
-	cfg            *config.Config
-	device         *device.Device
-	peerConnection *webrtc.PeerConnection
-	dataChannel    *webrtc.DataChannel
-	screenCapturer *screen.Capturer
-	// mouseController *input.MouseController // Disabled
-	// keyController   *input.KeyboardController // Disabled
-	sessionID   string
-	isStreaming bool
+	cfg             *config.Config
+	device          *device.Device
+	peerConnection  *webrtc.PeerConnection
+	dataChannel     *webrtc.DataChannel
+	screenCapturer  *screen.Capturer
+	mouseController *input.MouseController
+	keyController   *input.KeyboardController
+	sessionID       string
+	isStreaming     bool
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
@@ -31,21 +31,20 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 		return nil, fmt.Errorf("failed to initialize screen capturer: %w", err)
 	}
 
-	_ , _ = capturer.GetResolution() // width, height - not used for now
+	width, height := capturer.GetResolution()
 
 	return &Manager{
-		cfg:            cfg,
-		device:         dev,
-		screenCapturer: capturer,
-		// mouseController: input.NewMouseController(width, height), // Disabled
-		// keyController:   input.NewKeyboardController(), // Disabled
+		cfg:             cfg,
+		device:          dev,
+		screenCapturer:  capturer,
+		mouseController: input.NewMouseController(width, height),
+		keyController:   input.NewKeyboardController(),
 		isStreaming: false,
 	}, nil
 }
 
 func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	config := webrtc.Configuration{
-		ICEServers: iceServers,
 	}
 
 	pc, err := webrtc.NewPeerConnection(config)
@@ -121,10 +120,6 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 		return
 	}
 
-	// Input control disabled for now (requires robotgo/gcc)
-	log.Printf("Control event received: %s (input disabled)", eventType)
-	
-	/*
 	switch eventType {
 	case "mouse_move":
 		x, _ := event["x"].(float64)
@@ -141,7 +136,6 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 		down, _ := event["down"].(bool)
 		m.keyController.SendKey(code, down)
 	}
-	*/
 }
 
 func (m *Manager) startScreenStreaming() {
