@@ -37,9 +37,9 @@ func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
 		return nil, fmt.Errorf("failed to capture screen: %w", err)
 	}
 
-	// Resize to max 1920 width for better quality (maintain aspect ratio)
+	// Resize to max 800 width to reduce file size (maintain aspect ratio)
 	var finalImg image.Image = img
-	maxWidth := uint(1920)
+	maxWidth := uint(800)
 	if img.Bounds().Dx() > int(maxWidth) {
 		finalImg = resize.Resize(maxWidth, 0, img, resize.Lanczos3)
 	}

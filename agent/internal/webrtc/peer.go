@@ -31,6 +31,7 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 		return nil, fmt.Errorf("failed to initialize screen capturer: %w", err)
 	}
 
+	// Get primary screen dimensions for input mapping
 	width, height := capturer.GetResolution()
 
 	return &Manager{
@@ -39,12 +40,12 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 		screenCapturer:  capturer,
 		mouseController: input.NewMouseController(width, height),
 		keyController:   input.NewKeyboardController(),
-		isStreaming: false,
 	}, nil
 }
 
 func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	config := webrtc.Configuration{
+		ICEServers: iceServers,
 	}
 
 	pc, err := webrtc.NewPeerConnection(config)
@@ -124,23 +125,35 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 	case "mouse_move":
 		x, _ := event["x"].(float64)
 		y, _ := event["y"].(float64)
-		m.mouseController.Move(x, y)
+		if err := m.mouseController.Move(x, y); err != nil {
+			log.Printf("Mouse move error: %v", err)
+		}
 
 	case "mouse_click":
 		button, _ := event["button"].(string)
 		down, _ := event["down"].(bool)
-		m.mouseController.Click(button, down)
+		if err := m.mouseController.Click(button, down); err != nil {
+			log.Printf("Mouse click error: %v", err)
+		}
+
+	case "mouse_scroll":
+		delta, _ := event["delta"].(float64)
+		if err := m.mouseController.Scroll(int(delta)); err != nil {
+			log.Printf("Mouse scroll error: %v", err)
+		}
 
 	case "key":
 		code, _ := event["code"].(string)
 		down, _ := event["down"].(bool)
-		m.keyController.SendKey(code, down)
+		if err := m.keyController.SendKey(code, down); err != nil {
+			log.Printf("Key event error: %v", err)
+		}
 	}
 }
 
 func (m *Manager) startScreenStreaming() {
 	// Stream JPEG frames over data channel
-	ticker := time.NewTicker(33 * time.Millisecond) // ~30 FPS
+	ticker := time.NewTicker(100 * time.Millisecond) // ~10 FPS
 	defer ticker.Stop()
 
 	log.Println("🎥 Starting screen streaming...")
@@ -153,7 +166,7 @@ func (m *Manager) startScreenStreaming() {
 		}
 
 		// Capture screen as JPEG
-		jpeg, err := m.screenCapturer.CaptureJPEG(60) // Quality 60
+		jpeg, err := m.screenCapturer.CaptureJPEG(50) // Quality 50
 		if err != nil {
 			log.Printf("Failed to capture screen: %v", err)
 			continue

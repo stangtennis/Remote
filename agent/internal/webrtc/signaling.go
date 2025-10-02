@@ -147,6 +147,9 @@ func (m *Manager) handleSession(session Session) {
 				}
 			}
 			log.Printf("🔐 Using TURN config with %d ICE servers", len(iceServers))
+			for i, server := range iceServers {
+				log.Printf("  ICE Server %d: URLs=%v, Username=%s", i+1, server.URLs, server.Username)
+			}
 		}
 	}
 
@@ -314,10 +317,16 @@ func (m *Manager) sendAnswer(sessionID, sdp string) {
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Failed to send answer: %v", err)
+		log.Printf("❌ Failed to send answer: %v", err)
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("❌ Failed to send answer: HTTP %d - %s", resp.StatusCode, string(body))
+		return
+	}
 
 	log.Println("📤 Sent answer to dashboard")
 }
@@ -349,10 +358,16 @@ func (m *Manager) sendICECandidate(candidate *webrtc.ICECandidate) {
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Failed to send ICE candidate: %v", err)
+		log.Printf("❌ Failed to send ICE candidate: %v", err)
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("❌ Failed to send ICE candidate: HTTP %d - %s", resp.StatusCode, string(body))
+		return
+	}
 
 	// Read and discard body
 	io.Copy(io.Discard, resp.Body)
