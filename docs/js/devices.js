@@ -19,11 +19,11 @@ async function loadDevices() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
-    // Fetch devices owned by current user
+    // Fetch devices owned by current user OR pending approval (owner_id = null)
     const { data: devices, error } = await supabase
       .from('remote_devices')
       .select('*')
-      .eq('owner_id', session.user.id)
+      .or(`owner_id.eq.${session.user.id},owner_id.is.null`)
       .order('last_seen', { ascending: false });
 
     if (error) throw error;
