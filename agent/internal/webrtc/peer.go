@@ -153,10 +153,10 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 
 func (m *Manager) startScreenStreaming() {
 	// Stream JPEG frames over data channel
-	ticker := time.NewTicker(100 * time.Millisecond) // ~10 FPS
+	ticker := time.NewTicker(33 * time.Millisecond) // ~30 FPS
 	defer ticker.Stop()
 
-	log.Println("🎥 Starting screen streaming...")
+	log.Println("🎥 Starting screen streaming at 30 FPS...")
 
 	for m.isStreaming {
 		<-ticker.C
@@ -210,7 +210,7 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 		}
 		
 		// Small delay between chunks to avoid overwhelming the channel
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 	
 	return nil
