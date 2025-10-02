@@ -1,16 +1,21 @@
 // WebRTC Connection Module
 // Handles peer connection, media tracks, and data channels
-
 let peerConnection = null;
 let dataChannel = null;
 
 async function initWebRTC(session) {
   try {
+    console.log('🚀 initWebRTC called with session:', session);
+    
+    if (!session || !session.session_id) {
+      throw new Error('Invalid session object - missing session_id');
+    }
+    
     // Create peer connection with TURN servers from session
     const configuration = session.turn_config || {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun1.l.google.com:19302' }
       ]
     };
 
@@ -18,36 +23,44 @@ async function initWebRTC(session) {
 
     peerConnection = new RTCPeerConnection(configuration);
     window.peerConnection = peerConnection; // Expose globally for signaling module
+    console.log('✅ PeerConnection created');
 
     // Set up event handlers
     setupPeerConnectionHandlers();
+    console.log('✅ Event handlers set up');
 
     // Create data channel for control inputs
     dataChannel = peerConnection.createDataChannel('control', {
       ordered: true
     });
     setupDataChannelHandlers();
+    console.log('✅ Data channel created');
 
     // Create offer
+    console.log('📝 Creating offer...');
     const offer = await peerConnection.createOffer({
       offerToReceiveVideo: true,
       offerToReceiveAudio: false
     });
+    console.log('✅ Offer created');
 
+    console.log('📝 Setting local description...');
     await peerConnection.setLocalDescription(offer);
+    console.log('✅ Local description set');
 
     // Send offer via signaling
+    console.log('📤 Sending offer to agent via signaling...');
     await sendSignal({
       session_id: session.session_id,
       from: 'dashboard',
       type: 'offer',
       sdp: offer.sdp
     });
-
-    console.log('WebRTC offer sent');
+    console.log('✅ WebRTC offer sent successfully!');
 
   } catch (error) {
-    console.error('WebRTC initialization failed:', error);
+    console.error('❌ WebRTC initialization failed:', error);
+    console.error('Error stack:', error.stack);
     throw error;
   }
 }
