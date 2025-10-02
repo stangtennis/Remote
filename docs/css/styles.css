@@ -432,13 +432,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  margin: 0;
+  max-height: none;
 }
 
-.viewer-container:fullscreen #remoteCanvas {
+.viewer-container:fullscreen #remoteCanvas,
+.viewer-container:fullscreen #remoteVideo {
+  width: 100vw !important;
+  height: 100vh !important;
   max-width: 100vw;
   max-height: 100vh;
-  width: auto;
-  height: auto;
+  object-fit: contain;
 }
 
 /* ===== Stats Panel ===== */
