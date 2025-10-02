@@ -158,6 +158,48 @@ async function endSession() {
   }
 }
 
+// Clean up session on page unload/refresh
+window.addEventListener('beforeunload', (e) => {
+  if (currentSession) {
+    console.log('Page unloading - cleaning up session:', currentSession.session_id);
+    
+    // Use navigator.sendBeacon for reliable session cleanup
+    const payload = {
+      status: 'ended',
+      ended_at: new Date().toISOString()
+    };
+    
+    // Try supabase update first (async, may not complete)
+    supabase
+      .from('remote_sessions')
+      .update(payload)
+      .eq('id', currentSession.session_id)
+      .then(() => console.log('Session ended successfully'))
+      .catch(err => console.error('Session end error:', err));
+    
+    // Close peer connection
+    if (window.peerConnection) {
+      window.peerConnection.close();
+      window.peerConnection = null;
+    }
+    
+    // Close data channel
+    if (window.dataChannel) {
+      window.dataChannel.close();
+      window.dataChannel = null;
+    }
+  }
+});
+
+// Also clean up when page is hidden (e.g., switching tabs)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && currentSession) {
+    console.log('Page hidden - keeping session alive but monitoring');
+    // Don't end session immediately - user might come back
+    // The 15-minute timeout will handle cleanup if they don't return
+  }
+});
+
 // Export for other modules
 window.startSession = startSession;
 window.endSession = endSession;
