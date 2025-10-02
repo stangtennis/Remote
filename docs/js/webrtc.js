@@ -147,8 +147,10 @@ function setupDataChannelHandlers() {
   };
 
   dataChannel.onmessage = (event) => {
-    // Handle messages from agent (e.g., acknowledgments)
-    console.log('Data channel message:', event.data);
+    // Receive JPEG frame from agent
+    if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
+      displayVideoFrame(event.data);
+    }
   };
 }
 
@@ -292,6 +294,33 @@ async function updateConnectionType() {
   } catch (error) {
     console.error('Failed to get connection type:', error);
   }
+}
+
+// Display video frame on canvas
+function displayVideoFrame(data) {
+  const canvas = document.getElementById('remoteCanvas');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  
+  // Convert data to blob if it's an ArrayBuffer
+  const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
+  
+  // Create image from blob
+  const img = new Image();
+  img.onload = () => {
+    // Resize canvas to match image
+    canvas.width = img.width;
+    canvas.height = img.height;
+    
+    // Draw image on canvas
+    ctx.drawImage(img, 0, 0);
+    
+    // Clean up
+    URL.revokeObjectURL(img.src);
+  };
+  
+  img.src = URL.createObjectURL(blob);
 }
 
 // Update stats every 2 seconds when connected
