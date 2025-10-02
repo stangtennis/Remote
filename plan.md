@@ -489,17 +489,20 @@ RATE_LIMIT: Rate limit overskredet
 
 ### ⚠️ Known Issues
 - **Multiple dashboard tabs**: Causes signaling conflicts - only use one tab
-- **Session cleanup**: Stale sessions must be manually deleted occasionally
-- **Mouse/keyboard**: Currently disabled (robotgo commented out)
+- **Session cleanup**: Now automatic via pg_cron (runs every 5 minutes)
+- **Mouse/keyboard**: Re-enabled (requires CGO build with MinGW-w64)
+- **Video encoding**: Currently JPEG frames (~10 FPS) - H.264/VP8 optimization guide available
 
 ### 🔧 Næste skridt (afklaringer)
 1. ✅ Agent sprogvalg: **Go + Pion** (bekræftet)
 2. ✅ TURN leverandør: **Twilio** (bekræftet og virker)
-3. ⏳ Multi-tenancy: Personlig brug eller multi-org SaaS?
-4. ⏳ Re-enable mouse/keyboard control (robotgo + CGO)
-5. ⏳ Implement automatic session cleanup (scheduled function)
-6. ⏳ Optimize video encoding (H.264/VP8 instead of JPEG)
-7. ⏳ Køb code signing certificate (Sectigo anbefales)
+3. ✅ Re-enable mouse/keyboard control (robotgo + CGO) - **DONE**
+4. ✅ Implement automatic session cleanup (pg_cron scheduled function) - **DONE**
+5. ⏳ Multi-tenancy: Personlig brug eller multi-org SaaS?
+6. ⏳ Optimize video encoding (H.264/VP8 instead of JPEG) - See OPTIMIZATION.md
+7. ⏳ Køb code signing certificate (Sectigo anbefales) - Required for production
+8. ⏳ Deploy migrations and Edge Functions to Supabase
+9. ⏳ Test full build with CGO enabled (MinGW-w64 required)
 
 ## 17) TODO (oversigt)
 - [x] **Fase 0**: Opsæt Supabase tabeller + indexes + RLS + triggers + Edge Functions + Storage

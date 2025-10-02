@@ -117,11 +117,13 @@ signtool sign /f cert.pfx /p password /t http://timestamp.digicert.com remote-ag
 
 See `plan.md` for detailed milestones.
 
-## Known Issues
+## Known Issues & Limitations
 
 - **Multiple dashboard tabs**: Only use one browser tab to avoid signaling conflicts
-- **Session cleanup**: Occasionally needs manual cleanup of stale sessions
-- **Mouse/keyboard control**: Currently disabled pending robotgo + CGO setup
+- **Session cleanup**: ✅ Now automatic via pg_cron (runs every 5 minutes)
+- **Mouse/keyboard control**: ✅ Re-enabled (requires CGO build - see DEPLOYMENT.md)
+- **Video quality**: Currently JPEG frames @ 10 FPS (see OPTIMIZATION.md for H.264/VP8 upgrade path)
+- **Code signing**: Not yet implemented (required for production Windows deployment)
 
 ## Security
 
@@ -143,8 +145,26 @@ See `plan.md` for detailed milestones.
 
 ## Documentation
 
-- `plan.md` - Comprehensive project plan with architecture, security, and phases
+- **`plan.md`** - Comprehensive project plan with architecture, security, and phases
+- **`DEPLOYMENT.md`** - Complete deployment guide with troubleshooting (START HERE!)
+- **`OPTIMIZATION.md`** - Video encoding optimization guide (H.264/VP8)
 - Each component has its own README in respective folders
+
+## Quick Start
+
+### For Deployment
+See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for complete setup instructions including:
+- Database migrations
+- Edge Functions deployment
+- Agent build with CGO (mouse/keyboard control)
+- Dashboard deployment to GitHub Pages
+- Testing and troubleshooting
+
+### For Optimization
+See **[OPTIMIZATION.md](./OPTIMIZATION.md)** for upgrading from JPEG to H.264/VP8:
+- 3x better FPS (10 → 30+)
+- 50% bandwidth reduction
+- Hardware encoding support
 
 ## License
 
