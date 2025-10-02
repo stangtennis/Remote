@@ -46,6 +46,9 @@ function subscribeToSessionSignaling(sessionId) {
       },
       async (payload) => {
         console.log('Signal received:', payload);
+        console.log('Signal data:', payload.new);
+        console.log('  from_side:', payload.new.from_side);
+        console.log('  msg_type:', payload.new.msg_type);
         await handleSignal(payload.new);
       }
     )
