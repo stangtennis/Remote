@@ -93,6 +93,19 @@ async function startSession(device) {
     if (error) {
       console.error('Full error object:', error);
       console.error('Error context:', error.context);
+      
+      // Try to get the actual error message from response
+      if (error.context && error.context instanceof Response) {
+        const errorText = await error.context.text();
+        console.error('Response body:', errorText);
+        try {
+          const errorJson = JSON.parse(errorText);
+          console.error('Parsed error:', errorJson);
+          throw new Error(errorJson.error || errorJson.message || 'Unknown error');
+        } catch (e) {
+          throw new Error(errorText || error.message);
+        }
+      }
       throw error;
     }
 
