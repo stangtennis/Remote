@@ -158,6 +158,59 @@ function setupDataChannelHandlers() {
   };
 }
 
+// Helper function to calculate actual image area within canvas (accounting for object-fit: contain)
+function getImageCoordinates(element, clientX, clientY) {
+  const rect = element.getBoundingClientRect();
+  
+  // Get displayed size
+  const displayWidth = rect.width;
+  const displayHeight = rect.height;
+  
+  // Get actual canvas/image size
+  let actualWidth, actualHeight;
+  if (element.tagName === 'CANVAS') {
+    actualWidth = element.width;
+    actualHeight = element.height;
+  } else if (element.tagName === 'VIDEO') {
+    actualWidth = element.videoWidth || displayWidth;
+    actualHeight = element.videoHeight || displayHeight;
+  } else {
+    actualWidth = displayWidth;
+    actualHeight = displayHeight;
+  }
+  
+  // Calculate aspect ratios
+  const displayAspect = displayWidth / displayHeight;
+  const imageAspect = actualWidth / actualHeight;
+  
+  // Calculate actual rendered image dimensions within the element
+  let renderWidth, renderHeight, offsetX, offsetY;
+  
+  if (imageAspect > displayAspect) {
+    // Image is wider - letterboxing on top/bottom
+    renderWidth = displayWidth;
+    renderHeight = displayWidth / imageAspect;
+    offsetX = 0;
+    offsetY = (displayHeight - renderHeight) / 2;
+  } else {
+    // Image is taller - letterboxing on left/right
+    renderHeight = displayHeight;
+    renderWidth = displayHeight * imageAspect;
+    offsetX = (displayWidth - renderWidth) / 2;
+    offsetY = 0;
+  }
+  
+  // Calculate coordinates relative to element
+  const relX = clientX - rect.left;
+  const relY = clientY - rect.top;
+  
+  // Map to actual image area (0-1 range)
+  const x = Math.max(0, Math.min(1, (relX - offsetX) / renderWidth));
+  const y = Math.max(0, Math.min(1, (relY - offsetY) / renderHeight));
+  
+  return { x, y };
+}
+
 function setupInputCapture() {
   const remoteVideo = document.getElementById('remoteVideo');
   const remoteCanvas = document.getElementById('remoteCanvas');
@@ -169,14 +222,15 @@ function setupInputCapture() {
   target.addEventListener('mousemove', (e) => {
     if (!dataChannel || dataChannel.readyState !== 'open') return;
     
-    const rect = target.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
+    const coords = getImageCoordinates(target, e.clientX, e.clientY);
+    
+    // Debug: Log coordinates (comment out in production)
+    // console.log(`Mouse: (${coords.x.toFixed(3)}, ${coords.y.toFixed(3)})`);
     
     sendControlEvent({
       t: 'mouse_move',
-      x: Math.round(x * 10000) / 10000,
-      y: Math.round(y * 10000) / 10000
+      x: Math.round(coords.x * 10000) / 10000,
+      y: Math.round(coords.y * 10000) / 10000
     });
   });
 
