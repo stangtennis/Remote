@@ -21,6 +21,10 @@ agent/*.exe
 vendor/
 go.sum
 
+# Agent device ID (unique per machine)
+.device_id
+agent/.device_id
+
 # Build artifacts
 dist/
 build/
