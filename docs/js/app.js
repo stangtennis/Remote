@@ -110,6 +110,7 @@ async function startSession(device) {
     }
 
     currentSession = data;
+    window.currentSession = data; // Expose globally for WebRTC module
     
     // Show session UI
     document.getElementById('sessionSection').style.display = 'block';

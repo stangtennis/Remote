@@ -54,6 +54,12 @@ function setupPeerConnectionHandlers() {
   peerConnection.onicecandidate = async (event) => {
     if (event.candidate) {
       console.log('📤 Sending ICE candidate:', event.candidate.type, event.candidate.candidate);
+      
+      if (!window.currentSession) {
+        console.error('⚠️ Cannot send ICE candidate: currentSession is null');
+        return;
+      }
+      
       await sendSignal({
         session_id: window.currentSession.session_id,
         from: 'dashboard',
