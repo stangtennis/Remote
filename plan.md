@@ -475,22 +475,39 @@ RATE_LIMIT: Rate limit overskredet
 
 ---
 
-## 16) Næste skridt (afklaringer)
+## 16) Status & Næste skridt
+
+### ✅ WORKING - Confirmed 2025-10-02
+- **Remote screen streaming**: Working across networks
+- **External access**: Confirmed working from outside local network
+- **TURN relay**: Twilio TURN servers working properly
+- **WebRTC P2P**: Working on same network
+- **Agent**: Go + Pion implementation stable
+- **Dashboard**: GitHub Pages deployment functional
+- **Authentication**: Supabase Auth with email/password
+- **Device registration**: Hardware-based device_id working
+
+### ⚠️ Known Issues
+- **Multiple dashboard tabs**: Causes signaling conflicts - only use one tab
+- **Session cleanup**: Stale sessions must be manually deleted occasionally
+- **Mouse/keyboard**: Currently disabled (robotgo commented out)
+
+### 🔧 Næste skridt (afklaringer)
 1. ✅ Agent sprogvalg: **Go + Pion** (bekræftet)
-2. ⏳ TURN leverandør: **Twilio** (lavere cost) eller Xirsys?
+2. ✅ TURN leverandør: **Twilio** (bekræftet og virker)
 3. ⏳ Multi-tenancy: Personlig brug eller multi-org SaaS?
-4. ⏳ Godkend denne opdaterede plan
-5. ⏳ Bekræft Supabase projekt/org til schema migrering
-6. ⏳ Opret GitHub repo og setup CI/CD
+4. ⏳ Re-enable mouse/keyboard control (robotgo + CGO)
+5. ⏳ Implement automatic session cleanup (scheduled function)
+6. ⏳ Optimize video encoding (H.264/VP8 instead of JPEG)
 7. ⏳ Køb code signing certificate (Sectigo anbefales)
 
 ## 17) TODO (oversigt)
-- [ ] **Fase 0**: Opsæt Supabase tabeller + indexes + RLS + triggers + Edge Functions + Storage
-- [ ] **Fase 0.5**: Supabase Auth + device approval flow + API keys + rate limiting
-- [ ] **Fase 1**: Dashboard auth flow + enhedsliste + device approval UI + mock signaling
-- [ ] **Fase 2**: Agent MVP (Go + Pion) + device registration + JPEG screen + input + metrics
-- [ ] **Fase 3**: TURN integration (Twilio) + ICE restart + reconnection logic
-- [ ] **Fase 4**: Video track (VP8/H.264) + adaptive bitrate + FPS control
+- [x] **Fase 0**: Opsæt Supabase tabeller + indexes + RLS + triggers + Edge Functions + Storage
+- [x] **Fase 0.5**: Supabase Auth + device approval flow + API keys + rate limiting
+- [x] **Fase 1**: Dashboard auth flow + enhedsliste + device approval UI + mock signaling
+- [x] **Fase 2**: Agent MVP (Go + Pion) + device registration + JPEG screen + input + metrics
+- [x] **Fase 3**: TURN integration (Twilio) + ICE restart + reconnection logic ✅ **WORKING**
+- [ ] **Fase 4**: Video track (VP8/H.264) + adaptive bitrate + FPS control (currently using JPEG frames)
 - [ ] **Fase 5**: Filtransfer (data channel + Edge Function fallback)
 - [ ] **Fase 6**: PIN + token rotation + code signing + auto-update + service mode
 - [ ] **Fase 7**: E2E tests + load testing + security audit + documentation + runbook
@@ -523,3 +540,18 @@ RATE_LIMIT: Rate limit overskredet
 **Beslutning**: Authenticode signering required (ikke optional)
 **Rationale**: SmartScreen bypass critical for adoption
 **Cost**: $200-500/year (acceptable)
+
+### ADR-006: Session Cleanup Strategy
+**Beslutning**: Manual cleanup of stale sessions during debugging; automatic cleanup via scheduled function for production
+**Rationale**: Stale pending sessions caused signaling deadlocks. Agent kept reusing old session IDs
+**Implementation**: 
+- Delete sessions older than 1 minute from `session_signaling`
+- Delete `pending` or `active` sessions older than 15 minutes from `remote_sessions`
+- Schedule cleanup function to run every 5 minutes
+**Lessons learned**: Always clean up state between WebRTC connection attempts
+
+### ADR-007: Single Dashboard Tab Policy
+**Beslutning**: Enforce single dashboard tab per user via detection and warning
+**Rationale**: Multiple tabs subscribing to same session creates ICE candidate duplication and conflicts
+**Implementation**: Use SharedWorker or BroadcastChannel to detect multiple tabs; show warning in UI
+**Alternative**: Use tab-specific session IDs (more complex, defer to future)

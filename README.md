@@ -2,6 +2,14 @@
 
 A serverless remote desktop solution built with Supabase, WebRTC, and GitHub Pages - inspired by MeshCentral/TeamViewer.
 
+## ✅ Status: **WORKING** (Confirmed 2025-10-02)
+
+- Remote screen streaming functional across networks
+- External access working (confirmed from outside local network)
+- TURN relay working via Twilio
+- WebRTC P2P connections stable
+- Agent and Dashboard deployed and operational
+
 ## Architecture
 
 - **Backend**: Supabase (Database, Realtime, Storage, Edge Functions, Auth)
@@ -98,16 +106,22 @@ signtool sign /f cert.pfx /p password /t http://timestamp.digicert.com remote-ag
 ## Development Phases
 
 - [x] **Fase 0**: Infrastructure (Supabase tables, Edge Functions, Storage)
-- [ ] **Fase 0.5**: Authentication & Authorization
-- [ ] **Fase 1**: Dashboard skeleton
-- [ ] **Fase 2**: Agent MVP (JPEG screen + input)
-- [ ] **Fase 3**: TURN + reconnection
-- [ ] **Fase 4**: Video track (VP8/H.264)
+- [x] **Fase 0.5**: Authentication & Authorization
+- [x] **Fase 1**: Dashboard skeleton
+- [x] **Fase 2**: Agent MVP (JPEG screen + input)
+- [x] **Fase 3**: TURN + reconnection ✅ **WORKING**
+- [ ] **Fase 4**: Video track (VP8/H.264) - Currently using JPEG frames
 - [ ] **Fase 5**: File transfer
-- [ ] **Fase 6**: Security & production
+- [ ] **Fase 6**: Security & production - Partially complete (auth working)
 - [ ] **Fase 7**: Production hardening
 
 See `plan.md` for detailed milestones.
+
+## Known Issues
+
+- **Multiple dashboard tabs**: Only use one browser tab to avoid signaling conflicts
+- **Session cleanup**: Occasionally needs manual cleanup of stale sessions
+- **Mouse/keyboard control**: Currently disabled pending robotgo + CGO setup
 
 ## Security
 
