@@ -14,6 +14,8 @@ async function initWebRTC(session) {
       ]
     };
 
+    console.log('🔐 Dashboard TURN config:', JSON.stringify(configuration, null, 2));
+
     peerConnection = new RTCPeerConnection(configuration);
     window.peerConnection = peerConnection; // Expose globally for signaling module
 
