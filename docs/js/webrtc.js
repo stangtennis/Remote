@@ -148,6 +148,10 @@ function setupPeerConnectionHandlers() {
   };
 }
 
+// Frame reassembly state
+let frameChunks = [];
+let expectedChunks = 0;
+
 function setupDataChannelHandlers() {
   dataChannel.onopen = () => {
     console.log('Data channel opened');
@@ -163,9 +167,50 @@ function setupDataChannelHandlers() {
     console.error('Data channel error:', error);
   };
 
-  dataChannel.onmessage = (event) => {
-    // Receive JPEG frame from agent
-    if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
+  dataChannel.onmessage = async (event) => {
+    // Receive JPEG frame from agent (possibly chunked)
+    if (event.data instanceof ArrayBuffer) {
+      const data = new Uint8Array(event.data);
+      
+      // Check if this is a chunked frame (has 2-byte header)
+      if (data.length > 2 && data[1] > 1) {
+        const chunkIndex = data[0];
+        const totalChunks = data[1];
+        const chunkData = data.slice(2);
+        
+        // Initialize chunk array if first chunk
+        if (chunkIndex === 0) {
+          frameChunks = new Array(totalChunks);
+          expectedChunks = totalChunks;
+        }
+        
+        // Store this chunk
+        frameChunks[chunkIndex] = chunkData;
+        
+        // Check if we have all chunks
+        const receivedCount = frameChunks.filter(c => c).length;
+        if (receivedCount === expectedChunks) {
+          // Reassemble frame
+          const totalLength = frameChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+          const completeFrame = new Uint8Array(totalLength);
+          let offset = 0;
+          for (const chunk of frameChunks) {
+            completeFrame.set(chunk, offset);
+            offset += chunk.length;
+          }
+          
+          // Display the complete frame
+          displayVideoFrame(completeFrame.buffer);
+          
+          // Reset for next frame
+          frameChunks = [];
+          expectedChunks = 0;
+        }
+      } else {
+        // Single-packet frame (no chunking)
+        displayVideoFrame(event.data);
+      }
+    } else if (event.data instanceof Blob) {
       displayVideoFrame(event.data);
     }
   };
