@@ -90,7 +90,11 @@ async function startSession(device) {
       }
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Full error object:', error);
+      console.error('Error context:', error.context);
+      throw error;
+    }
 
     currentSession = data;
     
