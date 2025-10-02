@@ -75,8 +75,17 @@ function createDeviceCard(device) {
         <button class="btn btn-primary connect-btn" data-device-id="${device.device_id}">
           Connect
         </button>
+        <button class="btn btn-danger delete-btn" data-device-id="${device.device_id}">
+          Delete
+        </button>
       </div>
-    ` : ''}
+    ` : `
+      <div class="device-actions">
+        <button class="btn btn-danger delete-btn" data-device-id="${device.device_id}">
+          Delete
+        </button>
+      </div>
+    `}
     ${!device.approved_at ? `
       <div class="device-actions">
         <span class="status-badge pending">Pending Approval</span>
@@ -101,6 +110,14 @@ function createDeviceCard(device) {
     approveBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       await approveDevice(device);
+    });
+  }
+
+  const deleteBtn = card.querySelector('.delete-btn');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await deleteDevice(device);
     });
   }
 
@@ -141,6 +158,30 @@ async function approveDevice(device) {
   } catch (error) {
     console.error('Failed to approve device:', error);
     alert('Failed to approve device: ' + error.message);
+  }
+}
+
+async function deleteDevice(device) {
+  if (!confirm(`Delete device "${device.device_name || device.device_id}"?\n\nThis cannot be undone.`)) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('remote_devices')
+      .delete()
+      .eq('device_id', device.device_id);
+
+    if (error) throw error;
+
+    console.log('Device deleted:', device.device_id);
+    
+    // Reload devices (or it will auto-reload via realtime subscription)
+    await loadDevices();
+
+  } catch (error) {
+    console.error('Failed to delete device:', error);
+    alert('Failed to delete device: ' + error.message);
   }
 }
 
