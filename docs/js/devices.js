@@ -3,6 +3,7 @@
 
 async function initDevices() {
   await loadDevices();
+  subscribeToDeviceUpdates();
 }
 
 async function loadDevices() {
@@ -141,6 +142,24 @@ async function approveDevice(device) {
     console.error('Failed to approve device:', error);
     alert('Failed to approve device: ' + error.message);
   }
+}
+
+function subscribeToDeviceUpdates() {
+  // Subscribe to real-time device changes
+  const channel = supabase
+    .channel('devices-changes')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'remote_devices'
+    }, (payload) => {
+      console.log('Device update:', payload);
+      // Reload devices list on any change
+      loadDevices();
+    })
+    .subscribe();
+
+  console.log('📡 Subscribed to device updates');
 }
 
 // Export
