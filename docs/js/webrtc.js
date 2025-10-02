@@ -85,7 +85,9 @@ function setupPeerConnectionHandlers() {
   // Connection state handler
   peerConnection.onconnectionstatechange = () => {
     const state = peerConnection.connectionState;
-    console.log('Connection state:', state);
+    console.log('❗ Connection state:', state);
+    console.log('❗ ICE state:', peerConnection.iceConnectionState);
+    console.log('❗ Signaling state:', peerConnection.signalingState);
     
     const statusElement = document.getElementById('sessionStatus');
     const overlay = document.getElementById('viewerOverlay');
