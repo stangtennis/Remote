@@ -72,12 +72,13 @@
       </div>
 
       <!-- WebRTC Viewer -->
-      <div class="viewer-container">
+      <div class="viewer-container" id="viewerContainer">
         <video id="remoteVideo" autoplay playsinline></video>
         <canvas id="remoteCanvas"></canvas>
         <div id="viewerOverlay" class="viewer-overlay">
           <p>Waiting for connection...</p>
         </div>
+        <button id="fullscreenBtn" class="fullscreen-btn" title="Fullscreen (F11)">⛶</button>
       </div>
 
       <!-- Connection Stats -->

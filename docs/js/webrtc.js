@@ -330,6 +330,35 @@ setInterval(() => {
   }
 }, 2000);
 
+// Fullscreen functionality
+document.addEventListener('DOMContentLoaded', () => {
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+  const viewerContainer = document.getElementById('viewerContainer');
+
+  if (fullscreenBtn && viewerContainer) {
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        viewerContainer.requestFullscreen().catch(err => {
+          console.error('Failed to enter fullscreen:', err);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    // Update button text when fullscreen changes
+    document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement) {
+        fullscreenBtn.textContent = '⛶'; // Exit fullscreen icon
+        fullscreenBtn.title = 'Exit Fullscreen (Esc)';
+      } else {
+        fullscreenBtn.textContent = '⛶'; // Fullscreen icon
+        fullscreenBtn.title = 'Fullscreen (F11)';
+      }
+    });
+  }
+});
+
 // Export
 window.initWebRTC = initWebRTC;
 window.peerConnection = peerConnection;

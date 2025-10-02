@@ -146,7 +146,7 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 
 func (m *Manager) startScreenStreaming() {
 	// Stream JPEG frames over data channel
-	ticker := time.NewTicker(100 * time.Millisecond) // ~10 FPS
+	ticker := time.NewTicker(33 * time.Millisecond) // ~30 FPS
 	defer ticker.Stop()
 
 	log.Println("🎥 Starting screen streaming...")
@@ -159,7 +159,7 @@ func (m *Manager) startScreenStreaming() {
 		}
 
 		// Capture screen as JPEG
-		jpeg, err := m.screenCapturer.CaptureJPEG(50) // Quality 50 - lower for smaller packets
+		jpeg, err := m.screenCapturer.CaptureJPEG(60) // Quality 60
 		if err != nil {
 			log.Printf("Failed to capture screen: %v", err)
 			continue
