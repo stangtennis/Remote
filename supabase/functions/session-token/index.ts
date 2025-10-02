@@ -61,15 +61,18 @@ serve(async (req) => {
       .single()
 
     if (deviceError || !device) {
-      throw new Error('Device not found')
+      console.error('Device lookup error:', deviceError)
+      throw new Error(`Device not found: ${deviceError?.message || 'Unknown error'}`)
     }
 
     if (device.owner_id !== user.id) {
-      throw new Error('You do not own this device')
+      console.error('Ownership check failed:', { device_owner: device.owner_id, user_id: user.id })
+      throw new Error(`You do not own this device. Owner: ${device.owner_id}, You: ${user.id}`)
     }
 
     if (!device.is_online) {
-      throw new Error('Device is offline')
+      console.error('Device is offline:', device)
+      throw new Error(`Device is offline. Last seen: ${device.last_seen || 'never'}`)
     }
 
     // Generate session token (JWT-style random string)
@@ -83,6 +86,9 @@ serve(async (req) => {
     // Session expires in 15 minutes
     const expires_at = new Date(Date.now() + 15 * 60 * 1000).toISOString()
 
+    // Get TURN credentials (Twilio example)
+    const turnConfig = await getTurnCredentials()
+
     // Create session
     const { data: session, error: sessionError } = await supabaseClient
       .from('remote_sessions')
@@ -93,6 +99,7 @@ serve(async (req) => {
         token,
         pin,
         expires_at,
+        turn_config: turnConfig,
       })
       .select()
       .single()
@@ -100,9 +107,6 @@ serve(async (req) => {
     if (sessionError) {
       throw sessionError
     }
-
-    // Get TURN credentials (Twilio example)
-    const turnConfig = await getTurnCredentials()
 
     // Log audit event
     await supabaseClient.rpc('log_audit_event', {
