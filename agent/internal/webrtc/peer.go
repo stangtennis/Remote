@@ -166,19 +166,54 @@ func (m *Manager) startScreenStreaming() {
 		}
 
 		// Capture screen as JPEG
-		jpeg, err := m.screenCapturer.CaptureJPEG(85) // Quality 85 (better quality)
+		jpeg, err := m.screenCapturer.CaptureJPEG(75) // Quality 75 (balanced quality/size)
 		if err != nil {
 			log.Printf("Failed to capture screen: %v", err)
 			continue
 		}
 
-		// Send frame over data channel
-		if err := m.dataChannel.Send(jpeg); err != nil {
+		// Send frame over data channel (with chunking if needed)
+		if err := m.sendFrameChunked(jpeg); err != nil {
 			log.Printf("Failed to send frame: %v", err)
 		}
 	}
 
 	log.Println("🛑 Screen streaming stopped")
+}
+
+func (m *Manager) sendFrameChunked(data []byte) error {
+	const maxChunkSize = 60000 // 60KB chunks (safely under 64KB limit)
+	
+	// If data fits in one message, send directly
+	if len(data) <= maxChunkSize {
+		return m.dataChannel.Send(data)
+	}
+	
+	// Otherwise, chunk it
+	totalChunks := (len(data) + maxChunkSize - 1) / maxChunkSize
+	
+	for i := 0; i < totalChunks; i++ {
+		start := i * maxChunkSize
+		end := start + maxChunkSize
+		if end > len(data) {
+			end = len(data)
+		}
+		
+		// Create chunk with header: [chunk_index, total_chunks, ...data]
+		chunk := make([]byte, 2+len(data[start:end]))
+		chunk[0] = byte(i)
+		chunk[1] = byte(totalChunks)
+		copy(chunk[2:], data[start:end])
+		
+		if err := m.dataChannel.Send(chunk); err != nil {
+			return err
+		}
+		
+		// Small delay between chunks to avoid overwhelming the channel
+		time.Sleep(5 * time.Millisecond)
+	}
+	
+	return nil
 }
 
 func (m *Manager) Close() {
