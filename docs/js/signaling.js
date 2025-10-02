@@ -58,6 +58,8 @@ async function handleSignal(signal) {
   // Ignore our own signals
   if (signal.from_side === 'dashboard') return;
 
+  console.log('🔵 Processing signal:', signal.msg_type, 'from', signal.from_side);
+
   const peerConnection = window.peerConnection;
   if (!peerConnection) {
     console.warn('No peer connection available');
@@ -68,12 +70,13 @@ async function handleSignal(signal) {
     switch (signal.msg_type) {
       case 'answer':
         // Agent sent answer to our offer
+        console.log('📥 Received answer from agent');
         const answer = new RTCSessionDescription({
           type: 'answer',
           sdp: signal.payload.sdp
         });
         await peerConnection.setRemoteDescription(answer);
-        console.log('Remote description set (answer)');
+        console.log('✅ Remote description set (answer)');
         break;
 
       case 'ice':
