@@ -430,22 +430,38 @@ async function updateConnectionType() {
     const stats = await peerConnection.getStats();
     let connectionType = 'Unknown';
 
+    // First, find the active candidate pair
+    let activePair = null;
     stats.forEach(report => {
-      if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-        if (report.localCandidate && report.remoteCandidate) {
-          const localType = report.localCandidate.candidateType || 'unknown';
-          const remoteType = report.remoteCandidate.candidateType || 'unknown';
-          
-          if (localType === 'relay' || remoteType === 'relay') {
-            connectionType = 'TURN (Relayed)';
-          } else if (localType === 'srflx' || remoteType === 'srflx') {
-            connectionType = 'P2P (STUN)';
-          } else {
-            connectionType = 'P2P (Direct)';
-          }
-        }
+      if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.nominated) {
+        activePair = report;
       }
     });
+
+    // If we found an active pair, look up the candidate details
+    if (activePair) {
+      let localType = 'unknown';
+      let remoteType = 'unknown';
+
+      stats.forEach(report => {
+        if (report.type === 'local-candidate' && report.id === activePair.localCandidateId) {
+          localType = report.candidateType || 'unknown';
+        }
+        if (report.type === 'remote-candidate' && report.id === activePair.remoteCandidateId) {
+          remoteType = report.candidateType || 'unknown';
+        }
+      });
+
+      console.log(`🔗 Connection: local=${localType}, remote=${remoteType}`);
+
+      if (localType === 'relay' || remoteType === 'relay') {
+        connectionType = 'TURN (Relayed)';
+      } else if (localType === 'srflx' || remoteType === 'srflx') {
+        connectionType = 'P2P (STUN)';
+      } else if (localType === 'host' && remoteType === 'host') {
+        connectionType = 'P2P (Direct)';
+      }
+    }
 
     document.getElementById('statConnectionType').textContent = connectionType;
 
