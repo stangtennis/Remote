@@ -166,7 +166,7 @@ func (m *Manager) startScreenStreaming() {
 		}
 
 		// Capture screen as JPEG
-		jpeg, err := m.screenCapturer.CaptureJPEG(75) // Quality 75 (balanced quality/size)
+		jpeg, err := m.screenCapturer.CaptureJPEG(60) // Quality 60 (optimized for speed)
 		if err != nil {
 			log.Printf("Failed to capture screen: %v", err)
 			continue
