@@ -153,10 +153,10 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 
 func (m *Manager) startScreenStreaming() {
 	// Stream JPEG frames over data channel
-	ticker := time.NewTicker(33 * time.Millisecond) // ~30 FPS
+	ticker := time.NewTicker(50 * time.Millisecond) // ~20 FPS (more realistic)
 	defer ticker.Stop()
 
-	log.Println("🎥 Starting screen streaming at 30 FPS...")
+	log.Println("🎥 Starting screen streaming at 20 FPS...")
 
 	for m.isStreaming {
 		<-ticker.C

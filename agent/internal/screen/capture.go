@@ -41,7 +41,8 @@ func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
 	var finalImg image.Image = img
 	maxWidth := uint(1280)
 	if img.Bounds().Dx() > int(maxWidth) {
-		finalImg = resize.Resize(maxWidth, 0, img, resize.Lanczos3)
+		// Use Bilinear for faster resizing (vs Lanczos3)
+		finalImg = resize.Resize(maxWidth, 0, img, resize.Bilinear)
 	}
 
 	// Encode as JPEG
