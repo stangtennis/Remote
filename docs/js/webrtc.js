@@ -456,12 +456,17 @@ async function updateConnectionType() {
 // Display video frame on canvas
 function displayVideoFrame(data) {
   const canvas = document.getElementById('remoteCanvas');
-  if (!canvas) return;
+  if (!canvas) {
+    console.error('Canvas not found!');
+    return;
+  }
 
   const ctx = canvas.getContext('2d');
   
   // Convert data to blob if it's an ArrayBuffer
   const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
+  
+  console.log(`🖼️ Displaying frame: ${blob.size} bytes`);
   
   // Create image from blob
   const img = new Image();
@@ -473,7 +478,14 @@ function displayVideoFrame(data) {
     // Draw image on canvas
     ctx.drawImage(img, 0, 0);
     
+    console.log(`✅ Frame drawn: ${img.width}x${img.height}`);
+    
     // Clean up
+    URL.revokeObjectURL(img.src);
+  };
+  
+  img.onerror = (e) => {
+    console.error('Failed to load image:', e);
     URL.revokeObjectURL(img.src);
   };
   
