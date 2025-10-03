@@ -5,8 +5,10 @@ let signalingChannel = null;
 
 async function sendSignal(payload) {
   try {
+    console.log('📤 Attempting to send signal:', payload.type, 'for session:', payload.session_id);
+    
     // Insert signaling message into database
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('session_signaling')
       .insert({
         session_id: payload.session_id,
@@ -17,14 +19,19 @@ async function sendSignal(payload) {
           candidate: payload.candidate,
           ts: new Date().toISOString()
         }
-      });
+      })
+      .select();
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Database error:', error);
+      throw error;
+    }
 
-    console.log('Signal sent:', payload.type);
+    console.log('✅ Signal sent successfully:', payload.type, data);
 
   } catch (error) {
-    console.error('Failed to send signal:', error);
+    console.error('❌ Failed to send signal:', error);
+    console.error('❌ Error details:', JSON.stringify(error, null, 2));
     throw error;
   }
 }
