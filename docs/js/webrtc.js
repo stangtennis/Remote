@@ -151,6 +151,9 @@ function setupPeerConnectionHandlers() {
 // Frame reassembly state
 let frameChunks = [];
 let expectedChunks = 0;
+let frameTimeout = null;
+let framesReceived = 0;
+let framesDropped = 0;
 
 function setupDataChannelHandlers() {
   dataChannel.onopen = () => {
@@ -180,40 +183,78 @@ function setupDataChannelHandlers() {
         
         // Initialize chunk array if first chunk
         if (chunkIndex === 0) {
+          // Clear any previous incomplete frame
+          if (frameChunks.length > 0 && expectedChunks > 0) {
+            framesDropped++;
+            console.warn('Dropped incomplete frame');
+          }
           frameChunks = new Array(totalChunks);
           expectedChunks = totalChunks;
+          
+          // Clear old timeout
+          if (frameTimeout) clearTimeout(frameTimeout);
+          
+          // Set timeout to discard incomplete frames (500ms)
+          frameTimeout = setTimeout(() => {
+            if (frameChunks.length > 0) {
+              framesDropped++;
+              console.warn('Frame timeout - discarding incomplete frame');
+              frameChunks = [];
+              expectedChunks = 0;
+            }
+          }, 500);
         }
         
         // Store this chunk
-        frameChunks[chunkIndex] = chunkData;
-        
-        // Check if we have all chunks
-        const receivedCount = frameChunks.filter(c => c).length;
-        if (receivedCount === expectedChunks) {
-          // Reassemble frame
-          const totalLength = frameChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-          const completeFrame = new Uint8Array(totalLength);
-          let offset = 0;
-          for (const chunk of frameChunks) {
-            completeFrame.set(chunk, offset);
-            offset += chunk.length;
+        if (frameChunks.length === totalChunks) {
+          frameChunks[chunkIndex] = chunkData;
+          
+          // Check if we have all chunks
+          const receivedCount = frameChunks.filter(c => c).length;
+          if (receivedCount === expectedChunks) {
+            // Clear timeout
+            if (frameTimeout) {
+              clearTimeout(frameTimeout);
+              frameTimeout = null;
+            }
+            
+            // Reassemble frame
+            const totalLength = frameChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            const completeFrame = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of frameChunks) {
+              completeFrame.set(chunk, offset);
+              offset += chunk.length;
+            }
+            
+            // Display the complete frame
+            displayVideoFrame(completeFrame.buffer);
+            framesReceived++;
+            
+            // Reset for next frame
+            frameChunks = [];
+            expectedChunks = 0;
           }
-          
-          // Display the complete frame
-          displayVideoFrame(completeFrame.buffer);
-          
-          // Reset for next frame
-          frameChunks = [];
-          expectedChunks = 0;
         }
       } else {
         // Single-packet frame (no chunking)
         displayVideoFrame(event.data);
+        framesReceived++;
       }
     } else if (event.data instanceof Blob) {
       displayVideoFrame(event.data);
+      framesReceived++;
     }
   };
+  
+  // Log stats every 5 seconds
+  setInterval(() => {
+    if (framesReceived > 0 || framesDropped > 0) {
+      console.log(`📊 Frames: ${framesReceived} received, ${framesDropped} dropped`);
+      framesReceived = 0;
+      framesDropped = 0;
+    }
+  }, 5000);
 }
 
 // Helper function to calculate actual image area within canvas (accounting for object-fit: contain)
