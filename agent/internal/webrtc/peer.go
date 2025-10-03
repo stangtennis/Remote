@@ -158,6 +158,7 @@ func (m *Manager) startScreenStreaming() {
 
 	log.Println("🎥 Starting screen streaming at 20 FPS...")
 
+	frameCount := 0
 	for m.isStreaming {
 		<-ticker.C
 
@@ -175,6 +176,11 @@ func (m *Manager) startScreenStreaming() {
 		// Send frame over data channel (with chunking if needed)
 		if err := m.sendFrameChunked(jpeg); err != nil {
 			log.Printf("Failed to send frame: %v", err)
+		} else {
+			frameCount++
+			if frameCount%100 == 0 {
+				log.Printf("📊 Sent %d frames (latest size: %d KB)", frameCount, len(jpeg)/1024)
+			}
 		}
 	}
 

@@ -196,7 +196,7 @@ function setupDataChannelHandlers() {
           
           // Set timeout to discard incomplete frames (500ms)
           frameTimeout = setTimeout(() => {
-            if (frameChunks.length > 0) {
+            if (expectedChunks > 0) {
               framesDropped++;
               console.warn('Frame timeout - discarding incomplete frame');
               frameChunks = [];
@@ -205,8 +205,8 @@ function setupDataChannelHandlers() {
           }, 500);
         }
         
-        // Store this chunk
-        if (frameChunks.length === totalChunks) {
+        // Store this chunk (if we have a valid array initialized)
+        if (expectedChunks > 0 && chunkIndex < expectedChunks) {
           frameChunks[chunkIndex] = chunkData;
           
           // Check if we have all chunks
