@@ -175,11 +175,12 @@ function setupDataChannelHandlers() {
     if (event.data instanceof ArrayBuffer) {
       const data = new Uint8Array(event.data);
       
-      // Check if this is a chunked frame (has 2-byte header)
-      if (data.length > 2 && data[1] > 1) {
-        const chunkIndex = data[0];
-        const totalChunks = data[1];
-        const chunkData = data.slice(2);
+      // Check if this is a chunked frame (magic byte 0xFF + 3-byte header)
+      const chunkMagic = 0xFF;
+      if (data.length > 3 && data[0] === chunkMagic) {
+        const chunkIndex = data[1];
+        const totalChunks = data[2];
+        const chunkData = data.slice(3);
         
         // Initialize chunk array if first chunk
         if (chunkIndex === 0) {

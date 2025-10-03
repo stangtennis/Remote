@@ -189,6 +189,7 @@ func (m *Manager) startScreenStreaming() {
 
 func (m *Manager) sendFrameChunked(data []byte) error {
 	const maxChunkSize = 60000 // 60KB chunks (safely under 64KB limit)
+	const chunkMagic = 0xFF // Magic byte to identify chunked frames
 	
 	// If data fits in one message, send directly
 	if len(data) <= maxChunkSize {
@@ -205,11 +206,12 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 			end = len(data)
 		}
 		
-		// Create chunk with header: [chunk_index, total_chunks, ...data]
-		chunk := make([]byte, 2+len(data[start:end]))
-		chunk[0] = byte(i)
-		chunk[1] = byte(totalChunks)
-		copy(chunk[2:], data[start:end])
+		// Create chunk with header: [magic, chunk_index, total_chunks, ...data]
+		chunk := make([]byte, 3+len(data[start:end]))
+		chunk[0] = chunkMagic
+		chunk[1] = byte(i)
+		chunk[2] = byte(totalChunks)
+		copy(chunk[3:], data[start:end])
 		
 		if err := m.dataChannel.Send(chunk); err != nil {
 			return err
