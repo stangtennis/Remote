@@ -115,6 +115,11 @@ function setupPeerConnectionHandlers() {
         statusElement.className = 'status-badge online';
         overlay.style.display = 'none';
         updateConnectionStats();
+        // Stop polling since we're connected
+        if (window.stopPolling) {
+          window.stopPolling();
+          console.log('🛑 Stopped signaling polling (connection established)');
+        }
         break;
       case 'disconnected':
         statusElement.textContent = 'Disconnected';
@@ -318,6 +323,12 @@ function setupInputCapture() {
 
   if (!target) return;
 
+  // Prevent context menu
+  target.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
   // Mouse move
   target.addEventListener('mousemove', (e) => {
     if (!dataChannel || dataChannel.readyState !== 'open') return;
@@ -359,8 +370,25 @@ function setupInputCapture() {
     e.preventDefault();
   });
 
+  // Mouse wheel / scroll
+  target.addEventListener('wheel', (e) => {
+    if (!dataChannel || dataChannel.readyState !== 'open') return;
+    
+    sendControlEvent({
+      t: 'mouse_wheel',
+      delta: e.deltaY > 0 ? -1 : 1  // Negative for down, positive for up
+    });
+    e.preventDefault();
+  });
+
   // Keyboard (when viewer is focused)
   target.tabIndex = 0; // Make focusable
+  target.style.outline = 'none'; // Remove focus outline
+  
+  // Auto-focus on click
+  target.addEventListener('click', () => {
+    target.focus();
+  });
   
   target.addEventListener('keydown', (e) => {
     if (!dataChannel || dataChannel.readyState !== 'open') return;
@@ -371,6 +399,7 @@ function setupInputCapture() {
       down: true
     });
     e.preventDefault();
+    e.stopPropagation();
   });
 
   target.addEventListener('keyup', (e) => {
@@ -382,6 +411,7 @@ function setupInputCapture() {
       down: false
     });
     e.preventDefault();
+    e.stopPropagation();
   });
 
   console.log('Input capture enabled');
