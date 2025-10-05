@@ -27,8 +27,8 @@ echo Installing service...
 echo Agent path: %AGENT_PATH%
 echo.
 
-:: Create the service
-sc create RemoteDesktopAgent binPath= "%AGENT_PATH%" start= auto DisplayName= "Remote Desktop Agent" obj= LocalSystem
+:: Create the service with network dependency
+sc create RemoteDesktopAgent binPath= "%AGENT_PATH%" start= delayed-auto DisplayName= "Remote Desktop Agent" obj= LocalSystem depend= LanmanWorkstation
 
 if %errorLevel% neq 0 (
     echo.
@@ -44,6 +44,9 @@ sc description RemoteDesktopAgent "Provides remote desktop access with lock scre
 :: Configure service to interact with desktop (required for login screen access)
 sc config RemoteDesktopAgent type= own type= interact
 
+:: Configure service recovery options (restart on failure)
+sc failure RemoteDesktopAgent reset= 86400 actions= restart/5000/restart/10000/restart/30000
+
 :: Start the service
 echo.
 echo Starting service...
@@ -56,8 +59,13 @@ if %errorLevel% equ 0 (
     echo ========================================
     echo.
     echo The agent will now run as a Windows Service
-    echo It will start automatically on boot
-    echo It can capture the login screen when locked
+    echo.
+    echo Features:
+    echo   - Auto-starts on boot (before user login)
+    echo   - Waits for network to be ready
+    echo   - Auto-restarts on failure
+    echo   - Can capture the login screen when locked
+    echo   - Allows remote access right after restart
     echo.
     echo Service name: RemoteDesktopAgent
     echo.
