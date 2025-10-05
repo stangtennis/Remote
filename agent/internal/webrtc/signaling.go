@@ -36,12 +36,25 @@ func (m *Manager) ListenForSessions() {
 	defer ticker.Stop()
 
 	handledSessions := make(map[string]bool)
+	errorCount := 0
+	
+	log.Println("🔄 Session polling started (checking every 2 seconds)")
 	
 	for range ticker.C {
 		sessions, err := m.fetchPendingSessions()
 		if err != nil {
-			// Silently continue on error
+			errorCount++
+			// Log every 30th error to avoid spam (once per minute)
+			if errorCount%30 == 1 {
+				log.Printf("⚠️  Error fetching sessions (count: %d): %v", errorCount, err)
+			}
 			continue
+		}
+		
+		// Reset error count on success
+		if errorCount > 0 {
+			log.Printf("✅ Session polling recovered after %d errors", errorCount)
+			errorCount = 0
 		}
 
 		for _, session := range sessions {
