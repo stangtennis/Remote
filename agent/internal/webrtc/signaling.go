@@ -3,6 +3,7 @@ package webrtc
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -101,22 +102,41 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
+	// Log HTTP status
+	if resp.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	var sessions []map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&sessions); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("JSON decode failed: %w", err)
+	}
+
+	// DEBUG: Log what we got
+	if len(sessions) == 0 {
+		// Log only every 30 polls (once per minute) to avoid spam
+		if time.Now().Unix()%60 < 2 {
+			log.Printf("🔍 No pending sessions found for device: %s (query OK, but 0 results)", m.device.ID)
+		}
+	} else {
+		log.Printf("🔍 Found %d pending session(s)", len(sessions))
 	}
 
 	var result []Session
 	for _, s := range sessions {
 		sessionID, ok := s["session_id"].(string)
 		if !ok {
+			log.Printf("⚠️  Skipping session with invalid session_id: %+v", s)
 			continue // Skip if session_id is missing
 		}
 		pin, _ := s["pin"].(string)
+		
+		log.Printf("🔍 Session details: ID=%s, PIN=%s, device_id=%v", sessionID, pin, s["device_id"])
 		
 		session := Session{
 			ID:  sessionID,
