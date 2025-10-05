@@ -44,24 +44,29 @@ func runInteractive() {
 	fmt.Println("🖥️  Remote Desktop Agent Starting...")
 	fmt.Println("=====================================")
 	
-	// Check current desktop
-	desktopName, _ := desktop.GetInputDesktop()
-	fmt.Printf("🖥️  Current desktop: %s\n", desktopName)
-	if desktop.IsOnLoginScreen() {
-		fmt.Println("⚠️  Running on login screen - limited functionality")
+	// Check current desktop (non-fatal if fails)
+	desktopName, err := desktop.GetInputDesktop()
+	if err != nil {
+		fmt.Printf("⚠️  Cannot detect desktop: %v\n", err)
+		fmt.Println("   (This is normal when running as a service)")
+	} else {
+		fmt.Printf("🖥️  Current desktop: %s\n", desktopName)
+		if desktop.IsOnLoginScreen() {
+			fmt.Println("⚠️  Running on login screen - limited functionality")
+		}
 	}
 
 	if err := startAgent(); err != nil {
 		log.Fatalf("Failed to start agent: %v", err)
 	}
 
-	// Start desktop monitoring
+	// Start desktop monitoring (will handle errors internally)
 	go desktop.MonitorDesktopSwitch(func(dt desktop.DesktopType) {
 		switch dt {
 		case desktop.DesktopWinlogon:
-			fmt.Println("🔒 Switched to login screen")
+			log.Println("🔒 Switched to login screen")
 		case desktop.DesktopDefault:
-			fmt.Println("🔓 Switched to user desktop")
+			log.Println("🔓 Switched to user desktop")
 		}
 	})
 

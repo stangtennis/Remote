@@ -48,9 +48,6 @@ if %errorLevel% neq 0 (
 :: Set service description
 sc description RemoteDesktopAgent "Provides remote desktop access with lock screen support via WebRTC"
 
-:: Configure service to interact with desktop (required for login screen access)
-sc config RemoteDesktopAgent type= own type= interact
-
 :: Configure service recovery options (restart on failure)
 sc failure RemoteDesktopAgent reset= 86400 actions= restart/5000/restart/10000/restart/30000
 
