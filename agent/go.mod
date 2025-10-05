@@ -1,6 +1,6 @@
 module github.com/stangtennis/remote-agent
 
-go 1.23.0
+go 1.24.0
 
 require (
 	github.com/go-vgo/robotgo v0.110.8
@@ -56,6 +56,6 @@ require (
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6 // indirect
 	golang.org/x/image v0.27.0 // indirect
 	golang.org/x/net v0.22.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/sys v0.36.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
