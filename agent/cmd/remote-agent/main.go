@@ -4,9 +4,11 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -18,12 +20,63 @@ import (
 )
 
 var (
-	cfg *config.Config
-	dev *device.Device
-	rtc *webrtc.Manager
+	cfg     *config.Config
+	dev     *device.Device
+	rtc     *webrtc.Manager
+	logFile *os.File
 )
 
+func setupLogging() error {
+	// Get executable directory
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %w", err)
+	}
+	exeDir := filepath.Dir(exePath)
+	
+	// Create log file in same directory as executable
+	logPath := filepath.Join(exeDir, "agent.log")
+	
+	// Open log file (append mode)
+	logFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open log file: %w", err)
+	}
+	
+	// Write to both file and console (if interactive)
+	isService, _ := svc.IsWindowsService()
+	if isService {
+		// Service: only write to file
+		log.SetOutput(logFile)
+	} else {
+		// Interactive: write to both
+		multiWriter := io.MultiWriter(os.Stdout, logFile)
+		log.SetOutput(multiWriter)
+	}
+	
+	// Add timestamp to log entries
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+	
+	log.Printf("========================================")
+	log.Printf("🖥️  Remote Desktop Agent Starting...")
+	log.Printf("📝 Log file: %s", logPath)
+	log.Printf("========================================")
+	
+	return nil
+}
+
 func main() {
+	// Setup logging first
+	if err := setupLogging(); err != nil {
+		fmt.Printf("Failed to setup logging: %v\n", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if logFile != nil {
+			logFile.Close()
+		}
+	}()
+
 	// Check if running as Windows Service
 	isWindowsService, err := svc.IsWindowsService()
 	if err != nil {
@@ -31,28 +84,27 @@ func main() {
 	}
 
 	if isWindowsService {
+		log.Println("🔧 Running as Windows Service")
 		// Run as Windows Service
 		runService()
 		return
 	}
 
+	log.Println("🔧 Running in interactive mode")
 	// Run interactively
 	runInteractive()
 }
 
 func runInteractive() {
-	fmt.Println("🖥️  Remote Desktop Agent Starting...")
-	fmt.Println("=====================================")
-	
 	// Check current desktop (non-fatal if fails)
 	desktopName, err := desktop.GetInputDesktop()
 	if err != nil {
-		fmt.Printf("⚠️  Cannot detect desktop: %v\n", err)
-		fmt.Println("   (This is normal when running as a service)")
+		log.Printf("⚠️  Cannot detect desktop: %v", err)
+		log.Println("   (This is normal when running as a service)")
 	} else {
-		fmt.Printf("🖥️  Current desktop: %s\n", desktopName)
+		log.Printf("🖥️  Current desktop: %s", desktopName)
 		if desktop.IsOnLoginScreen() {
-			fmt.Println("⚠️  Running on login screen - limited functionality")
+			log.Println("⚠️  Running on login screen - limited functionality")
 		}
 	}
 
