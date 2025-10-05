@@ -35,6 +35,8 @@ func (m *Manager) ListenForSessions() {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
+	handledSessions := make(map[string]bool)
+	
 	for range ticker.C {
 		sessions, err := m.fetchPendingSessions()
 		if err != nil {
@@ -43,13 +45,22 @@ func (m *Manager) ListenForSessions() {
 		}
 
 		for _, session := range sessions {
+			// Skip if already handling this session
+			if handledSessions[session.ID] {
+				continue
+			}
+			
+			// Skip if currently connected
+			if m.peerConnection != nil && m.peerConnection.ConnectionState() == webrtc.PeerConnectionStateConnected {
+				continue
+			}
+			
 			log.Printf("📞 Incoming session: %s (PIN: %s)", session.ID, session.PIN)
+			handledSessions[session.ID] = true
 			m.sessionID = session.ID
 			
 			// Handle this session in background
 			go m.handleSession(session)
-			
-			// Continue polling for new sessions
 		}
 	}
 }
@@ -196,7 +207,8 @@ func (m *Manager) waitForOffer(sessionID string) {
 				if sig.MsgType == "offer" {
 					log.Println("📨 Received offer from dashboard")
 					m.handleOffer(sessionID, sig)
-					return
+					// Continue listening for ICE candidates
+					// (don't return - keep processing signals)
 				} else if sig.MsgType == "ice" && sig.Payload.Candidate != nil {
 					m.handleICECandidate(sig.Payload.Candidate)
 				}
@@ -347,6 +359,55 @@ func (m *Manager) sendAnswer(sessionID, sdp string) {
 	}
 
 	log.Println("📤 Sent answer to dashboard")
+}
+
+func (m *Manager) updateSessionStatus(status string) {
+	if m.sessionID == "" {
+		return
+	}
+
+	url := m.cfg.SupabaseURL + "/rest/v1/remote_sessions"
+	
+	updateData := map[string]interface{}{
+		"status": status,
+	}
+	
+	jsonData, err := json.Marshal(updateData)
+	if err != nil {
+		log.Printf("Failed to marshal session update: %v", err)
+		return
+	}
+
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Failed to create session update request: %v", err)
+		return
+	}
+
+	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
+	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=minimal")
+	
+	q := req.URL.Query()
+	q.Add("session_id", "eq."+m.sessionID)
+	req.URL.RawQuery = q.Encode()
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Failed to update session status: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Failed to update session (status %d): %s", resp.StatusCode, string(body))
+		return
+	}
+
+	log.Printf("✅ Session %s marked as %s", m.sessionID, status)
 }
 
 func (m *Manager) sendICECandidate(candidate *webrtc.ICECandidate) {
