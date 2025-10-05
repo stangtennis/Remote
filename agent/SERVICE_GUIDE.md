@@ -88,6 +88,36 @@ sc stop RemoteDesktopAgent
 sc delete RemoteDesktopAgent
 ```
 
+### View Service Logs 📝
+The agent automatically logs to a file in the same directory:
+
+**Log File Location:**
+```
+C:\RemoteAgent\agent.log
+```
+
+**To View Logs (Real-time):**
+```powershell
+Get-Content C:\RemoteAgent\agent.log -Wait -Tail 50
+```
+
+**Or open in Notepad:**
+```cmd
+notepad C:\RemoteAgent\agent.log
+```
+
+**Log includes:**
+- ✅ Service start/stop events
+- ✅ Device registration
+- ✅ Incoming connections
+- ✅ WebRTC connection state
+- ✅ Screen streaming status
+- ✅ Desktop switching events
+- ✅ Errors and warnings
+- ✅ Timestamps for all events
+
+**Tip:** Use the `-Wait` parameter in PowerShell to tail the log file in real-time!
+
 ---
 
 ## 📊 How It Works
