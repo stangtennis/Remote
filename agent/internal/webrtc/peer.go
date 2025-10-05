@@ -26,13 +26,21 @@ type Manager struct {
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
+	// Try to initialize screen capturer, but don't fail if it's not available
+	// (happens in Session 0 / before user login)
 	capturer, err := screen.NewCapturer()
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize screen capturer: %w", err)
+		log.Printf("⚠️  Screen capturer not available: %v", err)
+		log.Println("   This is normal before user login (Session 0)")
+		log.Println("   Screen capture will be initialized on first connection")
 	}
 
-	// Get primary screen dimensions for input mapping
-	width, height := capturer.GetResolution()
+	// Get screen dimensions for input mapping (default to 1920x1080 if capturer not available)
+	width, height := 1920, 1080
+	if capturer != nil {
+		width, height = capturer.GetResolution()
+		log.Printf("✅ Screen capturer initialized: %dx%d", width, height)
+	}
 
 	return &Manager{
 		cfg:             cfg,
@@ -157,6 +165,24 @@ func (m *Manager) startScreenStreaming() {
 	defer ticker.Stop()
 
 	log.Println("🎥 Starting screen streaming at 30 FPS...")
+	
+	// If screen capturer not initialized (Session 0), try to initialize now
+	if m.screenCapturer == nil {
+		log.Println("⚠️  Screen capturer not initialized, attempting to initialize now...")
+		capturer, err := screen.NewCapturer()
+		if err != nil {
+			log.Printf("❌ Failed to initialize screen capturer: %v", err)
+			log.Println("   Cannot stream screen - user might need to log in first")
+			return
+		}
+		m.screenCapturer = capturer
+		log.Println("✅ Screen capturer initialized successfully!")
+		
+		// Update screen dimensions
+		width, height := capturer.GetResolution()
+		m.mouseController = input.NewMouseController(width, height)
+		log.Printf("✅ Updated screen resolution: %dx%d", width, height)
+	}
 
 	frameCount := 0
 	errorCount := 0

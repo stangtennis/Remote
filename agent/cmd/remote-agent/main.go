@@ -156,18 +156,46 @@ func (s *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, chan
 		return true, 1
 	}
 
-	// Start desktop monitoring with error recovery
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("❌ Desktop monitoring panic: %v", r)
+	// Check if we can access desktop (user logged in)
+	canAccessDesktop := false
+	if _, err := desktop.GetInputDesktop(); err == nil {
+		canAccessDesktop = true
+		log.Println("✅ Desktop access available - starting desktop monitoring")
+		
+		// Start desktop monitoring with error recovery
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("❌ Desktop monitoring panic: %v", r)
+				}
+			}()
+			desktop.MonitorDesktopSwitch(func(dt desktop.DesktopType) {
+				log.Printf("Desktop switched to type: %d", dt)
+			})
+			log.Println("⚠️  Desktop monitoring stopped")
+		}()
+	} else {
+		log.Println("⚠️  No desktop access (Session 0 / pre-login)")
+		log.Println("   Service will run but desktop features limited until user logs in")
+		log.Println("   This is normal for services running before login")
+		
+		// Monitor for desktop becoming available (user login)
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			
+			for range ticker.C {
+				if _, err := desktop.GetInputDesktop(); err == nil {
+					log.Println("✅ Desktop access now available - user logged in!")
+					// Start desktop monitoring now
+					go desktop.MonitorDesktopSwitch(func(dt desktop.DesktopType) {
+						log.Printf("Desktop switched to type: %d", dt)
+					})
+					return
+				}
 			}
 		}()
-		desktop.MonitorDesktopSwitch(func(dt desktop.DesktopType) {
-			log.Printf("Desktop switched to type: %d", dt)
-		})
-		log.Println("⚠️  Desktop monitoring stopped")
-	}()
+	}
 
 	changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 	log.Println("Service running")
