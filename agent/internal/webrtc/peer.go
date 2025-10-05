@@ -66,13 +66,13 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 			go m.startScreenStreaming()
 		case webrtc.PeerConnectionStateDisconnected:
 			log.Println("⚠️  WebRTC disconnected")
-			m.isStreaming = false
+			m.cleanupConnection("Disconnected")
 		case webrtc.PeerConnectionStateFailed:
 			log.Println("❌ WebRTC connection failed")
-			m.isStreaming = false
+			m.cleanupConnection("Failed")
 		case webrtc.PeerConnectionStateClosed:
 			log.Println("🔒 WebRTC connection closed")
-			m.isStreaming = false
+			m.cleanupConnection("Closed")
 		}
 	})
 
@@ -241,6 +241,33 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 	}
 	
 	return nil
+}
+
+func (m *Manager) cleanupConnection(reason string) {
+	log.Printf("🧹 Cleaning up connection (reason: %s)", reason)
+	
+	// Stop streaming
+	m.isStreaming = false
+	
+	// Update session status to completed
+	if m.sessionID != "" {
+		m.updateSessionStatus("completed")
+	}
+	
+	// Close data channel
+	if m.dataChannel != nil {
+		m.dataChannel.Close()
+		m.dataChannel = nil
+	}
+	
+	// Close peer connection
+	if m.peerConnection != nil {
+		m.peerConnection.Close()
+		m.peerConnection = nil
+	}
+	
+	// Reset session ID for next connection
+	log.Println("✅ Connection cleaned up - ready for new connections")
 }
 
 func (m *Manager) Close() {
