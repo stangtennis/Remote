@@ -156,10 +156,18 @@ func (s *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, chan
 		return true, 1
 	}
 
-	// Start desktop monitoring
-	go desktop.MonitorDesktopSwitch(func(dt desktop.DesktopType) {
-		log.Printf("Desktop switched to type: %d", dt)
-	})
+	// Start desktop monitoring with error recovery
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("❌ Desktop monitoring panic: %v", r)
+			}
+		}()
+		desktop.MonitorDesktopSwitch(func(dt desktop.DesktopType) {
+			log.Printf("Desktop switched to type: %d", dt)
+		})
+		log.Println("⚠️  Desktop monitoring stopped")
+	}()
 
 	changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 	log.Println("Service running")
@@ -171,8 +179,12 @@ loop:
 			switch c.Cmd {
 			case svc.Interrogate:
 				changes <- c.CurrentStatus
-			case svc.Stop, svc.Shutdown:
-				log.Println("Service stopping...")
+				log.Println("Service interrogated - responding")
+			case svc.Stop:
+				log.Println("Service received STOP command")
+				break loop
+			case svc.Shutdown:
+				log.Println("Service received SHUTDOWN command")
 				break loop
 			default:
 				log.Printf("Unexpected control request #%d", c)
