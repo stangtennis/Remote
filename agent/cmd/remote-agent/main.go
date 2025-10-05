@@ -157,9 +157,7 @@ func (s *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, chan
 	}
 
 	// Check if we can access desktop (user logged in)
-	canAccessDesktop := false
 	if _, err := desktop.GetInputDesktop(); err == nil {
-		canAccessDesktop = true
 		log.Println("✅ Desktop access available - starting desktop monitoring")
 		
 		// Start desktop monitoring with error recovery
