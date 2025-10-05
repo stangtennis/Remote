@@ -167,18 +167,14 @@ func (m *Manager) handleSession(session Session) {
 }
 
 func (m *Manager) waitForOffer(sessionID string) {
-	// Poll for signaling messages
+	// Poll for signaling messages - no timeout, wait indefinitely
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
-	timeout := time.After(30 * time.Second)
 	processedIDs := make(map[int]bool)
 
 	for {
 		select {
-		case <-timeout:
-			log.Println("⏱️  Timeout waiting for offer")
-			return
 		case <-ticker.C:
 			signals, err := m.fetchSignalingMessages(sessionID, "dashboard")
 			if err != nil {

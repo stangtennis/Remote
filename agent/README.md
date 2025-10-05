@@ -29,24 +29,57 @@ go build -ldflags="-s -w" -o remote-agent.exe ./cmd/remote-agent
 
 ## Run
 
+### Quick Start (One-Time Manual Run)
 ```bash
-# Development mode
-go run ./cmd/remote-agent
+# Double-click or run:
+run-agent-once.bat
 
-# Or run the built executable
+# Or directly:
 .\remote-agent.exe
+```
+
+### Auto-Start Options
+
+**Option 1: Windows Service (Recommended for servers/lock screen access)**
+```bash
+# Install as service (requires Admin)
+install-service.bat
+
+# Uninstall service
+uninstall-service.bat
+
+# See SERVICE_GUIDE.md for details
+```
+
+**Option 2: Startup Task (Run on user login)**
+```bash
+# Setup auto-start on login (requires Admin)
+setup-startup.bat
+
+# Remove auto-start
+schtasks /delete /tn "RemoteDesktopAgent" /f
+```
+
+### Development Mode
+```bash
+# Run from source
+go run ./cmd/remote-agent
 ```
 
 ## Features
 
 - ✅ Device registration with Supabase
-- ✅ Screen capture (JPEG over data channel)
-- ✅ WebRTC P2P connection
+- ✅ Screen capture (JPEG over data channel, 30 FPS, 1920px)
+- ✅ WebRTC P2P connection with TURN fallback
 - ✅ Mouse and keyboard input
+- ✅ Mouse wheel/scroll support
 - ✅ Realtime presence tracking
 - ✅ Auto-reconnection
-- 🔄 Video track (coming in Fase 4)
-- 🔄 File transfer (coming in Fase 5)
+- ✅ Windows Service support
+- ✅ Lock screen capture (Windows login screen access)
+- ✅ Desktop switching detection
+- 🔄 Video track (coming in Phase 4)
+- 🔄 File transfer (coming in Phase 5)
 
 ## Architecture
 
@@ -54,23 +87,31 @@ go run ./cmd/remote-agent
 agent/
 ├── cmd/
 │   └── remote-agent/
-│       └── main.go           # Entry point
+│       └── main.go           # Entry point (service-aware)
 ├── internal/
 │   ├── device/
 │   │   ├── device.go         # Device info & registration
 │   │   └── presence.go       # Heartbeat & online status
 │   ├── screen/
-│   │   ├── capture.go        # Screen capture
-│   │   └── encoder.go        # JPEG encoding
+│   │   └── capture.go        # Screen capture (multi-desktop)
 │   ├── input/
 │   │   ├── mouse.go          # Mouse input simulation
 │   │   └── keyboard.go       # Keyboard input simulation
+│   ├── desktop/
+│   │   └── desktop_windows.go # Desktop switching & detection
+│   ├── service/
+│   │   └── service_windows.go # Windows Service wrapper
 │   ├── webrtc/
 │   │   ├── peer.go           # WebRTC peer connection
 │   │   ├── datachannel.go    # Data channel for frames & input
 │   │   └── signaling.go      # Signaling via Supabase
 │   └── config/
 │       └── config.go         # Configuration
+├── run-agent-once.bat        # Manual one-time start
+├── setup-startup.bat         # Auto-start on login
+├── install-service.bat       # Install as Windows Service
+├── uninstall-service.bat     # Remove Windows Service
+├── SERVICE_GUIDE.md          # Service installation guide
 ├── go.mod
 ├── go.sum
 └── README.md
