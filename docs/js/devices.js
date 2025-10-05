@@ -66,6 +66,7 @@ function createDeviceCard(device) {
       <span class="status-badge ${statusClass}">${statusText}</span>
     </div>
     <div class="device-info">
+      <div>🆔 ${device.device_id}</div>
       <div>💻 ${device.platform || 'Unknown'} (${device.arch || 'Unknown'})</div>
       <div>🖥️ ${device.cpu_count || '?'} CPUs</div>
       <div>📅 Last seen: ${lastSeen}</div>
