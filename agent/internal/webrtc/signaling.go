@@ -46,11 +46,10 @@ func (m *Manager) ListenForSessions() {
 			log.Printf("📞 Incoming session: %s (PIN: %s)", session.ID, session.PIN)
 			m.sessionID = session.ID
 			
-			// Handle this session
+			// Handle this session in background
 			go m.handleSession(session)
 			
-			// Only handle one session at a time
-			return
+			// Continue polling for new sessions
 		}
 	}
 }
@@ -89,9 +88,15 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 
 	var result []Session
 	for _, s := range sessions {
+		sessionID, ok := s["session_id"].(string)
+		if !ok {
+			continue // Skip if session_id is missing
+		}
+		pin, _ := s["pin"].(string)
+		
 		session := Session{
-			ID:  s["id"].(string),
-			PIN: s["pin"].(string),
+			ID:  sessionID,
+			PIN: pin,
 		}
 		if token, ok := s["token"].(string); ok {
 			session.Token = token
