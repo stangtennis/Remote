@@ -69,6 +69,30 @@ func New(cfg *config.Config) (*Device, error) {
 }
 
 func (d *Device) Register() error {
+	// Retry registration with exponential backoff (for boot scenarios)
+	maxRetries := 5
+	baseDelay := 2 * time.Second
+	
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err := d.attemptRegister()
+		if err == nil {
+			return nil // Success
+		}
+		
+		if attempt < maxRetries {
+			delay := baseDelay * time.Duration(attempt)
+			fmt.Printf("⚠️  Registration attempt %d failed: %v\n", attempt, err)
+			fmt.Printf("   Retrying in %v...\n", delay)
+			time.Sleep(delay)
+		} else {
+			return fmt.Errorf("registration failed after %d attempts: %w", maxRetries, err)
+		}
+	}
+	
+	return fmt.Errorf("registration failed")
+}
+
+func (d *Device) attemptRegister() error {
 	// Prepare registration request
 	reqBody := map[string]interface{}{
 		"device_id":   d.ID,
@@ -94,7 +118,7 @@ func (d *Device) Register() error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("apikey", d.cfg.SupabaseAnonKey)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to register device: %w", err)

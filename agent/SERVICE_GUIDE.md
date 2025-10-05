@@ -5,9 +5,12 @@
 Installing the agent as a Windows Service provides:
 
 ✅ **Lock Screen Access** - Capture and control the Windows login screen  
-✅ **Auto-Start** - Runs automatically on boot  
+✅ **Auto-Start on Boot** - Runs automatically when computer starts (before login)  
 ✅ **Background Operation** - Runs even when no one is logged in  
 ✅ **Full Desktop Switching** - Works across user desktop ↔ login screen transitions  
+✅ **Network Wait** - Waits for network to be ready before connecting  
+✅ **Auto-Recovery** - Restarts automatically if it crashes  
+✅ **Remote Reboot Access** - Connect immediately after restart without physical access  
 
 ---
 
@@ -89,6 +92,22 @@ sc delete RemoteDesktopAgent
 
 ## 📊 How It Works
 
+### Boot/Restart Sequence
+When computer starts up:
+
+1. **Windows boots** - Hardware initialization
+2. **Network starts** - Service waits for LanmanWorkstation (network)
+3. **Agent starts** - Runs as LocalSystem with delayed start
+4. **Retry connection** - Attempts to connect up to 5 times with exponential backoff (2s, 4s, 6s, 8s, 10s)
+5. **Registration** - Connects to Supabase and registers device
+6. **Ready to connect** - Device shows as online in dashboard, ready before user login
+
+**This means you can:**
+- Restart a remote machine
+- Connect immediately after it boots
+- Access the login screen to log in
+- No physical access needed!
+
 ### Desktop Switching
 The agent automatically detects and switches between:
 
@@ -102,6 +121,13 @@ The agent automatically detects and switches between:
 3. Captures login screen instead of user desktop
 4. You can send keyboard/mouse input to login
 5. After login, automatically switches to user desktop
+
+### Auto-Recovery
+If the agent crashes or fails:
+- **First failure** - Restarts after 5 seconds
+- **Second failure** - Restarts after 10 seconds
+- **Third failure** - Restarts after 30 seconds
+- Resets counter after 24 hours
 
 ---
 
