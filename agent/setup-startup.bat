@@ -1,4 +1,19 @@
 @echo off
+
+:: Check for admin rights
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    :: Request administrator privileges
+    echo Set UAC = CreateObject^("Shell.Application"^) > "%temp%\getadmin.vbs"
+    echo UAC.ShellExecute "%~s0", "", "", "runas", 1 >> "%temp%\getadmin.vbs"
+    "%temp%\getadmin.vbs"
+    del "%temp%\getadmin.vbs"
+    exit /B
+)
+
+:: Running as admin now
+cd /d "%~dp0"
+
 echo ========================================
 echo Remote Desktop Agent - Auto-Startup Setup
 echo ========================================
@@ -6,14 +21,6 @@ echo.
 echo This will configure the agent to start automatically
 echo when you log in to Windows (not as a service)
 echo.
-
-:: Check for admin rights
-net session >nul 2>&1
-if %errorLevel% neq 0 (
-    echo Requesting administrator privileges...
-    powershell -Command "Start-Process '%~f0' -Verb RunAs"
-    exit /b
-)
 
 :: Get current directory
 set "AGENT_PATH=%~dp0remote-agent.exe"
