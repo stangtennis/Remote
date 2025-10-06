@@ -19,7 +19,15 @@ agent/*.exe
 *.test
 *.out
 vendor/
-go.sum
+
+# Test files
+agent/test_*
+*.png
+*.jpg
+*.jpeg
+
+# Third-party tools
+agent/nssm.exe
 
 # Agent device ID (unique per machine)
 .device_id
