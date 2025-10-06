@@ -1,38 +1,42 @@
 # Branching Strategy
 
-This repository uses a **feature branch workflow** to organize development work.
+This repository uses a **simple feature branch workflow** to organize development work.
 
 ## Branch Structure
+
+All branches contain the **complete codebase** - just work on the relevant parts!
 
 ### **`main`** (Production)
 - **Purpose:** Stable, production-ready code
 - **Protection:** Should always be stable and tested
-- **Merges from:** `agent` and `dashboard` branches via Pull Requests
+- **Merges from:** `agent` and `dashboard` branches
 
 ### **`agent`** (Agent Development)
-- **Purpose:** Development work for the Remote Desktop Agent (Go application)
-- **Files:** Everything under `/agent`
+- **Purpose:** Work on the Remote Desktop Agent (Go application)
+- **Focus:** Files under `/agent`
+- **Contains:** Complete codebase (all files)
 - **Usage:**
   ```bash
   git checkout agent
+  git pull origin agent
   # Make changes to agent code
   git add agent/
   git commit -m "feat: your agent changes"
   git push origin agent
-  # Create PR to merge into main
   ```
 
 ### **`dashboard`** (Dashboard Development)
-- **Purpose:** Development work for the web dashboard (HTML/JS)
-- **Files:** Everything under `/docs` and `/supabase`
+- **Purpose:** Work on the web dashboard and backend
+- **Focus:** Files under `/docs` and `/supabase`
+- **Contains:** Complete codebase (all files)
 - **Usage:**
   ```bash
   git checkout dashboard
-  # Make changes to dashboard code
+  git pull origin dashboard
+  # Make changes to dashboard/backend code
   git add docs/ supabase/
   git commit -m "feat: your dashboard changes"
   git push origin dashboard
-  # Create PR to merge into main
   ```
 
 ---
