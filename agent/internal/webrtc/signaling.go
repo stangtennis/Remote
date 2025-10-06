@@ -129,10 +129,11 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 
 	var result []Session
 	for _, s := range sessions {
-		sessionID, ok := s["session_id"].(string)
+		// Database column is "id" not "session_id"
+		sessionID, ok := s["id"].(string)
 		if !ok {
-			log.Printf("⚠️  Skipping session with invalid session_id: %+v", s)
-			continue // Skip if session_id is missing
+			log.Printf("⚠️  Skipping session with invalid id: %+v", s)
+			continue // Skip if id is missing
 		}
 		pin, _ := s["pin"].(string)
 		
