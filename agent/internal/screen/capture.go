@@ -39,12 +39,11 @@ func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
 		return nil, fmt.Errorf("failed to capture screen: %w", err)
 	}
 
-	// Aggressively downscale to 1280 width (720p) for performance
-	// This significantly reduces encoding time and bandwidth
+	// Keep full resolution up to Full HD (1920px) for high quality
 	var finalImg image.Image = img
-	maxWidth := uint(1280)
+	maxWidth := uint(1920)
 	if img.Bounds().Dx() > int(maxWidth) {
-		// Use Bilinear for faster scaling (less CPU than Lanczos3)
+		// Use Bilinear for fast scaling
 		finalImg = resize.Resize(maxWidth, 0, img, resize.Bilinear)
 	}
 
@@ -88,7 +87,7 @@ func (c *Capturer) CaptureJPEGIfChanged(quality int) ([]byte, error) {
 
 	// Screen changed - encode and return
 	var finalImg image.Image = img
-	maxWidth := uint(1280)
+	maxWidth := uint(1920)
 	if img.Bounds().Dx() > int(maxWidth) {
 		finalImg = resize.Resize(maxWidth, 0, img, resize.Bilinear)
 	}

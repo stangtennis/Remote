@@ -1,197 +1,50 @@
-2025/10/06 09:35:35.896334 ========================================
-2025/10/06 09:35:35.911327 🖥️  Remote Desktop Agent Starting...
-2025/10/06 09:35:35.911327 📝 Log file: C:\#Remote\agent\agent.log
-2025/10/06 09:35:35.911327 ========================================
-2025/10/06 09:35:35.913626 🔧 Running as Windows Service
-2025/10/06 09:35:35.913626 Starting as Windows Service...
-2025/10/06 09:35:35.914678 📱 Registering device...
-2025/10/06 09:35:36.323657 ✅ Device registered: dev-8832ccd8c6242859
-2025/10/06 09:35:36.323657    Name: Dennis-bærbar
-2025/10/06 09:35:36.323657    Platform: windows
-2025/10/06 09:35:36.323657    Arch: amd64
-2025/10/06 09:35:36.324299 ✅ Screen capturer initialized: 1024x768
-2025/10/06 09:35:36.324299 👂 Listening for incoming connections...
-2025/10/06 09:35:36.324299 🔄 Session polling started (checking every 2 seconds)
-2025/10/06 09:35:36.325544 ⚠️  No desktop access (Session 0 / pre-login)
-2025/10/06 09:35:36.325544    Service will run but desktop features limited until user logs in
-2025/10/06 09:35:36.325544    This is normal for services running before login
-2025/10/06 09:35:36.326070 Service running
-2025/10/06 09:36:00.401774 🔍 No pending sessions found for device: dev-8832ccd8c6242859 (query OK, but 0 results)
-2025/10/06 09:36:07.591810 Service received STOP command
-2025/10/06 09:36:38.986278 ========================================
-2025/10/06 09:36:39.004086 🖥️  Remote Desktop Agent Starting...
-2025/10/06 09:36:39.004086 📝 Log file: C:\#Remote\agent\agent.log
-2025/10/06 09:36:39.004086 ========================================
-2025/10/06 09:36:39.006744 🔧 Running as Windows Service
-2025/10/06 09:36:39.006744 Starting as Windows Service...
-2025/10/06 09:36:39.007793 📱 Registering device...
-2025/10/06 09:36:39.381626 ✅ Device registered: dev-8832ccd8c6242859
-2025/10/06 09:36:39.381626    Name: Dennis-bærbar
-2025/10/06 09:36:39.381626    Platform: windows
-2025/10/06 09:36:39.381626    Arch: amd64
-2025/10/06 09:36:39.382213 ✅ Screen capturer initialized: 1024x768
-2025/10/06 09:36:39.382213 👂 Listening for incoming connections...
-2025/10/06 09:36:39.382213 🔄 Session polling started (checking every 2 seconds)
-2025/10/06 09:36:39.384044 ⚠️  No desktop access (Session 0 / pre-login)
-2025/10/06 09:36:39.384044    Service will run but desktop features limited until user logs in
-2025/10/06 09:36:39.384044    This is normal for services running before login
-2025/10/06 09:36:39.384044 Service running
-2025/10/06 09:37:01.437624 🔍 No pending sessions found for device: dev-8832ccd8c6242859 (query OK, but 0 results)
-2025/10/06 09:37:05.448194 🔍 Found 1 pending session(s)
-2025/10/06 09:37:05.448194 🔍 Session details: ID=3cc71d70-fbf9-43fb-a621-34c9549ad9a3, PIN=874260, device_id=dev-8832ccd8c6242859
-2025/10/06 09:37:05.448194 📞 Incoming session: 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 (PIN: 874260)
-2025/10/06 09:37:05.448723 🔧 Setting up WebRTC connection...
-2025/10/06 09:37:05.448723 🔐 Using TURN config with 4 ICE servers
-2025/10/06 09:37:05.448723   ICE Server 1: URLs=[stun:global.stun.twilio.com:3478], Username=
-2025/10/06 09:37:05.448723   ICE Server 2: URLs=[turn:global.turn.twilio.com:3478?transport=udp], Username=870e1275530de853a24a55ae4bc59e842b1c9b0a075dc2d6854b295c1abecaed
-2025/10/06 09:37:05.448723   ICE Server 3: URLs=[turn:global.turn.twilio.com:3478?transport=tcp], Username=870e1275530de853a24a55ae4bc59e842b1c9b0a075dc2d6854b295c1abecaed
-2025/10/06 09:37:05.448723   ICE Server 4: URLs=[turn:global.turn.twilio.com:443?transport=tcp], Username=870e1275530de853a24a55ae4bc59e842b1c9b0a075dc2d6854b295c1abecaed
-2025/10/06 09:37:05.452525 ⏳ Waiting for offer from dashboard...
-2025/10/06 09:37:06.008919 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:06.008919 Failed to add ICE candidate: InvalidStateError: remote description is not set
-2025/10/06 09:37:06.008919 📨 Received offer from dashboard
-2025/10/06 09:37:06.065304 Connection state: connecting
-2025/10/06 09:37:06.065858 📤 Generated ICE candidate: host
-2025/10/06 09:37:06.129546 📤 Sent answer to dashboard
-2025/10/06 09:37:06.129546 📤 Generated ICE candidate: srflx
-2025/10/06 09:37:06.129546 ➕ Added ICE candidate
-2025/10/06 09:37:06.129546 ➕ Added ICE candidate
-2025/10/06 09:37:06.129546 ➕ Added ICE candidate
-2025/10/06 09:37:06.129546 ➕ Added ICE candidate
-2025/10/06 09:37:06.129546 ➕ Added ICE candidate
-2025/10/06 09:37:06.129546 ➕ Added ICE candidate
-2025/10/06 09:37:06.130058 ➕ Added ICE candidate
-2025/10/06 09:37:06.130058 ➕ Added ICE candidate
-2025/10/06 09:37:06.130058 ➕ Added ICE candidate
-2025/10/06 09:37:06.130058 ➕ Added ICE candidate
-2025/10/06 09:37:06.130058 ➕ Added ICE candidate
-2025/10/06 09:37:06.130058 ➕ Added ICE candidate
-2025/10/06 09:37:06.130058 ➕ Added ICE candidate
-2025/10/06 09:37:06.199983 📤 Generated ICE candidate: srflx
-2025/10/06 09:37:06.259619 📤 Generated ICE candidate: srflx
-2025/10/06 09:37:06.320171 📤 Generated ICE candidate: srflx
-2025/10/06 09:37:06.380029 📤 Generated ICE candidate: relay
-2025/10/06 09:37:06.440151 📤 Generated ICE candidate: relay
-2025/10/06 09:37:06.501012 📤 Generated ICE candidate: relay
-2025/10/06 09:37:06.509755 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:06.690169 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:06.690746 ➕ Added ICE candidate
-2025/10/06 09:37:06.690746 ➕ Added ICE candidate
-2025/10/06 09:37:06.690746 ➕ Added ICE candidate
-2025/10/06 09:37:06.690746 ➕ Added ICE candidate
-2025/10/06 09:37:06.690746 ➕ Added ICE candidate
-2025/10/06 09:37:06.690746 ➕ Added ICE candidate
-2025/10/06 09:37:06.690746 ➕ Added ICE candidate
-2025/10/06 09:37:06.690746 ➕ Added ICE candidate
-2025/10/06 09:37:06.690746 ➕ Added ICE candidate
-2025/10/06 09:37:06.690746 ➕ Added ICE candidate
-2025/10/06 09:37:06.690746 ➕ Added ICE candidate
-2025/10/06 09:37:06.690746 ➕ Added ICE candidate
-2025/10/06 09:37:06.690746 ➕ Added ICE candidate
-2025/10/06 09:37:06.691258 ➕ Added ICE candidate
-2025/10/06 09:37:07.017501 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:07.194497 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:07.238685 Connection state: connected
-2025/10/06 09:37:07.238685 ✅ WebRTC connected!
-2025/10/06 09:37:07.238685 🎥 Starting screen streaming at 30 FPS...
-2025/10/06 09:37:07.242724 📡 Data channel opened: control
-2025/10/06 09:37:07.242724 ✅ Data channel ready
-2025/10/06 09:37:07.276773 ⚠️ Screen capture failing (total: 1 errors) - Error: failed to capture screen: BitBlt failed
-2025/10/06 09:37:07.435674 🔍 Found 1 pending session(s)
-2025/10/06 09:37:07.435674 🔍 Session details: ID=3cc71d70-fbf9-43fb-a621-34c9549ad9a3, PIN=874260, device_id=dev-8832ccd8c6242859
-2025/10/06 09:37:07.501806 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:07.677681 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:08.005791 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:08.182970 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:08.508352 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:08.680424 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:08.923112 ⚠️ Screen capture failing (total: 51 errors) - Error: failed to capture screen: BitBlt failed
-2025/10/06 09:37:09.008472 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:09.184833 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:09.434868 🔍 Found 1 pending session(s)
-2025/10/06 09:37:09.434868 🔍 Session details: ID=3cc71d70-fbf9-43fb-a621-34c9549ad9a3, PIN=874260, device_id=dev-8832ccd8c6242859
-2025/10/06 09:37:09.505846 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:09.682310 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:10.015731 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:10.182131 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:10.506063 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:10.573903 ⚠️ Screen capture failing (total: 101 errors) - Error: failed to capture screen: BitBlt failed
-2025/10/06 09:37:10.581721 ❌ Too many consecutive capture failures (101), stopping stream
-2025/10/06 09:37:10.582187 🛑 Screen streaming stopped (sent 0 frames, 101 errors)
-2025/10/06 09:37:10.685872 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:11.006194 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:11.180610 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:11.433559 🔍 Found 1 pending session(s)
-2025/10/06 09:37:11.433559 🔍 Session details: ID=3cc71d70-fbf9-43fb-a621-34c9549ad9a3, PIN=874260, device_id=dev-8832ccd8c6242859
-2025/10/06 09:37:11.502726 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:11.685634 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:12.009534 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:12.191433 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:12.509850 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:12.686995 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:13.007140 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:13.185887 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:13.431936 🔍 Found 1 pending session(s)
-2025/10/06 09:37:13.431936 🔍 Session details: ID=3cc71d70-fbf9-43fb-a621-34c9549ad9a3, PIN=874260, device_id=dev-8832ccd8c6242859
-2025/10/06 09:37:13.508500 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:13.685356 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:14.003625 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:14.180338 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:14.516676 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:14.681508 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:15.002428 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:15.179688 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:15.434589 🔍 Found 1 pending session(s)
-2025/10/06 09:37:15.434589 🔍 Session details: ID=3cc71d70-fbf9-43fb-a621-34c9549ad9a3, PIN=874260, device_id=dev-8832ccd8c6242859
-2025/10/06 09:37:15.502295 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:15.680031 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:15.789068 ❌ Data channel closed
-2025/10/06 09:37:16.002362 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:16.181437 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:16.508995 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:16.690111 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:17.017349 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:17.470875 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:17.510732 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:17.684400 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:18.006773 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:18.182735 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:18.505327 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:18.681286 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:19.007456 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:19.184884 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:19.508782 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:19.682405 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:20.003490 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:20.186152 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:20.507301 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:20.692276 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:21.018928 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:21.183956 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:21.507658 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:21.630652 Connection state: disconnected
-2025/10/06 09:37:21.630652 ⚠️  WebRTC disconnected
-2025/10/06 09:37:21.630652 🧹 Cleaning up connection (reason: Disconnected)
-2025/10/06 09:37:21.683269 Failed to update session (status 400): {"code":"23514","details":"Failing row contains (3cc71d70-fbf9-43fb-a621-34c9549ad9a3, dev-8832ccd8c6242859, fc4d1c86-cce0-436f-9a5a-f024ae4ba862, completed, 874260, 16fe269d-407a-4e5f-8e42-64dbf5e99630-1759736224477, 2025-10-06 07:37:04.674478+00, 2025-10-06 07:52:04.477+00, 2025-10-06 07:37:14.912+00, {}, v1, {\"iceServers\": [{\"url\": \"stun:global.stun.twilio.com:3478\", \"url...).","hint":null,"message":"new row for relation \"remote_sessions\" violates check constraint \"remote_sessions_status_check\""}
-2025/10/06 09:37:21.686645 ✅ Connection cleaned up - ready for new connections
-2025/10/06 09:37:21.687640 Connection state: closed
-2025/10/06 09:37:21.687640 🔒 WebRTC connection closed
-2025/10/06 09:37:21.687640 🧹 Cleaning up connection (reason: Closed)
-2025/10/06 09:37:21.688390 🔍 Fetched 15 signals for session 3cc71d70-fbf9-43fb-a621-34c9549ad9a3 from dashboard
-2025/10/06 09:37:26.738468 ========================================
-2025/10/06 09:37:26.751851 🖥️  Remote Desktop Agent Starting...
-2025/10/06 09:37:26.751851 📝 Log file: C:\#Remote\agent\agent.log
-2025/10/06 09:37:26.751851 ========================================
-2025/10/06 09:37:26.754029 🔧 Running as Windows Service
-2025/10/06 09:37:26.754029 Starting as Windows Service...
-2025/10/06 09:37:26.755146 📱 Registering device...
-2025/10/06 09:37:27.181718 ✅ Device registered: dev-8832ccd8c6242859
-2025/10/06 09:37:27.181718    Name: Dennis-bærbar
-2025/10/06 09:37:27.181718    Platform: windows
-2025/10/06 09:37:27.181718    Arch: amd64
-2025/10/06 09:37:27.181718 ✅ Screen capturer initialized: 1024x768
-2025/10/06 09:37:27.181718 👂 Listening for incoming connections...
-2025/10/06 09:37:27.181718 🔄 Session polling started (checking every 2 seconds)
-2025/10/06 09:37:27.183566 ⚠️  No desktop access (Session 0 / pre-login)
-2025/10/06 09:37:27.183566    Service will run but desktop features limited until user logs in
-2025/10/06 09:37:27.183566    This is normal for services running before login
+Remote Agent Log Viewer
+========================================
+
+Log file: C:\#Remote\agent\agent.log
+
+Press Ctrl+C to stop watching...
+
+2025/10/06 20:14:16.987179 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:17.182791 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:17.481972 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:17.680543 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:17.979514 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:18.179768 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:18.415039 ðŸ” Found 1 pending session(s)
+2025/10/06 20:14:18.415629 ðŸ” Session details: ID=40ea717b-edb6-400c-8aa4-c24baf6c5af2, PIN=862377, device_id=dev-8832ccd8c6242859
+2025/10/06 20:14:18.425121 ðŸ“Š Sent 100 frames (latest size: 50 KB, 0 errors)
+2025/10/06 20:14:18.474546 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:18.706578 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:18.976933 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:19.192675 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:19.483762 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:19.677660 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:19.983843 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:20.191327 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:20.374998 âŒ Data channel closed
+2025/10/06 20:14:20.475994 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:20.681193 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:20.979971 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:21.183415 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:21.483050 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:21.680007 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:21.977888 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:22.183661 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:22.487340 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:22.680774 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:22.991067 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:23.181890 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:23.486838 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:23.679378 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:23.986832 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:24.180814 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:24.490649 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:24.680055 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:24.983201 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:25.180407 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:25.492309 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:25.689317 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:25.985311 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:26.178964 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
+2025/10/06 20:14:26.486147 ðŸ” Fetched 15 signals for session 40ea717b-edb6-400c-8aa4-c24baf6c5af2 from dashboard
