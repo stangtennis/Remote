@@ -424,7 +424,7 @@ func (m *Manager) updateSessionStatus(status string) {
 	req.Header.Set("Prefer", "return=minimal")
 	
 	q := req.URL.Query()
-	q.Add("session_id", "eq."+m.sessionID)
+	q.Add("id", "eq."+m.sessionID)
 	req.URL.RawQuery = q.Encode()
 
 	client := &http.Client{Timeout: 5 * time.Second}
