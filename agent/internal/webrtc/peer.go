@@ -161,11 +161,11 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 
 func (m *Manager) startScreenStreaming() {
 	// Stream JPEG frames over data channel
-	// 10 FPS (100ms) = much lower CPU usage, still acceptable for remote desktop
-	ticker := time.NewTicker(100 * time.Millisecond)
+	// 15 FPS (66ms) = smooth experience with good bandwidth
+	ticker := time.NewTicker(66 * time.Millisecond)
 	defer ticker.Stop()
 
-	log.Println("🎥 Starting screen streaming at 10 FPS (all frames)...")
+	log.Println("🎥 Starting screen streaming at 15 FPS (high quality)...")
 	
 	// If screen capturer not initialized (Session 0), try to initialize now
 	if m.screenCapturer == nil {
@@ -196,8 +196,8 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
-		// Capture every frame (change detection temporarily disabled for debugging)
-		jpeg, err := m.screenCapturer.CaptureJPEG(45) // Quality 45 (aggressive optimization)
+		// Capture every frame with high quality
+		jpeg, err := m.screenCapturer.CaptureJPEG(75) // Quality 75 (high quality for good bandwidth)
 		if err != nil {
 			errorCount++
 			consecutiveErrors++
