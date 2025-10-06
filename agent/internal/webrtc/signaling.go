@@ -298,8 +298,25 @@ func (m *Manager) listenForICE(sessionID string) {
 	defer ticker.Stop()
 	processedIDs := make(map[int]bool)
 
-	for m.isStreaming || m.peerConnection.ConnectionState() == webrtc.PeerConnectionStateConnecting {
+	// Only poll while connecting, stop once connected or failed
+	for {
 		<-ticker.C
+		
+		// Check if peer connection is closed or doesn't exist
+		if m.peerConnection == nil {
+			log.Println("🛑 Stopped ICE candidate polling - connection closed")
+			return
+		}
+		
+		state := m.peerConnection.ConnectionState()
+		
+		// Stop if connected (ICE negotiation complete) or failed/closed
+		if state == webrtc.PeerConnectionStateConnected || 
+		   state == webrtc.PeerConnectionStateFailed || 
+		   state == webrtc.PeerConnectionStateClosed {
+			log.Printf("🛑 Stopped ICE candidate polling - connection state: %s", state)
+			return
+		}
 
 		signals, err := m.fetchSignalingMessages(sessionID, "dashboard")
 		if err != nil {
@@ -318,8 +335,6 @@ func (m *Manager) listenForICE(sessionID string) {
 			}
 		}
 	}
-	
-	log.Println("🛑 Stopped ICE candidate polling - connection closed")
 }
 
 func (m *Manager) handleICECandidate(candidate *webrtc.ICECandidateInit) {
