@@ -275,9 +275,9 @@ func (m *Manager) cleanupConnection(reason string) {
 	// Stop streaming
 	m.isStreaming = false
 	
-	// Update session status to completed
+	// Update session status to ended
 	if m.sessionID != "" {
-		m.updateSessionStatus("completed")
+		m.updateSessionStatus("ended")
 	}
 	
 	// Close data channel
