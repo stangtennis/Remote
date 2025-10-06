@@ -28,7 +28,7 @@ jobs:
         env:
           CGO_ENABLED: 1
         run: |
-          go build -ldflags "-s -w -H windowsgui" -o remote-agent.exe ./cmd/agent
+          go build -ldflags "-s -w -H windowsgui" -o remote-agent.exe ./cmd/remote-agent
 
       - name: Get version from tag
         id: get_version
