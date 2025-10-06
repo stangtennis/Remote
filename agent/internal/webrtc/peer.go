@@ -295,6 +295,8 @@ func (m *Manager) cleanupConnection(reason string) {
 	}
 	
 	// Reset session ID for next connection
+	m.sessionID = ""
+	
 	log.Println("✅ Connection cleaned up - ready for new connections")
 }
 

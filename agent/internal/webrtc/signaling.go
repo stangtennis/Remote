@@ -157,6 +157,14 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 
 func (m *Manager) handleSession(session Session) {
 	log.Println("🔧 Setting up WebRTC connection...")
+	
+	// Ensure previous connection is fully cleaned up
+	if m.peerConnection != nil {
+		log.Println("⚠️  Previous connection still exists, cleaning up first...")
+		m.cleanupConnection("Preparing for new session")
+		// Small delay to ensure cleanup completes
+		time.Sleep(100 * time.Millisecond)
+	}
 
 	// Get ICE servers from session TURN config or use default STUN
 	iceServers := []webrtc.ICEServer{
