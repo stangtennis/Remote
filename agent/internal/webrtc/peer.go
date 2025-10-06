@@ -161,10 +161,11 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 
 func (m *Manager) startScreenStreaming() {
 	// Stream JPEG frames over data channel
-	ticker := time.NewTicker(33 * time.Millisecond) // ~30 FPS for smooth experience
+	// 20 FPS (50ms) = better balance of responsiveness vs bandwidth
+	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 
-	log.Println("🎥 Starting screen streaming at 30 FPS...")
+	log.Println("🎥 Starting screen streaming at 20 FPS...")
 	
 	// If screen capturer not initialized (Session 0), try to initialize now
 	if m.screenCapturer == nil {
@@ -195,8 +196,8 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
-		// Capture screen as JPEG
-		jpeg, err := m.screenCapturer.CaptureJPEG(75) // Quality 75 (balanced)
+		// Capture screen as JPEG with lower quality for faster encoding
+		jpeg, err := m.screenCapturer.CaptureJPEG(60) // Quality 60 (faster encoding, lower latency)
 		if err != nil {
 			errorCount++
 			consecutiveErrors++
@@ -223,7 +224,8 @@ func (m *Manager) startScreenStreaming() {
 			log.Printf("Failed to send frame: %v", err)
 		} else {
 			frameCount++
-			if frameCount%50 == 0 {
+			// Log every 100 frames instead of 50 to reduce logging overhead
+			if frameCount%100 == 0 {
 				log.Printf("📊 Sent %d frames (latest size: %d KB, %d errors)", frameCount, len(jpeg)/1024, errorCount)
 			}
 		}
