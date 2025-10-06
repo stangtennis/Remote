@@ -23,6 +23,12 @@ jobs:
           choco install mingw -y
           refreshenv
 
+      - name: Download Go modules
+        working-directory: ./agent
+        run: |
+          go mod download
+          go mod verify
+
       - name: Build Agent
         working-directory: ./agent
         env:
