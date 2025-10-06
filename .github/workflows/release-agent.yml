@@ -98,8 +98,7 @@ jobs:
             "remote-agent.exe",
             "setup-startup.bat",
             "uninstall-service.bat",
-            "view-logs.bat",
-            ".env.example"
+            "view-logs.bat"
           )
           Compress-Archive -Path $files -DestinationPath remote-agent-windows.zip
         shell: pwsh
