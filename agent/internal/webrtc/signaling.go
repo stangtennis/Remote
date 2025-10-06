@@ -217,13 +217,14 @@ func (m *Manager) handleSession(session Session) {
 }
 
 func (m *Manager) waitForOffer(sessionID string) {
-	// Poll for signaling messages - no timeout, wait indefinitely
+	// Poll for signaling messages - stop once connected
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
 	processedIDs := make(map[int]bool)
 
-	for {
+	// Stop polling once peer connection is established
+	for m.peerConnection.ConnectionState() != webrtc.PeerConnectionStateConnected {
 		select {
 		case <-ticker.C:
 			signals, err := m.fetchSignalingMessages(sessionID, "dashboard")
@@ -249,6 +250,8 @@ func (m *Manager) waitForOffer(sessionID string) {
 			}
 		}
 	}
+	
+	log.Println("🛑 Stopped signal polling - connection established")
 }
 
 func (m *Manager) handleOffer(sessionID string, sig SignalMessage) {
@@ -307,6 +310,8 @@ func (m *Manager) listenForICE(sessionID string) {
 			}
 		}
 	}
+	
+	log.Println("🛑 Stopped ICE candidate polling - connection closed")
 }
 
 func (m *Manager) handleICECandidate(candidate *webrtc.ICECandidateInit) {
