@@ -1,0 +1,106 @@
+name: Build and Release Agent
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on version tags like v1.0.0, v1.2.3, etc.
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Install MinGW (GCC for Windows)
+        run: |
+          choco install mingw -y
+          refreshenv
+
+      - name: Build Agent
+        working-directory: ./agent
+        env:
+          CGO_ENABLED: 1
+        run: |
+          go build -ldflags "-s -w -H windowsgui" -o remote-agent.exe ./cmd/agent
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          $version = $env:GITHUB_REF -replace 'refs/tags/', ''
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Remote Desktop Agent ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            ## 🎉 Remote Desktop Agent ${{ steps.get_version.outputs.VERSION }}
+            
+            ### 📥 Installation
+            
+            1. Download `remote-agent.exe`
+            2. Run `setup-startup.bat` to install as startup task
+            3. Configure `.env` file with your Supabase credentials
+            
+            ### ✨ Features
+            
+            - High-quality screen streaming (1920px @ 15 FPS)
+            - Low latency WebRTC connection
+            - Mouse and keyboard control
+            - Automatic reconnection
+            - Clean session management
+            
+            ### 📋 System Requirements
+            
+            - Windows 10/11
+            - .NET Framework 4.7.2 or higher
+            - Active internet connection
+            
+            For full documentation, see the [README](https://github.com/stangtennis/Remote/blob/main/README.md).
+          draft: false
+          prerelease: false
+
+      - name: Upload Agent Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./agent/remote-agent.exe
+          asset_name: remote-agent.exe
+          asset_content_type: application/octet-stream
+
+      - name: Create ZIP with installation scripts
+        working-directory: ./agent
+        run: |
+          $files = @(
+            "remote-agent.exe",
+            "setup-startup.bat",
+            "uninstall-service.bat",
+            "view-logs.bat",
+            ".env.example"
+          )
+          Compress-Archive -Path $files -DestinationPath remote-agent-windows.zip
+        shell: pwsh
+
+      - name: Upload ZIP Package
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./agent/remote-agent-windows.zip
+          asset_name: remote-agent-windows.zip
+          asset_content_type: application/zip
