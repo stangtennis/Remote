@@ -23,18 +23,18 @@ jobs:
           choco install mingw -y
           refreshenv
 
-      - name: Download Go modules
+      - name: Tidy Go modules
         working-directory: ./agent
         run: |
+          go mod tidy
           go mod download
-          go mod verify
 
       - name: Build Agent
         working-directory: ./agent
         env:
           CGO_ENABLED: 1
         run: |
-          go build -ldflags "-s -w -H windowsgui" -o remote-agent.exe ./cmd/remote-agent
+          go build -mod=mod -ldflags "-s -w -H windowsgui" -o remote-agent.exe ./cmd/remote-agent
 
       - name: Get version from tag
         id: get_version
