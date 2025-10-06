@@ -165,7 +165,7 @@ func (m *Manager) startScreenStreaming() {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
-	log.Println("🎥 Starting screen streaming at 10 FPS with change detection...")
+	log.Println("🎥 Starting screen streaming at 10 FPS (all frames)...")
 	
 	// If screen capturer not initialized (Session 0), try to initialize now
 	if m.screenCapturer == nil {
@@ -196,12 +196,8 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
-		// Only capture if screen changed (skip unchanged frames)
-		jpeg, err := m.screenCapturer.CaptureJPEGIfChanged(45) // Quality 45 (aggressive optimization)
-		if err == nil && jpeg == nil {
-			// No change detected - skip this frame
-			continue
-		}
+		// Capture every frame (change detection temporarily disabled for debugging)
+		jpeg, err := m.screenCapturer.CaptureJPEG(45) // Quality 45 (aggressive optimization)
 		if err != nil {
 			errorCount++
 			consecutiveErrors++
