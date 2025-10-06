@@ -2,6 +2,8 @@
 // Handles WebRTC signaling via Supabase Realtime
 
 let signalingChannel = null;
+let pollingInterval = null;
+let processedSignalIds = new Set();
 
 async function sendSignal(payload) {
   try {
@@ -41,7 +43,13 @@ function subscribeToSessionSignaling(sessionId) {
     supabase.removeChannel(signalingChannel);
   }
 
-  // Subscribe to signaling messages for this session
+  // Clear previous polling
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+  }
+  processedSignalIds.clear();
+
+  // Subscribe to signaling messages for this session (Realtime)
   signalingChannel = supabase
     .channel(`session:${sessionId}`)
     .on('postgres_changes',
@@ -52,16 +60,60 @@ function subscribeToSessionSignaling(sessionId) {
         filter: `session_id=eq.${sessionId}`
       },
       async (payload) => {
-        console.log('Signal received:', payload);
-        console.log('Signal data:', payload.new);
-        console.log('  from_side:', payload.new.from_side);
-        console.log('  msg_type:', payload.new.msg_type);
+        console.log('✅ Realtime signal received:', payload.new.msg_type);
         await handleSignal(payload.new);
       }
     )
     .subscribe();
 
   console.log('Subscribed to signaling for session:', sessionId);
+
+  // Start polling as fallback (in case Realtime is slow/broken)
+  startPollingForSignals(sessionId);
+}
+
+async function startPollingForSignals(sessionId) {
+  console.log('🔄 Starting polling fallback for signals...');
+  
+  // Poll every 500ms
+  pollingInterval = setInterval(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('session_signaling')
+        .select('*')
+        .eq('session_id', sessionId)
+        .eq('from_side', 'agent')
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('❌ Polling error:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        for (const signal of data) {
+          // Skip already processed signals
+          if (processedSignalIds.has(signal.id)) {
+            continue;
+          }
+          processedSignalIds.add(signal.id);
+          
+          console.log('📥 Polled signal:', signal.msg_type);
+          await handleSignal(signal);
+        }
+      }
+    } catch (err) {
+      console.error('❌ Polling exception:', err);
+    }
+  }, 500);
+}
+
+function stopPolling() {
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+    pollingInterval = null;
+  }
+  processedSignalIds.clear();
 }
 
 async function handleSignal(signal) {
@@ -132,3 +184,4 @@ async function handleSignal(signal) {
 // Export
 window.sendSignal = sendSignal;
 window.subscribeToSessionSignaling = subscribeToSessionSignaling;
+window.stopPolling = stopPolling;
