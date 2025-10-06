@@ -36,8 +36,13 @@ async function loadDevices() {
       return;
     }
 
-    // Render devices
-    devices.forEach(device => {
+    // Render devices (deduplicate by device_id just in case)
+    const uniqueDevices = devices.reduce((acc, device) => {
+      acc[device.device_id] = device; // Keep last one
+      return acc;
+    }, {});
+    
+    Object.values(uniqueDevices).forEach(device => {
       const card = createDeviceCard(device);
       devicesList.appendChild(card);
     });
@@ -186,6 +191,15 @@ async function deleteDevice(device) {
   }
 }
 
+// Debounce helper to prevent too frequent reloads
+let reloadTimeout;
+function debouncedReload() {
+  clearTimeout(reloadTimeout);
+  reloadTimeout = setTimeout(() => {
+    loadDevices();
+  }, 500); // Wait 500ms before reloading
+}
+
 function subscribeToDeviceUpdates() {
   // Subscribe to real-time device changes
   const channel = supabase
@@ -196,8 +210,8 @@ function subscribeToDeviceUpdates() {
       table: 'remote_devices'
     }, (payload) => {
       console.log('Device update:', payload);
-      // Reload devices list on any change
-      loadDevices();
+      // Debounced reload to prevent flickering
+      debouncedReload();
     })
     .subscribe();
 
