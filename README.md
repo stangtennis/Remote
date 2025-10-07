@@ -1,14 +1,16 @@
-# Remote Desktop Application
+# 🖥️ Remote Desktop Application
 
-A serverless remote desktop solution built with Supabase, WebRTC, and GitHub Pages - inspired by MeshCentral/TeamViewer.
+A lightweight, serverless remote desktop solution built with **Supabase**, **WebRTC**, and **GitHub Pages**.
 
-## ✅ Status: **WORKING** (Confirmed 2025-10-02)
+## ✅ Status: **Production Ready** (Updated 2025-10-07)
 
-- Remote screen streaming functional across networks
-- External access working (confirmed from outside local network)
-- TURN relay working via Twilio
-- WebRTC P2P connections stable
-- Agent and Dashboard deployed and operational
+- ✅ **High-quality screen streaming** (1920px @ 15 FPS)
+- ✅ **System tray integration** - Runs silently in background
+- ✅ **Stable reconnection** - Automatic cleanup and recovery
+- ✅ **Mouse & keyboard control** - Full remote input
+- ✅ **External access** - Works across networks via TURN relay
+- ✅ **Automated releases** - GitHub Actions CI/CD
+- ✅ **Clean logging** - Minimal, informative output
 
 ## Architecture
 
@@ -17,40 +19,88 @@ A serverless remote desktop solution built with Supabase, WebRTC, and GitHub Pag
 - **Agent**: Go + Pion WebRTC (Single Windows EXE)
 - **Connectivity**: WebRTC P2P with TURN fallback
 
-## Project Structure
+## ✨ Key Features
+
+- **🔒 Secure** - WebRTC P2P encryption, Supabase RLS, short-lived tokens
+- **🚀 Fast** - Direct P2P connection when possible, TURN fallback
+- **📦 Portable** - Single EXE file, no installation required
+- **🔔 System Tray** - Runs minimized in notification area
+- **🔄 Auto-Reconnect** - Handles network interruptions gracefully
+- **📊 Clean Logs** - View activity from system tray menu
+- **🌐 Cross-Network** - Works behind NAT/firewalls via TURN
+
+## 📥 Quick Start (For Users)
+
+### Download & Install Agent
+
+1. **Download** the latest release:
+   ```
+   https://github.com/stangtennis/Remote/releases/latest
+   ```
+
+2. **Extract** `remote-agent-windows.zip`
+
+3. **Configure** - Create `.env` file with your Supabase credentials:
+   ```env
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_ANON_KEY=your-anon-key
+   ```
+
+4. **Run Setup** - Double-click `setup-startup.bat` to install as startup task
+
+5. **Done!** - Agent runs on startup, visible in system tray
+
+### Access Dashboard
+
+Visit: `https://your-username.github.io/Remote/`
+
+## 📁 Project Structure
 
 ```
-f:\#Remote\
-├── supabase/              # Supabase backend
-│   ├── migrations/        # Database schema migrations
-│   └── functions/         # Edge Functions
-│       ├── session-token/
-│       ├── device-register/
-│       └── file-transfer/
-├── dashboard/             # GitHub Pages dashboard
+Remote/
+├── .github/
+│   └── workflows/         # GitHub Actions (automated releases)
+├── agent/                 # Go agent application
+│   ├── cmd/remote-agent/  # Main entry point
+│   ├── internal/          # Core packages
+│   │   ├── webrtc/       # WebRTC peer connection
+│   │   ├── screen/       # Screen capture
+│   │   ├── input/        # Mouse/keyboard control
+│   │   ├── tray/         # System tray integration
+│   │   └── device/       # Device registration
+│   ├── build.bat         # Local build script
+│   └── setup-startup.bat # Installation script
+├── docs/                  # GitHub Pages dashboard
 │   ├── index.html
 │   ├── css/
-│   ├── js/
-│   └── assets/
-├── agent/                 # Go agent application
-│   ├── cmd/
-│   ├── internal/
-│   └── go.mod
-├── plan.md                # Comprehensive project plan
-└── .env.example           # Environment variables template
+│   └── js/
+└── supabase/              # Supabase backend
+    ├── migrations/        # Database schema
+    └── functions/         # Edge Functions
 ```
 
-## Setup Instructions
+## 🛠️ Development Setup
 
 ### Prerequisites
 
-- [Supabase CLI](https://supabase.com/docs/guides/cli)
-- [Go 1.21+](https://golang.org/dl/)
-- [Git](https://git-scm.com/)
+- [Supabase CLI](https://supabase.com/docs/guides/cli) - Backend deployment
+- [Go 1.24+](https://golang.org/dl/) - Agent compilation
+- [MinGW-w64](https://www.mingw-w64.org/) - CGO support (for input control)
+- [Git](https://git-scm.com/) - Version control
 - Supabase account
-- Code signing certificate (for production)
 
-### 1. Supabase Setup
+### 1. Clone & Configure
+
+```bash
+git clone https://github.com/stangtennis/Remote.git
+cd Remote
+
+# Copy environment template
+cp .env.example .env
+# Edit .env with your Supabase credentials
+```
+
+### 2. Deploy Supabase Backend
 
 ```bash
 # Login to Supabase
@@ -59,10 +109,6 @@ supabase login
 # Link to your project
 supabase link --project-ref your-project-ref
 
-# Copy environment variables
-cp .env.example .env
-# Edit .env with your Supabase keys
-
 # Run migrations
 cd supabase
 supabase db push
@@ -70,106 +116,139 @@ supabase db push
 # Deploy Edge Functions
 supabase functions deploy session-token
 supabase functions deploy device-register
-supabase functions deploy file-transfer
 ```
 
-### 2. Dashboard Setup
-
-The dashboard is a static site hosted on GitHub Pages.
-
-```bash
-cd dashboard
-# Open index.html in browser for local testing
-# Or use Live Server in VS Code
-```
-
-To deploy to GitHub Pages:
-1. Push to GitHub
-2. Enable GitHub Pages in repo settings
-3. Set source to main branch, /dashboard folder
-
-### 3. Agent Setup
+### 3. Build Agent Locally
 
 ```bash
 cd agent
-go mod init github.com/yourusername/remote-agent
-go mod tidy
 
-# Development build
-go build -o remote-agent.exe ./cmd/remote-agent
+# Install dependencies
+go mod download
 
-# Production build (with code signing)
-go build -ldflags="-s -w" -o remote-agent.exe ./cmd/remote-agent
-signtool sign /f cert.pfx /p password /t http://timestamp.digicert.com remote-agent.exe
+# Build (Windows)
+.\build.bat
+
+# Or manual build
+$env:CGO_ENABLED=1
+go build -ldflags "-s -w -H windowsgui" -o remote-agent.exe ./cmd/remote-agent
 ```
 
-## Development Phases
+### 4. Deploy Dashboard
 
-- [x] **Fase 0**: Infrastructure (Supabase tables, Edge Functions, Storage)
-- [x] **Fase 0.5**: Authentication & Authorization
-- [x] **Fase 1**: Dashboard skeleton
-- [x] **Fase 2**: Agent MVP (JPEG screen + input)
-- [x] **Fase 3**: TURN + reconnection ✅ **WORKING**
-- [ ] **Fase 4**: Video track (VP8/H.264) - Currently using JPEG frames
-- [ ] **Fase 5**: File transfer
-- [ ] **Fase 6**: Security & production - Partially complete (auth working)
-- [ ] **Fase 7**: Production hardening
+The dashboard is hosted on GitHub Pages:
 
-See `plan.md` for detailed milestones.
+1. Push to GitHub
+2. Settings → Pages
+3. Source: `main` branch, `/docs` folder
+4. Save
 
-## Known Issues & Limitations
+Access at: `https://your-username.github.io/Remote/`
 
-- **Multiple dashboard tabs**: Only use one browser tab to avoid signaling conflicts
-- **Session cleanup**: ✅ Now automatic via pg_cron (runs every 5 minutes)
-- **Mouse/keyboard control**: ✅ Re-enabled (requires CGO build - see DEPLOYMENT.md)
-- **Video quality**: Currently JPEG frames @ 10 FPS (see OPTIMIZATION.md for H.264/VP8 upgrade path)
-- **Code signing**: Not yet implemented (required for production Windows deployment)
+## 🔄 Branching Strategy
 
-## Security
+- **`main`** - Stable, production-ready code
+- **`agent`** - Agent development
+- **`dashboard`** - Dashboard development
 
-- **MFA**: Enabled for dashboard users
-- **API Keys**: Generated per device with rotation
-- **RLS**: Row-level security on all tables
-- **Tokens**: Short-lived JWT (5-15 min)
-- **Code Signing**: Mandatory for Windows EXE
-- **Rate Limiting**: 100 req/min per user/device
+See [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md) for details.
 
-## Cost Estimation (Monthly)
+## 📦 Releases
 
-- Supabase Pro: $25/mo
-- TURN (Twilio): ~$112/mo (280GB @ $0.40/GB)
-- GitHub Pages: Free
-- Code Signing Cert: ~$200-500/year
+Releases are **automated via GitHub Actions**:
 
-**Total**: ~$150-200/mo + cert
+```bash
+# Create new version
+git tag v1.2.0
+git push origin v1.2.0
 
-## Documentation
+# GitHub Actions will:
+# 1. Build agent with CGO
+# 2. Create GitHub Release
+# 3. Upload remote-agent.exe
+# 4. Upload remote-agent-windows.zip (with scripts)
+```
 
-- **`plan.md`** - Comprehensive project plan with architecture, security, and phases
-- **`DEPLOYMENT.md`** - Complete deployment guide with troubleshooting (START HERE!)
-- **`OPTIMIZATION.md`** - Video encoding optimization guide (H.264/VP8)
-- Each component has its own README in respective folders
+See [RELEASE.md](./RELEASE.md) for details.
 
-## Quick Start
+## 📋 Implementation Status
 
-### For Deployment
-See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for complete setup instructions including:
-- Database migrations
-- Edge Functions deployment
-- Agent build with CGO (mouse/keyboard control)
-- Dashboard deployment to GitHub Pages
-- Testing and troubleshooting
+### ✅ Completed Features
 
-### For Optimization
-See **[OPTIMIZATION.md](./OPTIMIZATION.md)** for upgrading from JPEG to H.264/VP8:
-- 3x better FPS (10 → 30+)
-- 50% bandwidth reduction
-- Hardware encoding support
+- [x] **Infrastructure** - Supabase backend, database, Edge Functions
+- [x] **Authentication** - Supabase Auth with RLS policies
+- [x] **Dashboard** - Web interface hosted on GitHub Pages
+- [x] **Agent Core** - Screen capture, WebRTC streaming
+- [x] **Input Control** - Mouse & keyboard remote control
+- [x] **TURN Relay** - Cross-network connectivity via Twilio
+- [x] **Reconnection** - Automatic cleanup and recovery
+- [x] **System Tray** - Background operation with menu
+- [x] **Automated Releases** - GitHub Actions CI/CD
+- [x] **Session Cleanup** - Automatic via pg_cron
 
-## License
+### 🚧 Planned Enhancements
 
-[Your License Here]
+- [ ] **Video Encoding** - H.264/VP8 for better performance
+- [ ] **File Transfer** - Send/receive files during session
+- [ ] **Multi-Monitor** - Select which screen to stream
+- [ ] **Code Signing** - Windows EXE certificate
+- [ ] **Audio Streaming** - Remote audio support
 
-## Support
+## ⚠️ Known Limitations
 
-[Your Support Information]
+- **Platform**: Windows only (agent)
+- **Video Format**: JPEG frames @ 15 FPS (H.264/VP8 planned)
+- **Multiple Tabs**: Use one dashboard tab per session
+- **Code Signing**: Not implemented (Windows SmartScreen warning)
+
+## 🔒 Security Features
+
+- **🔐 Encryption** - WebRTC P2P encryption (DTLS-SRTP)
+- **👤 Authentication** - Supabase Auth with MFA support
+- **🛡️ RLS Policies** - Row-level security on all database tables
+- **🎟️ Short-lived Tokens** - JWT expiration (5-15 minutes)
+- **🔑 API Key Rotation** - Per-device key management
+- **⏱️ Rate Limiting** - 100 requests/min per user/device
+- **📝 Audit Logs** - Session history and device tracking
+
+## 💰 Cost Estimation
+
+| Service | Cost | Notes |
+|---------|------|-------|
+| Supabase Free Tier | $0/mo | Good for testing/personal use |
+| Supabase Pro | $25/mo | Production (500GB bandwidth) |
+| TURN (Twilio) | ~$112/mo | 280GB @ $0.40/GB |
+| GitHub Pages | Free | Static hosting |
+| **Total** | **~$140/mo** | Production setup |
+
+**Free Alternative**: Use Supabase free tier + free TURN services for personal use.
+
+## 📚 Documentation
+
+- **[BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)** - Git workflow and branch structure
+- **[RELEASE.md](./RELEASE.md)** - Automated release process
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Detailed deployment guide
+- **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** - Testing and troubleshooting
+- **[OPTIMIZATION.md](./OPTIMIZATION.md)** - Performance tuning (H.264/VP8)
+- **[CHANGELOG.md](./CHANGELOG.md)** - Version history
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`agent` or `dashboard`)
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## 📄 License
+
+MIT License - See [LICENSE](./LICENSE) for details
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/stangtennis/Remote/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/stangtennis/Remote/discussions)
+
+---
+
+**Made with ❤️ using Supabase, WebRTC, and Go**
