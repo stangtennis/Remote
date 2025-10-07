@@ -29,9 +29,10 @@ func (t *TrayApp) Run() {
 
 func (t *TrayApp) onReady() {
 	// Set up the system tray icon and menu
-	systray.SetIcon(getIcon())
-	systray.SetTitle("Remote Agent")
-	systray.SetTooltip(fmt.Sprintf("Remote Desktop Agent\n%s", t.device.Name))
+	// Note: Icon is optional - systray will use a default if not set
+	// systray.SetIcon(getIcon()) // Commented out - icon format needs proper implementation
+	systray.SetTitle("Remote")
+	systray.SetTooltip(fmt.Sprintf("Remote Desktop Agent\nDevice: %s", t.device.Name))
 
 	// Add menu items
 	mDeviceName := systray.AddMenuItem(fmt.Sprintf("Device: %s", t.device.Name), "")
@@ -85,28 +86,6 @@ func openLogs() {
 	}
 }
 
-// getIcon returns a simple ICO file bytes for the system tray
-// This is a minimal 16x16 icon (Windows .ico format)
-func getIcon() []byte {
-	// Simple blue square icon (16x16, 32-bit RGBA)
-	// ICO file format: ICONDIR header + ICONDIRENTRY + BMP data
-	return []byte{
-		// ICO Header (6 bytes)
-		0x00, 0x00, // Reserved (must be 0)
-		0x01, 0x00, // Type (1 = ICO)
-		0x01, 0x00, // Number of images
-		
-		// ICONDIRENTRY (16 bytes)
-		0x10,       // Width (16 pixels)
-		0x10,       // Height (16 pixels)
-		0x00,       // Color palette (0 = no palette)
-		0x00,       // Reserved
-		0x01, 0x00, // Color planes
-		0x20, 0x00, // Bits per pixel (32)
-		0x00, 0x04, 0x00, 0x00, // Size of image data (1024 bytes)
-		0x16, 0x00, 0x00, 0x00, // Offset to image data
-		
-		// BMP data would go here (simplified for now)
-		// For production, use an actual icon file or embed one
-	}
-}
+// TODO: Add proper icon support
+// getIcon() should return valid ICO file bytes for the system tray
+// For now, we rely on the default Windows icon
