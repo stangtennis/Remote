@@ -345,8 +345,24 @@ func (m *Manager) listenForICE(sessionID string) {
 }
 
 func (m *Manager) handleICECandidate(candidate *webrtc.ICECandidateInit) {
+	// Check if peer connection exists and is in valid state
+	if m.peerConnection == nil {
+		log.Println("⚠️  Cannot add ICE candidate - no peer connection")
+		return
+	}
+	
+	state := m.peerConnection.ConnectionState()
+	
+	// Only add ICE candidates during connection setup
+	// Don't try to add them if already connected, failed, or closed
+	if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed {
+		// Silently ignore - connection is already done
+		return
+	}
+	
 	if err := m.peerConnection.AddICECandidate(*candidate); err != nil {
-		log.Printf("Failed to add ICE candidate: %v", err)
+		// Only log as warning, not error - this can happen during normal operation
+		log.Printf("⚠️  Could not add ICE candidate (state: %s): %v", state, err)
 	} else {
 		log.Println("➕ Added ICE candidate")
 	}
