@@ -7,14 +7,13 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/desktop"
 	"github.com/stangtennis/remote-agent/internal/device"
+	"github.com/stangtennis/remote-agent/internal/tray"
 	"github.com/stangtennis/remote-agent/internal/webrtc"
 	"golang.org/x/sys/windows/svc"
 )
@@ -122,15 +121,16 @@ func runInteractive() {
 		}
 	})
 
-	// Wait for interrupt signal
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	<-sigChan
-	fmt.Println("\n🛑 Shutting down...")
-
-	stopAgent()
-	fmt.Println("👋 Goodbye!")
+	log.Println("🔔 Starting system tray...")
+	
+	// Run system tray (blocks until user exits from tray menu)
+	trayApp := tray.New(dev, func() {
+		log.Println("🛑 Shutting down from system tray...")
+		stopAgent()
+		log.Println("👋 Goodbye!")
+	})
+	
+	trayApp.Run()
 }
 
 func runService() {
