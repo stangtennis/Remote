@@ -5,56 +5,56 @@
 -- 1. Enable RLS on all tables
 -- ===========================================
 
-ALTER TABLE public.devices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.remote_devices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.remote_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.session_signaling ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- ===========================================
--- 2. DEVICES table policies
+-- 2. REMOTE_DEVICES table policies
 -- ===========================================
 
 -- Users can only see devices they own
-DROP POLICY IF EXISTS "Users can view own devices" ON public.devices;
+DROP POLICY IF EXISTS "Users can view own devices" ON public.remote_devices;
 CREATE POLICY "Users can view own devices"
-ON public.devices
+ON public.remote_devices
 FOR SELECT
 TO authenticated
-USING (auth.uid() = user_id);
+USING (auth.uid() = owner_id);
 
 -- Users can insert their own devices
-DROP POLICY IF EXISTS "Users can insert own devices" ON public.devices;
+DROP POLICY IF EXISTS "Users can insert own devices" ON public.remote_devices;
 CREATE POLICY "Users can insert own devices"
-ON public.devices
+ON public.remote_devices
 FOR INSERT
 TO authenticated
-WITH CHECK (auth.uid() = user_id);
+WITH CHECK (auth.uid() = owner_id);
 
 -- Users can update their own devices
-DROP POLICY IF EXISTS "Users can update own devices" ON public.devices;
+DROP POLICY IF EXISTS "Users can update own devices" ON public.remote_devices;
 CREATE POLICY "Users can update own devices"
-ON public.devices
+ON public.remote_devices
 FOR UPDATE
 TO authenticated
-USING (auth.uid() = user_id)
-WITH CHECK (auth.uid() = user_id);
+USING (auth.uid() = owner_id)
+WITH CHECK (auth.uid() = owner_id);
 
 -- Users can delete their own devices
-DROP POLICY IF EXISTS "Users can delete own devices" ON public.devices;
+DROP POLICY IF EXISTS "Users can delete own devices" ON public.remote_devices;
 CREATE POLICY "Users can delete own devices"
-ON public.devices
+ON public.remote_devices
 FOR DELETE
 TO authenticated
-USING (auth.uid() = user_id);
+USING (auth.uid() = owner_id);
 
 -- Agents can update their own device status (heartbeat)
-DROP POLICY IF EXISTS "Agents can update own device" ON public.devices;
+DROP POLICY IF EXISTS "Agents can update own device" ON public.remote_devices;
 CREATE POLICY "Agents can update own device"
-ON public.devices
+ON public.remote_devices
 FOR UPDATE
 TO anon
-USING (id = current_setting('request.jwt.claims', true)::json->>'device_id')
-WITH CHECK (id = current_setting('request.jwt.claims', true)::json->>'device_id');
+USING (device_id = current_setting('request.jwt.claims', true)::json->>'device_id')
+WITH CHECK (device_id = current_setting('request.jwt.claims', true)::json->>'device_id');
 
 -- ===========================================
 -- 3. REMOTE_SESSIONS table policies
@@ -68,7 +68,7 @@ FOR SELECT
 TO authenticated
 USING (
   device_id IN (
-    SELECT id FROM public.devices WHERE user_id = auth.uid()
+    SELECT device_id FROM public.remote_devices WHERE owner_id = auth.uid()
   )
 );
 
@@ -80,7 +80,7 @@ FOR INSERT
 TO authenticated
 WITH CHECK (
   device_id IN (
-    SELECT id FROM public.devices WHERE user_id = auth.uid()
+    SELECT device_id FROM public.remote_devices WHERE owner_id = auth.uid()
   )
 );
 
@@ -92,7 +92,7 @@ FOR UPDATE
 TO authenticated
 USING (
   device_id IN (
-    SELECT id FROM public.devices WHERE user_id = auth.uid()
+    SELECT device_id FROM public.remote_devices WHERE owner_id = auth.uid()
   )
 );
 
@@ -125,8 +125,8 @@ TO authenticated
 USING (
   session_id IN (
     SELECT id FROM public.remote_sessions rs
-    JOIN public.devices d ON rs.device_id = d.id
-    WHERE d.user_id = auth.uid()
+    JOIN public.remote_devices d ON rs.device_id = d.device_id
+    WHERE d.owner_id = auth.uid()
   )
 );
 
@@ -139,8 +139,8 @@ TO authenticated
 WITH CHECK (
   session_id IN (
     SELECT id FROM public.remote_sessions rs
-    JOIN public.devices d ON rs.device_id = d.id
-    WHERE d.user_id = auth.uid()
+    JOIN public.remote_devices d ON rs.device_id = d.device_id
+    WHERE d.owner_id = auth.uid()
   )
 );
 
@@ -180,7 +180,7 @@ CREATE POLICY "Users can view own audit logs"
 ON public.audit_logs
 FOR SELECT
 TO authenticated
-USING (user_id = auth.uid());
+USING (actor = auth.uid());
 
 -- System can insert audit logs
 DROP POLICY IF EXISTS "System can insert audit logs" ON public.audit_logs;
@@ -194,13 +194,13 @@ WITH CHECK (true);
 -- Comments
 -- ===========================================
 
-COMMENT ON POLICY "Users can view own devices" ON public.devices 
+COMMENT ON POLICY "Users can view own devices" ON public.remote_devices 
 IS 'Users can only see devices they own (linked to their auth.uid)';
 
 COMMENT ON POLICY "Agents can view device sessions" ON public.remote_sessions
 IS 'Agents can only view sessions for their specific device_id (from JWT claims)';
 
-COMMENT ON TABLE public.devices 
+COMMENT ON TABLE public.remote_devices 
 IS 'RLS enabled. Users can only access devices they own.';
 
 COMMENT ON TABLE public.remote_sessions 
