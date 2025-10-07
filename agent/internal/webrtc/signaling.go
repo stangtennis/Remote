@@ -69,7 +69,9 @@ func (m *Manager) ListenForSessions() {
 				continue
 			}
 			
+			// Log only when we're actually starting a NEW session
 			log.Printf("📞 Incoming session: %s (PIN: %s)", session.ID, session.PIN)
+			log.Printf("   Device ID: %s", m.device.ID)
 			handledSessions[session.ID] = true
 			m.sessionID = session.ID
 			
@@ -117,15 +119,14 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 		return nil, fmt.Errorf("JSON decode failed: %w", err)
 	}
 
-	// DEBUG: Log what we got
+	// Reduced logging - only log when no sessions (once per minute)
 	if len(sessions) == 0 {
 		// Log only every 30 polls (once per minute) to avoid spam
 		if time.Now().Unix()%60 < 2 {
-			log.Printf("🔍 No pending sessions found for device: %s (query OK, but 0 results)", m.device.ID)
+			log.Printf("🔍 No pending sessions found for device: %s", m.device.ID)
 		}
-	} else {
-		log.Printf("🔍 Found %d pending session(s)", len(sessions))
 	}
+	// Don't log here - let the handler log only when actually processing NEW sessions
 
 	var result []Session
 	for _, s := range sessions {
@@ -137,7 +138,7 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 		}
 		pin, _ := s["pin"].(string)
 		
-		log.Printf("🔍 Session details: ID=%s, PIN=%s, device_id=%v", sessionID, pin, s["device_id"])
+		// Don't log here - moved to where we actually handle NEW sessions
 		
 		session := Session{
 			ID:  sessionID,
@@ -298,11 +299,11 @@ func (m *Manager) listenForICE(sessionID string) {
 	defer ticker.Stop()
 	processedIDs := make(map[int]bool)
 
+	log.Println("🔍 Starting ICE candidate listener...")
+
 	// Only poll while connecting, stop once connected or failed
 	for {
-		<-ticker.C
-		
-		// Check if peer connection is closed or doesn't exist
+		// Check state BEFORE waiting for tick
 		if m.peerConnection == nil {
 			log.Println("🛑 Stopped ICE candidate polling - connection closed")
 			return
@@ -316,6 +317,12 @@ func (m *Manager) listenForICE(sessionID string) {
 		   state == webrtc.PeerConnectionStateClosed {
 			log.Printf("🛑 Stopped ICE candidate polling - connection state: %s", state)
 			return
+		}
+
+		// Now wait for tick or proceed immediately on first iteration
+		select {
+		case <-ticker.C:
+			// Continue to fetch signals
 		}
 
 		signals, err := m.fetchSignalingMessages(sessionID, "dashboard")
