@@ -12,7 +12,7 @@ import (
 )
 
 // Version of the agent - update this with each release
-const Version = "v1.1.5"
+const Version = "v1.1.6"
 
 type TrayApp struct {
 	device *device.Device
