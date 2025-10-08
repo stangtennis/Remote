@@ -45,7 +45,8 @@ func (t *TrayApp) onReady() {
 	
 	systray.AddSeparator()
 	
-	mLogs := systray.AddMenuItem("View Logs", "Open log file")
+	mConsole := systray.AddMenuItem("Show Console Window", "Open live console output")
+	mLogs := systray.AddMenuItem("View Log File", "Open log file in editor")
 	mVersion := systray.AddMenuItem(fmt.Sprintf("Version %s", Version), "Agent version")
 	mVersion.Disable()
 	
@@ -57,8 +58,10 @@ func (t *TrayApp) onReady() {
 	go func() {
 		for {
 			select {
+			case <-mConsole.ClickedCh:
+				openConsole()
 			case <-mLogs.ClickedCh:
-				openLogs()
+				openLogFile()
 			case <-mQuit.ClickedCh:
 				log.Println("🛑 Exit requested from system tray")
 				systray.Quit()
@@ -68,7 +71,7 @@ func (t *TrayApp) onReady() {
 	}()
 }
 
-func openLogs() {
+func openConsole() {
 	// Get the executable directory
 	exePath, err := os.Executable()
 	if err != nil {
@@ -78,11 +81,39 @@ func openLogs() {
 	exeDir := filepath.Dir(exePath)
 	logPath := filepath.Join(exeDir, "agent.log")
 
-	// Open log file with default text editor
-	log.Printf("Opening log file: %s", logPath)
+	// Open a PowerShell window that tails the log file
+	log.Println("🪟 Opening console window with live logs...")
 	
-	// Use cmd /c start to open with default editor
-	cmd := exec.Command("cmd", "/c", "start", "", logPath)
+	// Use PowerShell to tail the log file in a new window
+	psCmd := fmt.Sprintf(`Get-Content '%s' -Wait -Tail 50`, logPath)
+	cmd := exec.Command("powershell", "-NoExit", "-Command", psCmd)
+	
+	if err := cmd.Start(); err != nil {
+		log.Printf("Failed to open console: %v", err)
+	}
+}
+
+func openLogFile() {
+	// Get the executable directory
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Printf("Failed to get executable path: %v", err)
+		return
+	}
+	exeDir := filepath.Dir(exePath)
+	logPath := filepath.Join(exeDir, "agent.log")
+
+	// Check if log file exists
+	if _, err := os.Stat(logPath); os.IsNotExist(err) {
+		log.Printf("Log file does not exist: %s", logPath)
+		return
+	}
+
+	// Open log file with default text editor
+	log.Printf("📄 Opening log file: %s", logPath)
+	
+	// Use notepad as it's always available on Windows
+	cmd := exec.Command("notepad", logPath)
 	if err := cmd.Start(); err != nil {
 		log.Printf("Failed to open log file: %v", err)
 	}
