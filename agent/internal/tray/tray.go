@@ -11,6 +11,9 @@ import (
 	"github.com/stangtennis/remote-agent/internal/device"
 )
 
+// Version of the agent - update this with each release
+const Version = "v1.1.5"
+
 type TrayApp struct {
 	device *device.Device
 	onExit func()
@@ -43,7 +46,7 @@ func (t *TrayApp) onReady() {
 	systray.AddSeparator()
 	
 	mLogs := systray.AddMenuItem("View Logs", "Open log file")
-	mVersion := systray.AddMenuItem("Version 1.0.0", "Agent version")
+	mVersion := systray.AddMenuItem(fmt.Sprintf("Version %s", Version), "Agent version")
 	mVersion.Disable()
 	
 	systray.AddSeparator()
