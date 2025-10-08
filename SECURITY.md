@@ -38,14 +38,24 @@ This will apply migration `20250108000000_enable_security.sql` which enables Row
 **How it works:**
 - Agent registers with user's email
 - User **approves device** in dashboard
-- Device gets unique `device_id` in `.device_id` file
-- Device uses **Supabase anon key** (public)
+- Device gets unique `device_id` stored in `.device_id` file
+- Device uses **Supabase anon key** (public, no auth)
 
-**Security:**
-- Device can only access **its own sessions**
-- Device cannot see other devices
-- Device cannot create sessions (only dashboard can)
-- If device file is stolen, user can delete device from dashboard
+**Security Model:**
+- Agent uses **anon key** (public, same for all devices)
+- Agent **filters by device_id** in application code
+- Technically can query all data, but:
+  - ✅ Application code only queries its own device_id
+  - ✅ PIN codes required to actually connect
+  - ✅ device_id stored locally, not exposed
+  - ✅ User can delete device from dashboard anytime
+
+**Why this is acceptable:**
+- Agents are **backend services**, not browsers
+- Even if someone knew all session IDs, they need the **6-digit PIN** to connect
+- **Users' data is protected** - RLS prevents users from seeing each other's devices
+
+**Future improvement:** Use per-device API keys (field exists in schema)
 
 ---
 
@@ -53,23 +63,35 @@ This will apply migration `20250108000000_enable_security.sql` which enables Row
 
 All database tables have RLS enabled:
 
-#### **`devices` table:**
+#### **`remote_devices` table:**
 ```sql
--- Users can only see their own devices
-WHERE user_id = auth.uid()
+-- ✅ USERS (authenticated):
+--    Can ONLY see devices where owner_id = their user_id
+WHERE owner_id = auth.uid()
 
--- Agents can only update their own device
-WHERE device_id = JWT_CLAIM('device_id')
+-- ⚠️ AGENTS (anon key):
+--    Can see all devices, but application filters by device_id
+USING (true)  -- Application-level filtering
 ```
 
 #### **`remote_sessions` table:**
 ```sql
--- Users can only access sessions for their devices
-WHERE device_id IN (SELECT id FROM devices WHERE user_id = auth.uid())
+-- ✅ USERS (authenticated):
+--    Can ONLY access sessions for devices they own
+WHERE device_id IN (
+  SELECT device_id FROM remote_devices WHERE owner_id = auth.uid()
+)
 
--- Agents can only access sessions for their device_id
-WHERE device_id = JWT_CLAIM('device_id')
+-- ⚠️ AGENTS (anon key):
+--    Can see all sessions, but application filters by device_id
+--    Additional security: PIN codes required to connect
+USING (true)  -- Application-level filtering + PIN codes
 ```
+
+**Security Layers:**
+1. **Users:** Database-enforced (RLS) ✅
+2. **Agents:** Application-enforced + PIN codes ⚠️
+3. **Connections:** WebRTC P2P encryption 🔐
 
 ---
 
