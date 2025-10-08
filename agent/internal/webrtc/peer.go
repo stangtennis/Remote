@@ -165,7 +165,7 @@ func (m *Manager) startScreenStreaming() {
 	ticker := time.NewTicker(66 * time.Millisecond)
 	defer ticker.Stop()
 
-	log.Println("🎥 Starting screen streaming at 15 FPS (high quality)...")
+	log.Println("🎥 Starting screen streaming at 15 FPS (optimized quality)...")
 	
 	// If screen capturer not initialized (Session 0), try to initialize now
 	if m.screenCapturer == nil {
@@ -188,6 +188,7 @@ func (m *Manager) startScreenStreaming() {
 	frameCount := 0
 	errorCount := 0
 	consecutiveErrors := 0
+	droppedFrames := 0
 	
 	for m.isStreaming {
 		<-ticker.C
@@ -196,8 +197,19 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
-		// Capture every frame with high quality
-		jpeg, err := m.screenCapturer.CaptureJPEG(75) // Quality 75 (high quality for good bandwidth)
+		// Check if data channel is backed up (buffered amount > 1MB)
+		// This prevents lag by dropping frames when network can't keep up
+		if m.dataChannel.BufferedAmount() > 1024*1024 {
+			droppedFrames++
+			if droppedFrames%10 == 1 {
+				log.Printf("⚠️ Network congestion detected - dropped %d frames to prevent lag", droppedFrames)
+			}
+			continue
+		}
+
+		// Capture with optimized quality (60 = good balance of quality/size)
+		// Quality 60 reduces file size by ~40% vs 75 with minimal visual difference
+		jpeg, err := m.screenCapturer.CaptureJPEG(60)
 		if err != nil {
 			errorCount++
 			consecutiveErrors++
@@ -226,12 +238,14 @@ func (m *Manager) startScreenStreaming() {
 			frameCount++
 			// Log every 100 frames instead of 50 to reduce logging overhead
 			if frameCount%100 == 0 {
-				log.Printf("📊 Sent %d frames (latest size: %d KB, %d errors)", frameCount, len(jpeg)/1024, errorCount)
+				log.Printf("📊 Sent %d frames (latest: %d KB, %d errors, %d dropped)", 
+					frameCount, len(jpeg)/1024, errorCount, droppedFrames)
 			}
 		}
 	}
 
-	log.Printf("🛑 Screen streaming stopped (sent %d frames, %d errors)", frameCount, errorCount)
+	log.Printf("🛑 Screen streaming stopped (sent %d frames, %d errors, %d dropped)", 
+		frameCount, errorCount, droppedFrames)
 }
 
 func (m *Manager) sendFrameChunked(data []byte) error {
