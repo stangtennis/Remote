@@ -169,6 +169,7 @@ function setupDataChannelHandlers() {
 
   dataChannel.onclose = () => {
     console.log('Data channel closed');
+    cleanupInputCapture();
   };
 
   dataChannel.onerror = (error) => {
@@ -316,37 +317,55 @@ function getImageCoordinates(element, clientX, clientY) {
   return { x, y };
 }
 
+// Store event listeners so we can clean them up
+let inputListenersAttached = false;
+let inputEventHandlers = {};
+
 function setupInputCapture() {
   const remoteVideo = document.getElementById('remoteVideo');
   const remoteCanvas = document.getElementById('remoteCanvas');
   const target = remoteCanvas || remoteVideo;
 
   if (!target) return;
+  
+  // Prevent duplicate event listeners (would cause double input!)
+  if (inputListenersAttached) {
+    console.log('Input capture already enabled, skipping duplicate setup');
+    return;
+  }
+  inputListenersAttached = true;
 
   // Prevent context menu
-  target.addEventListener('contextmenu', (e) => {
+  const contextMenuHandler = (e) => {
     e.preventDefault();
     e.stopPropagation();
-  });
+  };
+  target.addEventListener('contextmenu', contextMenuHandler);
+  inputEventHandlers.contextMenu = contextMenuHandler;
 
-  // Mouse move
-  target.addEventListener('mousemove', (e) => {
+  // Mouse move with throttling to prevent overwhelming the connection
+  let lastMouseMove = 0;
+  const mouseMoveHandler = (e) => {
     if (!dataChannel || dataChannel.readyState !== 'open') return;
     
-    const coords = getImageCoordinates(target, e.clientX, e.clientY);
+    // Throttle to max 60 FPS (16ms) to reduce network load
+    const now = Date.now();
+    if (now - lastMouseMove < 16) return;
+    lastMouseMove = now;
     
-    // Debug: Log coordinates (comment out in production)
-    // console.log(`Mouse: (${coords.x.toFixed(3)}, ${coords.y.toFixed(3)})`);
+    const coords = getImageCoordinates(target, e.clientX, e.clientY);
     
     sendControlEvent({
       t: 'mouse_move',
       x: Math.round(coords.x * 10000) / 10000,
       y: Math.round(coords.y * 10000) / 10000
     });
-  });
+  };
+  target.addEventListener('mousemove', mouseMoveHandler);
+  inputEventHandlers.mouseMove = mouseMoveHandler;
 
   // Mouse click
-  target.addEventListener('mousedown', (e) => {
+  const mouseDownHandler = (e) => {
     if (!dataChannel || dataChannel.readyState !== 'open') return;
     
     const button = ['left', 'middle', 'right'][e.button] || 'left';
@@ -356,9 +375,11 @@ function setupInputCapture() {
       down: true
     });
     e.preventDefault();
-  });
+  };
+  target.addEventListener('mousedown', mouseDownHandler);
+  inputEventHandlers.mouseDown = mouseDownHandler;
 
-  target.addEventListener('mouseup', (e) => {
+  const mouseUpHandler = (e) => {
     if (!dataChannel || dataChannel.readyState !== 'open') return;
     
     const button = ['left', 'middle', 'right'][e.button] || 'left';
@@ -368,30 +389,43 @@ function setupInputCapture() {
       down: false
     });
     e.preventDefault();
-  });
+  };
+  target.addEventListener('mouseup', mouseUpHandler);
+  inputEventHandlers.mouseUp = mouseUpHandler;
 
   // Mouse wheel / scroll
-  target.addEventListener('wheel', (e) => {
+  const wheelHandler = (e) => {
     if (!dataChannel || dataChannel.readyState !== 'open') return;
     
     sendControlEvent({
-      t: 'mouse_wheel',
+      t: 'mouse_scroll',
       delta: e.deltaY > 0 ? -1 : 1  // Negative for down, positive for up
     });
     e.preventDefault();
-  });
+  };
+  target.addEventListener('wheel', wheelHandler);
+  inputEventHandlers.wheel = wheelHandler;
 
   // Keyboard (when viewer is focused)
   target.tabIndex = 0; // Make focusable
   target.style.outline = 'none'; // Remove focus outline
   
   // Auto-focus on click
-  target.addEventListener('click', () => {
+  const clickHandler = () => {
     target.focus();
-  });
+  };
+  target.addEventListener('click', clickHandler);
+  inputEventHandlers.click = clickHandler;
   
-  target.addEventListener('keydown', (e) => {
+  // Track pressed keys to prevent duplicates from key repeat
+  const pressedKeys = new Set();
+  
+  const keyDownHandler = (e) => {
     if (!dataChannel || dataChannel.readyState !== 'open') return;
+    
+    // Ignore key repeat events (only send first press)
+    if (pressedKeys.has(e.code)) return;
+    pressedKeys.add(e.code);
     
     sendControlEvent({
       t: 'key',
@@ -400,10 +434,15 @@ function setupInputCapture() {
     });
     e.preventDefault();
     e.stopPropagation();
-  });
+  };
+  target.addEventListener('keydown', keyDownHandler);
+  inputEventHandlers.keyDown = keyDownHandler;
 
-  target.addEventListener('keyup', (e) => {
+  const keyUpHandler = (e) => {
     if (!dataChannel || dataChannel.readyState !== 'open') return;
+    
+    // Remove from pressed keys
+    pressedKeys.delete(e.code);
     
     sendControlEvent({
       t: 'key',
@@ -412,9 +451,42 @@ function setupInputCapture() {
     });
     e.preventDefault();
     e.stopPropagation();
-  });
+  };
+  target.addEventListener('keyup', keyUpHandler);
+  inputEventHandlers.keyUp = keyUpHandler;
 
-  console.log('Input capture enabled');
+  console.log('✅ Input capture enabled (duplicate prevention active)');
+}
+
+// Clean up input capture when connection closes
+function cleanupInputCapture() {
+  if (!inputListenersAttached) return;
+  
+  const remoteVideo = document.getElementById('remoteVideo');
+  const remoteCanvas = document.getElementById('remoteCanvas');
+  const target = remoteCanvas || remoteVideo;
+  
+  if (target && inputEventHandlers) {
+    Object.entries(inputEventHandlers).forEach(([name, handler]) => {
+      const eventName = {
+        contextMenu: 'contextmenu',
+        mouseMove: 'mousemove',
+        mouseDown: 'mousedown',
+        mouseUp: 'mouseup',
+        wheel: 'wheel',
+        click: 'click',
+        keyDown: 'keydown',
+        keyUp: 'keyup'
+      }[name];
+      if (eventName) {
+        target.removeEventListener(eventName, handler);
+      }
+    });
+  }
+  
+  inputListenersAttached = false;
+  inputEventHandlers = {};
+  console.log('🧹 Input capture cleaned up');
 }
 
 function sendControlEvent(event) {
