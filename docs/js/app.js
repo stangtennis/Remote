@@ -149,6 +149,11 @@ async function endSession() {
       .update({ status: 'ended', ended_at: new Date().toISOString() })
       .eq('id', currentSession.session_id);
 
+    // Clean up input capture
+    if (typeof cleanupInputCapture === 'function') {
+      cleanupInputCapture();
+    }
+    
     // Close WebRTC connection
     if (window.peerConnection) {
       window.peerConnection.close();
@@ -184,6 +189,11 @@ window.addEventListener('beforeunload', (e) => {
       .eq('id', currentSession.session_id)
       .then(() => console.log('Session ended successfully'))
       .catch(err => console.error('Session end error:', err));
+    
+    // Clean up input capture
+    if (typeof cleanupInputCapture === 'function') {
+      cleanupInputCapture();
+    }
     
     // Close peer connection
     if (window.peerConnection) {
