@@ -14,6 +14,7 @@ async function checkAuth() {
   const isLoginPage = window.location.pathname.endsWith('index.html') || 
                       window.location.pathname.endsWith('/') ||
                       window.location.pathname.endsWith('/Remote/');
+  const isAdminPage = window.location.pathname.endsWith('admin.html');
   
   if (session && isLoginPage) {
     // User is logged in on login page -> redirect to dashboard
@@ -21,6 +22,23 @@ async function checkAuth() {
   } else if (!session && !isLoginPage) {
     // User is not logged in on dashboard -> redirect to login
     window.location.href = 'index.html';
+  } else if (session && !isLoginPage && !isAdminPage) {
+    // Check if user is approved (only for dashboard, not admin page)
+    const { data: approval, error } = await supabase
+      .from('user_approvals')
+      .select('approved')
+      .eq('user_id', session.user.id)
+      .single();
+    
+    if (error) {
+      console.error('Error checking approval status:', error);
+    } else if (approval && !approval.approved) {
+      // User is not approved - show message and logout
+      alert('⏸️ Your account is pending approval.\n\nPlease wait for an administrator to approve your account before you can access the dashboard.');
+      await supabase.auth.signOut();
+      window.location.href = 'index.html';
+      return null;
+    }
   }
   
   return session;
