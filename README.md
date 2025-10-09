@@ -2,15 +2,17 @@
 
 A lightweight, serverless remote desktop solution built with **Supabase**, **WebRTC**, and **GitHub Pages**.
 
-## ✅ Status: **Production Ready** (Updated 2025-10-07)
+## ✅ Status: **Production Ready** (v1.1.7 - Updated 2025-01-09)
 
-- ✅ **High-quality screen streaming** (1920px @ 15 FPS)
-- ✅ **System tray integration** - Runs silently in background
+- ✅ **High-quality screen streaming** (1920px @ 15 FPS, optimized quality)
+- ✅ **User approval system** - Admin controls who can register
+- ✅ **System tray integration** - Enhanced menu with console & log viewer
 - ✅ **Stable reconnection** - Automatic cleanup and recovery
-- ✅ **Mouse & keyboard control** - Full remote input
+- ✅ **Mouse & keyboard control** - Full remote input (double-click fixed!)
 - ✅ **External access** - Works across networks via TURN relay
 - ✅ **Automated releases** - GitHub Actions CI/CD
-- ✅ **Clean logging** - Minimal, informative output
+- ✅ **Admin panel** - Approve users, monitor access
+- ✅ **Console mode** - View live logs anytime
 
 ## Architecture
 
@@ -21,38 +23,62 @@ A lightweight, serverless remote desktop solution built with **Supabase**, **Web
 
 ## ✨ Key Features
 
-- **🔒 Secure** - WebRTC P2P encryption, Supabase RLS, short-lived tokens
-- **🚀 Fast** - Direct P2P connection when possible, TURN fallback
-- **📦 Portable** - Single EXE file, no installation required
-- **🔔 System Tray** - Runs minimized in notification area
+### Security & Access Control
+- **🔒 WebRTC Encryption** - P2P encryption with DTLS-SRTP
+- **👥 User Approval** - Admin must approve all new users
+- **🛡️ Admin Panel** - Centralized user management at `/admin.html`
+- **🔐 RLS Policies** - Database-level security enforcement
+
+### Performance & Reliability
+- **🚀 Fast P2P** - Direct connection when possible, TURN fallback
+- **⚡ Optimized Streaming** - JPEG quality 60, frame dropping on congestion
 - **🔄 Auto-Reconnect** - Handles network interruptions gracefully
-- **📊 Clean Logs** - View activity from system tray menu
 - **🌐 Cross-Network** - Works behind NAT/firewalls via TURN
+
+### User Experience
+- **📦 Portable** - Single EXE file, no installation required
+- **🔔 Enhanced Tray** - Console window, log viewer, version display
+- **🪟 Console Mode** - View live logs in real-time
+- **🎮 Fixed Input** - No more double-clicks or arrow key issues
+- **📊 Live Monitoring** - PowerShell window with tailed logs
 
 ## 📥 Quick Start (For Users)
 
-### Download & Install Agent
+### 1. Sign Up & Get Approved
+
+1. **Visit Dashboard**: `https://stangtennis.github.io/Remote/`
+2. **Create Account** - Sign up with your email
+3. **Verify Email** - Click the verification link
+4. **Wait for Approval** - Admin must approve your account
+5. **Login** - Once approved, you can access the dashboard
+
+### 2. Download & Run Agent
 
 1. **Download** the latest release:
    ```
    https://github.com/stangtennis/Remote/releases/latest
    ```
 
-2. **Extract** `remote-agent-windows.zip`
+2. **Run Agent** - Double-click `remote-agent.exe`
 
-3. **Configure** - Create `.env` file with your Supabase credentials:
-   ```env
-   SUPABASE_URL=https://your-project.supabase.co
-   SUPABASE_ANON_KEY=your-anon-key
-   ```
+3. **Enter Email** - On first run, enter your registered email
 
-4. **Run Setup** - Double-click `setup-startup.bat` to install as startup task
+4. **Approve Device** - Go to dashboard and approve your device
 
-5. **Done!** - Agent runs on startup, visible in system tray
+5. **Connect!** - Click "Connect" in dashboard, enter PIN on agent
+
+### 3. System Tray Features
+
+Right-click the tray icon to:
+- **Show Console Window** - View live logs in PowerShell
+- **View Log File** - Open full log in Notepad
+- **Exit** - Stop the agent
 
 ### Access Dashboard
 
-Visit: `https://your-username.github.io/Remote/`
+Visit: `https://stangtennis.github.io/Remote/`
+
+**Admin Panel**: `https://stangtennis.github.io/Remote/admin.html`
 
 ## 📁 Project Structure
 
@@ -173,18 +199,27 @@ See [RELEASE.md](./RELEASE.md) for details.
 
 ## 📋 Implementation Status
 
-### ✅ Completed Features
+### ✅ Completed Features (v1.1.7)
 
+#### Core Functionality
 - [x] **Infrastructure** - Supabase backend, database, Edge Functions
 - [x] **Authentication** - Supabase Auth with RLS policies
 - [x] **Dashboard** - Web interface hosted on GitHub Pages
 - [x] **Agent Core** - Screen capture, WebRTC streaming
-- [x] **Input Control** - Mouse & keyboard remote control
+- [x] **Input Control** - Mouse & keyboard remote control (fixed!)
 - [x] **TURN Relay** - Cross-network connectivity via Twilio
 - [x] **Reconnection** - Automatic cleanup and recovery
-- [x] **System Tray** - Background operation with menu
 - [x] **Automated Releases** - GitHub Actions CI/CD
 - [x] **Session Cleanup** - Automatic via pg_cron
+
+#### New in v1.1.7
+- [x] **User Approval System** - Admin controls who can register
+- [x] **Admin Panel** - Web UI for approving users
+- [x] **Enhanced Tray Menu** - Console window + log viewer
+- [x] **Console Mode** - Live log viewing (PowerShell tail)
+- [x] **Input Fixes** - No more double-clicks or arrow key issues
+- [x] **Performance** - Optimized JPEG quality (60) with frame dropping
+- [x] **Documentation** - USER_APPROVAL_GUIDE.md, CONSOLE_MODE.md
 
 ### 🚧 Planned Enhancements
 
@@ -193,6 +228,7 @@ See [RELEASE.md](./RELEASE.md) for details.
 - [ ] **Multi-Monitor** - Select which screen to stream
 - [ ] **Code Signing** - Windows EXE certificate
 - [ ] **Audio Streaming** - Remote audio support
+- [ ] **Role-Based Access** - Separate admin vs user roles
 
 ## ⚠️ Known Limitations
 
@@ -203,13 +239,24 @@ See [RELEASE.md](./RELEASE.md) for details.
 
 ## 🔒 Security Features
 
-- **🔐 Encryption** - WebRTC P2P encryption (DTLS-SRTP)
-- **👤 Authentication** - Supabase Auth with MFA support
-- **🛡️ RLS Policies** - Row-level security on all database tables
+### Authentication & Access Control
+- **👤 Supabase Auth** - Email verification required
+- **👥 User Approval** - Admin must approve all new users
+- **🔐 Admin Panel** - Centralized user management
+- **🛡️ RLS Policies** - Database-level security with approval checks
 - **🎟️ Short-lived Tokens** - JWT expiration (5-15 minutes)
-- **🔑 API Key Rotation** - Per-device key management
 - **⏱️ Rate Limiting** - 100 requests/min per user/device
+
+### Connection Security
+- **🔐 WebRTC Encryption** - P2P encryption (DTLS-SRTP)
+- **🔑 Device Approval** - Two-factor: user approval + device approval
+- **📌 PIN Codes** - Random PIN for each session
+- **🚫 Automatic Timeout** - Sessions expire after inactivity
+
+### Monitoring & Audit
 - **📝 Audit Logs** - Session history and device tracking
+- **📊 User Activity** - Track sign-ups and approvals
+- **🔍 Admin Oversight** - View all pending users
 
 ## 💰 Cost Estimation
 
@@ -225,12 +272,22 @@ See [RELEASE.md](./RELEASE.md) for details.
 
 ## 📚 Documentation
 
+### Setup & Deployment
 - **[BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)** - Git workflow and branch structure
 - **[RELEASE.md](./RELEASE.md)** - Automated release process
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Detailed deployment guide
+
+### User Management
+- **[USER_APPROVAL_GUIDE.md](./USER_APPROVAL_GUIDE.md)** - Complete guide to user approval system
+- **[CONSOLE_MODE.md](./agent/CONSOLE_MODE.md)** - How to use debug/console mode
+
+### Troubleshooting & Optimization
 - **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** - Testing and troubleshooting
 - **[OPTIMIZATION.md](./OPTIMIZATION.md)** - Performance tuning (H.264/VP8)
+
+### Release History
 - **[CHANGELOG.md](./CHANGELOG.md)** - Version history
+- **[RELEASE_NOTES_v1.1.7.md](./RELEASE_NOTES_v1.1.7.md)** - Latest release notes
 
 ## 🤝 Contributing
 
