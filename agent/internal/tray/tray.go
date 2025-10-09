@@ -81,15 +81,24 @@ func openConsole() {
 	exeDir := filepath.Dir(exePath)
 	logPath := filepath.Join(exeDir, "agent.log")
 
+	// Check if log file exists
+	if _, err := os.Stat(logPath); os.IsNotExist(err) {
+		log.Printf("Log file does not exist: %s", logPath)
+		return
+	}
+
 	// Open a PowerShell window that tails the log file
 	log.Println("🪟 Opening console window with live logs...")
 	
-	// Use PowerShell to tail the log file in a new window
-	psCmd := fmt.Sprintf(`Get-Content '%s' -Wait -Tail 50`, logPath)
-	cmd := exec.Command("powershell", "-NoExit", "-Command", psCmd)
+	// Use cmd to start PowerShell with proper escaping
+	// This ensures the window opens correctly
+	psCmd := fmt.Sprintf(`Get-Content -Path "%s" -Wait -Tail 50`, logPath)
+	cmd := exec.Command("cmd", "/c", "start", "powershell", "-NoExit", "-Command", psCmd)
 	
 	if err := cmd.Start(); err != nil {
 		log.Printf("Failed to open console: %v", err)
+	} else {
+		log.Printf("✅ Console window opened for: %s", logPath)
 	}
 }
 
