@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🌐 Web Agent - Remote Desktop</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .agent-container {
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 30px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .agent-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .agent-header h1 {
+      font-size: 2.5em;
+      margin-bottom: 10px;
+      color: #2c3e50;
+    }
+
+    .agent-header p {
+      color: #7f8c8d;
+      font-size: 1.1em;
+    }
+
+    .section {
+      margin-bottom: 30px;
+      padding: 20px;
+      border: 1px solid #ecf0f1;
+      border-radius: 8px;
+    }
+
+    .section.hidden {
+      display: none;
+    }
+
+    .section h2 {
+      margin-top: 0;
+      color: #34495e;
+      font-size: 1.5em;
+      margin-bottom: 15px;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 0.9em;
+      margin-left: 10px;
+    }
+
+    .status-badge.offline {
+      background: #e74c3c;
+      color: white;
+    }
+
+    .status-badge.online {
+      background: #27ae60;
+      color: white;
+    }
+
+    .status-badge.sharing {
+      background: #3498db;
+      color: white;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #34495e;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #ecf0f1;
+      border-radius: 6px;
+      font-size: 1em;
+      transition: border-color 0.3s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #3498db;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-right: 10px;
+    }
+
+    .btn-primary {
+      background: #3498db;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #2980b9;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
+    }
+
+    .btn-success {
+      background: #27ae60;
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: #229954;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(39, 174, 96, 0.3);
+    }
+
+    .btn-danger {
+      background: #e74c3c;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #c0392b;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(231, 76, 60, 0.3);
+    }
+
+    .btn-secondary {
+      background: #95a5a6;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #7f8c8d;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .info-box {
+      padding: 15px;
+      background: #ecf0f1;
+      border-radius: 6px;
+      margin-bottom: 20px;
+    }
+
+    .info-box p {
+      margin: 8px 0;
+      color: #34495e;
+    }
+
+    .info-box strong {
+      color: #2c3e50;
+    }
+
+    .preview-container {
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    #preview {
+      max-width: 100%;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      background: #000;
+    }
+
+    .pin-prompt {
+      text-align: center;
+      padding: 30px;
+    }
+
+    .pin-prompt h3 {
+      color: #3498db;
+      margin-bottom: 10px;
+      font-size: 1.8em;
+    }
+
+    .pin-prompt p {
+      color: #7f8c8d;
+      margin-bottom: 20px;
+    }
+
+    .pin-input {
+      width: 200px !important;
+      text-align: center;
+      font-size: 1.5em !important;
+      letter-spacing: 0.5em;
+      font-weight: 600;
+    }
+
+    .alert {
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+    }
+
+    .alert-info {
+      background: #d1ecf1;
+      border: 1px solid #bee5eb;
+      color: #0c5460;
+    }
+
+    .alert-warning {
+      background: #fff3cd;
+      border: 1px solid #ffeaa7;
+      color: #856404;
+    }
+
+    .alert-success {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+    }
+
+    .control-status {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 6px;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    .control-status.enabled {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .control-status.disabled {
+      background: #fff3cd;
+      color: #856404;
+    }
+  </style>
+</head>
+<body>
+  <div class="agent-container">
+    <!-- Header -->
+    <div class="agent-header">
+      <h1>🌐 Web Agent</h1>
+      <p>Browser-based remote desktop agent - no installation required!</p>
+    </div>
+
+    <!-- Login Section -->
+    <div id="loginSection" class="section">
+      <h2>Login</h2>
+      <div class="alert alert-info">
+        <strong>📌 Note:</strong> Your account must be approved by an administrator before you can use the web agent.
+      </div>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Your password" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary" onclick="login()">Login</button>
+      <p style="margin-top: 15px; color: #7f8c8d;">
+        Don't have an account? <a href="index.html">Sign up here</a>
+      </p>
+    </div>
+
+    <!-- Device Section -->
+    <div id="deviceSection" class="section hidden">
+      <h2>
+        Device Status
+        <span id="statusBadge" class="status-badge offline">Offline</span>
+      </h2>
+      
+      <div class="info-box">
+        <p><strong>Device Name:</strong> <span id="deviceName">-</span></p>
+        <p><strong>Platform:</strong> Web Browser</p>
+        <p><strong>Browser:</strong> <span id="browserInfo">-</span></p>
+        <p><strong>User:</strong> <span id="userEmail">-</span></p>
+      </div>
+
+      <div class="alert alert-warning">
+        <strong>⚠️ Important:</strong> Keep this tab open while sharing your screen. Closing the tab will stop the connection.
+      </div>
+
+      <div>
+        <button id="startBtn" class="btn btn-success" onclick="startSharing()">
+          🎥 Start Screen Sharing
+        </button>
+        <button id="stopBtn" class="btn btn-danger hidden" onclick="stopSharing()">
+          🛑 Stop Sharing
+        </button>
+        <button class="btn btn-secondary" onclick="logout()">Logout</button>
+      </div>
+
+      <!-- Control Status -->
+      <div id="controlStatus" class="control-status disabled hidden">
+        <span id="controlText">Remote Control: View-Only Mode</span><br>
+        <small>Install the browser extension for full remote control</small>
+      </div>
+
+      <!-- Preview -->
+      <div class="preview-container">
+        <h3>Preview</h3>
+        <video id="preview" autoplay muted playsinline></video>
+      </div>
+    </div>
+
+    <!-- Session Section (PIN Entry) -->
+    <div id="sessionSection" class="section hidden">
+      <div class="pin-prompt">
+        <h3>🔔 Connection Request</h3>
+        <p>Someone wants to connect to your screen</p>
+        <p style="font-size: 0.9em; color: #95a5a6;">Enter the 6-digit PIN to accept the connection</p>
+        
+        <div class="form-group">
+          <input 
+            type="text" 
+            id="pinInput" 
+            class="pin-input" 
+            placeholder="------" 
+            maxlength="6"
+            autocomplete="off"
+          >
+        </div>
+        
+        <button class="btn btn-success" onclick="acceptSession()">
+          ✅ Accept Connection
+        </button>
+        <button class="btn btn-danger" onclick="rejectSession()">
+          ❌ Reject
+        </button>
+      </div>
+    </div>
+
+    <!-- Connected Session -->
+    <div id="connectedSection" class="section hidden">
+      <h2>
+        🟢 Connected
+        <span class="status-badge sharing">Sharing Screen</span>
+      </h2>
+      
+      <div class="alert alert-success">
+        <strong>✅ Session Active:</strong> Your screen is being shared. The viewer can see everything on your screen.
+      </div>
+
+      <div class="info-box">
+        <p><strong>Session Started:</strong> <span id="sessionStart">-</span></p>
+        <p><strong>Status:</strong> <span id="connectionStatus">Connected via WebRTC</span></p>
+      </div>
+
+      <button class="btn btn-danger" onclick="endSession()">
+        🛑 End Session
+      </button>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/supabase.js"></script>
+  <script type="module" src="js/web-agent.js"></script>
+</body>
+</html>
