@@ -1,5 +1,11 @@
 // Web Agent - Browser-based remote desktop agent
-import { supabase } from './supabase.js';
+
+// Supabase configuration
+const SUPABASE_URL = 'https://mnqtdugcvfyenjuqruol.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ucXRkdWdjdmZ5ZW5qdXFydW9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzMDEwODMsImV4cCI6MjA3NDg3NzA4M30.QKs8vMS9tQJgX11GHfarHdpWZHOcCpv0B-aiq7qc15E';
+
+// Initialize Supabase client
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // State
 let currentUser = null;
