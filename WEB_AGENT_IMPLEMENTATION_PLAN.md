@@ -1,11 +1,13 @@
 # 🌐 Web-Based Agent Implementation Plan
 
+> **📌 UPDATE:** For detailed analysis of adding remote control capabilities to the web agent, see **[WEB_AGENT_CONTROL_SOLUTION.md](./WEB_AGENT_CONTROL_SOLUTION.md)** - including hybrid approach with tiny native helper (5KB)!
+
 ## Executive Summary
 
 Create a browser-based screen sharing agent that works **without installing anything** - perfect for locked-down computers where you can't run executables.
 
-**Feasibility:** ✅ **HIGH** (Screen Share) / ⚠️ **MEDIUM** (Remote Control)  
-**Timeline:** 2-3 weeks (view-only) / 4-5 weeks (with control)  
+**Feasibility:** ✅ **HIGH** (Screen Share) / ✅ **HIGH** (Remote Control with hybrid)  
+**Timeline:** 2-3 weeks (view-only) / 4-5 weeks (with hybrid control)  
 **Priority:** **HIGH** - Solves major use case (work computers, restricted systems)
 
 ---
