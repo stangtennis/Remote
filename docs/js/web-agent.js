@@ -143,22 +143,48 @@ async function registerDevice() {
     // Generate device ID
     const generatedDeviceId = await generateDeviceID();
     
-    const { data, error } = await supabase
+    // Check if device already exists
+    const { data: existing } = await supabase
       .from('remote_devices')
-      .insert({
-        device_id: generatedDeviceId,
-        device_name: deviceName,
-        platform: 'web',
-        owner_id: currentUser.id,
-        last_seen: new Date().toISOString(),
-        is_online: true
-      })
-      .select()
+      .select('device_id')
+      .eq('device_id', generatedDeviceId)
       .single();
+    
+    if (existing) {
+      // Device exists - update it
+      console.log('Device already exists, updating...');
+      const { data, error } = await supabase
+        .from('remote_devices')
+        .update({
+          device_name: deviceName,
+          last_seen: new Date().toISOString(),
+          is_online: true
+        })
+        .eq('device_id', generatedDeviceId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      deviceId = data.device_id;
+    } else {
+      // Device doesn't exist - insert it
+      const { data, error } = await supabase
+        .from('remote_devices')
+        .insert({
+          device_id: generatedDeviceId,
+          device_name: deviceName,
+          platform: 'web',
+          owner_id: currentUser.id,
+          last_seen: new Date().toISOString(),
+          is_online: true
+        })
+        .select()
+        .single();
 
-    if (error) throw error;
+      if (error) throw error;
+      deviceId = data.device_id;
+    }
 
-    deviceId = data.device_id;
     document.getElementById('deviceName').textContent = deviceName;
     document.getElementById('browserInfo').textContent = browserInfo;
     document.getElementById('statusBadge').textContent = 'Online';
