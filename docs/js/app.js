@@ -90,11 +90,21 @@ async function startSession(device) {
       .eq('device_id', device.device_id)
       .in('status', ['pending', 'active']);
     
-    // Call session-token Edge Function
+    // Get current session token for authorization
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      throw new Error('Not authenticated. Please log in again.');
+    }
+    
+    // Call session-token Edge Function with explicit authorization
     const { data, error } = await supabase.functions.invoke('session-token', {
       body: {
         device_id: device.device_id,
         use_pin: true
+      },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`
       }
     });
 
