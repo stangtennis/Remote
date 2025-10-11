@@ -121,14 +121,32 @@ async function logout() {
 // Device Registration
 // ============================================================================
 
+async function generateDeviceID() {
+  // Generate unique device ID based on browser fingerprint
+  const data = `${navigator.userAgent}-${navigator.platform}-${currentUser.id}`;
+  
+  // Create SHA-256 hash
+  const encoder = new TextEncoder();
+  const dataBuffer = encoder.encode(data);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  
+  return 'web-' + hashHex.substring(0, 16); // First 16 chars
+}
+
 async function registerDevice() {
   const browserInfo = getBrowserInfo();
   const deviceName = `Web - ${browserInfo}`;
 
   try {
+    // Generate device ID
+    const generatedDeviceId = await generateDeviceID();
+    
     const { data, error } = await supabase
       .from('remote_devices')
       .insert({
+        device_id: generatedDeviceId,
         device_name: deviceName,
         platform: 'web',
         owner_id: currentUser.id,
