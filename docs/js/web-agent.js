@@ -122,8 +122,8 @@ async function logout() {
 // ============================================================================
 
 async function registerDevice() {
-  const deviceName = `Web - ${navigator.platform}`;
   const browserInfo = getBrowserInfo();
+  const deviceName = `Web - ${browserInfo}`;
 
   try {
     const { data, error } = await supabase
@@ -131,9 +131,9 @@ async function registerDevice() {
       .insert({
         device_name: deviceName,
         platform: 'web',
-        browser: browserInfo,
         owner_id: currentUser.id,
-        last_heartbeat: new Date().toISOString()
+        last_seen: new Date().toISOString(),
+        is_online: true
       })
       .select()
       .single();
@@ -179,7 +179,10 @@ function startHeartbeat() {
     try {
       await supabase
         .from('remote_devices')
-        .update({ last_heartbeat: new Date().toISOString() })
+        .update({ 
+          last_seen: new Date().toISOString(),
+          is_online: true
+        })
         .eq('device_id', deviceId);
     } catch (error) {
       console.error('Heartbeat failed:', error);
