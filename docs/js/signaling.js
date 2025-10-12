@@ -9,6 +9,19 @@ async function sendSignal(payload) {
   try {
     console.log('📤 Attempting to send signal:', payload.type, 'for session:', payload.session_id);
     
+    // Prepare payload based on type
+    let signalPayload;
+    if (payload.type === 'ice') {
+      // For ICE candidates, send the candidate object directly
+      signalPayload = payload.candidate;
+    } else {
+      // For offer/answer, send as-is with type and sdp
+      signalPayload = {
+        type: payload.type,
+        sdp: payload.sdp
+      };
+    }
+    
     // Insert signaling message into database
     const { data, error } = await supabase
       .from('session_signaling')
@@ -16,11 +29,7 @@ async function sendSignal(payload) {
         session_id: payload.session_id,
         from_side: payload.from,
         msg_type: payload.type,
-        payload: {
-          sdp: payload.sdp,
-          candidate: payload.candidate,
-          ts: new Date().toISOString()
-        }
+        payload: signalPayload
       })
       .select();
 
@@ -131,12 +140,9 @@ async function handleSignal(signal) {
   try {
     switch (signal.msg_type) {
       case 'answer':
-        // Agent sent answer to our offer
-        console.log('📥 Received answer from agent');
-        const answer = new RTCSessionDescription({
-          type: 'answer',
-          sdp: signal.payload.sdp
-        });
+        // Dashboard sent answer (we're agent receiving)
+        // Payload has {type, sdp} structure
+        const answer = new RTCSessionDescription(signal.payload);
         await peerConnection.setRemoteDescription(answer);
         console.log('✅ Remote description set (answer)');
         break;
@@ -155,10 +161,8 @@ async function handleSignal(signal) {
 
       case 'offer':
         // Agent sent offer (reconnection scenario)
-        const offer = new RTCSessionDescription({
-          type: 'offer',
-          sdp: signal.payload.sdp
-        });
+        // Payload has {type, sdp} structure
+        const offer = new RTCSessionDescription(signal.payload);
         await peerConnection.setRemoteDescription(offer);
         
         // Create and send answer
