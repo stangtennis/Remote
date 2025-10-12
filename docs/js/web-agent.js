@@ -396,8 +396,7 @@ async function acceptSession() {
     await supabase
       .from('remote_sessions')
       .update({
-        status: 'active',
-        started_at: new Date().toISOString()
+        status: 'active'
       })
       .eq('id', currentSession.id);
 
@@ -504,9 +503,9 @@ async function startWebRTC() {
           .from('session_signaling')
           .insert({
             session_id: currentSession.id,
-            type: 'ice_candidate',
-            data: JSON.stringify(event.candidate),
-            from_agent: true
+            from_side: 'agent',
+            msg_type: 'ice',
+            payload: event.candidate
           });
       }
     };
@@ -538,9 +537,9 @@ async function startWebRTC() {
       .from('session_signaling')
       .insert({
         session_id: currentSession.id,
-        type: 'offer',
-        data: JSON.stringify(offer),
-        from_agent: true
+        from_side: 'agent',
+        msg_type: 'offer',
+        payload: offer
       });
 
     // Listen for answer and ICE candidates
@@ -566,18 +565,18 @@ function listenForSignaling() {
     }, async (payload) => {
       const msg = payload.new;
 
-      // Skip our own messages
-      if (msg.from_agent) return;
+      // Skip our own messages (from agent)
+      if (msg.from_side === 'agent') return;
 
-      console.log('📥 Received signaling:', msg.type);
+      console.log('📥 Received signaling:', msg.msg_type);
 
-      const data = JSON.parse(msg.data);
+      const data = msg.payload;
 
       try {
-        if (msg.type === 'answer') {
+        if (msg.msg_type === 'answer') {
           await peerConnection.setRemoteDescription(new RTCSessionDescription(data));
           console.log('✅ Answer received and set');
-        } else if (msg.type === 'ice_candidate') {
+        } else if (msg.msg_type === 'ice') {
           await peerConnection.addIceCandidate(new RTCIceCandidate(data));
           console.log('✅ ICE candidate added');
         }
