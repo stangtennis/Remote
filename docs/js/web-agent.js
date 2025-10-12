@@ -144,11 +144,11 @@ async function registerDevice() {
     const generatedDeviceId = await generateDeviceID();
     
     // Check if device already exists
-    const { data: existing } = await supabase
+    const { data: existing, error: checkError } = await supabase
       .from('remote_devices')
       .select('device_id')
       .eq('device_id', generatedDeviceId)
-      .single();
+      .maybeSingle(); // Use maybeSingle instead of single to handle 0 or 1 results
     
     if (existing) {
       // Device exists - update it
