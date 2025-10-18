@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>💻 Remote Desktop Agent - Electron</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="agent-container">
+    <!-- Header -->
+    <div class="agent-header">
+      <h1>💻 Remote Desktop Agent</h1>
+      <p>Electron-based agent with full remote control</p>
+      <div class="control-badge">
+        🎮 <strong>Remote Control:</strong> <span class="enabled">✅ Enabled</span>
+      </div>
+    </div>
+
+    <!-- Login Section -->
+    <div id="loginSection" class="section">
+      <h2>Login</h2>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Your password" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary" onclick="login()">🔐 Login</button>
+    </div>
+
+    <!-- Device Section -->
+    <div id="deviceSection" class="section hidden">
+      <h2>
+        Device Status
+        <span id="statusBadge" class="status-badge offline">Offline</span>
+      </h2>
+      
+      <div class="info-box">
+        <p><strong>Device Name:</strong> <span id="deviceName">-</span></p>
+        <p><strong>Platform:</strong> <span id="platformInfo">-</span></p>
+        <p><strong>Logged in as:</strong> <span id="userEmail">-</span></p>
+      </div>
+
+      <div class="control-section">
+        <button class="btn btn-primary" id="startBtn" onclick="startSharing()">
+          📹 Start Screen Sharing
+        </button>
+        <button class="btn btn-danger hidden" id="stopBtn" onclick="stopSharing()">
+          🛑 Stop Sharing
+        </button>
+      </div>
+
+      <div class="preview-container">
+        <video id="preview" autoplay muted playsinline></video>
+      </div>
+
+      <button class="btn btn-secondary" onclick="logout()">Logout</button>
+    </div>
+
+    <!-- Session Section (PIN Entry) -->
+    <div id="sessionSection" class="section hidden">
+      <h2>🔔 Incoming Connection Request</h2>
+      
+      <div class="alert alert-warning">
+        <strong>⚠️ Security Check:</strong> Someone wants to connect to your computer.
+      </div>
+
+      <div class="pin-prompt">
+        <p><strong>Please enter the 6-digit PIN shown on their dashboard:</strong></p>
+        <input type="text" id="pinInput" maxlength="6" placeholder="000000" autocomplete="off">
+      </div>
+
+      <div class="button-group">
+        <button class="btn btn-success" onclick="acceptSession()">
+          ✅ Accept Connection
+        </button>
+        <button class="btn btn-danger" onclick="rejectSession()">
+          ❌ Reject
+        </button>
+      </div>
+    </div>
+
+    <!-- Connected Session -->
+    <div id="connectedSection" class="section hidden">
+      <h2>
+        🟢 Connected
+        <span class="status-badge sharing">Active Session</span>
+      </h2>
+      
+      <div class="alert alert-success">
+        <strong>✅ Session Active:</strong> Remote user can view and control your screen.
+      </div>
+
+      <div class="info-box">
+        <p><strong>Session Started:</strong> <span id="sessionStart">-</span></p>
+        <p><strong>Connection:</strong> <span id="connectionStatus">Connected via WebRTC</span></p>
+        <p><strong>Remote Control:</strong> <span class="enabled">🎮 Enabled</span></p>
+      </div>
+
+      <button class="btn btn-danger" onclick="endSession()">
+        🛑 End Session
+      </button>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="agent.js"></script>
+</body>
+</html>
