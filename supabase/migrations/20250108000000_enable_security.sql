@@ -124,7 +124,7 @@ FOR SELECT
 TO authenticated
 USING (
   session_id IN (
-    SELECT id FROM public.remote_sessions rs
+    SELECT rs.id FROM public.remote_sessions rs
     JOIN public.remote_devices d ON rs.device_id = d.device_id
     WHERE d.owner_id = auth.uid()
   )
@@ -138,7 +138,7 @@ FOR INSERT
 TO authenticated
 WITH CHECK (
   session_id IN (
-    SELECT id FROM public.remote_sessions rs
+    SELECT rs.id FROM public.remote_sessions rs
     JOIN public.remote_devices d ON rs.device_id = d.device_id
     WHERE d.owner_id = auth.uid()
   )
