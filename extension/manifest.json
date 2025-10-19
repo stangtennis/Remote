@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Remote Desktop Control",
+  "version": "1.0.0",
+  "description": "Enables remote control for the web-based remote desktop agent",
+  "permissions": [
+    "nativeMessaging",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://stangtennis.github.io/*",
+    "http://localhost:*/*",
+    "http://127.0.0.1:*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://stangtennis.github.io/Remote/agent.html",
+        "http://localhost:*/agent.html",
+        "http://127.0.0.1:*/agent.html"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
