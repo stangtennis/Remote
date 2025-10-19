@@ -181,21 +181,18 @@ func handleMouseScroll(cmd map[string]interface{}) {
 		deltaY = int(d)
 	}
 
-	// Scroll (positive = down, negative = up)
-	direction := "down"
-	amount := deltaY
-	if deltaY < 0 {
-		direction = "up"
-		amount = -deltaY
+	// Normalize scroll amount (positive = down, negative = up)
+	scrollAmount := deltaY / 10
+	if scrollAmount == 0 && deltaY != 0 {
+		if deltaY > 0 {
+			scrollAmount = 1
+		} else {
+			scrollAmount = -1
+		}
 	}
 
-	// Normalize scroll amount
-	scrollClicks := amount / 10
-	if scrollClicks == 0 && amount != 0 {
-		scrollClicks = 1
-	}
-
-	robotgo.Scroll(0, scrollClicks, direction)
+	// robotgo.Scroll(x, y) - negative y scrolls up, positive scrolls down
+	robotgo.Scroll(0, scrollAmount)
 	sendMessage(Message{Type: "input_success"})
 }
 

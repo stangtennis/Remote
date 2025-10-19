@@ -1,7 +1,7 @@
 {
   "name": "com.remote.desktop.control",
   "description": "Native messaging host for Remote Desktop Control",
-  "path": "remote-desktop-control.exe",
+  "path": "F:\\#Remote\\native-host\\remote-desktop-control.exe",
   "type": "stdio",
   "allowed_origins": [
     "chrome-extension://EXTENSION_ID_HERE/"
