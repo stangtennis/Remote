@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Web Agent**: Browser-based agent using getDisplayMedia() - no installation required!
+- **Browser Extension**: Chrome extension for remote control capabilities
+- **Native Messaging Host**: Tiny native helper (Go) for mouse/keyboard control
+- **Electron Agent**: Cross-platform desktop agent prototype
+- **Extension Installation Scripts**: Automated setup for Windows/Mac/Linux
+
+### Changed
+- **Native Host Manifest**: Updated with actual extension ID
+- **Web Agent UI**: Modern, responsive design with status indicators
+- **Documentation**: Added comprehensive implementation plans for web agent
+
+## [1.1.7] - 2025-01-09
+
+### Added
 - **Automatic Session Cleanup**: PostgreSQL cron job runs every 5 minutes to clean stale sessions
 - **Mouse/Keyboard Control**: Re-enabled with robotgo (requires CGO build)
 - **Build Script**: `build.bat` for easy CGO-enabled compilation
@@ -64,6 +78,10 @@ This project uses Semantic Versioning (SemVer):
 - **MINOR**: New features, backwards compatible
 - **PATCH**: Bug fixes, backwards compatible
 
-Current version: **0.3.0** (Pre-release)
+Current versions:
+- **Windows Agent**: v1.1.7 (Production)
+- **Web Agent**: v1.0.0-beta (Unreleased)
+- **Browser Extension**: v1.0.0 (Unreleased)
+- **Dashboard**: v1.1.7 (Production)
 
-Target stable release: **1.0.0** (After code signing + production hardening)
+Next release: **v1.2.0** (Web Agent + Extension)

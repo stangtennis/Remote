@@ -4,6 +4,7 @@ A lightweight, serverless remote desktop solution built with **Supabase**, **Web
 
 ## ✅ Status: **Production Ready** (v1.1.7 - Updated 2025-01-09)
 
+### Core Features
 - ✅ **High-quality screen streaming** (1920px @ 15 FPS, optimized quality)
 - ✅ **User approval system** - Admin controls who can register
 - ✅ **System tray integration** - Enhanced menu with console & log viewer
@@ -13,6 +14,12 @@ A lightweight, serverless remote desktop solution built with **Supabase**, **Web
 - ✅ **Automated releases** - GitHub Actions CI/CD
 - ✅ **Admin panel** - Approve users, monitor access
 - ✅ **Console mode** - View live logs anytime
+
+### 🆕 New: Multiple Agent Options
+- ✅ **Windows Native Agent** - Full-featured, production-ready
+- 🆕 **Web Agent** - Browser-based, no installation required!
+- 🆕 **Browser Extension** - Add remote control to web agent
+- 🚧 **Electron Agent** - Cross-platform desktop app (prototype)
 
 ## Architecture
 
@@ -52,7 +59,10 @@ A lightweight, serverless remote desktop solution built with **Supabase**, **Web
 4. **Wait for Approval** - Admin must approve your account
 5. **Login** - Once approved, you can access the dashboard
 
-### 2. Download & Run Agent
+### 2. Choose Your Agent
+
+#### Option A: Windows Native Agent (Recommended)
+**Best for:** Full control, always-on monitoring, Windows systems
 
 1. **Download** the latest release:
    ```
@@ -67,12 +77,35 @@ A lightweight, serverless remote desktop solution built with **Supabase**, **Web
 
 5. **Connect!** - Click "Connect" in dashboard, enter PIN on agent
 
-### 3. System Tray Features
-
+**System Tray Features:**
 Right-click the tray icon to:
 - **Show Console Window** - View live logs in PowerShell
 - **View Log File** - Open full log in Notepad
 - **Exit** - Stop the agent
+
+#### Option B: Web Agent (No Installation!)
+**Best for:** Locked-down computers, quick access, cross-platform
+
+1. **Open Web Agent**: `https://stangtennis.github.io/Remote/agent.html`
+
+2. **Login** - Use your approved email/password
+
+3. **Start Screen Share** - Click button and select screen
+
+4. **Connect!** - Device appears in dashboard, enter PIN when prompted
+
+**Note:** View-only mode. For remote control, install the browser extension.
+
+#### Option C: Web Agent + Extension (Full Control)
+**Best for:** Remote control on locked-down systems
+
+1. **Install Extension** - [Chrome Web Store link] (Coming soon)
+
+2. **Install Native Helper** - Run installer from extension
+
+3. **Open Web Agent** - Follow Option B steps above
+
+4. **Full Control** - Mouse & keyboard control now enabled!
 
 ### Access Dashboard
 
@@ -86,7 +119,7 @@ Visit: `https://stangtennis.github.io/Remote/`
 Remote/
 ├── .github/
 │   └── workflows/         # GitHub Actions (automated releases)
-├── agent/                 # Go agent application
+├── agent/                 # Windows native agent (Go)
 │   ├── cmd/remote-agent/  # Main entry point
 │   ├── internal/          # Core packages
 │   │   ├── webrtc/       # WebRTC peer connection
@@ -96,10 +129,26 @@ Remote/
 │   │   └── device/       # Device registration
 │   ├── build.bat         # Local build script
 │   └── setup-startup.bat # Installation script
-├── docs/                  # GitHub Pages dashboard
-│   ├── index.html
+├── docs/                  # GitHub Pages dashboard + web agent
+│   ├── index.html        # Dashboard
+│   ├── agent.html        # 🆕 Web agent (browser-based)
+│   ├── admin.html        # Admin panel
 │   ├── css/
 │   └── js/
+│       ├── app.js
+│       ├── webrtc.js
+│       └── web-agent.js  # 🆕 Web agent logic
+├── extension/             # 🆕 Browser extension
+│   ├── manifest.json
+│   ├── background.js
+│   ├── content.js
+│   └── icons/
+├── native-host/           # 🆕 Native messaging helper
+│   ├── main.go           # Input control helper
+│   ├── build.bat
+│   └── install-*.sh/bat  # Platform installers
+├── electron-agent/        # 🚧 Electron agent (prototype)
+│   └── ...
 └── supabase/              # Supabase backend
     ├── migrations/        # Database schema
     └── functions/         # Edge Functions
@@ -223,12 +272,14 @@ See [RELEASE.md](./RELEASE.md) for details.
 
 ### 🚧 Planned Enhancements
 
+- [ ] **Chrome Web Store** - Publish browser extension
 - [ ] **Video Encoding** - H.264/VP8 for better performance
 - [ ] **File Transfer** - Send/receive files during session
 - [ ] **Multi-Monitor** - Select which screen to stream
 - [ ] **Code Signing** - Windows EXE certificate
 - [ ] **Audio Streaming** - Remote audio support
 - [ ] **Role-Based Access** - Separate admin vs user roles
+- [ ] **Mobile Apps** - Android/iOS agents
 
 ## ⚠️ Known Limitations
 
@@ -272,14 +323,23 @@ See [RELEASE.md](./RELEASE.md) for details.
 
 ## 📚 Documentation
 
+### Project Status
+- **[PROJECT_STATUS.md](./PROJECT_STATUS.md)** - 🆕 Current status & forward plan
+
 ### Setup & Deployment
 - **[BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)** - Git workflow and branch structure
 - **[RELEASE.md](./RELEASE.md)** - Automated release process
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Detailed deployment guide
 
-### User Management
+### User Guides
 - **[USER_APPROVAL_GUIDE.md](./USER_APPROVAL_GUIDE.md)** - Complete guide to user approval system
+- **[QUICKSTART-EXTENSION.md](./QUICKSTART-EXTENSION.md)** - 🆕 Browser extension quick start
 - **[CONSOLE_MODE.md](./agent/CONSOLE_MODE.md)** - How to use debug/console mode
+
+### Implementation Plans
+- **[WEB_AGENT_IMPLEMENTATION_PLAN.md](./WEB_AGENT_IMPLEMENTATION_PLAN.md)** - 🆕 Web agent design
+- **[WEB_AGENT_CONTROL_SOLUTION.md](./WEB_AGENT_CONTROL_SOLUTION.md)** - 🆕 Control solution analysis
+- **[ANDROID_IMPLEMENTATION_PLAN.md](./ANDROID_IMPLEMENTATION_PLAN.md)** - Android agent plan
 
 ### Troubleshooting & Optimization
 - **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** - Testing and troubleshooting
