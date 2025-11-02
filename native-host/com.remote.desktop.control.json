@@ -4,6 +4,6 @@
   "path": "F:\\#Remote\\native-host\\remote-desktop-control.exe",
   "type": "stdio",
   "allowed_origins": [
-    "chrome-extension://EXTENSION_ID_HERE/"
+    "chrome-extension://oekgjimcechngekebmaeedcnbkkbjemi/"
   ]
 }
