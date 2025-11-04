@@ -42,6 +42,7 @@ type Device struct {
 	Status        string    `json:"status"`
 	LastHeartbeat time.Time `json:"last_heartbeat"`
 	CreatedAt     time.Time `json:"created_at"`
+	AssignedAt    time.Time `json:"assigned_at"`
 }
 
 // NewClient creates a new Supabase client
@@ -103,15 +104,25 @@ func (c *Client) SignIn(email, password string) (*AuthResponse, error) {
 	return &authResp, nil
 }
 
-// GetDevices fetches all devices for the authenticated user
-func (c *Client) GetDevices() ([]Device, error) {
+// GetDevices fetches devices assigned to the authenticated user
+func (c *Client) GetDevices(userID string) ([]Device, error) {
 	if c.AuthToken == "" {
 		return nil, fmt.Errorf("not authenticated")
 	}
 
-	url := fmt.Sprintf("%s/rest/v1/remote_devices?select=*&order=last_heartbeat.desc", c.URL)
+	// Call get_user_devices function
+	url := fmt.Sprintf("%s/rest/v1/rpc/get_user_devices", c.URL)
 
-	req, err := http.NewRequest("GET", url, nil)
+	payload := map[string]string{
+		"p_user_id": userID,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
