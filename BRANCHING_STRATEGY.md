@@ -39,6 +39,22 @@ All branches contain the **complete codebase** - just work on the relevant parts
   git push origin dashboard
   ```
 
+### **`controller`** (Controller Application Development) 🆕
+- **Purpose:** Work on the standalone controller application
+- **Focus:** Files under `/controller`
+- **Contains:** Complete codebase (all files)
+- **GitHub Actions:** Automatically builds `controller.exe` on push
+- **Usage:**
+  ```bash
+  git checkout controller
+  git pull origin controller
+  # Make changes to controller code
+  git add controller/
+  git commit -m "feat: your controller changes"
+  git push origin controller
+  # GitHub Actions builds EXE automatically
+  ```
+
 ---
 
 ## Workflow
@@ -63,7 +79,19 @@ git commit -m "feat: your changes"
 git push origin dashboard
 ```
 
-### 3. **Merging to Main**
+### 3. **Working on Controller** 🆕
+```bash
+git checkout controller
+git pull origin controller
+# Make your changes
+git add controller/
+git commit -m "feat: your changes"
+git push origin controller
+# GitHub Actions builds controller.exe
+# Download from Actions → Artifacts
+```
+
+### 4. **Merging to Main**
 
 **Option A: Via GitHub Pull Request (Recommended)**
 1. Go to https://github.com/stangtennis/Remote
@@ -113,6 +141,7 @@ docs: update installation instructions
 |------|---------|
 | Switch to agent branch | `git checkout agent` |
 | Switch to dashboard branch | `git checkout dashboard` |
+| Switch to controller branch | `git checkout controller` 🆕 |
 | Switch to main | `git checkout main` |
 | View current branch | `git branch` |
 | View all branches | `git branch -a` |
@@ -125,3 +154,14 @@ docs: update installation instructions
 - **Main:** https://github.com/stangtennis/Remote/tree/main
 - **Agent:** https://github.com/stangtennis/Remote/tree/agent
 - **Dashboard:** https://github.com/stangtennis/Remote/tree/dashboard
+- **Controller:** https://github.com/stangtennis/Remote/tree/controller 🆕
+
+---
+
+## GitHub Actions
+
+### Controller Branch
+- **Trigger:** Push to `controller` branch
+- **Action:** Builds `controller.exe` automatically
+- **Download:** Actions tab → Build Controller Application → Artifacts
+- **Release:** Tag with `controller-v0.2.0` to create GitHub Release
