@@ -2,29 +2,44 @@
 -- Date: 2025-11-04
 -- Description: Enable admin-managed device assignments (TeamViewer-style)
 
--- 1. Update remote_devices table
+-- 1. Update user_approvals table (add role if not exists)
+ALTER TABLE user_approvals
+ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'user';
+
+-- Update existing admins (if any exist with is_admin flag)
+UPDATE user_approvals
+SET role = 'admin'
+WHERE approved = TRUE
+AND user_id IN (
+    SELECT user_id FROM user_approvals 
+    WHERE approved = TRUE 
+    LIMIT 1
+);
+
+-- 2. Update remote_devices table
 ALTER TABLE remote_devices
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'offline',
 ADD COLUMN IF NOT EXISTS approved BOOLEAN DEFAULT FALSE,
-ADD COLUMN IF NOT EXISTS assigned_by TEXT REFERENCES auth.users(id),
+ADD COLUMN IF NOT EXISTS assigned_by UUID REFERENCES auth.users(id),
 ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ;
 
 -- Make owner_id nullable (devices can exist without owner)
 ALTER TABLE remote_devices
 ALTER COLUMN owner_id DROP NOT NULL;
 
--- 2. Create device_assignments table
+-- 3. Create device_assignments table
 CREATE TABLE IF NOT EXISTS device_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     device_id TEXT NOT NULL REFERENCES remote_devices(device_id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    assigned_by TEXT NOT NULL REFERENCES auth.users(id),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    assigned_by UUID NOT NULL REFERENCES auth.users(id),
     assigned_at TIMESTAMPTZ DEFAULT NOW(),
     revoked_at TIMESTAMPTZ,
     notes TEXT,
     UNIQUE(device_id, user_id, revoked_at)
 );
 
--- 3. Create indexes for performance
+-- 4. Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_device_assignments_device 
 ON device_assignments(device_id) 
 WHERE revoked_at IS NULL;
@@ -40,8 +55,8 @@ WHERE owner_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_approved_devices 
 ON remote_devices(approved, status);
 
--- 4. Create function to get user's assigned devices
-CREATE OR REPLACE FUNCTION get_user_devices(p_user_id TEXT)
+-- 5. Create function to get user's assigned devices
+CREATE OR REPLACE FUNCTION get_user_devices(p_user_id UUID)
 RETURNS TABLE (
     device_id TEXT,
     device_name TEXT,
@@ -74,7 +89,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 5. Create function to get unassigned devices (admin only)
+-- 6. Create function to get unassigned devices (admin only)
 CREATE OR REPLACE FUNCTION get_unassigned_devices()
 RETURNS TABLE (
     device_id TEXT,
@@ -92,7 +107,7 @@ BEGIN
     -- Check if user is admin
     IF NOT EXISTS (
         SELECT 1 FROM user_approvals 
-        WHERE user_id = auth.uid()::text 
+        WHERE user_id::uuid = auth.uid()
         AND role = 'admin'
     ) THEN
         RAISE EXCEPTION 'Access denied: Admin role required';
@@ -117,10 +132,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 6. Create function to assign device to user
+-- 7. Create function to assign device to user
 CREATE OR REPLACE FUNCTION assign_device(
     p_device_id TEXT,
-    p_user_id TEXT,
+    p_user_id UUID,
     p_approve_device BOOLEAN DEFAULT TRUE,
     p_notes TEXT DEFAULT NULL
 )
@@ -129,13 +144,13 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-    v_admin_id TEXT;
+    v_admin_id UUID;
     v_result JSONB;
 BEGIN
     -- Check if caller is admin
-    SELECT user_id INTO v_admin_id
+    SELECT user_id::uuid INTO v_admin_id
     FROM user_approvals 
-    WHERE user_id = auth.uid()::text 
+    WHERE user_id::uuid = auth.uid()
     AND role = 'admin';
     
     IF v_admin_id IS NULL THEN
@@ -150,7 +165,7 @@ BEGIN
     -- Check if user exists and is approved
     IF NOT EXISTS (
         SELECT 1 FROM user_approvals 
-        WHERE user_id = p_user_id 
+        WHERE user_id::uuid = p_user_id 
         AND approved = TRUE
     ) THEN
         RAISE EXCEPTION 'User not found or not approved: %', p_user_id;
@@ -196,23 +211,23 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 7. Create function to revoke device assignment
+-- 8. Create function to revoke device assignment
 CREATE OR REPLACE FUNCTION revoke_device_assignment(
     p_device_id TEXT,
-    p_user_id TEXT
+    p_user_id UUID
 )
 RETURNS JSONB
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-    v_admin_id TEXT;
+    v_admin_id UUID;
     v_result JSONB;
 BEGIN
     -- Check if caller is admin
-    SELECT user_id INTO v_admin_id
+    SELECT user_id::uuid INTO v_admin_id
     FROM user_approvals 
-    WHERE user_id = auth.uid()::text 
+    WHERE user_id::uuid = auth.uid()
     AND role = 'admin';
     
     IF v_admin_id IS NULL THEN
@@ -238,14 +253,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 8. Update RLS policies for device_assignments
+-- 9. Update RLS policies for device_assignments
 ALTER TABLE device_assignments ENABLE ROW LEVEL SECURITY;
 
 -- Users can see their own assignments
 CREATE POLICY "Users can view their device assignments"
 ON device_assignments FOR SELECT
 TO authenticated
-USING (user_id = auth.uid()::text);
+USING (user_id = auth.uid());
 
 -- Admins can manage all assignments
 CREATE POLICY "Admins can manage device assignments"
@@ -254,12 +269,12 @@ TO authenticated
 USING (
     EXISTS (
         SELECT 1 FROM user_approvals
-        WHERE user_id = auth.uid()::text
+        WHERE user_id::uuid = auth.uid()
         AND role = 'admin'
     )
 );
 
--- 9. Update RLS policies for remote_devices
+-- 10. Update RLS policies for remote_devices
 -- Allow devices to register without authentication
 CREATE POLICY "Devices can register themselves"
 ON remote_devices FOR INSERT
@@ -273,13 +288,13 @@ TO anon
 USING (true)
 WITH CHECK (true);
 
--- 10. Migrate existing devices
+-- 11. Migrate existing devices
 -- Assign existing devices to their current owners
 INSERT INTO device_assignments (device_id, user_id, assigned_by)
 SELECT 
     device_id,
-    owner_id,
-    owner_id  -- Self-assigned
+    owner_id::uuid,
+    owner_id::uuid  -- Self-assigned
 FROM remote_devices
 WHERE owner_id IS NOT NULL
 ON CONFLICT DO NOTHING;
@@ -289,7 +304,7 @@ UPDATE remote_devices
 SET approved = TRUE
 WHERE owner_id IS NOT NULL;
 
--- 11. Add comments for documentation
+-- 12. Add comments for documentation
 COMMENT ON TABLE device_assignments IS 'Tracks which users are assigned to which devices';
 COMMENT ON FUNCTION get_user_devices IS 'Returns all devices assigned to a specific user';
 COMMENT ON FUNCTION get_unassigned_devices IS 'Returns all unassigned devices (admin only)';
