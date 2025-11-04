@@ -57,25 +57,45 @@ jobs:
           body: |
             ## 🎉 Remote Desktop Agent ${{ steps.get_version.outputs.VERSION }}
             
+            ### 🆕 What's New in v0.2.0
+            
+            - **Anonymous Registration**: No login required! Just run the agent
+            - **Auto-Registration**: Automatically registers on startup
+            - **Persistent Device ID**: Stable ID across restarts (Registry + File)
+            - **Admin Assignment**: Waits for admin to assign device to user
+            - **Improved Heartbeat**: Better presence detection
+            
             ### 📥 Installation
             
-            1. Download `remote-agent.exe`
-            2. Run `setup-startup.bat` to install as startup task
-            3. Configure `.env` file with your Supabase credentials
+            1. Download `remote-agent.exe` or `remote-agent-windows.zip`
+            2. Run `remote-agent.exe` - it will auto-register!
+            3. Admin assigns device via admin panel
+            4. (Optional) Run `setup-startup.bat` to start on boot
             
             ### ✨ Features
             
-            - High-quality screen streaming (1920px @ 15 FPS)
-            - Low latency WebRTC connection
-            - Mouse and keyboard control
-            - Automatic reconnection
-            - Clean session management
+            - ✅ Anonymous device registration (no login needed)
+            - ✅ Persistent device ID
+            - ✅ Auto-registration on startup
+            - ✅ High-quality screen streaming (1920px @ 15 FPS)
+            - ✅ Low latency WebRTC connection
+            - ✅ Mouse and keyboard control
+            - ✅ Automatic reconnection
+            - ✅ Clean session management
             
             ### 📋 System Requirements
             
             - Windows 10/11
             - .NET Framework 4.7.2 or higher
             - Active internet connection
+            
+            ### 🔧 How It Works
+            
+            1. Agent generates unique device ID
+            2. Registers anonymously with Supabase
+            3. Shows "Waiting for admin assignment" message
+            4. Admin assigns device to user via admin panel
+            5. User can now connect via controller app
             
             For full documentation, see the [README](https://github.com/stangtennis/Remote/blob/main/README.md).
           draft: false

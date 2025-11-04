@@ -1,0 +1,86 @@
+name: Release Controller
+
+on:
+  push:
+    tags:
+      - 'controller-v*'
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+        
+    - name: Get version from tag
+      id: get_version
+      shell: bash
+      run: echo "VERSION=${GITHUB_REF#refs/tags/controller-v}" >> $GITHUB_OUTPUT
+      
+    - name: Install dependencies
+      working-directory: ./controller
+      run: go mod download
+      
+    - name: Build Controller
+      working-directory: ./controller
+      run: |
+        go build -ldflags="-s -w -H windowsgui" -o controller.exe
+        
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Controller v${{ steps.get_version.outputs.VERSION }}
+        body: |
+          # 🎮 Remote Desktop Controller v${{ steps.get_version.outputs.VERSION }}
+          
+          ## What's New
+          - Professional remote desktop controller application
+          - Login with Supabase authentication
+          - View devices assigned to you
+          - Modern UI optimized for Full HD (1920x1080)
+          - Device assignment system integration
+          
+          ## Download
+          Download `controller.exe` below and run it!
+          
+          ## Requirements
+          - Windows 10/11
+          - Internet connection
+          - Supabase account
+          
+          ## Features
+          ✅ User authentication
+          ✅ Device list with status
+          ✅ Assignment-based access
+          ✅ Modern UI with Fyne
+          🔄 WebRTC viewer (coming in v0.3.0)
+          
+          ## Installation
+          1. Download `controller.exe`
+          2. Run the executable
+          3. Login with your credentials
+          4. View your assigned devices
+          
+          See [CHANGELOG.md](https://github.com/stangtennis/Remote/blob/main/CHANGELOG.md) for full details.
+        draft: false
+        prerelease: false
+        
+    - name: Upload Controller EXE
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./controller/controller.exe
+        asset_name: controller.exe
+        asset_content_type: application/vnd.microsoft.portable-executable
