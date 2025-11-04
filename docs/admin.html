@@ -107,17 +107,190 @@
       color: #666;
       margin-top: 5px;
     }
+    
+    .tab-button {
+      background: none;
+      border: none;
+      padding: 12px 24px;
+      cursor: pointer;
+      font-size: 16px;
+      color: #666;
+      border-bottom: 3px solid transparent;
+      transition: all 0.3s;
+    }
+    
+    .tab-button:hover {
+      color: #2196f3;
+    }
+    
+    .tab-button.active {
+      color: #2196f3;
+      border-bottom-color: #2196f3;
+      font-weight: bold;
+    }
+    
+    .tab-content {
+      animation: fadeIn 0.3s;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    .device-card {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+    
+    .device-card.unassigned {
+      border-left: 4px solid #ff9800;
+    }
+    
+    .device-card.assigned {
+      border-left: 4px solid #4caf50;
+    }
+    
+    .device-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    
+    .device-name {
+      font-weight: bold;
+      font-size: 16px;
+    }
+    
+    .device-status-badge {
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    
+    .status-online {
+      background: #d4edda;
+      color: #155724;
+    }
+    
+    .status-offline {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    
+    .device-details {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    
+    .device-actions {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .assign-btn {
+      background: #2196f3;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .assign-btn:hover {
+      background: #1976d2;
+    }
+    
+    .revoke-btn {
+      background: #f44336;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .revoke-btn:hover {
+      background: #d32f2f;
+    }
+    
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    
+    .modal-content {
+      background-color: white;
+      margin: 10% auto;
+      padding: 30px;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 500px;
+    }
+    
+    .modal-header {
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+    
+    .modal-body {
+      margin-bottom: 20px;
+    }
+    
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    
+    select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      margin-bottom: 15px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+      color: #333;
+    }
   </style>
 </head>
 <body>
   <div class="admin-container">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
-      <h1>🔐 User Approvals</h1>
+      <h1>🔐 Admin Panel</h1>
       <div>
         <button onclick="window.location.href='dashboard.html'" class="button">← Back to Dashboard</button>
         <button onclick="logout()" class="button">Logout</button>
       </div>
     </div>
+
+    <!-- Tabs -->
+    <div style="margin-bottom: 30px; border-bottom: 2px solid #ddd;">
+      <button onclick="showTab('users')" id="tabUsers" class="tab-button active">👥 User Approvals</button>
+      <button onclick="showTab('devices')" id="tabDevices" class="tab-button">📱 Device Management</button>
+    </div>
+
+    <!-- Users Tab -->
+    <div id="usersTab" class="tab-content">
 
     <!-- Stats -->
     <div class="stats">
@@ -144,6 +317,58 @@
 
     <!-- Users List -->
     <div id="usersList"></div>
+    </div>
+
+    <!-- Devices Tab -->
+    <div id="devicesTab" class="tab-content" style="display: none;">
+      <!-- Device Stats -->
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-number" id="totalDevices">0</div>
+          <div class="stat-label">Total Devices</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="unassignedDevices">0</div>
+          <div class="stat-label">Unassigned</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="onlineDevices">0</div>
+          <div class="stat-label">Online</div>
+        </div>
+      </div>
+
+      <!-- Device Filters -->
+      <div style="margin-bottom: 20px;">
+        <button onclick="filterDevices('all')" class="button" id="filterAllDevices">All Devices</button>
+        <button onclick="filterDevices('unassigned')" class="button" id="filterUnassigned">Unassigned</button>
+        <button onclick="filterDevices('assigned')" class="button" id="filterAssigned">Assigned</button>
+      </div>
+
+      <!-- Devices List -->
+      <div id="devicesList"></div>
+    </div>
+  </div>
+
+  <!-- Assignment Modal -->
+  <div id="assignModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">Assign Device</div>
+      <div class="modal-body">
+        <div id="modalDeviceName" style="margin-bottom: 20px; font-weight: bold;"></div>
+        <label for="userSelect">Assign to User:</label>
+        <select id="userSelect">
+          <option value="">Select a user...</option>
+        </select>
+        <label>
+          <input type="checkbox" id="approveDevice" checked>
+          Approve device for use
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button onclick="closeAssignModal()" class="button">Cancel</button>
+        <button onclick="confirmAssignment()" class="assign-btn">Assign Device</button>
+      </div>
+    </div>
   </div>
 
   <script type="module">
@@ -151,6 +376,10 @@
 
     let currentFilter = 'all';
     let allUsers = [];
+    let currentDeviceFilter = 'all';
+    let allDevices = [];
+    let assignedDevices = [];
+    let currentAssignDevice = null;
 
     // Check if user is logged in
     const { data: { user } } = await supabase.auth.getUser();
@@ -269,6 +498,203 @@
 
     // Auto-refresh every 30 seconds
     setInterval(loadUsers, 30000);
+
+    // ===== DEVICE MANAGEMENT =====
+
+    async function loadDevices() {
+      try {
+        // Get all devices
+        const { data: devices, error: devicesError } = await supabase
+          .from('remote_devices')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (devicesError) throw devicesError;
+
+        // Get all assignments
+        const { data: assignments, error: assignError } = await supabase
+          .from('device_assignments')
+          .select('*, user_approvals!inner(email)')
+          .is('revoked_at', null);
+
+        if (assignError) throw assignError;
+
+        allDevices = devices || [];
+        assignedDevices = assignments || [];
+        
+        updateDeviceStats();
+        displayDevices();
+      } catch (error) {
+        console.error('Error loading devices:', error);
+        alert('Failed to load devices: ' + error.message);
+      }
+    }
+
+    function updateDeviceStats() {
+      const total = allDevices.length;
+      const assigned = assignedDevices.length;
+      const unassigned = total - assigned;
+      const online = allDevices.filter(d => d.status === 'online').length;
+
+      document.getElementById('totalDevices').textContent = total;
+      document.getElementById('unassignedDevices').textContent = unassigned;
+      document.getElementById('onlineDevices').textContent = online;
+    }
+
+    function displayDevices() {
+      const devicesList = document.getElementById('devicesList');
+      let filteredDevices = allDevices;
+
+      // Filter devices
+      if (currentDeviceFilter === 'unassigned') {
+        const assignedIds = assignedDevices.map(a => a.device_id);
+        filteredDevices = allDevices.filter(d => !assignedIds.includes(d.device_id));
+      } else if (currentDeviceFilter === 'assigned') {
+        const assignedIds = assignedDevices.map(a => a.device_id);
+        filteredDevices = allDevices.filter(d => assignedIds.includes(d.device_id));
+      }
+
+      if (filteredDevices.length === 0) {
+        devicesList.innerHTML = '<p style="text-align: center; color: #666;">No devices found.</p>';
+        return;
+      }
+
+      devicesList.innerHTML = filteredDevices.map(device => {
+        const assignment = assignedDevices.find(a => a.device_id === device.device_id);
+        const isAssigned = !!assignment;
+        const statusClass = device.status === 'online' ? 'status-online' : 'status-offline';
+        const statusText = device.status === 'online' ? '🟢 Online' : '🔴 Offline';
+
+        return `
+          <div class="device-card ${isAssigned ? 'assigned' : 'unassigned'}">
+            <div class="device-header">
+              <div class="device-name">${device.device_name || device.device_id}</div>
+              <span class="device-status-badge ${statusClass}">${statusText}</span>
+            </div>
+            <div class="device-details">
+              <div>Device ID: ${device.device_id}</div>
+              <div>Platform: ${device.platform || 'Unknown'}</div>
+              <div>Created: ${new Date(device.created_at).toLocaleString()}</div>
+              ${device.last_heartbeat ? `<div>Last Seen: ${new Date(device.last_heartbeat).toLocaleString()}</div>` : ''}
+              ${isAssigned ? `<div>✅ Assigned to: ${assignment.user_approvals.email}</div>` : '<div>⚠️ Not assigned to any user</div>'}
+              ${device.approved ? '<div>✅ Approved for use</div>' : '<div>⏸️ Pending approval</div>'}
+            </div>
+            <div class="device-actions">
+              ${!isAssigned ? `
+                <button class="assign-btn" onclick="showAssignModal('${device.device_id}', '${device.device_name || device.device_id}')">
+                  Assign to User
+                </button>
+              ` : `
+                <button class="revoke-btn" onclick="revokeAssignment('${device.device_id}', '${assignment.user_id}')">
+                  Revoke Assignment
+                </button>
+              `}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.filterDevices = function(filter) {
+      currentDeviceFilter = filter;
+      
+      // Update button states
+      document.getElementById('filterAllDevices').classList.toggle('active', filter === 'all');
+      document.getElementById('filterUnassigned').classList.toggle('active', filter === 'unassigned');
+      document.getElementById('filterAssigned').classList.toggle('active', filter === 'assigned');
+      
+      displayDevices();
+    };
+
+    window.showAssignModal = function(deviceId, deviceName) {
+      currentAssignDevice = deviceId;
+      document.getElementById('modalDeviceName').textContent = `Device: ${deviceName}`;
+      
+      // Populate user dropdown with approved users
+      const userSelect = document.getElementById('userSelect');
+      const approvedUsers = allUsers.filter(u => u.approved);
+      
+      userSelect.innerHTML = '<option value="">Select a user...</option>' +
+        approvedUsers.map(u => `<option value="${u.user_id}">${u.email}</option>`).join('');
+      
+      document.getElementById('assignModal').style.display = 'block';
+    };
+
+    window.closeAssignModal = function() {
+      document.getElementById('assignModal').style.display = 'none';
+      currentAssignDevice = null;
+    };
+
+    window.confirmAssignment = async function() {
+      const userId = document.getElementById('userSelect').value;
+      const approveDevice = document.getElementById('approveDevice').checked;
+
+      if (!userId) {
+        alert('Please select a user');
+        return;
+      }
+
+      try {
+        // Call assign_device function
+        const { data, error } = await supabase.rpc('assign_device', {
+          p_device_id: currentAssignDevice,
+          p_user_id: userId,
+          p_approve_device: approveDevice
+        });
+
+        if (error) throw error;
+
+        alert('✅ Device assigned successfully!');
+        closeAssignModal();
+        await loadDevices();
+      } catch (error) {
+        console.error('Error assigning device:', error);
+        alert('Failed to assign device: ' + error.message);
+      }
+    };
+
+    window.revokeAssignment = async function(deviceId, userId) {
+      if (!confirm('Revoke this device assignment?')) return;
+
+      try {
+        const { data, error } = await supabase.rpc('revoke_device_assignment', {
+          p_device_id: deviceId,
+          p_user_id: userId
+        });
+
+        if (error) throw error;
+
+        alert('✅ Assignment revoked');
+        await loadDevices();
+      } catch (error) {
+        console.error('Error revoking assignment:', error);
+        alert('Failed to revoke assignment: ' + error.message);
+      }
+    };
+
+    // Tab switching
+    window.showTab = function(tab) {
+      if (tab === 'users') {
+        document.getElementById('usersTab').style.display = 'block';
+        document.getElementById('devicesTab').style.display = 'none';
+        document.getElementById('tabUsers').classList.add('active');
+        document.getElementById('tabDevices').classList.remove('active');
+      } else if (tab === 'devices') {
+        document.getElementById('usersTab').style.display = 'none';
+        document.getElementById('devicesTab').style.display = 'block';
+        document.getElementById('tabUsers').classList.remove('active');
+        document.getElementById('tabDevices').classList.add('active');
+        loadDevices();
+      }
+    };
+
+    // Close modal when clicking outside
+    window.onclick = function(event) {
+      const modal = document.getElementById('assignModal');
+      if (event.target === modal) {
+        closeAssignModal();
+      }
+    };
   </script>
 </body>
 </html>
