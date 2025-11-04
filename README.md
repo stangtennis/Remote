@@ -272,6 +272,7 @@ See [RELEASE.md](./RELEASE.md) for details.
 
 ### 🚧 Planned Enhancements
 
+- [ ] **Controller Application** - 🆕 Standalone Windows EXE (TeamViewer-style) for admins
 - [ ] **Chrome Web Store** - Publish browser extension
 - [ ] **Video Encoding** - H.264/VP8 for better performance
 - [ ] **File Transfer** - Send/receive files during session
@@ -325,6 +326,7 @@ See [RELEASE.md](./RELEASE.md) for details.
 
 ### Project Status
 - **[PROJECT_STATUS.md](./PROJECT_STATUS.md)** - 🆕 Current status & forward plan
+- **[CONTROLLER_APP_PLAN.md](./CONTROLLER_APP_PLAN.md)** - 🆕 Standalone controller application plan
 
 ### Setup & Deployment
 - **[BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)** - Git workflow and branch structure

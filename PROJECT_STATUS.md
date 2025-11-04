@@ -125,6 +125,18 @@
 
 ## 📋 Forward Plan
 
+### 🆕 **NEW PRIORITY: Controller Application**
+
+**Goal:** Create a standalone Windows EXE (like TeamViewer) for admins to control clients
+
+See **[CONTROLLER_APP_PLAN.md](./CONTROLLER_APP_PLAN.md)** for complete details.
+
+**Technology:** Go + Fyne (reuse existing agent code)  
+**Timeline:** 10-12 weeks  
+**Result:** Professional desktop application to replace/complement web dashboard
+
+---
+
 ### 🔥 **Phase 1: Stabilize & Document (1-2 weeks)**
 
 #### Priority: HIGH
@@ -209,7 +221,39 @@
 
 ---
 
-### 🔮 **Phase 4: Advanced Features (4-8 weeks)**
+### 🎮 **Phase 4: Controller Application (10-12 weeks)** 🆕 NEW
+
+#### Priority: HIGH
+**Goal:** Build standalone controller EXE (TeamViewer-style)
+
+See **[CONTROLLER_APP_PLAN.md](./CONTROLLER_APP_PLAN.md)** for full details.
+
+**Weeks 1-6: Core Controller**
+- [ ] Set up Go + Fyne project
+- [ ] Create login window
+- [ ] Implement device list view
+- [ ] Build WebRTC viewer window
+- [ ] Add mouse/keyboard control
+- [ ] Integrate with existing backend
+
+**Weeks 7-10: Enhanced Features**
+- [ ] Multi-session support (multiple windows)
+- [ ] System tray integration
+- [ ] File transfer
+- [ ] Connection history
+- [ ] Settings panel
+- [ ] Performance monitoring
+
+**Weeks 11-12: Distribution**
+- [ ] Create installer
+- [ ] Code signing
+- [ ] Auto-update mechanism
+- [ ] Documentation
+- [ ] Release v1.0
+
+---
+
+### 🔮 **Phase 5: Advanced Features (4-8 weeks)**
 
 #### Priority: LOW
 **Goal:** Add nice-to-have features
@@ -218,11 +262,6 @@
   - [ ] Allow selecting which screen to share
   - [ ] Support multiple simultaneous streams
   - [ ] Add monitor switching during session
-
-- [ ] **File Transfer**
-  - [ ] Implement file upload/download
-  - [ ] Add drag-and-drop support
-  - [ ] Add progress indicators
 
 - [ ] **Audio Streaming**
   - [ ] Add audio capture
@@ -233,11 +272,6 @@
   - [ ] Create Android agent (see ANDROID_IMPLEMENTATION_PLAN.md)
   - [ ] Create iOS viewer app
   - [ ] Optimize for mobile networks
-
-- [ ] **Code Signing**
-  - [ ] Get Windows code signing certificate
-  - [ ] Sign Windows agent EXE
-  - [ ] Remove SmartScreen warnings
 
 - [ ] **Role-Based Access Control**
   - [ ] Separate admin vs user roles
