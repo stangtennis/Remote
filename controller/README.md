@@ -1,0 +1,118 @@
+# 🎮 Remote Desktop Controller
+
+**Standalone Windows application for controlling remote clients** - Like TeamViewer!
+
+## ✅ Status: Prototype Running!
+
+The controller application is **working** and ready for testing!
+
+## 🚀 Quick Start
+
+### Run the App
+
+```bash
+cd controller
+.\run.bat
+```
+
+Or build an EXE:
+
+```bash
+.\build.bat
+.\controller.exe
+```
+
+### What You'll See
+
+A native Windows application with:
+- ✅ Login window
+- ✅ Device list (mock data)
+- ✅ Tab-based interface
+- ✅ Professional UI
+
+See **[QUICKSTART.md](./QUICKSTART.md)** for detailed instructions.
+
+---
+
+## 📋 Current Features (v0.1 Prototype)
+
+- ✅ **Native Windows UI** - Built with Fyne
+- ✅ **Login Form** - Email/password input
+- ✅ **Device List** - Shows mock devices with status
+- ✅ **Tab Navigation** - Login, Devices, Settings
+- ✅ **Status Indicators** - Online/Offline/Away
+- 🚧 **Supabase Auth** - Coming next
+- 🚧 **WebRTC Viewer** - Coming soon
+- 🚧 **Remote Control** - Coming soon
+
+---
+
+## 🛠️ Development
+
+### Prerequisites
+
+- Go 1.21+
+- Windows (for now)
+
+### Build
+
+```bash
+# Development mode
+go run main.go
+
+# Build executable
+go build -ldflags "-s -w -H windowsgui" -o controller.exe
+```
+
+### Project Structure
+
+```
+controller/
+├── main.go              # Main application
+├── go.mod               # Dependencies
+├── build.bat            # Build script
+├── run.bat              # Run script
+├── README.md            # This file
+├── QUICKSTART.md        # Quick start guide
+└── .env.example         # Configuration template
+```
+
+---
+
+## 🎯 Roadmap
+
+### Week 1-2: Core Functionality
+- [x] Create prototype UI
+- [ ] Add Supabase authentication
+- [ ] Fetch real device list
+- [ ] Implement WebRTC viewer
+
+### Week 3-4: Remote Control
+- [ ] Capture mouse/keyboard input
+- [ ] Send via WebRTC data channel
+- [ ] Test with existing agents
+- [ ] Add connection management
+
+### Week 5-6: Polish
+- [ ] System tray integration
+- [ ] Multi-session support
+- [ ] File transfer
+- [ ] Settings panel
+
+---
+
+## 📚 Documentation
+
+- **[QUICKSTART.md](./QUICKSTART.md)** - Quick start guide
+- **[../CONTROLLER_APP_PLAN.md](../CONTROLLER_APP_PLAN.md)** - Complete implementation plan
+
+---
+
+## 🎉 Try It Now!
+
+```bash
+cd controller
+.\run.bat
+```
+
+The app will open and you can test the UI!
