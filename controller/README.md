@@ -54,7 +54,7 @@ See **[QUICKSTART.md](./QUICKSTART.md)** for detailed instructions.
 - Go 1.21+
 - Windows (for now)
 
-### Build
+### Build Locally
 
 ```bash
 # Development mode
@@ -62,6 +62,39 @@ go run main.go
 
 # Build executable
 go build -ldflags "-s -w -H windowsgui" -o controller.exe
+
+# Or use build script
+.\build.bat
+```
+
+### Build on GitHub
+
+**Automatic builds via GitHub Actions:**
+
+1. **Push to `controller` branch** - Triggers build
+2. **Download artifact** - From Actions tab
+3. **Create release** - Tag with `controller-v0.2.0`
+
+```bash
+# Push to controller branch
+git checkout controller
+git push origin controller
+
+# GitHub Actions builds controller.exe automatically
+# Download from: Actions → Build Controller Application → Artifacts
+```
+
+### Release Process
+
+```bash
+# Create and push tag
+git tag controller-v0.2.0
+git push origin controller-v0.2.0
+
+# GitHub Actions will:
+# 1. Build controller.exe
+# 2. Create GitHub Release
+# 3. Upload controller.exe to release
 ```
 
 ### Project Structure
