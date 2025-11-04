@@ -60,8 +60,9 @@ func createMainUI(window fyne.Window) *fyne.Container {
 	// Device list (will be populated after login)
 	var deviceListWidget *widget.List
 	var devicesData []supabase.Device
+	var loginButton *widget.Button
 
-	loginButton := widget.NewButton("Login", func() {
+	loginButton = widget.NewButton("Login", func() {
 		email := emailEntry.Text
 		password := passwordEntry.Text
 		
