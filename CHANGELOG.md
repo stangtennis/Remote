@@ -4,6 +4,80 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-11-05 - Device Assignment System
+
+### Added - TeamViewer-Style Device Management
+- **Device Assignment System**: Complete admin-managed device workflow
+  - Agents auto-register without login (anonymous registration)
+  - Admins assign devices to users via admin panel
+  - Users see only devices assigned to them
+  - Professional IT management workflow
+
+### Database
+- **New Table**: `device_assignments` - Tracks device-to-user assignments
+- **New Columns**: 
+  - `role` in `user_approvals` (user/admin)
+  - `status` in `remote_devices` (online/offline)
+  - `approved`, `assigned_by`, `assigned_at` in `remote_devices`
+- **New Functions**:
+  - `get_user_devices(user_id)` - Get devices assigned to user
+  - `get_unassigned_devices()` - List unassigned devices (admin only)
+  - `assign_device(device_id, user_id)` - Assign device to user
+  - `revoke_device_assignment(device_id, user_id)` - Revoke assignment
+- **RLS Policies**: Anonymous device registration, admin-only management
+
+### Controller Application
+- **Assignment-Based Access**: Users see only assigned devices
+- **Updated API**: Uses `get_user_devices()` RPC function
+- **GitHub Actions**: Automated Windows EXE builds on push
+- **Artifact Downloads**: 30-day retention for builds
+- **Release Tags**: `controller-v*` creates GitHub releases
+
+### Agent Application
+- **Anonymous Registration**: No login required on devices
+- **Persistent Device ID**: Saved to Windows Registry + file
+- **Hardware-Based ID**: Stable across restarts
+- **Auto-Registration**: Registers on startup
+- **New Files**:
+  - `agent/internal/device/id.go` - Device ID management
+  - `agent/internal/device/registration.go` - Anonymous registration
+- **Updated Heartbeat**: Uses new anonymous update system
+
+### Admin Panel
+- **Tabbed Interface**: User Approvals + Device Management
+- **Device Management Tab**:
+  - View all devices with real-time status
+  - Filter: All / Unassigned / Assigned
+  - Device stats: Total, Unassigned, Online
+  - Device cards with status badges (🟢 Online / 🔴 Offline)
+  - Assignment modal with user selection
+  - Approve devices during assignment
+  - Revoke assignments
+- **Visual Indicators**:
+  - Orange border: Unassigned devices
+  - Green border: Assigned devices
+  - Status badges with color coding
+
+### Documentation
+- **DEVICE_ASSIGNMENT_DESIGN.md**: Complete system design
+- **Migration Guide**: Database migration instructions
+- **Workflow Documentation**: Step-by-step usage guide
+
+### Changed
+- **Controller**: Now queries assigned devices only
+- **Agent**: Removed login requirement
+- **Admin Panel**: Expanded with device management
+- **Database**: Owner-based to assignment-based model
+
+### Benefits
+- ✅ Deploy agents via GPO/scripts
+- ✅ No user interaction needed
+- ✅ Central device management
+- ✅ Easy assignment/reassignment
+- ✅ Professional IT workflow
+
+## [Previous Releases]
+
 ### Added
 - **Web Agent**: Browser-based agent using getDisplayMedia() - no installation required!
 - **Browser Extension**: Chrome extension for remote control capabilities

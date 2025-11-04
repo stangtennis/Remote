@@ -2,27 +2,38 @@
 
 A **professional remote desktop solution** built with **Supabase**, **WebRTC**, and **Go** - like TeamViewer, but self-hosted!
 
-## ✅ Status: **Active Development** (Updated 2025-11-04)
+## ✅ Status: **Active Development** (Updated 2025-11-05)
 
-### 🎮 Controller Application (NEW!)
+### 🎮 Controller Application v0.2.0 (NEW!)
 - 🆕 **Standalone Windows EXE** - Native controller app (like TeamViewer)
 - ✅ **Real Supabase Auth** - Login with email/password
-- ✅ **Live Device List** - See all online devices
-- ✅ **Status Indicators** - Online/Offline/Away
+- ✅ **Assignment-Based Access** - See only devices assigned to you
+- ✅ **Live Device List** - Real-time status updates
+- ✅ **Status Indicators** - Online/Offline with color coding
 - 🚧 **WebRTC Viewer** - Coming soon (v0.3.0)
 - 📦 **Auto-builds on GitHub** - Download from Actions
+- 🏷️ **GitHub Releases** - Tag with `controller-v*` for releases
 
 ### 🖥️ Agent Options
-- ✅ **Windows Native Agent** (v1.1.7) - Full-featured, production-ready
+- ✅ **Windows Native Agent** (v0.2.0) - Auto-registers, no login required!
 - ✅ **Web Agent** - Browser-based, no installation required
 - ✅ **Browser Extension** - Remote control for web agent
 - 🚧 **Electron Agent** - Cross-platform desktop (prototype)
 
-### 🌐 Web Dashboard
+### 🔧 Device Management (NEW!)
+- ✅ **Anonymous Registration** - Agents auto-register without login
+- ✅ **Admin Assignment** - Assign devices to users via admin panel
+- ✅ **User-Based Access** - Users see only assigned devices
+- ✅ **Device Approval** - Admin approves devices for use
+- ✅ **Reassignment** - Easy device reassignment between users
+
+### 🌐 Web Dashboard & Admin Panel
 - ✅ **GitHub Pages** - Live at https://stangtennis.github.io/Remote/
 - ✅ **User Approval System** - Admin controls access
-- ✅ **Admin Panel** - Manage users and devices
+- ✅ **Device Management** - Assign/revoke device access
+- ✅ **Tabbed Interface** - Users & Devices management
 - ✅ **Real-time Updates** - Supabase Realtime integration
+- ✅ **Visual Indicators** - Color-coded status and assignments
 
 ## 🏗️ Architecture
 
@@ -66,8 +77,10 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 ### Security & Access Control
 - **🔒 WebRTC Encryption** - P2P encryption with DTLS-SRTP
 - **👥 User Approval** - Admin must approve all new users
-- **🛡️ Admin Panel** - Centralized user management at `/admin.html`
+- **📱 Device Assignment** - Admin assigns devices to users
+- **🛡️ Admin Panel** - Centralized user & device management at `/admin.html`
 - **🔐 RLS Policies** - Database-level security enforcement
+- **🎯 Access Control** - Users see only assigned devices
 
 ### Performance & Reliability
 - **🚀 Fast P2P** - Direct connection when possible, TURN fallback
