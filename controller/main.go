@@ -104,14 +104,14 @@ func createMainUI(window fyne.Window) *fyne.Container {
 
 			statusLabel.SetText("✅ Connected as: " + currentUser.Email)
 			
-			// Fetch devices
-			devices, err := supabaseClient.GetDevices()
+			// Fetch devices assigned to this user
+			devices, err := supabaseClient.GetDevices(currentUser.ID)
 			if err != nil {
 				log.Printf("Failed to fetch devices: %v", err)
 				statusLabel.SetText("⚠️ Connected but failed to load devices")
 			} else {
 				devicesData = devices
-				log.Printf("✅ Loaded %d devices", len(devices))
+				log.Printf("✅ Loaded %d assigned devices", len(devices))
 				if deviceListWidget != nil {
 					deviceListWidget.Refresh()
 				}
