@@ -1,32 +1,65 @@
 # 🖥️ Remote Desktop Application
 
-A lightweight, serverless remote desktop solution built with **Supabase**, **WebRTC**, and **GitHub Pages**.
+A **professional remote desktop solution** built with **Supabase**, **WebRTC**, and **Go** - like TeamViewer, but self-hosted!
 
-## ✅ Status: **Production Ready** (v1.1.7 - Updated 2025-01-09)
+## ✅ Status: **Active Development** (Updated 2025-11-04)
 
-### Core Features
-- ✅ **High-quality screen streaming** (1920px @ 15 FPS, optimized quality)
-- ✅ **User approval system** - Admin controls who can register
-- ✅ **System tray integration** - Enhanced menu with console & log viewer
-- ✅ **Stable reconnection** - Automatic cleanup and recovery
-- ✅ **Mouse & keyboard control** - Full remote input (double-click fixed!)
-- ✅ **External access** - Works across networks via TURN relay
-- ✅ **Automated releases** - GitHub Actions CI/CD
-- ✅ **Admin panel** - Approve users, monitor access
-- ✅ **Console mode** - View live logs anytime
+### 🎮 Controller Application (NEW!)
+- 🆕 **Standalone Windows EXE** - Native controller app (like TeamViewer)
+- ✅ **Real Supabase Auth** - Login with email/password
+- ✅ **Live Device List** - See all online devices
+- ✅ **Status Indicators** - Online/Offline/Away
+- 🚧 **WebRTC Viewer** - Coming soon (v0.3.0)
+- 📦 **Auto-builds on GitHub** - Download from Actions
 
-### 🆕 New: Multiple Agent Options
-- ✅ **Windows Native Agent** - Full-featured, production-ready
-- 🆕 **Web Agent** - Browser-based, no installation required!
-- 🆕 **Browser Extension** - Add remote control to web agent
-- 🚧 **Electron Agent** - Cross-platform desktop app (prototype)
+### 🖥️ Agent Options
+- ✅ **Windows Native Agent** (v1.1.7) - Full-featured, production-ready
+- ✅ **Web Agent** - Browser-based, no installation required
+- ✅ **Browser Extension** - Remote control for web agent
+- 🚧 **Electron Agent** - Cross-platform desktop (prototype)
 
-## Architecture
+### 🌐 Web Dashboard
+- ✅ **GitHub Pages** - Live at https://stangtennis.github.io/Remote/
+- ✅ **User Approval System** - Admin controls access
+- ✅ **Admin Panel** - Manage users and devices
+- ✅ **Real-time Updates** - Supabase Realtime integration
 
-- **Backend**: Supabase (Database, Realtime, Storage, Edge Functions, Auth)
-- **Dashboard**: GitHub Pages (Static hosting)
-- **Agent**: Go + Pion WebRTC (Single Windows EXE)
-- **Connectivity**: WebRTC P2P with TURN fallback
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│  CONTROLLER.EXE (Admin - NEW!)                      │
+│  - Native Windows application                       │
+│  - Login & device management                        │
+│  - WebRTC viewer (coming soon)                      │
+└────────────────┬────────────────────────────────────┘
+                 │ WebRTC P2P
+                 ↓
+┌─────────────────────────────────────────────────────┐
+│  AGENTS (Multiple Options)                          │
+│  ├─ Windows Agent (Go EXE) - Production             │
+│  ├─ Web Agent (Browser) - No install                │
+│  ├─ Extension + Native Host - Full control          │
+│  └─ Electron Agent - Cross-platform (prototype)     │
+└────────────────┬────────────────────────────────────┘
+                 │
+                 ↓
+┌─────────────────────────────────────────────────────┐
+│  BACKEND (Supabase)                                 │
+│  ├─ PostgreSQL - Devices, sessions, users           │
+│  ├─ Realtime - WebRTC signaling                     │
+│  ├─ Auth - User authentication                      │
+│  └─ Edge Functions - Session cleanup                │
+└─────────────────────────────────────────────────────┘
+```
+
+### Technology Stack
+- **Controller**: Go + Fyne (Native Windows UI)
+- **Backend**: Supabase (PostgreSQL, Realtime, Auth, Edge Functions)
+- **Dashboard**: HTML/CSS/JS hosted on GitHub Pages
+- **Agents**: Go (Windows), JavaScript (Web/Extension), Electron
+- **WebRTC**: Pion (Go), Browser WebRTC API
+- **Connectivity**: P2P with TURN fallback
 
 ## ✨ Key Features
 
@@ -49,9 +82,36 @@ A lightweight, serverless remote desktop solution built with **Supabase**, **Web
 - **🎮 Fixed Input** - No more double-clicks or arrow key issues
 - **📊 Live Monitoring** - PowerShell window with tailed logs
 
-## 📥 Quick Start (For Users)
+## 📥 Quick Start
 
-### 1. Sign Up & Get Approved
+### For Admins: Controller Application 🆕
+
+**Best for:** Controlling multiple remote computers (like TeamViewer)
+
+1. **Download Controller** (from GitHub Actions or build locally)
+   ```
+   https://github.com/stangtennis/Remote/actions
+   → Build Controller Application → Download artifact
+   ```
+
+2. **Run Controller**
+   ```bash
+   controller.exe
+   ```
+
+3. **Login** - Use your approved admin credentials
+
+4. **See Devices** - View all online devices in real-time
+
+5. **Connect** - Click Connect to start remote session (WebRTC viewer coming in v0.3.0)
+
+**See:** [controller/README.md](./controller/README.md) for details
+
+---
+
+### For Users: Choose Your Agent
+
+#### 1. Sign Up & Get Approved
 
 1. **Visit Dashboard**: `https://stangtennis.github.io/Remote/`
 2. **Create Account** - Sign up with your email
@@ -59,7 +119,7 @@ A lightweight, serverless remote desktop solution built with **Supabase**, **Web
 4. **Wait for Approval** - Admin must approve your account
 5. **Login** - Once approved, you can access the dashboard
 
-### 2. Choose Your Agent
+#### 2. Choose Your Agent
 
 #### Option A: Windows Native Agent (Recommended)
 **Best for:** Full control, always-on monitoring, Windows systems
@@ -118,7 +178,20 @@ Visit: `https://stangtennis.github.io/Remote/`
 ```
 Remote/
 ├── .github/
-│   └── workflows/         # GitHub Actions (automated releases)
+│   └── workflows/         # GitHub Actions
+│       ├── release.yml    # Windows agent releases
+│       └── build-controller.yml  # 🆕 Controller builds
+├── controller/            # 🆕 Controller application (v0.2.0)
+│   ├── main.go           # Main application
+│   ├── internal/
+│   │   ├── supabase/     # Supabase client
+│   │   └── config/       # Configuration
+│   ├── build.bat         # Build script
+│   ├── run.bat           # Run script
+│   ├── README.md         # Controller docs
+│   ├── QUICKSTART.md     # Quick start guide
+│   ├── CHANGELOG.md      # Version history
+│   └── TESTING.md        # Testing guide
 ├── agent/                 # Windows native agent (Go)
 │   ├── cmd/remote-agent/  # Main entry point
 │   ├── internal/          # Core packages
@@ -131,28 +204,41 @@ Remote/
 │   └── setup-startup.bat # Installation script
 ├── docs/                  # GitHub Pages dashboard + web agent
 │   ├── index.html        # Dashboard
-│   ├── agent.html        # 🆕 Web agent (browser-based)
+│   ├── agent.html        # Web agent (browser-based)
 │   ├── admin.html        # Admin panel
 │   ├── css/
 │   └── js/
 │       ├── app.js
 │       ├── webrtc.js
-│       └── web-agent.js  # 🆕 Web agent logic
-├── extension/             # 🆕 Browser extension
+│       └── web-agent.js  # Web agent logic
+├── extension/             # Browser extension
 │   ├── manifest.json
 │   ├── background.js
 │   ├── content.js
 │   └── icons/
-├── native-host/           # 🆕 Native messaging helper
+├── native-host/           # Native messaging helper
 │   ├── main.go           # Input control helper
 │   ├── build.bat
 │   └── install-*.sh/bat  # Platform installers
-├── electron-agent/        # 🚧 Electron agent (prototype)
+├── electron-agent/        # Electron agent (prototype)
 │   └── ...
 └── supabase/              # Supabase backend
     ├── migrations/        # Database schema
     └── functions/         # Edge Functions
 ```
+
+## 🌿 Development Branches
+
+This project uses feature branches for organized development:
+
+- **`main`** - Stable, production-ready code
+- **`agent`** - Windows agent development
+- **`dashboard`** - Web dashboard & backend
+- **`controller`** - Controller application (auto-builds on push) 🆕
+
+See [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md) for details.
+
+---
 
 ## 🛠️ Development Setup
 
@@ -324,24 +410,30 @@ See [RELEASE.md](./RELEASE.md) for details.
 
 ## 📚 Documentation
 
-### Project Status
-- **[PROJECT_STATUS.md](./PROJECT_STATUS.md)** - 🆕 Current status & forward plan
-- **[CONTROLLER_APP_PLAN.md](./CONTROLLER_APP_PLAN.md)** - 🆕 Standalone controller application plan
+### 🎮 Controller Application (NEW!)
+- **[controller/README.md](./controller/README.md)** - Main documentation
+- **[controller/QUICKSTART.md](./controller/QUICKSTART.md)** - Quick start guide
+- **[controller/CHANGELOG.md](./controller/CHANGELOG.md)** - Version history
+- **[controller/TESTING.md](./controller/TESTING.md)** - Testing guide
+- **[CONTROLLER_APP_PLAN.md](./CONTROLLER_APP_PLAN.md)** - Complete implementation plan
+
+### Project Status & Planning
+- **[PROJECT_STATUS.md](./PROJECT_STATUS.md)** - Current status & forward roadmap
+- **[BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)** - Git workflow and branches
 
 ### Setup & Deployment
-- **[BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)** - Git workflow and branch structure
 - **[RELEASE.md](./RELEASE.md)** - Automated release process
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Detailed deployment guide
 
 ### User Guides
-- **[USER_APPROVAL_GUIDE.md](./USER_APPROVAL_GUIDE.md)** - Complete guide to user approval system
-- **[QUICKSTART-EXTENSION.md](./QUICKSTART-EXTENSION.md)** - 🆕 Browser extension quick start
-- **[CONSOLE_MODE.md](./agent/CONSOLE_MODE.md)** - How to use debug/console mode
+- **[USER_APPROVAL_GUIDE.md](./USER_APPROVAL_GUIDE.md)** - User approval system
+- **[QUICKSTART-EXTENSION.md](./QUICKSTART-EXTENSION.md)** - Browser extension setup
+- **[CONSOLE_MODE.md](./agent/CONSOLE_MODE.md)** - Debug/console mode
 
 ### Implementation Plans
-- **[WEB_AGENT_IMPLEMENTATION_PLAN.md](./WEB_AGENT_IMPLEMENTATION_PLAN.md)** - 🆕 Web agent design
-- **[WEB_AGENT_CONTROL_SOLUTION.md](./WEB_AGENT_CONTROL_SOLUTION.md)** - 🆕 Control solution analysis
-- **[ANDROID_IMPLEMENTATION_PLAN.md](./ANDROID_IMPLEMENTATION_PLAN.md)** - Android agent plan
+- **[WEB_AGENT_IMPLEMENTATION_PLAN.md](./WEB_AGENT_IMPLEMENTATION_PLAN.md)** - Web agent design
+- **[WEB_AGENT_CONTROL_SOLUTION.md](./WEB_AGENT_CONTROL_SOLUTION.md)** - Control solution
+- **[ANDROID_IMPLEMENTATION_PLAN.md](./ANDROID_IMPLEMENTATION_PLAN.md)** - Android agent
 
 ### Troubleshooting & Optimization
 - **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** - Testing and troubleshooting
