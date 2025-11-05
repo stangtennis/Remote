@@ -264,6 +264,12 @@ $$ LANGUAGE plpgsql;
 -- 9. Update RLS policies for device_assignments
 ALTER TABLE device_assignments ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view their device assignments" ON device_assignments;
+DROP POLICY IF EXISTS "Admins can manage device assignments" ON device_assignments;
+DROP POLICY IF EXISTS "Devices can register themselves" ON remote_devices;
+DROP POLICY IF EXISTS "Devices can update their status" ON remote_devices;
+
 -- Users can see their own assignments
 CREATE POLICY "Users can view their device assignments"
 ON device_assignments FOR SELECT
@@ -289,7 +295,7 @@ ON remote_devices FOR INSERT
 TO anon
 WITH CHECK (true);
 
--- Allow devices to update their own status
+-- Allow devices to update their status
 CREATE POLICY "Devices can update their status"
 ON remote_devices FOR UPDATE
 TO anon
