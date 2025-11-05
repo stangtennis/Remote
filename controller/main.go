@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -205,15 +206,39 @@ func createMainUI(window fyne.Window) *fyne.Container {
 			label := box.Objects[0].(*widget.Label)
 			button := box.Objects[1].(*widget.Button)
 			
-			// Format device name with status indicator
-			statusIcon := "🔴" // offline
+			// Format device name with status indicator and time info
+			var statusIcon string
+			var statusText string
+			
 			if device.Status == "online" {
 				statusIcon = "🟢"
+				statusText = "Online"
 			} else if device.Status == "away" {
 				statusIcon = "🟡"
+				statusText = "Away"
+			} else {
+				statusIcon = "🔴"
+				// Calculate time since last seen
+				if !device.LastSeen.IsZero() {
+					timeSince := time.Since(device.LastSeen)
+					if timeSince < time.Minute {
+						statusText = "Offline (just now)"
+					} else if timeSince < time.Hour {
+						mins := int(timeSince.Minutes())
+						statusText = fmt.Sprintf("Offline (%dm ago)", mins)
+					} else if timeSince < 24*time.Hour {
+						hours := int(timeSince.Hours())
+						statusText = fmt.Sprintf("Offline (%dh ago)", hours)
+					} else {
+						days := int(timeSince.Hours() / 24)
+						statusText = fmt.Sprintf("Offline (%dd ago)", days)
+					}
+				} else {
+					statusText = "Offline"
+				}
 			}
 			
-			displayName := fmt.Sprintf("%s %s (%s)", statusIcon, device.DeviceName, device.Platform)
+			displayName := fmt.Sprintf("%s %s (%s) - %s", statusIcon, device.DeviceName, device.Platform, statusText)
 			label.SetText(displayName)
 			
 			// Disable button for offline devices
