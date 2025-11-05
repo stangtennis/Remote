@@ -56,6 +56,8 @@ CREATE INDEX IF NOT EXISTS idx_approved_devices
 ON remote_devices(approved, status);
 
 -- 5. Create function to get user's assigned devices
+DROP FUNCTION IF EXISTS get_user_devices(UUID);
+
 CREATE OR REPLACE FUNCTION get_user_devices(p_user_id UUID)
 RETURNS TABLE (
     device_id TEXT,
