@@ -1,6 +1,9 @@
 -- Fix get_user_devices function to use correct column names
 -- The database schema uses last_seen, not last_heartbeat
 
+-- Drop the existing function first (required when changing return type)
+DROP FUNCTION IF EXISTS get_user_devices(UUID);
+
 CREATE OR REPLACE FUNCTION get_user_devices(p_user_id UUID)
 RETURNS TABLE (
     device_id TEXT,
