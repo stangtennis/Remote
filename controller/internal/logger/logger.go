@@ -1,0 +1,85 @@
+package logger
+
+import (
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+var (
+	InfoLogger  *log.Logger
+	ErrorLogger *log.Logger
+	DebugLogger *log.Logger
+	logFile     *os.File
+)
+
+// Init initializes the logger with both file and console output
+func Init() error {
+	// Create logs directory if it doesn't exist
+	logsDir := "logs"
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create logs directory: %w", err)
+	}
+
+	// Create log file with timestamp
+	timestamp := time.Now().Format("2006-01-02_15-04-05")
+	logFilePath := filepath.Join(logsDir, fmt.Sprintf("controller_%s.log", timestamp))
+	
+	var err error
+	logFile, err = os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		return fmt.Errorf("failed to open log file: %w", err)
+	}
+
+	// Create multi-writer for both file and console
+	multiWriter := io.MultiWriter(os.Stdout, logFile)
+
+	// Initialize loggers with different prefixes
+	InfoLogger = log.New(multiWriter, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	ErrorLogger = log.New(multiWriter, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+	DebugLogger = log.New(multiWriter, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
+
+	InfoLogger.Printf("Logger initialized. Log file: %s", logFilePath)
+	return nil
+}
+
+// Close closes the log file
+func Close() {
+	if logFile != nil {
+		InfoLogger.Println("Closing logger")
+		logFile.Close()
+	}
+}
+
+// Info logs an informational message
+func Info(format string, v ...interface{}) {
+	if InfoLogger != nil {
+		InfoLogger.Output(2, fmt.Sprintf(format, v...))
+	}
+}
+
+// Error logs an error message
+func Error(format string, v ...interface{}) {
+	if ErrorLogger != nil {
+		ErrorLogger.Output(2, fmt.Sprintf(format, v...))
+	}
+}
+
+// Debug logs a debug message
+func Debug(format string, v ...interface{}) {
+	if DebugLogger != nil {
+		DebugLogger.Output(2, fmt.Sprintf(format, v...))
+	}
+}
+
+// Fatal logs a fatal error and exits
+func Fatal(format string, v ...interface{}) {
+	if ErrorLogger != nil {
+		ErrorLogger.Output(2, fmt.Sprintf("FATAL: "+format, v...))
+	}
+	Close()
+	os.Exit(1)
+}
