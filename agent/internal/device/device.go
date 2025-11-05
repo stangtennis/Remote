@@ -1,8 +1,6 @@
 package device
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"runtime"
@@ -29,12 +27,10 @@ type RegisterResponse struct {
 }
 
 func New(cfg *config.Config) (*Device, error) {
-	// Try to load existing device ID from file
-	deviceID, err := loadDeviceID()
-	if err != nil || deviceID == "" {
-		// Generate new device ID and save it
-		deviceID = generateDeviceID()
-		saveDeviceID(deviceID)
+	// Get or create persistent device ID
+	deviceID, err := GetOrCreateDeviceID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get device ID: %w", err)
 	}
 
 	dev := &Device{
@@ -96,28 +92,6 @@ func (d *Device) SetOffline() error {
 	// This will be handled by heartbeat timeout in presence.go
 	fmt.Println("📴 Setting device offline...")
 	return nil
-}
-
-func generateDeviceID() string {
-	// Generate unique device ID based on hostname (without timestamp for stability)
-	hostname, _ := os.Hostname()
-	data := fmt.Sprintf("%s-%s-%s", hostname, runtime.GOOS, runtime.GOARCH)
-	hash := sha256.Sum256([]byte(data))
-	return "dev-" + hex.EncodeToString(hash[:8])
-}
-
-func loadDeviceID() (string, error) {
-	// Load device ID from file
-	data, err := os.ReadFile(".device_id")
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-func saveDeviceID(deviceID string) error {
-	// Save device ID to file
-	return os.WriteFile(".device_id", []byte(deviceID), 0600)
 }
 
 func getRAMBytes() int64 {
