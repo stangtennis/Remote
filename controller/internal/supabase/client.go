@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/stangtennis/Remote/controller/internal/logger"
 )
 
 // Client represents a Supabase client
@@ -47,18 +49,26 @@ type Device struct {
 
 // NewClient creates a new Supabase client
 func NewClient(url, anonKey string) *Client {
-	return &Client{
+	logger.Debug("Creating Supabase client with URL: %s", url)
+	logger.Debug("Anon key length: %d", len(anonKey))
+	
+	client := &Client{
 		URL:     url,
 		AnonKey: anonKey,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 	}
+	
+	logger.Debug("Supabase client created successfully")
+	return client
 }
 
 // SignIn authenticates a user with email and password
 func (c *Client) SignIn(email, password string) (*AuthResponse, error) {
+	logger.Debug("[SignIn] Starting authentication for email: %s", email)
 	url := fmt.Sprintf("%s/auth/v1/token?grant_type=password", c.URL)
+	logger.Debug("[SignIn] Auth URL: %s", url)
 
 	payload := map[string]string{
 		"email":    email,
@@ -67,51 +77,69 @@ func (c *Client) SignIn(email, password string) (*AuthResponse, error) {
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
+		logger.Error("[SignIn] Failed to marshal payload: %v", err)
 		return nil, fmt.Errorf("failed to marshal payload: %w", err)
 	}
+	logger.Debug("[SignIn] Payload marshaled, size: %d bytes", len(jsonData))
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
+		logger.Error("[SignIn] Failed to create HTTP request: %v", err)
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("apikey", c.AnonKey)
+	logger.Debug("[SignIn] Request headers set, sending request...")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
+		logger.Error("[SignIn] HTTP request failed: %v", err)
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
+	logger.Debug("[SignIn] Received response with status: %d", resp.StatusCode)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		logger.Error("[SignIn] Failed to read response body: %v", err)
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
+	logger.Debug("[SignIn] Response body size: %d bytes", len(body))
 
 	if resp.StatusCode != http.StatusOK {
+		logger.Error("[SignIn] Authentication failed with status %d: %s", resp.StatusCode, string(body))
 		return nil, fmt.Errorf("authentication failed: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
 	var authResp AuthResponse
 	if err := json.Unmarshal(body, &authResp); err != nil {
+		logger.Error("[SignIn] Failed to unmarshal auth response: %v", err)
+		logger.Debug("[SignIn] Response body: %s", string(body))
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	// Store the auth token
 	c.AuthToken = authResp.AccessToken
+	logger.Debug("[SignIn] Auth token stored, length: %d", len(c.AuthToken))
+	logger.Info("[SignIn] Authentication successful for user: %s", authResp.User.Email)
 
 	return &authResp, nil
 }
 
 // GetDevices fetches devices assigned to the authenticated user
 func (c *Client) GetDevices(userID string) ([]Device, error) {
+	logger.Debug("[GetDevices] Starting device fetch for user: %s", userID)
+	
 	if c.AuthToken == "" {
+		logger.Error("[GetDevices] Not authenticated - auth token is empty")
 		return nil, fmt.Errorf("not authenticated")
 	}
+	logger.Debug("[GetDevices] Auth token present, length: %d", len(c.AuthToken))
 
 	// Call get_user_devices function
 	url := fmt.Sprintf("%s/rest/v1/rpc/get_user_devices", c.URL)
+	logger.Debug("[GetDevices] RPC URL: %s", url)
 
 	payload := map[string]string{
 		"p_user_id": userID,
@@ -119,36 +147,53 @@ func (c *Client) GetDevices(userID string) ([]Device, error) {
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
+		logger.Error("[GetDevices] Failed to marshal payload: %v", err)
 		return nil, fmt.Errorf("failed to marshal payload: %w", err)
 	}
+	logger.Debug("[GetDevices] Payload: %s", string(jsonData))
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
+		logger.Error("[GetDevices] Failed to create HTTP request: %v", err)
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("apikey", c.AnonKey)
 	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
 	req.Header.Set("Content-Type", "application/json")
+	logger.Debug("[GetDevices] Request headers set, sending request...")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
+		logger.Error("[GetDevices] HTTP request failed: %v", err)
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
+	logger.Debug("[GetDevices] Received response with status: %d", resp.StatusCode)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		logger.Error("[GetDevices] Failed to read response body: %v", err)
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
+	logger.Debug("[GetDevices] Response body: %s", string(body))
 
 	if resp.StatusCode != http.StatusOK {
+		logger.Error("[GetDevices] Failed to fetch devices with status %d: %s", resp.StatusCode, string(body))
 		return nil, fmt.Errorf("failed to fetch devices: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
 	var devices []Device
 	if err := json.Unmarshal(body, &devices); err != nil {
+		logger.Error("[GetDevices] Failed to unmarshal devices response: %v", err)
+		logger.Debug("[GetDevices] Raw response: %s", string(body))
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	logger.Info("[GetDevices] Successfully fetched %d devices", len(devices))
+	for i, device := range devices {
+		logger.Debug("[GetDevices] Device %d: ID=%s, Name=%s, Platform=%s, Status=%s, Owner=%s",
+			i+1, device.DeviceID, device.DeviceName, device.Platform, device.Status, device.OwnerID)
 	}
 
 	return devices, nil
@@ -156,33 +201,44 @@ func (c *Client) GetDevices(userID string) ([]Device, error) {
 
 // CheckApproval checks if the user is approved
 func (c *Client) CheckApproval(userID string) (bool, error) {
+	logger.Debug("[CheckApproval] Checking approval for user: %s", userID)
+	
 	if c.AuthToken == "" {
+		logger.Error("[CheckApproval] Not authenticated - auth token is empty")
 		return false, fmt.Errorf("not authenticated")
 	}
 
 	url := fmt.Sprintf("%s/rest/v1/user_approvals?select=approved&user_id=eq.%s", c.URL, userID)
+	logger.Debug("[CheckApproval] Query URL: %s", url)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		logger.Error("[CheckApproval] Failed to create HTTP request: %v", err)
 		return false, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("apikey", c.AnonKey)
 	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
 	req.Header.Set("Content-Type", "application/json")
+	logger.Debug("[CheckApproval] Request headers set, sending request...")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
+		logger.Error("[CheckApproval] HTTP request failed: %v", err)
 		return false, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
+	logger.Debug("[CheckApproval] Received response with status: %d", resp.StatusCode)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		logger.Error("[CheckApproval] Failed to read response body: %v", err)
 		return false, fmt.Errorf("failed to read response: %w", err)
 	}
+	logger.Debug("[CheckApproval] Response body: %s", string(body))
 
 	if resp.StatusCode != http.StatusOK {
+		logger.Error("[CheckApproval] Failed to check approval with status %d: %s", resp.StatusCode, string(body))
 		return false, fmt.Errorf("failed to check approval: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
@@ -190,12 +246,15 @@ func (c *Client) CheckApproval(userID string) (bool, error) {
 		Approved bool `json:"approved"`
 	}
 	if err := json.Unmarshal(body, &approvals); err != nil {
+		logger.Error("[CheckApproval] Failed to unmarshal approval response: %v", err)
 		return false, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	if len(approvals) == 0 {
+		logger.Info("[CheckApproval] No approval record found for user: %s", userID)
 		return false, nil
 	}
 
+	logger.Info("[CheckApproval] User %s approval status: %v", userID, approvals[0].Approved)
 	return approvals[0].Approved, nil
 }

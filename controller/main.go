@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/stangtennis/Remote/controller/internal/config"
+	"github.com/stangtennis/Remote/controller/internal/logger"
 	"github.com/stangtennis/Remote/controller/internal/supabase"
 )
 
@@ -20,27 +21,50 @@ var (
 )
 
 func main() {
+	// Initialize logger first
+	if err := logger.Init(); err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	defer logger.Close()
+
+	logger.Info("=== Remote Desktop Controller Starting ===")
+	logger.Info("Application startup initiated")
+
 	// Load configuration
+	logger.Info("Loading configuration...")
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		logger.Fatal("Failed to load config: %v", err)
 	}
+	logger.Info("Configuration loaded successfully")
+	logger.Debug("Supabase URL: %s", cfg.SupabaseURL)
+	logger.Debug("Supabase Key length: %d characters", len(cfg.SupabaseAnonKey))
 
 	// Initialize Supabase client
+	logger.Info("Initializing Supabase client...")
 	supabaseClient = supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseAnonKey)
-	log.Println("✅ Supabase client initialized")
+	if supabaseClient == nil {
+		logger.Fatal("Failed to create Supabase client: client is nil")
+	}
+	logger.Info("✅ Supabase client initialized successfully")
 
 	// Create application
+	logger.Info("Creating Fyne application...")
 	myApp := app.New()
 	myWindow := myApp.NewWindow("Remote Desktop Controller")
 	myWindow.Resize(fyne.NewSize(800, 600))
+	logger.Info("Application window created")
 
 	// Create UI
+	logger.Info("Building user interface...")
 	content := createMainUI(myWindow)
 	myWindow.SetContent(content)
+	logger.Info("UI initialized successfully")
 
 	// Show and run
+	logger.Info("Launching application window")
 	myWindow.ShowAndRun()
+	logger.Info("Application shutdown")
 }
 
 func createMainUI(window fyne.Window) *fyne.Container {
@@ -76,27 +100,31 @@ func createMainUI(window fyne.Window) *fyne.Container {
 		
 		// Authenticate with Supabase
 		go func() {
+			logger.Info("Attempting login for user: %s", email)
 			authResp, err := supabaseClient.SignIn(email, password)
 			if err != nil {
-				log.Printf("Login failed: %v", err)
+				logger.Error("Login failed for %s: %v", email, err)
 				statusLabel.SetText("❌ Login failed: " + err.Error())
 				loginButton.Enable()
 				return
 			}
 
 			currentUser = &authResp.User
-			log.Printf("✅ Logged in as: %s", currentUser.Email)
+			logger.Info("✅ Logged in successfully as: %s (ID: %s)", currentUser.Email, currentUser.ID)
 
 			// Check if user is approved
+			logger.Info("Checking approval status for user: %s", currentUser.ID)
 			approved, err := supabaseClient.CheckApproval(currentUser.ID)
 			if err != nil {
-				log.Printf("Failed to check approval: %v", err)
+				logger.Error("Failed to check approval for user %s: %v", currentUser.ID, err)
 				statusLabel.SetText("❌ Failed to check approval")
 				loginButton.Enable()
 				return
 			}
 
+			logger.Info("Approval status: %v", approved)
 			if !approved {
+				logger.Info("User %s is not approved yet", currentUser.Email)
 				statusLabel.SetText("⏸️ Account pending approval")
 				loginButton.Enable()
 				return
@@ -105,15 +133,22 @@ func createMainUI(window fyne.Window) *fyne.Container {
 			statusLabel.SetText("✅ Connected as: " + currentUser.Email)
 			
 			// Fetch devices assigned to this user
+			logger.Info("Fetching devices for user: %s", currentUser.ID)
 			devices, err := supabaseClient.GetDevices(currentUser.ID)
 			if err != nil {
-				log.Printf("Failed to fetch devices: %v", err)
+				logger.Error("Failed to fetch devices for user %s: %v", currentUser.ID, err)
+				logger.Debug("Device fetch error details: %+v", err)
 				statusLabel.SetText("⚠️ Connected but failed to load devices")
 			} else {
 				devicesData = devices
-				log.Printf("✅ Loaded %d assigned devices", len(devices))
+				logger.Info("✅ Successfully loaded %d assigned devices", len(devices))
+				for i, device := range devices {
+					logger.Debug("Device %d: Name=%s, ID=%s, Platform=%s, Status=%s", 
+						i+1, device.DeviceName, device.DeviceID, device.Platform, device.Status)
+				}
 				if deviceListWidget != nil {
 					deviceListWidget.Refresh()
+					logger.Debug("Device list widget refreshed")
 				}
 			}
 			
@@ -202,7 +237,8 @@ func createMainUI(window fyne.Window) *fyne.Container {
 
 // connectToDevice initiates a connection to a remote device
 func connectToDevice(device supabase.Device) {
-	log.Printf("🔗 Initiating connection to: %s", device.DeviceName)
+	logger.Info("🔗 Initiating connection to device: %s (ID: %s)", device.DeviceName, device.DeviceID)
+	logger.Debug("Device details - Platform: %s, Status: %s", device.Platform, device.Status)
 	
 	// TODO: Implement WebRTC viewer window
 	// For now, show a dialog
