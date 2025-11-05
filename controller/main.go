@@ -104,6 +104,8 @@ func createMainUI(window fyne.Window) *fyne.Container {
 			authResp, err := supabaseClient.SignIn(email, password)
 			if err != nil {
 				logger.Error("Login failed for %s: %v", email, err)
+				// Update UI on main thread
+				window.Canvas().Content().Refresh()
 				statusLabel.SetText("❌ Login failed: " + err.Error())
 				loginButton.Enable()
 				return
@@ -117,6 +119,8 @@ func createMainUI(window fyne.Window) *fyne.Container {
 			approved, err := supabaseClient.CheckApproval(currentUser.ID)
 			if err != nil {
 				logger.Error("Failed to check approval for user %s: %v", currentUser.ID, err)
+				// Update UI on main thread
+				window.Canvas().Content().Refresh()
 				statusLabel.SetText("❌ Failed to check approval")
 				loginButton.Enable()
 				return
@@ -125,11 +129,15 @@ func createMainUI(window fyne.Window) *fyne.Container {
 			logger.Info("Approval status: %v", approved)
 			if !approved {
 				logger.Info("User %s is not approved yet", currentUser.Email)
+				// Update UI on main thread
+				window.Canvas().Content().Refresh()
 				statusLabel.SetText("⏸️ Account pending approval")
 				loginButton.Enable()
 				return
 			}
 
+			// Update UI on main thread
+			window.Canvas().Content().Refresh()
 			statusLabel.SetText("✅ Connected as: " + currentUser.Email)
 			
 			// Fetch devices assigned to this user
@@ -138,20 +146,31 @@ func createMainUI(window fyne.Window) *fyne.Container {
 			if err != nil {
 				logger.Error("Failed to fetch devices for user %s: %v", currentUser.ID, err)
 				logger.Debug("Device fetch error details: %+v", err)
+				// Update UI on main thread
+				window.Canvas().Content().Refresh()
 				statusLabel.SetText("⚠️ Connected but failed to load devices")
 			} else {
-				devicesData = devices
 				logger.Info("✅ Successfully loaded %d assigned devices", len(devices))
 				for i, device := range devices {
 					logger.Debug("Device %d: Name=%s, ID=%s, Platform=%s, Status=%s", 
 						i+1, device.DeviceName, device.DeviceID, device.Platform, device.Status)
 				}
+				
+				// Update device list and UI on main thread
+				devicesData = devices
 				if deviceListWidget != nil {
+					window.Canvas().Content().Refresh()
 					deviceListWidget.Refresh()
-					logger.Debug("Device list widget refreshed")
+					logger.Debug("Device list widget refreshed with %d devices", len(devicesData))
+				} else {
+					logger.Error("Device list widget is nil")
 				}
+				
+				// Update status with device count
+				statusLabel.SetText(fmt.Sprintf("✅ Connected: %s (%d devices)", currentUser.Email, len(devices)))
 			}
 			
+			window.Canvas().Content().Refresh()
 			loginButton.Enable()
 		}()
 	})

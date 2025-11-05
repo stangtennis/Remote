@@ -61,8 +61,9 @@ RETURNS TABLE (
     device_id TEXT,
     device_name TEXT,
     platform TEXT,
+    owner_id TEXT,
     status TEXT,
-    last_heartbeat TIMESTAMPTZ,
+    last_seen TIMESTAMPTZ,
     created_at TIMESTAMPTZ,
     assigned_at TIMESTAMPTZ
 ) 
@@ -75,8 +76,13 @@ BEGIN
         d.device_id,
         d.device_name,
         d.platform,
-        d.status,
-        d.last_heartbeat,
+        d.owner_id::TEXT,
+        CASE 
+            WHEN d.is_online THEN 'online'
+            WHEN d.last_seen > NOW() - INTERVAL '5 minutes' THEN 'away'
+            ELSE 'offline'
+        END as status,
+        d.last_seen,
         d.created_at,
         da.assigned_at
     FROM remote_devices d
@@ -84,8 +90,8 @@ BEGIN
         ON d.device_id = da.device_id
     WHERE da.user_id = p_user_id
         AND da.revoked_at IS NULL
-        AND d.approved = TRUE
-    ORDER BY d.last_heartbeat DESC NULLS LAST;
+        AND d.approved_at IS NOT NULL
+    ORDER BY d.last_seen DESC NULLS LAST;
 END;
 $$ LANGUAGE plpgsql;
 
