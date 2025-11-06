@@ -53,11 +53,11 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 
 	// Create payload with all required fields
 	payload := map[string]interface{}{
-		"device_id":      device.DeviceID,
-		"device_name":    device.DeviceName,
-		"platform":       device.Platform,
-		"status":         device.Status,
-		"last_heartbeat": time.Now().Format(time.RFC3339),
+		"device_id":   device.DeviceID,
+		"device_name": device.DeviceName,
+		"platform":    device.Platform,
+		"status":      device.Status,
+		"last_seen":   time.Now().Format(time.RFC3339),
 	}
 
 	jsonData, err := json.Marshal(payload)
@@ -97,9 +97,8 @@ func UpdateHeartbeat(config RegistrationConfig, deviceID string) error {
 
 	now := time.Now().Format(time.RFC3339)
 	payload := map[string]interface{}{
-		"status":         "online",
-		"last_heartbeat": now,
-		"last_seen":      now, // Also update last_seen for controller compatibility
+		"status":    "online",
+		"last_seen": now,
 	}
 
 	jsonData, err := json.Marshal(payload)
