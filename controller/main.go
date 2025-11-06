@@ -166,14 +166,16 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			credentials.Delete()
 		}
 		
-		// Authenticate with Supabase
+		// Authenticate with Supabase in background
 		go func() {
 			logger.Info("Attempting login for user: %s", email)
 			authResp, err := supabaseClient.SignIn(email, password)
 			if err != nil {
 				logger.Error("Login failed for %s: %v", email, err)
-				statusLabel.SetText("❌ Login failed: " + err.Error())
-				loginButton.Enable()
+				time.AfterFunc(10*time.Millisecond, func() {
+					statusLabel.SetText("❌ Login failed: " + err.Error())
+					loginButton.Enable()
+				})
 				return
 			}
 
@@ -185,20 +187,26 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			approved, err := supabaseClient.CheckApproval(currentUser.ID)
 			if err != nil {
 				logger.Error("Failed to check approval for user %s: %v", currentUser.ID, err)
-				statusLabel.SetText("❌ Failed to check approval")
-				loginButton.Enable()
+				time.AfterFunc(10*time.Millisecond, func() {
+					statusLabel.SetText("❌ Failed to check approval")
+					loginButton.Enable()
+				})
 				return
 			}
 
 			logger.Info("Approval status: %v", approved)
 			if !approved {
 				logger.Info("User %s is not approved yet", currentUser.Email)
-				statusLabel.SetText("⏸️ Account pending approval")
-				loginButton.Enable()
+				time.AfterFunc(10*time.Millisecond, func() {
+					statusLabel.SetText("⏸️ Account pending approval")
+					loginButton.Enable()
+				})
 				return
 			}
 
-			statusLabel.SetText("✅ Connected as: " + currentUser.Email)
+			time.AfterFunc(10*time.Millisecond, func() {
+				statusLabel.SetText("✅ Connected as: " + currentUser.Email)
+			})
 			
 			// Fetch devices assigned to this user
 			logger.Info("Fetching devices for user: %s", currentUser.ID)
@@ -206,7 +214,9 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			if err != nil {
 				logger.Error("Failed to fetch devices for user %s: %v", currentUser.ID, err)
 				logger.Debug("Device fetch error details: %+v", err)
-				statusLabel.SetText("⚠️ Connected but failed to load devices")
+				time.AfterFunc(10*time.Millisecond, func() {
+					statusLabel.SetText("⚠️ Connected but failed to load devices")
+				})
 			} else {
 				logger.Info("✅ Successfully loaded %d assigned devices", len(devices))
 				for i, device := range devices {
@@ -215,16 +225,17 @@ func createModernUI(window fyne.Window) *fyne.Container {
 				}
 				
 				devicesData = devices
-				if deviceListWidget != nil {
-					deviceListWidget.Refresh()
-					logger.Debug("Device list widget refreshed with %d devices", len(devicesData))
-				} else {
-					logger.Error("Device list widget is nil")
-				}
-				statusLabel.SetText(fmt.Sprintf("✅ Connected: %s (%d devices)", currentUser.Email, len(devices)))
+				time.AfterFunc(10*time.Millisecond, func() {
+					if deviceListWidget != nil {
+						deviceListWidget.Refresh()
+						logger.Debug("Device list widget refreshed with %d devices", len(devicesData))
+					} else {
+						logger.Error("Device list widget is nil")
+					}
+					statusLabel.SetText(fmt.Sprintf("✅ Connected: %s (%d devices)", currentUser.Email, len(devices)))
+					loginButton.Enable()
+				})
 			}
-			
-			loginButton.Enable()
 		}()
 	})
 	loginButton.Importance = widget.HighImportance
