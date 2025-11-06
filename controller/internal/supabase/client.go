@@ -208,7 +208,7 @@ func (c *Client) GetAllDevices() ([]Device, error) {
 		return nil, fmt.Errorf("not authenticated")
 	}
 
-	url := fmt.Sprintf("%s/rest/v1/devices?select=*", c.URL)
+	url := fmt.Sprintf("%s/rest/v1/remote_devices?select=*", c.URL)
 	logger.Debug("[GetAllDevices] URL: %s", url)
 
 	req, err := http.NewRequest("GET", url, nil)
