@@ -39,12 +39,12 @@ func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
 		return nil, fmt.Errorf("failed to capture screen: %w", err)
 	}
 
-	// Keep full resolution up to Full HD (1920px) for high quality
+	// Keep full resolution up to 4K (3840px) for MAXIMUM quality
 	var finalImg image.Image = img
-	maxWidth := uint(1920)
+	maxWidth := uint(3840)
 	if img.Bounds().Dx() > int(maxWidth) {
-		// Use Bilinear for fast scaling
-		finalImg = resize.Resize(maxWidth, 0, img, resize.Bilinear)
+		// Use Lanczos3 for highest quality scaling
+		finalImg = resize.Resize(maxWidth, 0, img, resize.Lanczos3)
 	}
 
 	// Encode as JPEG
@@ -87,9 +87,9 @@ func (c *Capturer) CaptureJPEGIfChanged(quality int) ([]byte, error) {
 
 	// Screen changed - encode and return
 	var finalImg image.Image = img
-	maxWidth := uint(1920)
+	maxWidth := uint(3840)
 	if img.Bounds().Dx() > int(maxWidth) {
-		finalImg = resize.Resize(maxWidth, 0, img, resize.Bilinear)
+		finalImg = resize.Resize(maxWidth, 0, img, resize.Lanczos3)
 	}
 
 	var buf bytes.Buffer

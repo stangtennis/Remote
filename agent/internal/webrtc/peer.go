@@ -161,11 +161,11 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 
 func (m *Manager) startScreenStreaming() {
 	// Stream JPEG frames over data channel
-	// 15 FPS (66ms) = smooth experience with good bandwidth
-	ticker := time.NewTicker(66 * time.Millisecond)
+	// 60 FPS (16ms) = ultra-smooth experience for high bandwidth
+	ticker := time.NewTicker(16 * time.Millisecond)
 	defer ticker.Stop()
 
-	log.Println("🎥 Starting screen streaming at 15 FPS (optimized quality)...")
+	log.Println("🎥 Starting screen streaming at 60 FPS (MAXIMUM QUALITY MODE)...")
 	
 	// If screen capturer not initialized (Session 0), try to initialize now
 	if m.screenCapturer == nil {
@@ -197,9 +197,9 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
-		// Check if data channel is backed up (buffered amount > 1MB)
-		// This prevents lag by dropping frames when network can't keep up
-		if m.dataChannel.BufferedAmount() > 1024*1024 {
+		// Check if data channel is backed up (buffered amount > 10MB)
+		// High threshold for maximum quality with high bandwidth
+		if m.dataChannel.BufferedAmount() > 10*1024*1024 {
 			droppedFrames++
 			if droppedFrames%10 == 1 {
 				log.Printf("⚠️ Network congestion detected - dropped %d frames to prevent lag", droppedFrames)
@@ -207,9 +207,9 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
-		// Capture with optimized quality (60 = good balance of quality/size)
-		// Quality 60 reduces file size by ~40% vs 75 with minimal visual difference
-		jpeg, err := m.screenCapturer.CaptureJPEG(60)
+		// Capture with MAXIMUM quality (95 = near-lossless)
+		// Quality 95 provides exceptional visual fidelity for high bandwidth
+		jpeg, err := m.screenCapturer.CaptureJPEG(95)
 		if err != nil {
 			errorCount++
 			consecutiveErrors++
