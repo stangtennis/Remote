@@ -50,7 +50,7 @@ func (s *SignalingClient) CreateSession(deviceID, userID string) (*Session, erro
 		Status:    "pending",
 	}
 
-	url := fmt.Sprintf("%s/rest/v1/sessions", s.supabaseURL)
+	url := fmt.Sprintf("%s/rest/v1/webrtc_sessions", s.supabaseURL)
 	jsonData, err := json.Marshal(session)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal session: %w", err)
@@ -82,7 +82,7 @@ func (s *SignalingClient) CreateSession(deviceID, userID string) (*Session, erro
 
 // SendOffer sends the WebRTC offer to the session
 func (s *SignalingClient) SendOffer(sessionID, offer string) error {
-	url := fmt.Sprintf("%s/rest/v1/sessions?session_id=eq.%s", s.supabaseURL, sessionID)
+	url := fmt.Sprintf("%s/rest/v1/webrtc_sessions?session_id=eq.%s", s.supabaseURL, sessionID)
 	
 	payload := map[string]interface{}{
 		"offer":  offer,
@@ -141,7 +141,7 @@ func (s *SignalingClient) WaitForAnswer(sessionID string, timeout time.Duration)
 
 // GetSession retrieves a session from Supabase
 func (s *SignalingClient) GetSession(sessionID string) (*Session, error) {
-	url := fmt.Sprintf("%s/rest/v1/sessions?session_id=eq.%s&select=*", s.supabaseURL, sessionID)
+	url := fmt.Sprintf("%s/rest/v1/webrtc_sessions?session_id=eq.%s&select=*", s.supabaseURL, sessionID)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -180,7 +180,7 @@ func (s *SignalingClient) GetSession(sessionID string) (*Session, error) {
 
 // DeleteSession deletes a session from Supabase
 func (s *SignalingClient) DeleteSession(sessionID string) error {
-	url := fmt.Sprintf("%s/rest/v1/sessions?session_id=eq.%s", s.supabaseURL, sessionID)
+	url := fmt.Sprintf("%s/rest/v1/webrtc_sessions?session_id=eq.%s", s.supabaseURL, sessionID)
 
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
