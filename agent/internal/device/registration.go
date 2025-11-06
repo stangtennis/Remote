@@ -73,7 +73,7 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 	// Use anon key for anonymous registration
 	req.Header.Set("apikey", config.AnonKey)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Prefer", "resolution=merge-duplicates")
+	req.Header.Set("Prefer", "resolution=merge-duplicates,return=representation")
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
