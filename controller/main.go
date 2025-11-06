@@ -129,6 +129,11 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	var deviceListWidget *widget.List
 	var devicesData []supabase.Device
 	var loginButton *widget.Button
+	var loginForm *fyne.Container
+	var loggedInContainer *fyne.Container
+	var pendingDevicesWidget *widget.List
+	var pendingDevicesData []supabase.Device
+	var refreshPendingDevices func()
 
 	// Try to load saved credentials
 	savedCreds, err := credentials.Load()
@@ -234,6 +239,11 @@ func createModernUI(window fyne.Window) *fyne.Container {
 					}
 					statusLabel.SetText(fmt.Sprintf("✅ Connected: %s (%d devices)", currentUser.Email, len(devices)))
 					loginButton.Enable()
+					// Hide login form, show logged in view
+					loginForm.Hide()
+					loggedInContainer.Show()
+					// Also refresh pending devices
+					refreshPendingDevices()
 				})
 			}
 		}()
@@ -249,6 +259,9 @@ func createModernUI(window fyne.Window) *fyne.Container {
 		}
 		statusLabel.SetText("Logged out")
 		logger.Info("User logged out")
+		// Show login form, hide logged in view
+		loginForm.Show()
+		loggedInContainer.Hide()
 	})
 
 	// Restart button
@@ -264,16 +277,25 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	})
 	restartButton.Importance = widget.MediumImportance
 
-	loginForm := container.NewVBox(
+	loginForm = container.NewVBox(
 		widget.NewSeparator(),
 		widget.NewLabel("Login to Remote Desktop"),
 		emailEntry,
 		passwordEntry,
 		rememberCheck,
-		container.NewGridWithColumns(2, loginButton, logoutButton),
+		loginButton,
 		statusLabel,
 		widget.NewSeparator(),
 	)
+
+	// Logged in view (shown after successful login)
+	loggedInContainer = container.NewVBox(
+		widget.NewSeparator(),
+		statusLabel,
+		container.NewGridWithColumns(2, logoutButton, restartButton),
+		widget.NewSeparator(),
+	)
+	loggedInContainer.Hide() // Hidden by default
 
 	// Device list section with modern styling
 	deviceListWidget = widget.NewList(
@@ -357,10 +379,113 @@ func createModernUI(window fyne.Window) *fyne.Container {
 		deviceListWidget,
 	)
 
+	// Login tab with both login form and logged-in view
+	loginTab := container.NewStack(loginForm, loggedInContainer)
+	
+	// Pending devices tab for approval
+	refreshPendingDevices = func() {
+		if currentUser == nil {
+			return
+		}
+		go func() {
+			allDevices, err := supabaseClient.GetAllDevices()
+			if err != nil {
+				logger.Error("Failed to fetch all devices: %v", err)
+				return
+			}
+			
+			// Filter for unassigned devices (owner_id is empty)
+			var pending []supabase.Device
+			for _, dev := range allDevices {
+				if dev.OwnerID == "" {
+					pending = append(pending, dev)
+				}
+			}
+			
+			pendingDevicesData = pending
+			time.AfterFunc(10*time.Millisecond, func() {
+				if pendingDevicesWidget != nil {
+					pendingDevicesWidget.Refresh()
+					logger.Info("Refreshed pending devices: %d found", len(pending))
+				}
+			})
+		}()
+	}
+	
+	pendingDevicesWidget = widget.NewList(
+		func() int {
+			return len(pendingDevicesData)
+		},
+		func() fyne.CanvasObject {
+			return container.NewHBox(
+				widget.NewLabel("Device Name"),
+				widget.NewButton("✅ Approve", func() {}),
+			)
+		},
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			if id >= len(pendingDevicesData) {
+				return
+			}
+			
+			device := pendingDevicesData[id]
+			box := obj.(*fyne.Container)
+			label := box.Objects[0].(*widget.Label)
+			approveBtn := box.Objects[1].(*widget.Button)
+			
+			label.SetText(fmt.Sprintf("📱 %s (%s) - ID: %s", device.DeviceName, device.Platform, device.DeviceID))
+			
+			approveBtn.OnTapped = func() {
+				dialog.ShowConfirm("Approve Device",
+					fmt.Sprintf("Approve device '%s' and assign it to your account?", device.DeviceName),
+					func(confirmed bool) {
+						if confirmed && currentUser != nil {
+							go func() {
+								err := supabaseClient.AssignDevice(device.DeviceID, currentUser.ID)
+								if err != nil {
+									logger.Error("Failed to approve device: %v", err)
+									time.AfterFunc(10*time.Millisecond, func() {
+										dialog.ShowError(fmt.Errorf("Failed to approve device: %v", err), window)
+									})
+								} else {
+									logger.Info("✅ Device approved: %s", device.DeviceName)
+									time.AfterFunc(10*time.Millisecond, func() {
+										dialog.ShowInformation("Success", "Device approved successfully!", window)
+										refreshPendingDevices()
+										// Also refresh assigned devices
+										if deviceListWidget != nil {
+											go func() {
+												devices, _ := supabaseClient.GetDevices(currentUser.ID)
+												devicesData = devices
+												time.AfterFunc(10*time.Millisecond, func() {
+													deviceListWidget.Refresh()
+												})
+											}()
+										}
+									})
+								}
+							}()
+						}
+					}, window)
+			}
+		},
+	)
+	
+	pendingDevicesSection := container.NewBorder(
+		container.NewVBox(
+			widget.NewLabel("⏳ Pending Devices (Waiting for Approval)"),
+			widget.NewButton("🔄 Refresh", func() {
+				refreshPendingDevices()
+			}),
+		),
+		nil, nil, nil,
+		pendingDevicesWidget,
+	)
+	
 	// Main layout with tabs
 	tabs := container.NewAppTabs(
-		container.NewTabItem("Login", loginForm),
-		container.NewTabItem("Devices", deviceSection),
+		container.NewTabItem("Login", loginTab),
+		container.NewTabItem("My Devices", deviceSection),
+		container.NewTabItem("Approve Devices", pendingDevicesSection),
 		container.NewTabItem("Settings", createSettingsTab()),
 	)
 
