@@ -172,7 +172,6 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			authResp, err := supabaseClient.SignIn(email, password)
 			if err != nil {
 				logger.Error("Login failed for %s: %v", email, err)
-				window.Canvas().Content().Refresh()
 				statusLabel.SetText("❌ Login failed: " + err.Error())
 				loginButton.Enable()
 				return
@@ -186,7 +185,6 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			approved, err := supabaseClient.CheckApproval(currentUser.ID)
 			if err != nil {
 				logger.Error("Failed to check approval for user %s: %v", currentUser.ID, err)
-				window.Canvas().Content().Refresh()
 				statusLabel.SetText("❌ Failed to check approval")
 				loginButton.Enable()
 				return
@@ -195,13 +193,11 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			logger.Info("Approval status: %v", approved)
 			if !approved {
 				logger.Info("User %s is not approved yet", currentUser.Email)
-				window.Canvas().Content().Refresh()
 				statusLabel.SetText("⏸️ Account pending approval")
 				loginButton.Enable()
 				return
 			}
 
-			window.Canvas().Content().Refresh()
 			statusLabel.SetText("✅ Connected as: " + currentUser.Email)
 			
 			// Fetch devices assigned to this user
@@ -210,7 +206,6 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			if err != nil {
 				logger.Error("Failed to fetch devices for user %s: %v", currentUser.ID, err)
 				logger.Debug("Device fetch error details: %+v", err)
-				window.Canvas().Content().Refresh()
 				statusLabel.SetText("⚠️ Connected but failed to load devices")
 			} else {
 				logger.Info("✅ Successfully loaded %d assigned devices", len(devices))
@@ -221,17 +216,14 @@ func createModernUI(window fyne.Window) *fyne.Container {
 				
 				devicesData = devices
 				if deviceListWidget != nil {
-					window.Canvas().Content().Refresh()
 					deviceListWidget.Refresh()
 					logger.Debug("Device list widget refreshed with %d devices", len(devicesData))
 				} else {
 					logger.Error("Device list widget is nil")
 				}
-				
 				statusLabel.SetText(fmt.Sprintf("✅ Connected: %s (%d devices)", currentUser.Email, len(devices)))
 			}
 			
-			window.Canvas().Content().Refresh()
 			loginButton.Enable()
 		}()
 	})
