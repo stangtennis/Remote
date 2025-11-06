@@ -199,6 +199,108 @@ func (c *Client) GetDevices(userID string) ([]Device, error) {
 	return devices, nil
 }
 
+// GetAllDevices fetches all devices (including unassigned ones)
+func (c *Client) GetAllDevices() ([]Device, error) {
+	logger.Debug("[GetAllDevices] Fetching all devices")
+	
+	if c.AuthToken == "" {
+		logger.Error("[GetAllDevices] Not authenticated")
+		return nil, fmt.Errorf("not authenticated")
+	}
+
+	url := fmt.Sprintf("%s/rest/v1/devices?select=*", c.URL)
+	logger.Debug("[GetAllDevices] URL: %s", url)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		logger.Error("[GetAllDevices] Failed to create request: %v", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		logger.Error("[GetAllDevices] Request failed: %v", err)
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Error("[GetAllDevices] Failed to read response: %v", err)
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Error("[GetAllDevices] Failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("failed to fetch devices: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	var devices []Device
+	if err := json.Unmarshal(body, &devices); err != nil {
+		logger.Error("[GetAllDevices] Failed to unmarshal: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	logger.Info("[GetAllDevices] Successfully fetched %d devices", len(devices))
+	return devices, nil
+}
+
+// AssignDevice assigns a device to the current user (approves it)
+func (c *Client) AssignDevice(deviceID, userID string) error {
+	logger.Debug("[AssignDevice] Assigning device %s to user %s", deviceID, userID)
+	
+	if c.AuthToken == "" {
+		logger.Error("[AssignDevice] Not authenticated")
+		return fmt.Errorf("not authenticated")
+	}
+
+	url := fmt.Sprintf("%s/rest/v1/device_assignments", c.URL)
+	logger.Debug("[AssignDevice] URL: %s", url)
+
+	payload := map[string]string{
+		"device_id": deviceID,
+		"user_id":   userID,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		logger.Error("[AssignDevice] Failed to marshal payload: %v", err)
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		logger.Error("[AssignDevice] Failed to create request: %v", err)
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=minimal")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		logger.Error("[AssignDevice] Request failed: %v", err)
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		logger.Error("[AssignDevice] Failed with status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("failed to assign device: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	logger.Info("[AssignDevice] Successfully assigned device %s to user %s", deviceID, userID)
+	return nil
+}
+
 // CheckApproval checks if the user is approved
 func (c *Client) CheckApproval(userID string) (bool, error) {
 	logger.Debug("[CheckApproval] Checking approval for user: %s", userID)
