@@ -82,8 +82,8 @@ func (m *Manager) ListenForSessions() {
 }
 
 func (m *Manager) fetchPendingSessions() ([]Session, error) {
-	// Query remote_sessions for pending sessions for this device
-	url := m.cfg.SupabaseURL + "/rest/v1/remote_sessions"
+	// Query webrtc_sessions for sessions with offers for this device
+	url := m.cfg.SupabaseURL + "/rest/v1/webrtc_sessions"
 	
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -95,7 +95,8 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 	
 	q := req.URL.Query()
 	q.Add("device_id", "eq."+m.device.ID)
-	q.Add("status", "eq.pending")
+	q.Add("offer", "not.is.null") // Has an offer waiting
+	q.Add("answer", "is.null")     // No answer yet
 	q.Add("select", "*")
 	q.Add("order", "created_at.desc")
 	q.Add("limit", "1")
@@ -126,30 +127,30 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 			log.Printf("🔍 No pending sessions found for device: %s", m.device.ID)
 		}
 	}
-	// Don't log here - let the handler log only when actually processing NEW sessions
 
 	var result []Session
 	for _, s := range sessions {
-		// Database column is "id" not "session_id"
-		sessionID, ok := s["id"].(string)
+		// Get session_id from webrtc_sessions table
+		sessionID, ok := s["session_id"].(string)
 		if !ok {
-			log.Printf("⚠️  Skipping session with invalid id: %+v", s)
-			continue // Skip if id is missing
+			log.Printf("⚠️  Skipping session with invalid session_id: %+v", s)
+			continue
 		}
-		pin, _ := s["pin"].(string)
 		
-		// Don't log here - moved to where we actually handle NEW sessions
+		// Get offer (SDP) from the session
+		offer, _ := s["offer"].(string)
 		
 		session := Session{
-			ID:  sessionID,
-			PIN: pin,
+			ID: sessionID,
 		}
-		if token, ok := s["token"].(string); ok {
-			session.Token = token
+		
+		// Store offer in TurnConfig for now (will be extracted in handleSession)
+		if offer != "" {
+			session.TurnConfig = map[string]interface{}{
+				"offer": offer,
+			}
 		}
-		if turnConfig, ok := s["turn_config"].(map[string]interface{}); ok {
-			session.TurnConfig = turnConfig
-		}
+		
 		result = append(result, session)
 	}
 
@@ -167,52 +168,10 @@ func (m *Manager) handleSession(session Session) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Get ICE servers from session TURN config or use default STUN
+	// Use default STUN servers (TURN can be added later)
 	iceServers := []webrtc.ICEServer{
 		{URLs: []string{"stun:stun.l.google.com:19302"}},
 		{URLs: []string{"stun:stun1.l.google.com:19302"}},
-	}
-
-	// Parse TURN config from session
-	if session.TurnConfig != nil {
-		if iceServersRaw, ok := session.TurnConfig["iceServers"].([]interface{}); ok {
-			iceServers = []webrtc.ICEServer{}
-			for _, serverRaw := range iceServersRaw {
-				if serverMap, ok := serverRaw.(map[string]interface{}); ok {
-					server := webrtc.ICEServer{}
-					
-					// Parse URLs
-					if urlsRaw, ok := serverMap["urls"]; ok {
-						switch urls := urlsRaw.(type) {
-						case string:
-							server.URLs = []string{urls}
-						case []interface{}:
-							for _, url := range urls {
-								if urlStr, ok := url.(string); ok {
-									server.URLs = append(server.URLs, urlStr)
-								}
-							}
-						}
-					}
-					
-					// Parse credentials
-					if username, ok := serverMap["username"].(string); ok {
-						server.Username = username
-					}
-					if credential, ok := serverMap["credential"].(string); ok {
-						server.Credential = credential
-					}
-					
-					if len(server.URLs) > 0 {
-						iceServers = append(iceServers, server)
-					}
-				}
-			}
-			log.Printf("🔐 Using TURN config with %d ICE servers", len(iceServers))
-			for i, server := range iceServers {
-				log.Printf("  ICE Server %d: URLs=%v, Username=%s", i+1, server.URLs, server.Username)
-			}
-		}
 	}
 
 	if err := m.CreatePeerConnection(iceServers); err != nil {
@@ -220,9 +179,22 @@ func (m *Manager) handleSession(session Session) {
 		return
 	}
 
-	// Wait for offer from dashboard
-	log.Println("⏳ Waiting for offer from dashboard...")
-	m.waitForOffer(session.ID)
+	// Extract offer from session
+	var offerSDP string
+	if session.TurnConfig != nil {
+		if offer, ok := session.TurnConfig["offer"].(string); ok {
+			offerSDP = offer
+		}
+	}
+
+	if offerSDP == "" {
+		log.Println("❌ No offer found in session")
+		return
+	}
+
+	// Process the offer immediately
+	log.Println("📨 Processing offer from controller...")
+	m.handleOfferDirect(session.ID, offerSDP)
 }
 
 func (m *Manager) waitForOffer(sessionID string) {
@@ -410,24 +382,56 @@ func (m *Manager) fetchSignalingMessages(sessionID, fromSide string) ([]SignalMe
 	return signals, nil
 }
 
+// handleOfferDirect processes an offer directly from the session
+func (m *Manager) handleOfferDirect(sessionID, offerSDP string) {
+	// Set remote description
+	offer := webrtc.SessionDescription{
+		Type: webrtc.SDPTypeOffer,
+		SDP:  offerSDP,
+	}
+
+	if err := m.peerConnection.SetRemoteDescription(offer); err != nil {
+		log.Printf("Failed to set remote description: %v", err)
+		return
+	}
+
+	// Create answer
+	answer, err := m.peerConnection.CreateAnswer(nil)
+	if err != nil {
+		log.Printf("Failed to create answer: %v", err)
+		return
+	}
+
+	if err := m.peerConnection.SetLocalDescription(answer); err != nil {
+		log.Printf("Failed to set local description: %v", err)
+		return
+	}
+
+	// Send answer back to webrtc_sessions table
+	m.sendAnswer(sessionID, answer.SDP)
+}
+
 func (m *Manager) sendAnswer(sessionID, sdp string) {
-	url := m.cfg.SupabaseURL + "/rest/v1/session_signaling"
+	url := m.cfg.SupabaseURL + "/rest/v1/webrtc_sessions"
 
 	payload := map[string]interface{}{
-		"session_id": sessionID,
-		"from_side":  "agent",
-		"msg_type":   "answer",
-		"payload": map[string]interface{}{
-			"sdp": sdp,
-		},
+		"answer": sdp,
+		"status": "answered",
 	}
 
 	jsonData, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	
+	// Create PATCH request with session_id filter
+	req, _ := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
 	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
 	req.Header.Set("Prefer", "return=minimal")
+	
+	// Add query parameter to target specific session
+	q := req.URL.Query()
+	q.Add("session_id", "eq."+sessionID)
+	req.URL.RawQuery = q.Encode()
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
@@ -443,7 +447,7 @@ func (m *Manager) sendAnswer(sessionID, sdp string) {
 		return
 	}
 
-	log.Println("📤 Sent answer to dashboard")
+	log.Println("📤 Sent answer to controller")
 }
 
 func (m *Manager) updateSessionStatus(status string) {
