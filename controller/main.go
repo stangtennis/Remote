@@ -16,6 +16,7 @@ import (
 	"github.com/stangtennis/Remote/controller/internal/config"
 	"github.com/stangtennis/Remote/controller/internal/credentials"
 	"github.com/stangtennis/Remote/controller/internal/logger"
+	"github.com/stangtennis/Remote/controller/internal/settings"
 	"github.com/stangtennis/Remote/controller/internal/supabase"
 	"github.com/stangtennis/Remote/controller/internal/viewer"
 )
@@ -25,6 +26,7 @@ var (
 	currentUser    *supabase.User
 	myApp          fyne.App
 	myWindow       fyne.Window
+	appSettings    *settings.Settings
 )
 
 func main() {
@@ -37,6 +39,16 @@ func main() {
 
 	logger.Info("=== Remote Desktop Controller Starting ===")
 	logger.Info("Application startup initiated")
+
+	// Load settings
+	logger.Info("Loading settings...")
+	appSettings, err := settings.Load()
+	if err != nil {
+		logger.Error("Failed to load settings, using defaults: %v", err)
+		appSettings = settings.Default()
+	}
+	logger.Info("Settings loaded: Quality=%s, Resolution=%s, FPS=%d", 
+		appSettings.GetQualityDescription(), appSettings.MaxResolution, appSettings.TargetFPS)
 
 	// Load configuration
 	logger.Info("Loading configuration...")
@@ -56,13 +68,21 @@ func main() {
 	}
 	logger.Info("✅ Supabase client initialized successfully")
 
-	// Create application with modern theme
+	// Create application with theme from settings
 	logger.Info("Creating Fyne application...")
 	myApp = app.New()
-	myApp.Settings().SetTheme(theme.DarkTheme())
+	if appSettings.Theme == "dark" {
+		myApp.Settings().SetTheme(theme.DarkTheme())
+	} else {
+		myApp.Settings().SetTheme(theme.LightTheme())
+	}
 	
-	myWindow = myApp.NewWindow("Remote Desktop Controller - Modern Edition")
-	myWindow.Resize(fyne.NewSize(1200, 800))
+	windowTitle := "Remote Desktop Controller"
+	if appSettings.HighQualityMode {
+		windowTitle += " - High-Performance Mode"
+	}
+	myWindow = myApp.NewWindow(windowTitle)
+	myWindow.Resize(fyne.NewSize(float32(appSettings.WindowWidth), float32(appSettings.WindowHeight)))
 	myWindow.CenterOnScreen()
 	logger.Info("Application window created")
 
@@ -357,23 +377,211 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	)
 }
 
-// createSettingsTab creates the settings tab
+// createSettingsTab creates the comprehensive settings tab
 func createSettingsTab() *fyne.Container {
-	qualityLabel := widget.NewLabel("Video Quality: Ultra (Best for powerful computers)")
-	fpsLabel := widget.NewLabel("Target FPS: 60")
-	resolutionLabel := widget.NewLabel("Max Resolution: 4K (3840x2160)")
-	codecLabel := widget.NewLabel("Codec: H.264 High Profile")
+	// Performance Mode Toggle
+	highQualityCheck := widget.NewCheck("Enable High-Performance Mode", func(checked bool) {
+		appSettings.HighQualityMode = checked
+		if checked {
+			appSettings.ApplyPreset("ultra")
+		}
+		settings.Save(appSettings)
+		logger.Info("High-performance mode: %v", checked)
+	})
+	highQualityCheck.Checked = appSettings.HighQualityMode
 	
+	// Quality Preset Buttons
+	presetUltra := widget.NewButton("Ultra (4K, 60 FPS)", func() {
+		appSettings.ApplyPreset("ultra")
+		settings.Save(appSettings)
+		dialog.ShowInformation("Preset Applied", "Ultra quality preset applied. Restart for full effect.", myWindow)
+		logger.Info("Applied Ultra preset")
+	})
+	presetUltra.Importance = widget.HighImportance
+	
+	presetHigh := widget.NewButton("High (1440p, 60 FPS)", func() {
+		appSettings.ApplyPreset("high")
+		settings.Save(appSettings)
+		dialog.ShowInformation("Preset Applied", "High quality preset applied. Restart for full effect.", myWindow)
+		logger.Info("Applied High preset")
+	})
+	
+	presetLow := widget.NewButton("Low (1080p, 30 FPS)", func() {
+		appSettings.ApplyPreset("low")
+		settings.Save(appSettings)
+		dialog.ShowInformation("Preset Applied", "Low quality preset applied. Restart for full effect.", myWindow)
+		logger.Info("Applied Low preset")
+	})
+	
+	// Resolution Selection
+	resolutionSelect := widget.NewSelect([]string{"720p", "1080p", "1440p", "4K"}, func(value string) {
+		appSettings.MaxResolution = value
+		settings.Save(appSettings)
+		logger.Info("Resolution changed to: %s", value)
+	})
+	resolutionSelect.SetSelected(appSettings.MaxResolution)
+	
+	// FPS Selection
+	fpsSelect := widget.NewSelect([]string{"30", "60", "120"}, func(value string) {
+		if value == "30" {
+			appSettings.TargetFPS = 30
+		} else if value == "60" {
+			appSettings.TargetFPS = 60
+		} else {
+			appSettings.TargetFPS = 120
+		}
+		settings.Save(appSettings)
+		logger.Info("Target FPS changed to: %d", appSettings.TargetFPS)
+	})
+	fpsSelect.SetSelected(fmt.Sprintf("%d", appSettings.TargetFPS))
+	
+	// Video Quality Slider
+	qualitySlider := widget.NewSlider(1, 100)
+	qualitySlider.Value = float64(appSettings.VideoQuality)
+	qualitySlider.Step = 10
+	qualityLabel := widget.NewLabel(fmt.Sprintf("Video Quality: %d%%", appSettings.VideoQuality))
+	qualitySlider.OnChanged = func(value float64) {
+		appSettings.VideoQuality = int(value)
+		qualityLabel.SetText(fmt.Sprintf("Video Quality: %d%%", int(value)))
+		settings.Save(appSettings)
+	}
+	
+	// Codec Selection
+	codecSelect := widget.NewSelect([]string{"H.264", "H.265", "VP9"}, func(value string) {
+		appSettings.Codec = value
+		settings.Save(appSettings)
+		logger.Info("Codec changed to: %s", value)
+	})
+	codecSelect.SetSelected(appSettings.Codec)
+	
+	// Bitrate Slider
+	bitrateSlider := widget.NewSlider(5, 100)
+	bitrateSlider.Value = float64(appSettings.MaxBitrate)
+	bitrateSlider.Step = 5
+	bitrateLabel := widget.NewLabel(fmt.Sprintf("Max Bitrate: %d Mbps", appSettings.MaxBitrate))
+	bitrateSlider.OnChanged = func(value float64) {
+		appSettings.MaxBitrate = int(value)
+		bitrateLabel.SetText(fmt.Sprintf("Max Bitrate: %d Mbps", int(value)))
+		settings.Save(appSettings)
+	}
+	
+	// Feature Toggles
+	adaptiveBitrateCheck := widget.NewCheck("Adaptive Bitrate", func(checked bool) {
+		appSettings.AdaptiveBitrate = checked
+		settings.Save(appSettings)
+	})
+	adaptiveBitrateCheck.Checked = appSettings.AdaptiveBitrate
+	
+	hardwareAccelCheck := widget.NewCheck("Hardware Acceleration", func(checked bool) {
+		appSettings.HardwareAcceleration = checked
+		settings.Save(appSettings)
+	})
+	hardwareAccelCheck.Checked = appSettings.HardwareAcceleration
+	
+	lowLatencyCheck := widget.NewCheck("Low Latency Mode", func(checked bool) {
+		appSettings.LowLatencyMode = checked
+		settings.Save(appSettings)
+	})
+	lowLatencyCheck.Checked = appSettings.LowLatencyMode
+	
+	fileTransferCheck := widget.NewCheck("Enable File Transfer", func(checked bool) {
+		appSettings.EnableFileTransfer = checked
+		settings.Save(appSettings)
+	})
+	fileTransferCheck.Checked = appSettings.EnableFileTransfer
+	
+	clipboardCheck := widget.NewCheck("Enable Clipboard Sync", func(checked bool) {
+		appSettings.EnableClipboardSync = checked
+		settings.Save(appSettings)
+	})
+	clipboardCheck.Checked = appSettings.EnableClipboardSync
+	
+	audioCheck := widget.NewCheck("Enable Audio Streaming", func(checked bool) {
+		appSettings.EnableAudio = checked
+		settings.Save(appSettings)
+	})
+	audioCheck.Checked = appSettings.EnableAudio
+	
+	// Theme Selection
+	themeSelect := widget.NewSelect([]string{"dark", "light"}, func(value string) {
+		appSettings.Theme = value
+		settings.Save(appSettings)
+		dialog.ShowInformation("Theme Changed", "Please restart the application to apply the new theme.", myWindow)
+		logger.Info("Theme changed to: %s", value)
+	})
+	themeSelect.SetSelected(appSettings.Theme)
+	
+	// Reset to Defaults Button
+	resetButton := widget.NewButton("Reset to Defaults", func() {
+		dialog.ShowConfirm("Reset Settings", 
+			"Are you sure you want to reset all settings to defaults?",
+			func(confirmed bool) {
+				if confirmed {
+					appSettings = settings.Default()
+					settings.Save(appSettings)
+					dialog.ShowInformation("Settings Reset", "All settings have been reset. Please restart the application.", myWindow)
+					logger.Info("Settings reset to defaults")
+				}
+			}, myWindow)
+	})
+	resetButton.Importance = widget.DangerImportance
+	
+	// Current Settings Display
+	currentSettings := widget.NewLabel(fmt.Sprintf(
+		"Current: %s | %s @ %d FPS | Quality: %d%% | Bitrate: %d Mbps",
+		appSettings.GetQualityDescription(),
+		appSettings.MaxResolution,
+		appSettings.TargetFPS,
+		appSettings.VideoQuality,
+		appSettings.MaxBitrate,
+	))
+	currentSettings.Wrapping = fyne.TextWrapWord
+	
+	// Layout
 	return container.NewVBox(
-		widget.NewLabel("⚙️ High-Performance Settings"),
+		widget.NewLabelWithStyle("⚙️ Performance Settings", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		widget.NewSeparator(),
+		
+		highQualityCheck,
+		widget.NewLabel("Quick Presets:"),
+		container.NewGridWithColumns(3, presetUltra, presetHigh, presetLow),
+		
+		widget.NewSeparator(),
+		widget.NewLabel("Video Settings:"),
+		container.NewGridWithColumns(2,
+			widget.NewLabel("Resolution:"), resolutionSelect,
+			widget.NewLabel("Target FPS:"), fpsSelect,
+			widget.NewLabel("Codec:"), codecSelect,
+		),
 		qualityLabel,
-		fpsLabel,
-		resolutionLabel,
-		codecLabel,
+		qualitySlider,
+		
 		widget.NewSeparator(),
-		widget.NewLabel("These settings are optimized for powerful computers"),
-		widget.NewLabel("to provide the best possible remote desktop experience."),
+		widget.NewLabel("Network Settings:"),
+		bitrateLabel,
+		bitrateSlider,
+		adaptiveBitrateCheck,
+		
+		widget.NewSeparator(),
+		widget.NewLabel("Advanced Options:"),
+		hardwareAccelCheck,
+		lowLatencyCheck,
+		
+		widget.NewSeparator(),
+		widget.NewLabel("Features:"),
+		fileTransferCheck,
+		clipboardCheck,
+		audioCheck,
+		
+		widget.NewSeparator(),
+		widget.NewLabel("Appearance:"),
+		container.NewGridWithColumns(2,
+			widget.NewLabel("Theme:"), themeSelect,
+		),
+		
+		widget.NewSeparator(),
+		currentSettings,
+		resetButton,
 	)
 }
 
