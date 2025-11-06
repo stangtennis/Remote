@@ -313,6 +313,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			return container.NewHBox(
 				widget.NewLabel("Device Name"),
 				widget.NewButton("Connect", func() {}),
+				widget.NewButton("🗑️ Remove", func() {}),
 			)
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
@@ -324,7 +325,8 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			
 			box := obj.(*fyne.Container)
 			label := box.Objects[0].(*widget.Label)
-			button := box.Objects[1].(*widget.Button)
+			connectBtn := box.Objects[1].(*widget.Button)
+			removeBtn := box.Objects[2].(*widget.Button)
 			
 			// Format device name with status indicator and time info
 			var statusIcon string
@@ -363,17 +365,51 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			
 			// Configure connect button
 			if device.Status != "online" {
-				button.Disable()
-				button.SetText("Offline")
+				connectBtn.Disable()
+				connectBtn.SetText("Offline")
 			} else {
-				button.Enable()
-				button.SetText("Connect")
-				button.Importance = widget.HighImportance
-				button.OnTapped = func() {
+				connectBtn.Enable()
+				connectBtn.SetText("Connect")
+				connectBtn.Importance = widget.HighImportance
+				connectBtn.OnTapped = func() {
 					logger.Info("🔗 Initiating connection to device: %s (ID: %s)", device.DeviceName, device.DeviceID)
 					logger.Debug("Device details - Platform: %s, Status: %s", device.Platform, device.Status)
 					connectToDevice(device)
 				}
+			}
+			
+			// Configure remove button
+			removeBtn.SetText("🗑️ Remove")
+			removeBtn.Importance = widget.DangerImportance
+			removeBtn.OnTapped = func() {
+				dialog.ShowConfirm("Remove Device",
+					fmt.Sprintf("Remove device '%s' from your account?\n\nThis will unassign the device but not delete it.", device.DeviceName),
+					func(confirmed bool) {
+						if confirmed && currentUser != nil {
+							go func() {
+								err := supabaseClient.UnassignDevice(device.DeviceID, currentUser.ID)
+								if err != nil {
+									logger.Error("Failed to remove device: %v", err)
+									time.AfterFunc(10*time.Millisecond, func() {
+										dialog.ShowError(fmt.Errorf("Failed to remove device: %v", err), window)
+									})
+								} else {
+									logger.Info("✅ Device removed: %s", device.DeviceName)
+									time.AfterFunc(10*time.Millisecond, func() {
+										dialog.ShowInformation("Success", "Device removed from your account!", window)
+										// Refresh device list
+										go func() {
+											devices, _ := supabaseClient.GetDevices(currentUser.ID)
+											devicesData = devices
+											time.AfterFunc(10*time.Millisecond, func() {
+												deviceListWidget.Refresh()
+											})
+										}()
+									})
+								}
+							}()
+						}
+					}, window)
 			}
 		},
 	)
@@ -427,6 +463,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			return container.NewHBox(
 				widget.NewLabel("Device Name"),
 				widget.NewButton("✅ Approve", func() {}),
+				widget.NewButton("🗑️ Delete", func() {}),
 			)
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
@@ -438,9 +475,13 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			box := obj.(*fyne.Container)
 			label := box.Objects[0].(*widget.Label)
 			approveBtn := box.Objects[1].(*widget.Button)
+			deleteBtn := box.Objects[2].(*widget.Button)
 			
 			label.SetText(fmt.Sprintf("📱 %s (%s) - ID: %s", device.DeviceName, device.Platform, device.DeviceID))
 			
+			// Configure approve button
+			approveBtn.SetText("✅ Approve")
+			approveBtn.Importance = widget.SuccessImportance
 			approveBtn.OnTapped = func() {
 				dialog.ShowConfirm("Approve Device",
 					fmt.Sprintf("Approve device '%s' and assign it to your account?", device.DeviceName),
@@ -468,6 +509,33 @@ func createModernUI(window fyne.Window) *fyne.Container {
 												})
 											}()
 										}
+									})
+								}
+							}()
+						}
+					}, window)
+			}
+			
+			// Configure delete button
+			deleteBtn.SetText("🗑️ Delete")
+			deleteBtn.Importance = widget.DangerImportance
+			deleteBtn.OnTapped = func() {
+				dialog.ShowConfirm("Delete Device",
+					fmt.Sprintf("Permanently delete device '%s'?\n\nThis cannot be undone!", device.DeviceName),
+					func(confirmed bool) {
+						if confirmed {
+							go func() {
+								err := supabaseClient.DeleteDevice(device.DeviceID)
+								if err != nil {
+									logger.Error("Failed to delete device: %v", err)
+									time.AfterFunc(10*time.Millisecond, func() {
+										dialog.ShowError(fmt.Errorf("Failed to delete device: %v", err), window)
+									})
+								} else {
+									logger.Info("✅ Device deleted: %s", device.DeviceName)
+									time.AfterFunc(10*time.Millisecond, func() {
+										dialog.ShowInformation("Success", "Device permanently deleted!", window)
+										refreshPendingDevices()
 									})
 								}
 							}()

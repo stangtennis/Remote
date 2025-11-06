@@ -301,6 +301,86 @@ func (c *Client) AssignDevice(deviceID, userID string) error {
 	return nil
 }
 
+// UnassignDevice removes a device assignment (unassigns from user)
+func (c *Client) UnassignDevice(deviceID, userID string) error {
+	logger.Debug("[UnassignDevice] Unassigning device %s from user %s", deviceID, userID)
+	
+	if c.AuthToken == "" {
+		logger.Error("[UnassignDevice] Not authenticated")
+		return fmt.Errorf("not authenticated")
+	}
+
+	url := fmt.Sprintf("%s/rest/v1/device_assignments?device_id=eq.%s&user_id=eq.%s", c.URL, deviceID, userID)
+	logger.Debug("[UnassignDevice] URL: %s", url)
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		logger.Error("[UnassignDevice] Failed to create request: %v", err)
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		logger.Error("[UnassignDevice] Request failed: %v", err)
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		logger.Error("[UnassignDevice] Failed with status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("failed to unassign device: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	logger.Info("[UnassignDevice] Successfully unassigned device %s from user %s", deviceID, userID)
+	return nil
+}
+
+// DeleteDevice permanently deletes a device from the database
+func (c *Client) DeleteDevice(deviceID string) error {
+	logger.Debug("[DeleteDevice] Deleting device %s", deviceID)
+	
+	if c.AuthToken == "" {
+		logger.Error("[DeleteDevice] Not authenticated")
+		return fmt.Errorf("not authenticated")
+	}
+
+	url := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", c.URL, deviceID)
+	logger.Debug("[DeleteDevice] URL: %s", url)
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		logger.Error("[DeleteDevice] Failed to create request: %v", err)
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		logger.Error("[DeleteDevice] Request failed: %v", err)
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		logger.Error("[DeleteDevice] Failed with status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("failed to delete device: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	logger.Info("[DeleteDevice] Successfully deleted device %s", deviceID)
+	return nil
+}
+
 // CheckApproval checks if the user is approved
 func (c *Client) CheckApproval(userID string) (bool, error) {
 	logger.Debug("[CheckApproval] Checking approval for user: %s", userID)
