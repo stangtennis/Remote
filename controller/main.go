@@ -42,7 +42,8 @@ func main() {
 
 	// Load settings
 	logger.Info("Loading settings...")
-	appSettings, err := settings.Load()
+	var err error
+	appSettings, err = settings.Load()
 	if err != nil {
 		logger.Error("Failed to load settings, using defaults: %v", err)
 		appSettings = settings.Default()
