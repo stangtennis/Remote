@@ -21,17 +21,22 @@ type Viewer struct {
 	deviceName      string
 	connected       bool
 	fullscreen      bool
+	toolbarVisible  bool
 	
 	// UI Components
 	toolbar         *fyne.Container
 	statusBar       *fyne.Container
 	videoContainer  *fyne.Container
+	mainContent     *fyne.Container
 	
 	// Status indicators
 	statusLabel     *widget.Label
 	fpsLabel        *widget.Label
 	latencyLabel    *widget.Label
 	qualitySlider   *widget.Slider
+	
+	// Buttons
+	fullscreenBtn   *widget.Button
 	
 	// Callbacks
 	onDisconnect    func()
@@ -41,10 +46,11 @@ type Viewer struct {
 // NewViewer creates a new remote desktop viewer
 func NewViewer(app fyne.App, deviceID, deviceName string) *Viewer {
 	v := &Viewer{
-		deviceID:   deviceID,
-		deviceName: deviceName,
-		connected:  false,
-		fullscreen: false,
+		deviceID:       deviceID,
+		deviceName:     deviceName,
+		connected:      false,
+		fullscreen:     false,
+		toolbarVisible: true,
 	}
 	
 	// Create window optimized for Full HD
@@ -78,7 +84,7 @@ func (v *Viewer) buildUI() {
 	)
 	
 	// Main layout
-	content := container.NewBorder(
+	v.mainContent = container.NewBorder(
 		v.toolbar,    // Top
 		v.statusBar,  // Bottom
 		nil,          // Left
@@ -86,7 +92,23 @@ func (v *Viewer) buildUI() {
 		v.videoContainer, // Center
 	)
 	
-	v.window.SetContent(content)
+	v.window.SetContent(v.mainContent)
+	
+	// Setup keyboard shortcuts
+	v.window.Canvas().SetOnTypedKey(func(key *fyne.KeyEvent) {
+		// Ctrl+Alt+Home to toggle toolbar in fullscreen
+		if key.Name == fyne.KeyHome && v.fullscreen {
+			v.toggleToolbarVisibility()
+		}
+		// F11 for fullscreen toggle
+		if key.Name == fyne.KeyF11 {
+			v.toggleFullscreen()
+		}
+		// Escape to exit fullscreen
+		if key.Name == fyne.KeyEscape && v.fullscreen {
+			v.toggleFullscreen()
+		}
+	})
 	
 	// Handle window close
 	v.window.SetOnClosed(func() {
@@ -115,7 +137,7 @@ func (v *Viewer) createToolbar() *fyne.Container {
 	disconnectBtn.Importance = widget.DangerImportance
 	
 	// Fullscreen toggle
-	fullscreenBtn := widget.NewButton("⛶ Fullscreen", func() {
+	v.fullscreenBtn = widget.NewButton("⛶ Fullscreen", func() {
 		v.toggleFullscreen()
 	})
 	
@@ -152,7 +174,7 @@ func (v *Viewer) createToolbar() *fyne.Container {
 	)
 	
 	middleSection := container.NewHBox(
-		fullscreenBtn,
+		v.fullscreenBtn,
 		fileTransferBtn,
 		clipboardBtn,
 	)
@@ -185,6 +207,10 @@ func (v *Viewer) createStatusBar() *fyne.Container {
 	// Keyboard/Mouse status
 	inputLabel := widget.NewLabel("🖱️ Mouse & ⌨️ Keyboard Active")
 	
+	// Keyboard shortcuts hint
+	shortcutsLabel := widget.NewLabel("💡 F11: Fullscreen | ESC: Exit Fullscreen | Home: Toggle Toolbar")
+	shortcutsLabel.TextStyle = fyne.TextStyle{Italic: true}
+	
 	return container.NewHBox(
 		v.fpsLabel,
 		widget.NewSeparator(),
@@ -193,6 +219,8 @@ func (v *Viewer) createStatusBar() *fyne.Container {
 		resolutionLabel,
 		widget.NewSeparator(),
 		inputLabel,
+		layout.NewSpacer(),
+		shortcutsLabel,
 		layout.NewSpacer(),
 		widget.NewLabel(fmt.Sprintf("Device: %s", v.deviceName)),
 	)
@@ -244,6 +272,36 @@ func (v *Viewer) handleDisconnect() {
 func (v *Viewer) toggleFullscreen() {
 	v.fullscreen = !v.fullscreen
 	v.window.SetFullScreen(v.fullscreen)
+	
+	if v.fullscreen {
+		// In fullscreen, hide toolbar and status bar initially
+		v.fullscreenBtn.SetText("⛶ Exit Fullscreen")
+		v.hideToolbars()
+	} else {
+		// Windowed mode, show toolbars
+		v.fullscreenBtn.SetText("⛶ Fullscreen")
+		v.showToolbars()
+	}
+}
+
+func (v *Viewer) hideToolbars() {
+	v.toolbarVisible = false
+	// Replace content with just video (no toolbar/statusbar)
+	v.window.SetContent(v.videoContainer)
+}
+
+func (v *Viewer) showToolbars() {
+	v.toolbarVisible = true
+	// Restore full layout with toolbar and statusbar
+	v.window.SetContent(v.mainContent)
+}
+
+func (v *Viewer) toggleToolbarVisibility() {
+	if v.toolbarVisible {
+		v.hideToolbars()
+	} else {
+		v.showToolbars()
+	}
 }
 
 func (v *Viewer) handleFileTransfer() {
