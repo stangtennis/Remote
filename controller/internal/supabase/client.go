@@ -262,8 +262,9 @@ func (c *Client) AssignDevice(deviceID, userID string) error {
 	logger.Debug("[AssignDevice] URL: %s", url)
 
 	payload := map[string]string{
-		"device_id": deviceID,
-		"user_id":   userID,
+		"device_id":   deviceID,
+		"user_id":     userID,
+		"assigned_by": userID, // User assigns to themselves
 	}
 
 	jsonData, err := json.Marshal(payload)
