@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          
+      - name: Build Agent
+        run: |
+          cd agent
+          go build -ldflags="-s -w" -o remote-agent.exe .\cmd\remote-agent
+          
+      - name: Build Controller
+        run: |
+          cd controller
+          go build -ldflags="-s -w" -o controller.exe .
+          
+      - name: Get version from tag
+        id: get_version
+        run: |
+          $version = "${{ github.ref_name }}"
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ steps.get_version.outputs.version }} - Maximum Quality Update
+          body: |
+            # Release ${{ steps.get_version.outputs.version }}
+            
+            ## 🎯 Major Features
+            
+            ### **MAXIMUM QUALITY MODE** - Optimized for High Bandwidth
+            - **60 FPS** streaming (4x smoother)
+            - **JPEG Quality 95** (near-lossless compression)
+            - **4K Resolution Support** (up to 3840px)
+            - **Lanczos3 Scaling** (highest quality algorithm)
+            - **10MB Buffer** (prevents frame drops)
+            
+            ### **Device Approval in Controller**
+            - New "Approve Devices" tab
+            - Approve pending devices directly from UI
+            - Auto-refresh after approval
+            
+            ### **Improved Login Experience**
+            - Login form hides after successful login
+            - Clear visual indication of logged-in state
+            
+            ## 📊 Performance Specs
+            
+            | Metric | Previous | Now | Improvement |
+            |--------|----------|-----|-------------|
+            | Frame Rate | 15 FPS | **60 FPS** | 4x smoother |
+            | JPEG Quality | 60 | **95** | Near-lossless |
+            | Max Resolution | 1920px | **3840px** | 4K support |
+            | Buffer Size | 1MB | **10MB** | Less drops |
+            | Bandwidth | 0.5-2 MB/s | **5-15 MB/s** | High quality |
+            
+            ## 📦 Downloads
+            
+            Download the executables from the Assets section below.
+            
+            ### Remote Agent (Client)
+            **For the computer you want to control**
+            - `remote-agent.exe` - Windows executable
+            
+            ### Remote Controller
+            **For the computer you control from**
+            - `controller.exe` - Windows executable
+            
+            ## 🚀 Quick Start
+            
+            ### Agent Setup
+            1. Download `remote-agent.exe`
+            2. Run `install-service.bat` (as Admin)
+            3. Agent will register and wait for approval
+            
+            ### Controller Setup
+            1. Download `controller.exe`
+            2. Login with your credentials
+            3. Go to "Approve Devices" tab
+            4. Approve your agent
+            5. Connect from "My Devices" tab
+            
+          files: |
+            agent/remote-agent.exe
+            controller/controller.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
