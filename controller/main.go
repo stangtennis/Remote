@@ -617,14 +617,25 @@ func restartApplication() {
 		return
 	}
 	
+	logger.Info("Executable path: %s", executable)
+	
 	// Start a new instance in background
 	go func() {
 		// Small delay to ensure UI updates
 		time.Sleep(500 * time.Millisecond)
 		
-		cmd := exec.Command(executable)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		// On Windows, use cmd.exe to start the process detached
+		var cmd *exec.Cmd
+		if os.PathSeparator == '\\' { // Windows
+			// Use PowerShell to start detached process
+			cmd = exec.Command("powershell", "-Command", "Start-Process", "-FilePath", executable)
+		} else { // Unix-like
+			cmd = exec.Command(executable)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+		}
+		
+		logger.Info("Starting new instance with command: %v", cmd.Args)
 		
 		if err := cmd.Start(); err != nil {
 			logger.Error("Failed to start new instance: %v", err)
@@ -633,10 +644,10 @@ func restartApplication() {
 			return
 		}
 		
-		logger.Info("New instance started (PID: %d), shutting down current instance", cmd.Process.Pid)
+		logger.Info("New instance started successfully, shutting down current instance")
 		
 		// Small delay to let new instance initialize
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 		
 		// Exit current instance
 		myApp.Quit()
