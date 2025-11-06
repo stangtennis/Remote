@@ -600,27 +600,45 @@ func connectToDevice(device supabase.Device) {
 func restartApplication() {
 	logger.Info("Restarting application...")
 	
+	// Show progress dialog
+	progressDialog := dialog.NewCustom("Restarting", "Cancel", 
+		container.NewVBox(
+			widget.NewLabel("Restarting application..."),
+			widget.NewProgressBarInfinite(),
+		), myWindow)
+	progressDialog.Show()
+	
 	// Get the current executable path
 	executable, err := os.Executable()
 	if err != nil {
 		logger.Error("Failed to get executable path: %v", err)
+		progressDialog.Hide()
 		dialog.ShowError(fmt.Errorf("Failed to restart: %v", err), myWindow)
 		return
 	}
 	
-	// Start a new instance
-	cmd := exec.Command(executable)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	
-	if err := cmd.Start(); err != nil {
-		logger.Error("Failed to start new instance: %v", err)
-		dialog.ShowError(fmt.Errorf("Failed to restart: %v", err), myWindow)
-		return
-	}
-	
-	logger.Info("New instance started, shutting down current instance")
-	
-	// Exit current instance
-	myApp.Quit()
+	// Start a new instance in background
+	go func() {
+		// Small delay to ensure UI updates
+		time.Sleep(500 * time.Millisecond)
+		
+		cmd := exec.Command(executable)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		
+		if err := cmd.Start(); err != nil {
+			logger.Error("Failed to start new instance: %v", err)
+			progressDialog.Hide()
+			dialog.ShowError(fmt.Errorf("Failed to restart: %v", err), myWindow)
+			return
+		}
+		
+		logger.Info("New instance started (PID: %d), shutting down current instance", cmd.Process.Pid)
+		
+		// Small delay to let new instance initialize
+		time.Sleep(500 * time.Millisecond)
+		
+		// Exit current instance
+		myApp.Quit()
+	}()
 }
