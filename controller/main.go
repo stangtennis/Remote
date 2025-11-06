@@ -2,29 +2,36 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"os"
+	"os/exec"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/stangtennis/Remote/controller/internal/config"
+	"github.com/stangtennis/Remote/controller/internal/credentials"
 	"github.com/stangtennis/Remote/controller/internal/logger"
 	"github.com/stangtennis/Remote/controller/internal/supabase"
+	"github.com/stangtennis/Remote/controller/internal/viewer"
 )
 
 var (
 	supabaseClient *supabase.Client
 	currentUser    *supabase.User
+	myApp          fyne.App
+	myWindow       fyne.Window
 )
 
 func main() {
 	// Initialize logger first
 	if err := logger.Init(); err != nil {
-		log.Fatalf("Failed to initialize logger: %v", err)
+		fmt.Printf("Failed to initialize logger: %v\n", err)
+		os.Exit(1)
 	}
 	defer logger.Close()
 
@@ -49,16 +56,19 @@ func main() {
 	}
 	logger.Info("✅ Supabase client initialized successfully")
 
-	// Create application
+	// Create application with modern theme
 	logger.Info("Creating Fyne application...")
-	myApp := app.New()
-	myWindow := myApp.NewWindow("Remote Desktop Controller")
-	myWindow.Resize(fyne.NewSize(800, 600))
+	myApp = app.New()
+	myApp.Settings().SetTheme(theme.DarkTheme())
+	
+	myWindow = myApp.NewWindow("Remote Desktop Controller - Modern Edition")
+	myWindow.Resize(fyne.NewSize(1200, 800))
+	myWindow.CenterOnScreen()
 	logger.Info("Application window created")
 
 	// Create UI
 	logger.Info("Building user interface...")
-	content := createMainUI(myWindow)
+	content := createModernUI(myWindow)
 	myWindow.SetContent(content)
 	logger.Info("UI initialized successfully")
 
@@ -68,25 +78,47 @@ func main() {
 	logger.Info("Application shutdown")
 }
 
-func createMainUI(window fyne.Window) *fyne.Container {
-	// Title
-	title := widget.NewLabel("🎮 Remote Desktop Controller")
-	title.TextStyle = fyne.TextStyle{Bold: true}
+func createModernUI(window fyne.Window) *fyne.Container {
+	// Title with modern styling
+	title := widget.NewLabelWithStyle(
+		"🎮 Remote Desktop Controller",
+		fyne.TextAlignCenter,
+		fyne.TextStyle{Bold: true},
+	)
+	title.TextStyle.Bold = true
+
+	// Subtitle
+	subtitle := widget.NewLabel("High-Performance Remote Control for Powerful Computers")
+	subtitle.Alignment = fyne.TextAlignCenter
 
 	// Login section
 	emailEntry := widget.NewEntry()
-	emailEntry.SetPlaceHolder("Email")
+	emailEntry.SetPlaceHolder("Email Address")
 	
 	passwordEntry := widget.NewPasswordEntry()
 	passwordEntry.SetPlaceHolder("Password")
 
-	statusLabel := widget.NewLabel("Not connected")
+	// Remember me checkbox
+	rememberCheck := widget.NewCheck("Remember Me", nil)
+	
+	statusLabel := widget.NewLabel("Ready to connect")
+	statusLabel.Alignment = fyne.TextAlignCenter
 	
 	// Device list (will be populated after login)
 	var deviceListWidget *widget.List
 	var devicesData []supabase.Device
 	var loginButton *widget.Button
 
+	// Try to load saved credentials
+	savedCreds, err := credentials.Load()
+	if err == nil && savedCreds != nil && savedCreds.Remember {
+		emailEntry.SetText(savedCreds.Email)
+		passwordEntry.SetText(savedCreds.Password)
+		rememberCheck.Checked = true
+		logger.Info("Loaded saved credentials for: %s", savedCreds.Email)
+	}
+
+	// Login button
 	loginButton = widget.NewButton("Login", func() {
 		email := emailEntry.Text
 		password := passwordEntry.Text
@@ -99,13 +131,26 @@ func createMainUI(window fyne.Window) *fyne.Container {
 		statusLabel.SetText("🔄 Connecting to Supabase...")
 		loginButton.Disable()
 		
+		// Save credentials if remember me is checked
+		if rememberCheck.Checked {
+			creds := &credentials.Credentials{
+				Email:    email,
+				Password: password,
+				Remember: true,
+			}
+			if err := credentials.Save(creds); err != nil {
+				logger.Error("Failed to save credentials: %v", err)
+			}
+		} else {
+			credentials.Delete()
+		}
+		
 		// Authenticate with Supabase
 		go func() {
 			logger.Info("Attempting login for user: %s", email)
 			authResp, err := supabaseClient.SignIn(email, password)
 			if err != nil {
 				logger.Error("Login failed for %s: %v", email, err)
-				// Update UI on main thread
 				window.Canvas().Content().Refresh()
 				statusLabel.SetText("❌ Login failed: " + err.Error())
 				loginButton.Enable()
@@ -120,7 +165,6 @@ func createMainUI(window fyne.Window) *fyne.Container {
 			approved, err := supabaseClient.CheckApproval(currentUser.ID)
 			if err != nil {
 				logger.Error("Failed to check approval for user %s: %v", currentUser.ID, err)
-				// Update UI on main thread
 				window.Canvas().Content().Refresh()
 				statusLabel.SetText("❌ Failed to check approval")
 				loginButton.Enable()
@@ -130,14 +174,12 @@ func createMainUI(window fyne.Window) *fyne.Container {
 			logger.Info("Approval status: %v", approved)
 			if !approved {
 				logger.Info("User %s is not approved yet", currentUser.Email)
-				// Update UI on main thread
 				window.Canvas().Content().Refresh()
 				statusLabel.SetText("⏸️ Account pending approval")
 				loginButton.Enable()
 				return
 			}
 
-			// Update UI on main thread
 			window.Canvas().Content().Refresh()
 			statusLabel.SetText("✅ Connected as: " + currentUser.Email)
 			
@@ -147,7 +189,6 @@ func createMainUI(window fyne.Window) *fyne.Container {
 			if err != nil {
 				logger.Error("Failed to fetch devices for user %s: %v", currentUser.ID, err)
 				logger.Debug("Device fetch error details: %+v", err)
-				// Update UI on main thread
 				window.Canvas().Content().Refresh()
 				statusLabel.SetText("⚠️ Connected but failed to load devices")
 			} else {
@@ -157,7 +198,6 @@ func createMainUI(window fyne.Window) *fyne.Container {
 						i+1, device.DeviceName, device.DeviceID, device.Platform, device.Status)
 				}
 				
-				// Update device list and UI on main thread
 				devicesData = devices
 				if deviceListWidget != nil {
 					window.Canvas().Content().Refresh()
@@ -167,7 +207,6 @@ func createMainUI(window fyne.Window) *fyne.Container {
 					logger.Error("Device list widget is nil")
 				}
 				
-				// Update status with device count
 				statusLabel.SetText(fmt.Sprintf("✅ Connected: %s (%d devices)", currentUser.Email, len(devices)))
 			}
 			
@@ -175,16 +214,44 @@ func createMainUI(window fyne.Window) *fyne.Container {
 			loginButton.Enable()
 		}()
 	})
+	loginButton.Importance = widget.HighImportance
+
+	// Logout button
+	logoutButton := widget.NewButton("Logout", func() {
+		currentUser = nil
+		devicesData = nil
+		if deviceListWidget != nil {
+			deviceListWidget.Refresh()
+		}
+		statusLabel.SetText("Logged out")
+		logger.Info("User logged out")
+	})
+
+	// Restart button
+	restartButton := widget.NewButton("🔄 Restart App", func() {
+		dialog.ShowConfirm("Restart Application", 
+			"Are you sure you want to restart the application?",
+			func(confirmed bool) {
+				if confirmed {
+					logger.Info("Restarting application...")
+					restartApplication()
+				}
+			}, window)
+	})
+	restartButton.Importance = widget.MediumImportance
 
 	loginForm := container.NewVBox(
+		widget.NewSeparator(),
 		widget.NewLabel("Login to Remote Desktop"),
 		emailEntry,
 		passwordEntry,
-		loginButton,
+		rememberCheck,
+		container.NewGridWithColumns(2, loginButton, logoutButton),
 		statusLabel,
+		widget.NewSeparator(),
 	)
 
-	// Device list section (real data from Supabase)
+	// Device list section with modern styling
 	deviceListWidget = widget.NewList(
 		func() int {
 			return len(devicesData)
@@ -241,14 +308,17 @@ func createMainUI(window fyne.Window) *fyne.Container {
 			displayName := fmt.Sprintf("%s %s (%s) - %s", statusIcon, device.DeviceName, device.Platform, statusText)
 			label.SetText(displayName)
 			
-			// Disable button for offline devices
+			// Configure connect button
 			if device.Status != "online" {
 				button.Disable()
+				button.SetText("Offline")
 			} else {
 				button.Enable()
+				button.SetText("Connect")
+				button.Importance = widget.HighImportance
 				button.OnTapped = func() {
-					log.Printf("Connecting to device: %s (%s)", device.DeviceName, device.DeviceID)
-					// TODO: Implement WebRTC connection
+					logger.Info("🔗 Initiating connection to device: %s (ID: %s)", device.DeviceName, device.DeviceID)
+					logger.Debug("Device details - Platform: %s, Status: %s", device.Platform, device.Status)
 					connectToDevice(device)
 				}
 			}
@@ -256,7 +326,7 @@ func createMainUI(window fyne.Window) *fyne.Container {
 	)
 
 	deviceSection := container.NewBorder(
-		widget.NewLabel("📱 Available Devices"),
+		widget.NewLabel("📱 Available Devices (High-Performance Mode)"),
 		nil,
 		nil,
 		nil,
@@ -267,35 +337,82 @@ func createMainUI(window fyne.Window) *fyne.Container {
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Login", loginForm),
 		container.NewTabItem("Devices", deviceSection),
-		container.NewTabItem("Settings", widget.NewLabel("Settings coming soon...")),
+		container.NewTabItem("Settings", createSettingsTab()),
+	)
+
+	// Top bar with restart button
+	topBar := container.NewBorder(
+		nil, nil,
+		title,
+		restartButton,
+		subtitle,
 	)
 
 	return container.NewBorder(
-		title,
-		widget.NewLabel("Status: Ready"),
+		topBar,
+		widget.NewLabel("Status: Ready | High-Performance Mode Enabled"),
 		nil,
 		nil,
 		tabs,
 	)
 }
 
-// connectToDevice initiates a connection to a remote device
-func connectToDevice(device supabase.Device) {
-	logger.Info("🔗 Initiating connection to device: %s (ID: %s)", device.DeviceName, device.DeviceID)
-	logger.Debug("Device details - Platform: %s, Status: %s", device.Platform, device.Status)
+// createSettingsTab creates the settings tab
+func createSettingsTab() *fyne.Container {
+	qualityLabel := widget.NewLabel("Video Quality: Ultra (Best for powerful computers)")
+	fpsLabel := widget.NewLabel("Target FPS: 60")
+	resolutionLabel := widget.NewLabel("Max Resolution: 4K (3840x2160)")
+	codecLabel := widget.NewLabel("Codec: H.264 High Profile")
 	
-	// TODO: Implement WebRTC viewer window
-	// For now, show a dialog
-	dialog.ShowInformation(
-		"Connecting...",
-		fmt.Sprintf("Connecting to:\n\n"+
-			"Device: %s\n"+
-			"Platform: %s\n"+
-			"ID: %s\n\n"+
-			"WebRTC viewer coming soon!",
-			device.DeviceName,
-			device.Platform,
-			device.DeviceID),
-		nil,
+	return container.NewVBox(
+		widget.NewLabel("⚙️ High-Performance Settings"),
+		widget.NewSeparator(),
+		qualityLabel,
+		fpsLabel,
+		resolutionLabel,
+		codecLabel,
+		widget.NewSeparator(),
+		widget.NewLabel("These settings are optimized for powerful computers"),
+		widget.NewLabel("to provide the best possible remote desktop experience."),
 	)
+}
+
+// connectToDevice initiates a connection to a remote device with high-quality settings
+func connectToDevice(device supabase.Device) {
+	logger.Info("🔗 Opening high-performance viewer for: %s", device.DeviceName)
+	
+	// Create and show the modern viewer
+	v := viewer.NewViewer(myApp, device.DeviceID, device.DeviceName)
+	v.Show()
+	
+	logger.Info("Viewer window opened for device: %s", device.DeviceID)
+}
+
+// restartApplication restarts the application
+func restartApplication() {
+	logger.Info("Restarting application...")
+	
+	// Get the current executable path
+	executable, err := os.Executable()
+	if err != nil {
+		logger.Error("Failed to get executable path: %v", err)
+		dialog.ShowError(fmt.Errorf("Failed to restart: %v", err), myWindow)
+		return
+	}
+	
+	// Start a new instance
+	cmd := exec.Command(executable)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	
+	if err := cmd.Start(); err != nil {
+		logger.Error("Failed to start new instance: %v", err)
+		dialog.ShowError(fmt.Errorf("Failed to restart: %v", err), myWindow)
+		return
+	}
+	
+	logger.Info("New instance started, shutting down current instance")
+	
+	// Exit current instance
+	myApp.Quit()
 }
