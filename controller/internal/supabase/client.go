@@ -258,8 +258,50 @@ func (c *Client) AssignDevice(deviceID, userID string) error {
 		return fmt.Errorf("not authenticated")
 	}
 
+	// Step 1: Update the device's owner_id
+	deviceURL := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", c.URL, deviceID)
+	logger.Debug("[AssignDevice] Updating device owner, URL: %s", deviceURL)
+
+	devicePayload := map[string]string{
+		"owner_id": userID,
+	}
+
+	deviceJSON, err := json.Marshal(devicePayload)
+	if err != nil {
+		logger.Error("[AssignDevice] Failed to marshal device payload: %v", err)
+		return fmt.Errorf("failed to marshal device payload: %w", err)
+	}
+
+	deviceReq, err := http.NewRequest("PATCH", deviceURL, bytes.NewBuffer(deviceJSON))
+	if err != nil {
+		logger.Error("[AssignDevice] Failed to create device update request: %v", err)
+		return fmt.Errorf("failed to create device update request: %w", err)
+	}
+
+	deviceReq.Header.Set("apikey", c.AnonKey)
+	deviceReq.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	deviceReq.Header.Set("Content-Type", "application/json")
+	deviceReq.Header.Set("Prefer", "return=minimal")
+
+	deviceResp, err := c.client.Do(deviceReq)
+	if err != nil {
+		logger.Error("[AssignDevice] Device update request failed: %v", err)
+		return fmt.Errorf("device update request failed: %w", err)
+	}
+	defer deviceResp.Body.Close()
+
+	deviceBody, _ := io.ReadAll(deviceResp.Body)
+	
+	if deviceResp.StatusCode != http.StatusNoContent && deviceResp.StatusCode != http.StatusOK {
+		logger.Error("[AssignDevice] Failed to update device with status %d: %s", deviceResp.StatusCode, string(deviceBody))
+		return fmt.Errorf("failed to update device: %s (status: %d)", string(deviceBody), deviceResp.StatusCode)
+	}
+
+	logger.Debug("[AssignDevice] Device owner updated successfully")
+
+	// Step 2: Create device assignment record
 	url := fmt.Sprintf("%s/rest/v1/device_assignments", c.URL)
-	logger.Debug("[AssignDevice] URL: %s", url)
+	logger.Debug("[AssignDevice] Creating assignment, URL: %s", url)
 
 	payload := map[string]string{
 		"device_id":   deviceID,
