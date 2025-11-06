@@ -342,8 +342,50 @@ func (c *Client) UnassignDevice(deviceID, userID string) error {
 		return fmt.Errorf("not authenticated")
 	}
 
+	// Step 1: Clear the device's owner_id
+	deviceURL := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", c.URL, deviceID)
+	logger.Debug("[UnassignDevice] Clearing device owner, URL: %s", deviceURL)
+
+	devicePayload := map[string]interface{}{
+		"owner_id": nil, // Set to NULL
+	}
+
+	deviceJSON, err := json.Marshal(devicePayload)
+	if err != nil {
+		logger.Error("[UnassignDevice] Failed to marshal device payload: %v", err)
+		return fmt.Errorf("failed to marshal device payload: %w", err)
+	}
+
+	deviceReq, err := http.NewRequest("PATCH", deviceURL, bytes.NewBuffer(deviceJSON))
+	if err != nil {
+		logger.Error("[UnassignDevice] Failed to create device update request: %v", err)
+		return fmt.Errorf("failed to create device update request: %w", err)
+	}
+
+	deviceReq.Header.Set("apikey", c.AnonKey)
+	deviceReq.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	deviceReq.Header.Set("Content-Type", "application/json")
+	deviceReq.Header.Set("Prefer", "return=minimal")
+
+	deviceResp, err := c.client.Do(deviceReq)
+	if err != nil {
+		logger.Error("[UnassignDevice] Device update request failed: %v", err)
+		return fmt.Errorf("device update request failed: %w", err)
+	}
+	defer deviceResp.Body.Close()
+
+	deviceBody, _ := io.ReadAll(deviceResp.Body)
+	
+	if deviceResp.StatusCode != http.StatusNoContent && deviceResp.StatusCode != http.StatusOK {
+		logger.Error("[UnassignDevice] Failed to update device with status %d: %s", deviceResp.StatusCode, string(deviceBody))
+		return fmt.Errorf("failed to update device: %s (status: %d)", string(deviceBody), deviceResp.StatusCode)
+	}
+
+	logger.Debug("[UnassignDevice] Device owner cleared successfully")
+
+	// Step 2: Delete device assignment record
 	url := fmt.Sprintf("%s/rest/v1/device_assignments?device_id=eq.%s&user_id=eq.%s", c.URL, deviceID, userID)
-	logger.Debug("[UnassignDevice] URL: %s", url)
+	logger.Debug("[UnassignDevice] Deleting assignment, URL: %s", url)
 
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
