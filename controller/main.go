@@ -496,13 +496,19 @@ func createSettingsTab() *fyne.Container {
 	audioCheck.Checked = appSettings.EnableAudio
 	
 	// Theme Selection
-	themeSelect := widget.NewSelect([]string{"dark", "light"}, func(value string) {
+	themeSelect := widget.NewSelect([]string{"dark", "light"}, nil)
+	themeSelect.SetSelected(appSettings.Theme)
+	
+	// Now attach the callback after setting initial value
+	themeSelect.OnChanged = func(value string) {
+		if value == appSettings.Theme {
+			return // No change, don't show dialog
+		}
 		appSettings.Theme = value
 		settings.Save(appSettings)
 		dialog.ShowInformation("Theme Changed", "Please restart the application to apply the new theme.", myWindow)
 		logger.Info("Theme changed to: %s", value)
-	})
-	themeSelect.SetSelected(appSettings.Theme)
+	}
 	
 	// Reset to Defaults Button
 	resetButton := widget.NewButton("Reset to Defaults", func() {
