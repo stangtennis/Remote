@@ -21,6 +21,12 @@ import (
 	"github.com/stangtennis/Remote/controller/internal/viewer"
 )
 
+const (
+	Version     = "v2.0.0"
+	BuildDate   = "2025-11-06"
+	VersionInfo = Version + " (" + BuildDate + ")"
+)
+
 var (
 	supabaseClient *supabase.Client
 	currentUser    *supabase.User
@@ -38,6 +44,7 @@ func main() {
 	defer logger.Close()
 
 	logger.Info("=== Remote Desktop Controller Starting ===")
+	logger.Info("Version: %s", VersionInfo)
 	logger.Info("Application startup initiated")
 
 	// Load settings
@@ -78,7 +85,7 @@ func main() {
 		myApp.Settings().SetTheme(theme.LightTheme())
 	}
 	
-	windowTitle := "Remote Desktop Controller"
+	windowTitle := "Remote Desktop Controller " + Version
 	if appSettings.HighQualityMode {
 		windowTitle += " - High-Performance Mode"
 	}
@@ -102,7 +109,7 @@ func main() {
 func createModernUI(window fyne.Window) *fyne.Container {
 	// Title with modern styling
 	title := widget.NewLabelWithStyle(
-		"🎮 Remote Desktop Controller",
+		"🎮 Remote Desktop Controller " + Version,
 		fyne.TextAlignCenter,
 		fyne.TextStyle{Bold: true},
 	)

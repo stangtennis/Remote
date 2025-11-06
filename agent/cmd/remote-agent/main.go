@@ -58,7 +58,7 @@ func setupLogging() error {
 	
 	log.Printf("========================================")
 	log.Printf("🖥️  Remote Desktop Agent Starting...")
-	log.Printf("📦 Version: %s", tray.Version)
+	log.Printf("📦 Version: %s", tray.VersionString)
 	log.Printf("📝 Log file: %s", logPath)
 	log.Printf("========================================")
 	
