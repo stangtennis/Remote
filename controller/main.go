@@ -804,6 +804,20 @@ func connectToDevice(device supabase.Device) {
 	v.Show()
 	
 	logger.Info("Viewer window opened for device: %s", device.DeviceID)
+	
+	// Initiate WebRTC connection
+	if currentUser != nil {
+		go func() {
+			if err := v.ConnectWebRTC(
+				supabaseClient.URL,
+				supabaseClient.AnonKey,
+				supabaseClient.AuthToken,
+				currentUser.ID,
+			); err != nil {
+				logger.Error("Failed to connect WebRTC: %v", err)
+			}
+		}()
+	}
 }
 
 // restartApplication restarts the application
