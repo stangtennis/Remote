@@ -95,9 +95,11 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 func UpdateHeartbeat(config RegistrationConfig, deviceID string) error {
 	url := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, deviceID)
 
+	now := time.Now().Format(time.RFC3339)
 	payload := map[string]interface{}{
 		"status":         "online",
-		"last_heartbeat": time.Now().Format(time.RFC3339),
+		"last_heartbeat": now,
+		"last_seen":      now, // Also update last_seen for controller compatibility
 	}
 
 	jsonData, err := json.Marshal(payload)
