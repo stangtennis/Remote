@@ -127,7 +127,7 @@ func (c *Client) SignIn(email, password string) (*AuthResponse, error) {
 	return &authResp, nil
 }
 
-// GetDevices fetches devices assigned to the authenticated user
+// GetDevices fetches devices assigned to the user (by owner_id)
 func (c *Client) GetDevices(userID string) ([]Device, error) {
 	logger.Debug("[GetDevices] Starting device fetch for user: %s", userID)
 	
@@ -137,22 +137,11 @@ func (c *Client) GetDevices(userID string) ([]Device, error) {
 	}
 	logger.Debug("[GetDevices] Auth token present, length: %d", len(c.AuthToken))
 
-	// Call get_user_devices function
-	url := fmt.Sprintf("%s/rest/v1/rpc/get_user_devices", c.URL)
-	logger.Debug("[GetDevices] RPC URL: %s", url)
+	// Query devices table directly by owner_id
+	url := fmt.Sprintf("%s/rest/v1/remote_devices?owner_id=eq.%s&select=*", c.URL, userID)
+	logger.Debug("[GetDevices] Query URL: %s", url)
 
-	payload := map[string]string{
-		"p_user_id": userID,
-	}
-
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		logger.Error("[GetDevices] Failed to marshal payload: %v", err)
-		return nil, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-	logger.Debug("[GetDevices] Payload: %s", string(jsonData))
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		logger.Error("[GetDevices] Failed to create HTTP request: %v", err)
 		return nil, fmt.Errorf("failed to create request: %w", err)
