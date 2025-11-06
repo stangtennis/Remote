@@ -2,26 +2,33 @@
 
 A **professional remote desktop solution** built with **Supabase**, **WebRTC**, and **Go** - like TeamViewer, but self-hosted!
 
-## ✅ Status: **Active Development** (Updated 2025-11-05)
+## ✅ Status: **Active Development** (Updated 2025-11-06)
 
-### 🎮 Controller Application v0.2.0 (NEW!)
+### 🎮 Controller Application v2.0.0 (2025-11-06)
 - 🆕 **Standalone Windows EXE** - Native controller app (like TeamViewer)
 - ✅ **Real Supabase Auth** - Login with email/password
+- ✅ **Device Approval UI** - Approve pending devices directly in controller
 - ✅ **Assignment-Based Access** - See only devices assigned to you
 - ✅ **Live Device List** - Real-time status updates
 - ✅ **Status Indicators** - Online/Offline with color coding
-- 🚧 **WebRTC Viewer** - Coming soon (v0.3.0)
-- 📦 **Auto-builds on GitHub** - Download from Actions
-- 🏷️ **GitHub Releases** - Tag with `controller-v*` for releases
+- ✅ **Clean Login UX** - Login form hides when logged in
+- 🚧 **WebRTC Viewer** - Coming soon (v2.1.0)
+- 📦 **Auto-builds on GitHub** - Download from Releases
+- 🏷️ **GitHub Releases** - Automated via GitHub Actions
 
 ### 🖥️ Agent Options
-- ✅ **Windows Native Agent** (v0.2.0) - Auto-registers, no login required!
+- ✅ **Windows Native Agent** (v2.0.0) - **MAXIMUM QUALITY MODE**
+  - 60 FPS streaming (4x smoother)
+  - JPEG Quality 95 (near-lossless)
+  - 4K resolution support (3840px)
+  - Auto-registers, no login required
 - ✅ **Web Agent** - Browser-based, no installation required
 - ✅ **Browser Extension** - Remote control for web agent
 - 🚧 **Electron Agent** - Cross-platform desktop (prototype)
 
-### 🔧 Device Management (NEW!)
+### 🔧 Device Management
 - ✅ **Anonymous Registration** - Agents auto-register without login
+- ✅ **Controller Approval** - Approve devices directly in controller app (NEW!)
 - ✅ **Admin Assignment** - Assign devices to users via admin panel
 - ✅ **User-Based Access** - Users see only assigned devices
 - ✅ **Device Approval** - Admin approves devices for use
@@ -84,9 +91,11 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 
 ### Performance & Reliability
 - **🚀 Fast P2P** - Direct connection when possible, TURN fallback
-- **⚡ Optimized Streaming** - JPEG quality 60, frame dropping on congestion
+- **⚡ MAXIMUM QUALITY** - 60 FPS @ JPEG 95, 4K support (v2.0.0)
+- **💎 Near-Lossless** - Exceptional visual fidelity for high bandwidth
 - **🔄 Auto-Reconnect** - Handles network interruptions gracefully
 - **🌐 Cross-Network** - Works behind NAT/firewalls via TURN
+- **📊 Smart Buffering** - 10MB buffer prevents frame drops
 
 ### User Experience
 - **📦 Portable** - Single EXE file, no installation required
@@ -97,14 +106,14 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 
 ## 📥 Quick Start
 
-### For Admins: Controller Application 🆕
+### For Admins: Controller Application v2.0.0
 
 **Best for:** Controlling multiple remote computers (like TeamViewer)
 
-1. **Download Controller** (from GitHub Actions or build locally)
+1. **Download Controller** (from GitHub Releases)
    ```
-   https://github.com/stangtennis/Remote/actions
-   → Build Controller Application → Download artifact
+   https://github.com/stangtennis/Remote/releases/latest
+   → Download controller.exe
    ```
 
 2. **Run Controller**
@@ -112,11 +121,13 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
    controller.exe
    ```
 
-3. **Login** - Use your approved admin credentials
+3. **Login** - Use your approved credentials
 
-4. **See Devices** - View all online devices in real-time
+4. **Approve Devices** - Go to "Approve Devices" tab and approve pending devices
 
-5. **Connect** - Click Connect to start remote session (WebRTC viewer coming in v0.3.0)
+5. **See Devices** - View all assigned devices in "My Devices" tab
+
+6. **Connect** - Click Connect to start remote session (WebRTC viewer coming in v2.1.0)
 
 **See:** [controller/README.md](./controller/README.md) for details
 
@@ -347,7 +358,7 @@ See [RELEASE.md](./RELEASE.md) for details.
 
 ## 📋 Implementation Status
 
-### ✅ Completed Features (v1.1.7)
+### ✅ Completed Features (v2.0.0 - 2025-11-06)
 
 #### Core Functionality
 - [x] **Infrastructure** - Supabase backend, database, Edge Functions
@@ -360,20 +371,25 @@ See [RELEASE.md](./RELEASE.md) for details.
 - [x] **Automated Releases** - GitHub Actions CI/CD
 - [x] **Session Cleanup** - Automatic via pg_cron
 
-#### New in v1.1.7
+#### New in v2.0.0 (2025-11-06)
+- [x] **MAXIMUM QUALITY MODE** - 60 FPS, JPEG 95, 4K support
+- [x] **Device Approval in Controller** - Approve devices from controller app
+- [x] **Improved Login UX** - Login form hides when logged in
+- [x] **Version Info** - Build dates in agent and controller
+- [x] **GitHub Actions** - Automated releases on tag push
+- [x] **High Bandwidth Optimization** - 10MB buffer, Lanczos3 scaling
 - [x] **User Approval System** - Admin controls who can register
 - [x] **Admin Panel** - Web UI for approving users
 - [x] **Enhanced Tray Menu** - Console window + log viewer
 - [x] **Console Mode** - Live log viewing (PowerShell tail)
 - [x] **Input Fixes** - No more double-clicks or arrow key issues
-- [x] **Performance** - Optimized JPEG quality (60) with frame dropping
-- [x] **Documentation** - USER_APPROVAL_GUIDE.md, CONSOLE_MODE.md
 
-### 🚧 Planned Enhancements
+### 🚧 Planned Enhancements (v2.1.0+)
 
-- [ ] **Controller Application** - 🆕 Standalone Windows EXE (TeamViewer-style) for admins
+- [ ] **WebRTC Viewer** - Complete controller viewer with video rendering
+- [ ] **Input Forwarding** - Mouse/keyboard control from controller
 - [ ] **Chrome Web Store** - Publish browser extension
-- [ ] **Video Encoding** - H.264/VP8 for better performance
+- [ ] **Video Encoding** - H.264/VP8 for even better performance
 - [ ] **File Transfer** - Send/receive files during session
 - [ ] **Multi-Monitor** - Select which screen to stream
 - [ ] **Code Signing** - Windows EXE certificate
@@ -384,9 +400,11 @@ See [RELEASE.md](./RELEASE.md) for details.
 ## ⚠️ Known Limitations
 
 - **Platform**: Windows only (agent)
-- **Video Format**: JPEG frames @ 15 FPS (H.264/VP8 planned)
+- **Video Format**: JPEG frames @ 60 FPS (H.264/VP8 planned for v2.1.0)
+- **Controller Viewer**: WebRTC connection not yet implemented (coming in v2.1.0)
 - **Multiple Tabs**: Use one dashboard tab per session
 - **Code Signing**: Not implemented (Windows SmartScreen warning)
+- **Bandwidth**: 5-15 MB/s required for maximum quality mode
 
 ## 🔒 Security Features
 
@@ -454,7 +472,8 @@ See [RELEASE.md](./RELEASE.md) for details.
 
 ### Release History
 - **[CHANGELOG.md](./CHANGELOG.md)** - Version history
-- **[RELEASE_NOTES_v1.1.7.md](./RELEASE_NOTES_v1.1.7.md)** - Latest release notes
+- **[RELEASE_NOTES_v2.0.0.md](./RELEASE_NOTES_v2.0.0.md)** - Latest release notes (2025-11-06)
+- **[RELEASE_NOTES_v1.1.7.md](./RELEASE_NOTES_v1.1.7.md)** - Previous release notes
 
 ## 🤝 Contributing
 
