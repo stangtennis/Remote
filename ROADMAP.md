@@ -33,49 +33,51 @@ Create a **complete, professional remote desktop solution** with:
 
 ---
 
-### **v2.1.0 - File Transfer & Reconnection** 🎯
-**Status:** In Progress (40% complete)  
-**Target Date:** November 2025 (1-2 weeks)
+### **v2.1.0 - File Transfer & Reconnection** ✅
+**Status:** Complete  
+**Release Date:** November 7, 2025
 
 **Features:**
-- 🟡 File transfer (upload/download)
-- ⏳ Auto-reconnection on network interruption
-- ⏳ Connection quality indicators
-- ⏳ Bandwidth usage monitoring
-- ⏳ Improved error handling
+- ✅ File transfer (controller → agent)
+- ✅ Auto-reconnection with exponential backoff
+- ✅ Progress tracking and notifications
+- ✅ Improved error handling
 
-**Estimated Work:** 10-14 hours
+**Completed:** November 7, 2025
 
 ---
 
-### **v2.2.0 - Audio & Multi-Session**
+### **v2.2.0 - Clipboard Sync & Audio** 🎯
 **Status:** Planned  
-**Target Date:** December 2025 (3-4 weeks)
+**Target Date:** December 2025 (2-3 weeks)
 
 **Features:**
+- ⏳ **Clipboard synchronization (copy/paste)** 🎯 (user priority)
+- ⏳ Text clipboard sync
+- ⏳ Image clipboard sync
+- ⏳ File clipboard sync
 - ⏳ Audio streaming (system audio + microphone)
-- ⏳ Multiple simultaneous connections
-- ⏳ Connection manager UI
-- ⏳ Session history
-- ⏳ Performance monitoring dashboard
+- ⏳ Bidirectional file transfer (agent → controller)
 
-**Estimated Work:** 18-27 hours
+**Estimated Work:** 14-20 hours
 
 ---
 
-### **v2.3.0 - Polish & Optimization**
+### **v2.3.0 - Multi-Session & Advanced Features**
 **Status:** Planned  
 **Target Date:** January 2026 (2-3 weeks)
 
 **Features:**
+- ⏳ Multiple simultaneous connections
+- ⏳ Connection manager UI
+- ⏳ Session history
 - ⏳ H.264/VP8 video encoding (hardware-accelerated)
 - ⏳ Adaptive quality based on bandwidth
 - ⏳ Multi-monitor support
-- ⏳ Clipboard sync
 - ⏳ Chat/messaging
 - ⏳ Screen recording
 
-**Estimated Work:** 15-20 hours
+**Estimated Work:** 20-25 hours
 
 ---
 

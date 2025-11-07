@@ -187,12 +187,29 @@
 
 ---
 
+### **3. Clipboard Synchronization** ⏳ 0% Complete
+
+**What's Needed:**
+- ❌ Clipboard monitoring on controller
+- ❌ Clipboard monitoring on agent
+- ❌ Bidirectional clipboard sync
+- ❌ Text clipboard support
+- ❌ Image clipboard support
+- ❌ File clipboard support (copy/paste files)
+- ❌ Automatic sync on clipboard change
+- ❌ Manual sync button option
+
+**Estimated Work:** 6-8 hours  
+**Priority:** High (user requested) 🎯  
+**Target:** v2.2.0
+
+---
+
 ### **4. Advanced Features** ⏳ 0% Complete
 
 **Not Yet Implemented:**
 - ❌ H.264/VP8 video encoding (hardware-accelerated)
 - ❌ Multi-monitor support
-- ❌ Clipboard synchronization
 - ❌ Screen recording
 - ❌ Chat/messaging
 - ❌ Session history
@@ -261,7 +278,8 @@
 ### **❌ Not Yet Implemented:**
 - Audio streaming
 - Multiple simultaneous connections
-- Advanced features (H.264, multi-monitor, clipboard sync)
+- Clipboard synchronization (copy/paste between controller and agent)
+- Advanced features (H.264, multi-monitor, screen recording)
 
 ---
 
