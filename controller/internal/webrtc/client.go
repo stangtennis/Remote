@@ -11,14 +11,15 @@ import (
 
 // Client represents a WebRTC client for the controller
 type Client struct {
-	peerConnection *webrtc.PeerConnection
-	dataChannel    *webrtc.DataChannel
-	videoTrack     *webrtc.TrackRemote
-	onFrame        func([]byte)
-	onConnected    func()
-	onDisconnected func()
-	mu             sync.Mutex
-	connected      bool
+	peerConnection      *webrtc.PeerConnection
+	dataChannel         *webrtc.DataChannel
+	videoTrack          *webrtc.TrackRemote
+	onFrame             func([]byte)
+	onConnected         func()
+	onDisconnected      func()
+	onDataChannelMessage func([]byte)
+	mu                  sync.Mutex
+	connected           bool
 }
 
 // NewClient creates a new WebRTC client
@@ -80,9 +81,18 @@ func (c *Client) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 		c.dataChannel = dc
 
 		dc.OnMessage(func(msg webrtc.DataChannelMessage) {
-			// Received JPEG frame
-			if c.onFrame != nil {
-				c.onFrame(msg.Data)
+			// Try to parse as JSON first (for clipboard and other messages)
+			var jsonMsg map[string]interface{}
+			if err := json.Unmarshal(msg.Data, &jsonMsg); err == nil {
+				// It's a JSON message (clipboard, file transfer, etc.)
+				if c.onDataChannelMessage != nil {
+					c.onDataChannelMessage(msg.Data)
+				}
+			} else {
+				// It's binary data (JPEG frame)
+				if c.onFrame != nil {
+					c.onFrame(msg.Data)
+				}
 			}
 		})
 	})
@@ -153,6 +163,11 @@ func (c *Client) SetOnConnected(callback func()) {
 // SetOnDisconnected sets the callback for disconnection
 func (c *Client) SetOnDisconnected(callback func()) {
 	c.onDisconnected = callback
+}
+
+// SetOnDataChannelMessage sets the callback for data channel messages
+func (c *Client) SetOnDataChannelMessage(callback func([]byte)) {
+	c.onDataChannelMessage = callback
 }
 
 // IsConnected returns the connection status

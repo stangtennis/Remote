@@ -1,6 +1,7 @@
 package webrtc
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pion/webrtc/v3"
+	"github.com/stangtennis/remote-agent/internal/clipboard"
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/device"
 	"github.com/stangtennis/remote-agent/internal/filetransfer"
@@ -17,16 +19,17 @@ import (
 )
 
 type Manager struct {
-	cfg              *config.Config
-	device           *device.Device
-	peerConnection   *webrtc.PeerConnection
-	dataChannel      *webrtc.DataChannel
-	screenCapturer   *screen.Capturer
-	mouseController  *input.MouseController
-	keyController    *input.KeyboardController
+	cfg                 *config.Config
+	device              *device.Device
+	peerConnection      *webrtc.PeerConnection
+	dataChannel         *webrtc.DataChannel
+	screenCapturer      *screen.Capturer
+	mouseController     *input.MouseController
+	keyController       *input.KeyboardController
 	fileTransferHandler *filetransfer.Handler
-	sessionID        string
-	isStreaming      bool
+	clipboardMonitor    *clipboard.Monitor
+	sessionID           string
+	isStreaming         bool
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
@@ -127,10 +130,18 @@ func (m *Manager) setupDataChannelHandlers(dc *webrtc.DataChannel) {
 				return fmt.Errorf("data channel not ready")
 			})
 		}
+		
+		// Start clipboard monitoring
+		m.startClipboardMonitoring()
 	})
 
 	dc.OnClose(func() {
 		log.Println("❌ Data channel closed")
+		
+		// Stop clipboard monitoring
+		if m.clipboardMonitor != nil {
+			m.clipboardMonitor.Stop()
+		}
 	})
 
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
@@ -193,6 +204,65 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 		if err := m.keyController.SendKey(code, down); err != nil {
 			log.Printf("Key event error: %v", err)
 		}
+	}
+}
+
+func (m *Manager) startClipboardMonitoring() {
+	// Initialize clipboard monitor
+	m.clipboardMonitor = clipboard.NewMonitor()
+	
+	// Set up text clipboard callback
+	m.clipboardMonitor.SetOnTextChange(func(text string) {
+		if m.dataChannel == nil || m.dataChannel.ReadyState() != webrtc.DataChannelStateOpen {
+			return
+		}
+		
+		// Send text clipboard to controller
+		msg := map[string]interface{}{
+			"type":    "clipboard_text",
+			"content": text,
+		}
+		
+		data, err := json.Marshal(msg)
+		if err != nil {
+			log.Printf("❌ Failed to marshal clipboard text: %v", err)
+			return
+		}
+		
+		if err := m.dataChannel.Send(data); err != nil {
+			log.Printf("❌ Failed to send clipboard text: %v", err)
+		}
+	})
+	
+	// Set up image clipboard callback
+	m.clipboardMonitor.SetOnImageChange(func(imageData []byte) {
+		if m.dataChannel == nil || m.dataChannel.ReadyState() != webrtc.DataChannelStateOpen {
+			return
+		}
+		
+		// Encode image to base64 for JSON transmission
+		imageB64 := base64.StdEncoding.EncodeToString(imageData)
+		
+		// Send image clipboard to controller
+		msg := map[string]interface{}{
+			"type":    "clipboard_image",
+			"content": imageB64,
+		}
+		
+		data, err := json.Marshal(msg)
+		if err != nil {
+			log.Printf("❌ Failed to marshal clipboard image: %v", err)
+			return
+		}
+		
+		if err := m.dataChannel.Send(data); err != nil {
+			log.Printf("❌ Failed to send clipboard image: %v", err)
+		}
+	})
+	
+	// Start monitoring
+	if err := m.clipboardMonitor.Start(); err != nil {
+		log.Printf("❌ Failed to start clipboard monitor: %v", err)
 	}
 }
 
