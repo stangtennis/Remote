@@ -9,8 +9,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/pion/webrtc/v3"
 	rtc "github.com/stangtennis/Remote/controller/internal/webrtc"
+	"github.com/stangtennis/Remote/controller/internal/filetransfer"
+	"github.com/pion/webrtc/v3"
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/dialog"
 )
 
 // ConnectWebRTC initiates a WebRTC connection to the remote device
@@ -41,6 +44,9 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 		
 		// Enable input forwarding
 		v.setupInputForwarding()
+		
+		// Initialize file transfer
+		v.InitializeFileTransfer()
 	})
 
 	client.SetOnDisconnected(func() {
@@ -273,4 +279,92 @@ func (v *Viewer) SendKeyPress(key string, pressed bool) {
 	if client, ok := v.webrtcClient.(*rtc.Client); ok {
 		client.SendInput(string(eventJSON))
 	}
+}
+
+// InitializeFileTransfer sets up the file transfer manager
+func (v *Viewer) InitializeFileTransfer() {
+	ftManager := filetransfer.NewManager()
+	
+	// Set callback to send data via WebRTC
+	ftManager.SetSendDataCallback(func(data []byte) error {
+		if client, ok := v.webrtcClient.(*rtc.Client); ok {
+			return client.SendInput(string(data))
+		}
+		return fmt.Errorf("WebRTC client not available")
+	})
+	
+	// Set callback for new transfers
+	ftManager.SetOnTransferCallback(func(transfer *filetransfer.Transfer) {
+		log.Printf("📁 New transfer: %s (%d bytes)", transfer.Filename, transfer.Size)
+		// TODO: Show transfer progress in UI
+	})
+	
+	v.fileTransferMgr = ftManager
+	log.Println("✅ File transfer initialized")
+}
+
+// SendFile opens a file picker and sends the selected file
+func (v *Viewer) SendFile() {
+	fileDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
+		if err != nil {
+			dialog.ShowError(err, v.window)
+			return
+		}
+		if reader == nil {
+			return // User cancelled
+		}
+		defer reader.Close()
+		
+		filePath := reader.URI().Path()
+		log.Printf("📤 Sending file: %s", filePath)
+		
+		if ftMgr, ok := v.fileTransferMgr.(*filetransfer.Manager); ok {
+			transfer, err := ftMgr.SendFile(filePath)
+			if err != nil {
+				dialog.ShowError(err, v.window)
+				return
+			}
+			
+			// Show progress dialog
+			v.showFileTransferProgress(transfer)
+		}
+	}, v.window)
+	
+	fileDialog.Show()
+}
+
+// showFileTransferProgress shows a progress dialog for file transfer
+func (v *Viewer) showFileTransferProgress(transfer *filetransfer.Transfer) {
+	progressDialog := dialog.NewCustom(
+		"File Transfer",
+		"Cancel",
+		nil, // TODO: Add progress bar widget
+		v.window,
+	)
+	
+	// Set up progress callback
+	transfer.SetOnProgress(func(progress, total int64) {
+		// TODO: Update progress bar
+		log.Printf("📊 Transfer progress: %d%%", (progress*100)/total)
+	})
+	
+	// Set up completion callback
+	transfer.SetOnComplete(func(success bool, err error) {
+		progressDialog.Hide()
+		if success {
+			dialog.ShowInformation("Success", "File transferred successfully!", v.window)
+		} else {
+			dialog.ShowError(err, v.window)
+		}
+	})
+	
+	progressDialog.Show()
+}
+
+// HandleFileTransferData processes incoming file transfer data
+func (v *Viewer) HandleFileTransferData(data []byte) error {
+	if ftMgr, ok := v.fileTransferMgr.(*filetransfer.Manager); ok {
+		return ftMgr.HandleIncomingData(data)
+	}
+	return fmt.Errorf("file transfer manager not initialized")
 }
