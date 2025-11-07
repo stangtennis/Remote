@@ -189,17 +189,19 @@
 
 ### **3. Clipboard Synchronization** ⏳ 0% Complete
 
-**What's Needed:**
-- ❌ Clipboard monitoring on controller
+**What's Needed (Like RDP):**
 - ❌ Clipboard monitoring on agent
-- ❌ Bidirectional clipboard sync
+- ❌ One-way sync (agent → controller)
 - ❌ Text clipboard support
-- ❌ Image clipboard support
-- ❌ File clipboard support (copy/paste files)
+- ❌ Image clipboard support (screenshots)
 - ❌ Automatic sync on clipboard change
-- ❌ Manual sync button option
+- ❌ Simple and reliable (just like RDP)
 
-**Estimated Work:** 6-8 hours  
+**Future Enhancement:**
+- ⏳ Reverse sync (controller → agent)
+- ⏳ File clipboard support
+
+**Estimated Work:** 3-4 hours (simplified)  
 **Priority:** High (user requested) 🎯  
 **Target:** v2.2.0
 

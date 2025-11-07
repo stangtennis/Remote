@@ -1,37 +1,41 @@
 # 📋 Clipboard Synchronization Implementation Plan
 
-**Feature:** Bidirectional clipboard sync between controller and agent  
+**Feature:** One-way clipboard sync (agent → controller, like RDP)  
 **Priority:** High (user requested) 🎯  
 **Target Version:** v2.2.0  
-**Estimated Work:** 6-8 hours
+**Estimated Work:** 3-4 hours (simplified)
 
 ---
 
 ## 🎯 **Overview**
 
-Enable seamless copy/paste between the controller and remote agent, supporting:
+Enable **one-way clipboard sync from remote agent to controller** (like RDP):
+- **Primary Use Case:** Copy text/images on remote → paste on local computer
 - Text clipboard content
-- Image clipboard content
-- File clipboard content (copy/paste files)
-- Bidirectional sync (controller ↔ agent)
+- Image clipboard content (screenshots, etc.)
 - Automatic sync on clipboard change
-- Manual sync button option
+- Simple and reliable (like RDP)
+
+**Future Enhancement:** Bidirectional sync (controller → agent) can be added later if needed.
 
 ---
 
 ## 📋 **Requirements**
 
-### **Functional Requirements:**
-1. Copy text on controller → paste on agent
-2. Copy text on agent → paste on controller
-3. Copy images on controller → paste on agent
-4. Copy images on agent → paste on controller
-5. Copy files on controller → paste on agent
-6. Copy files on agent → paste on controller
-7. Automatic clipboard monitoring
-8. Manual sync button
-9. Clipboard change notifications
-10. Error handling for large clipboard data
+### **Functional Requirements (Priority Order):**
+
+**Phase 1 - Core (Like RDP):**
+1. ✅ Copy text on **agent** → paste on **controller** (PRIMARY USE CASE)
+2. ✅ Copy images on **agent** → paste on **controller** (screenshots, etc.)
+3. ✅ Automatic clipboard monitoring on agent
+4. ✅ Automatic sync to controller
+5. ✅ Error handling for large clipboard data
+
+**Phase 2 - Optional Enhancements:**
+6. ⏳ Copy text on controller → paste on agent (reverse direction)
+7. ⏳ Manual sync button
+8. ⏳ Clipboard change notifications
+9. ⏳ File clipboard support
 
 ### **Non-Functional Requirements:**
 1. Low latency (< 500ms for text)
@@ -99,9 +103,13 @@ type ClipboardData struct {
 
 ## 🔧 **Implementation Steps**
 
-### **Phase 1: Controller Clipboard Monitor (2 hours)**
+### **Simplified Implementation (Agent → Controller Only)**
 
-**File:** `controller/internal/clipboard/monitor.go`
+This matches RDP behavior: copy on remote, paste on local.
+
+### **Phase 1: Agent Clipboard Monitor (2 hours)**
+
+**File:** `agent/internal/clipboard/monitor.go`
 
 ```go
 package clipboard
@@ -114,7 +122,8 @@ import (
 type Monitor struct {
     lastContent []byte
     lastHash    string
-    onChange    func(data *ClipboardData)
+    onTextChange  func(text string)
+    onImageChange func(imageData []byte)
     stopChan    chan bool
 }
 
@@ -122,135 +131,135 @@ func NewMonitor() *Monitor
 func (m *Monitor) Start()
 func (m *Monitor) Stop()
 func (m *Monitor) checkClipboard()
-func (m *Monitor) SetOnChange(callback func(*ClipboardData))
+func (m *Monitor) SetOnTextChange(callback func(string))
+func (m *Monitor) SetOnImageChange(callback func([]byte))
 ```
 
 **Features:**
-- Poll clipboard every 500ms
+- Poll clipboard every 500ms on **agent**
 - Detect changes using hash comparison
-- Extract text, images, or file paths
-- Trigger callback on change
-- Prevent sync loops (track source)
+- Extract text or images
+- Send to controller via WebRTC
+- Simple and reliable (like RDP)
 
 ---
 
-### **Phase 2: Controller Clipboard Manager (1 hour)**
+### **Phase 2: Controller Clipboard Receiver (1 hour)**
 
-**File:** `controller/internal/clipboard/manager.go`
+**File:** `controller/internal/clipboard/receiver.go`
 
 ```go
 package clipboard
 
-type Manager struct {
-    monitor      *Monitor
-    sendData     func([]byte) error
-    lastSyncTime time.Time
+import "golang.design/x/clipboard"
+
+type Receiver struct {
+    // Simple receiver - just sets local clipboard
 }
 
-func NewManager() *Manager
-func (m *Manager) Start()
-func (m *Manager) Stop()
-func (m *Manager) SetClipboard(data *ClipboardData) error
-func (m *Manager) GetClipboard() (*ClipboardData, error)
-func (m *Manager) SyncToRemote(data *ClipboardData) error
-func (m *Manager) HandleRemoteClipboard(data []byte) error
+func NewReceiver() *Receiver
+func (r *Receiver) SetText(text string) error
+func (r *Receiver) SetImage(imageData []byte) error
+func (r *Receiver) HandleRemoteClipboard(data []byte) error
 ```
 
 **Features:**
-- Manage clipboard operations
-- Send clipboard to agent via WebRTC
-- Receive clipboard from agent
-- Handle different data types
-- Compression for large data
+- Receive clipboard from agent via WebRTC
+- Set local clipboard (text or image)
+- Simple and fast
+- No monitoring needed on controller (one-way only)
 
 ---
 
-### **Phase 3: Agent Clipboard Monitor (2 hours)**
-
-**File:** `agent/internal/clipboard/monitor.go`
-
-Same structure as controller monitor, but for Windows agent.
-
-**Windows API Integration:**
-- Use `golang.design/x/clipboard` package
-- Monitor clipboard changes
-- Extract text, images, files
-- Handle Windows-specific formats
-
----
-
-### **Phase 4: Agent Clipboard Manager (1 hour)**
-
-**File:** `agent/internal/clipboard/manager.go`
-
-Same structure as controller manager.
-
-**Features:**
-- Receive clipboard from controller
-- Set Windows clipboard
-- Send clipboard to controller
-- Handle format conversions
-
----
-
-### **Phase 5: WebRTC Integration (1 hour)**
-
-**Controller:** `controller/internal/viewer/connection.go`
-```go
-// Initialize clipboard manager
-v.clipboardMgr = clipboard.NewManager()
-v.clipboardMgr.SetSendDataCallback(func(data []byte) error {
-    return v.webrtcClient.SendInput(string(data))
-})
-v.clipboardMgr.Start()
-```
+### **Phase 3: WebRTC Integration (1 hour)**
 
 **Agent:** `agent/internal/webrtc/peer.go`
 ```go
-// Handle clipboard messages
-case "clipboard_sync":
-    if m.clipboardManager != nil {
-        m.clipboardManager.HandleRemoteClipboard(msg.Data)
+// Start clipboard monitor on agent
+m.clipboardMonitor = clipboard.NewMonitor()
+m.clipboardMonitor.SetOnTextChange(func(text string) {
+    // Send text to controller
+    msg := map[string]interface{}{
+        "type": "clipboard_text",
+        "content": text,
     }
+    data, _ := json.Marshal(msg)
+    m.dataChannel.Send(data)
+})
+m.clipboardMonitor.SetOnImageChange(func(imageData []byte) {
+    // Send image to controller
+    msg := map[string]interface{}{
+        "type": "clipboard_image",
+        "content": base64.StdEncoding.EncodeToString(imageData),
+    }
+    data, _ := json.Marshal(msg)
+    m.dataChannel.Send(data)
+})
+m.clipboardMonitor.Start()
+```
+
+**Controller:** `controller/internal/viewer/connection.go`
+```go
+// Initialize clipboard receiver
+v.clipboardReceiver = clipboard.NewReceiver()
+
+// Handle incoming clipboard from agent
+client.SetOnDataChannelMessage(func(msg []byte) {
+    var data map[string]interface{}
+    json.Unmarshal(msg, &data)
+    
+    switch data["type"] {
+    case "clipboard_text":
+        text := data["content"].(string)
+        v.clipboardReceiver.SetText(text)
+        log.Println("📋 Clipboard synced (text)")
+        
+    case "clipboard_image":
+        imageB64 := data["content"].(string)
+        imageData, _ := base64.StdEncoding.DecodeString(imageB64)
+        v.clipboardReceiver.SetImage(imageData)
+        log.Println("📋 Clipboard synced (image)")
+    }
+})
 ```
 
 ---
 
-### **Phase 6: UI Integration (1 hour)**
-
-**Controller Toolbar:**
-- Add "📋 Sync Clipboard" button
-- Show clipboard sync status
-- Manual sync option
-- Enable/disable auto-sync
+### **Phase 4: UI Integration (Optional - 30 minutes)**
 
 **Status Indicators:**
-- "📋 Clipboard synced" notification
+- "📋 Clipboard synced" log message
 - "⚠️ Clipboard too large" warning
 - "❌ Clipboard sync failed" error
+
+**Optional UI:**
+- Status label showing last clipboard sync
+- Enable/disable clipboard sync toggle
 
 ---
 
 ## 📊 **Protocol Specification**
 
-### **Message Types:**
+### **Message Types (Simplified):**
 
-1. **clipboard_sync** - Sync clipboard content
-2. **clipboard_request** - Request current clipboard
-3. **clipboard_ack** - Acknowledge receipt
-4. **clipboard_error** - Error message
+1. **clipboard_text** - Text clipboard content (agent → controller)
+2. **clipboard_image** - Image clipboard content (agent → controller)
 
-### **Message Flow:**
+### **Message Flow (One-Way):**
 
 ```
 Controller                          Agent
     |                                 |
-    |-- clipboard_sync (text) ------->|
-    |<-------- clipboard_ack ---------|
+    |                         [User copies text]
+    |<-- clipboard_text -------------|
+    |  (automatically sets local clipboard)
     |                                 |
-    |<-- clipboard_sync (image) ------|
-    |-------- clipboard_ack --------->|
+    |                      [User copies image]
+    |<-- clipboard_image ------------|
+    |  (automatically sets local clipboard)
 ```
+
+**Simple and automatic - just like RDP!**
 
 ---
 
@@ -344,45 +353,43 @@ go get golang.design/x/clipboard
 
 ## 🚀 **Implementation Order**
 
-### **Priority 1 (Must Have):**
-1. Text clipboard sync (controller → agent)
-2. Text clipboard sync (agent → controller)
-3. Automatic clipboard monitoring
-4. WebRTC integration
+### **Priority 1 (Core - Like RDP):**
+1. ✅ Text clipboard sync (agent → controller)
+2. ✅ Image clipboard sync (agent → controller)
+3. ✅ Automatic clipboard monitoring on agent
+4. ✅ WebRTC integration
+5. ✅ Error handling
 
-### **Priority 2 (Should Have):**
-5. Image clipboard sync
-6. Manual sync button
-7. UI notifications
-8. Error handling
-
-### **Priority 3 (Nice to Have):**
-9. File clipboard sync
-10. Compression for large data
-11. Sync history
-12. Clipboard preview
+### **Priority 2 (Future Enhancements):**
+6. ⏳ Reverse sync (controller → agent)
+7. ⏳ Manual sync button
+8. ⏳ UI notifications
+9. ⏳ File clipboard sync
+10. ⏳ Compression for large data
 
 ---
 
-## 📝 **Implementation Checklist**
+## 📝 **Implementation Checklist (Simplified)**
 
-- [ ] Create `controller/internal/clipboard/` package
+**Core Implementation (3-4 hours):**
 - [ ] Create `agent/internal/clipboard/` package
-- [ ] Implement clipboard monitor (controller)
-- [ ] Implement clipboard monitor (agent)
-- [ ] Implement clipboard manager (controller)
-- [ ] Implement clipboard manager (agent)
-- [ ] Define clipboard message protocol
-- [ ] Integrate with WebRTC data channel
-- [ ] Add UI button and status indicators
-- [ ] Handle text clipboard
-- [ ] Handle image clipboard
-- [ ] Handle file clipboard
-- [ ] Add compression for large data
-- [ ] Add error handling
-- [ ] Write unit tests
-- [ ] Write integration tests
+- [ ] Implement clipboard monitor on agent (text + images)
+- [ ] Create `controller/internal/clipboard/` package
+- [ ] Implement clipboard receiver on controller
+- [ ] Define simple message protocol (clipboard_text, clipboard_image)
+- [ ] Integrate agent monitor with WebRTC data channel
+- [ ] Integrate controller receiver with WebRTC data channel
+- [ ] Add error handling for large clipboard data
+- [ ] Test text clipboard sync
+- [ ] Test image clipboard sync
 - [ ] Update documentation
+
+**Future Enhancements:**
+- [ ] Add reverse sync (controller → agent)
+- [ ] Add manual sync button
+- [ ] Add UI notifications
+- [ ] Add file clipboard support
+- [ ] Add compression
 
 ---
 
@@ -397,8 +404,8 @@ go get golang.design/x/clipboard
 - **Solution:** Compress images before sending, use JPEG for photos
 
 ### **Challenge 3: Sync Loops**
-- **Issue:** Setting clipboard triggers monitor, causing infinite loop
-- **Solution:** Track source and timestamp, ignore self-generated changes
+- **Issue:** Not applicable (one-way sync only)
+- **Solution:** No sync loops possible with agent → controller only
 
 ### **Challenge 4: Format Conversion**
 - **Issue:** Different clipboard formats on Windows
