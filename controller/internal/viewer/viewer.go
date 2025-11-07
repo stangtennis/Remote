@@ -43,6 +43,7 @@ type Viewer struct {
 	inputHandler     *InputHandler
 	fileTransferMgr  interface{} // Will be *filetransfer.Manager
 	reconnectionMgr  interface{} // Will be *reconnection.Manager
+	clipboardReceiver interface{} // Will be *clipboard.Receiver
 	
 	// Connection state
 	supabaseURL      string

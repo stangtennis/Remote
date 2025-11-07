@@ -2,6 +2,7 @@ package viewer
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	rtc "github.com/stangtennis/Remote/controller/internal/webrtc"
+	"github.com/stangtennis/Remote/controller/internal/clipboard"
 	"github.com/stangtennis/Remote/controller/internal/filetransfer"
 	"github.com/stangtennis/Remote/controller/internal/reconnection"
 	"github.com/pion/webrtc/v3"
@@ -57,6 +59,9 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 		
 		// Initialize file transfer
 		v.InitializeFileTransfer()
+		
+		// Initialize clipboard receiver
+		v.InitializeClipboard()
 	})
 
 	client.SetOnDisconnected(func() {
@@ -385,6 +390,64 @@ func (v *Viewer) HandleFileTransferData(data []byte) error {
 		return ftMgr.HandleIncomingData(data)
 	}
 	return fmt.Errorf("file transfer manager not initialized")
+}
+
+// InitializeClipboard initializes the clipboard receiver
+func (v *Viewer) InitializeClipboard() {
+	receiver := clipboard.NewReceiver()
+	if err := receiver.Initialize(); err != nil {
+		log.Printf("❌ Failed to initialize clipboard receiver: %v", err)
+		return
+	}
+	
+	v.clipboardReceiver = receiver
+	log.Println("✅ Clipboard receiver initialized")
+	
+	// Set up message handler for clipboard data
+	if client, ok := v.webrtcClient.(*rtc.Client); ok {
+		client.SetOnDataChannelMessage(func(msg []byte) {
+			v.handleDataChannelMessage(msg)
+		})
+	}
+}
+
+// handleDataChannelMessage processes incoming data channel messages
+func (v *Viewer) handleDataChannelMessage(msg []byte) {
+	var data map[string]interface{}
+	if err := json.Unmarshal(msg, &data); err != nil {
+		return
+	}
+	
+	msgType, ok := data["type"].(string)
+	if !ok {
+		return
+	}
+	
+	switch msgType {
+	case "clipboard_text":
+		if content, ok := data["content"].(string); ok {
+			if receiver, ok := v.clipboardReceiver.(*clipboard.Receiver); ok {
+				if err := receiver.SetText(content); err != nil {
+					log.Printf("❌ Failed to set clipboard text: %v", err)
+				}
+			}
+		}
+		
+	case "clipboard_image":
+		if contentB64, ok := data["content"].(string); ok {
+			imageData, err := base64.StdEncoding.DecodeString(contentB64)
+			if err != nil {
+				log.Printf("❌ Failed to decode clipboard image: %v", err)
+				return
+			}
+			
+			if receiver, ok := v.clipboardReceiver.(*clipboard.Receiver); ok {
+				if err := receiver.SetImageRaw(imageData); err != nil {
+					log.Printf("❌ Failed to set clipboard image: %v", err)
+				}
+			}
+		}
+	}
 }
 
 // setupReconnection initializes the reconnection manager
