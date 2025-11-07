@@ -22,6 +22,9 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 	if err != nil {
 		return fmt.Errorf("failed to create WebRTC client: %w", err)
 	}
+	
+	// Store client reference for input forwarding
+	v.webrtcClient = client
 
 	// Create signaling client
 	signalingClient := rtc.NewSignalingClient(supabaseURL, anonKey, authToken)
@@ -35,6 +38,9 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 		log.Println("✅ WebRTC connected!")
 		v.connected = true
 		v.statusLabel.SetText("🟢 Connected")
+		
+		// Enable input forwarding
+		v.setupInputForwarding()
 	})
 
 	client.SetOnDisconnected(func() {
@@ -150,34 +156,121 @@ func (v *Viewer) updateCanvas(img image.Image) {
 	v.videoCanvas.Refresh()
 }
 
-// SendMouseEvent sends a mouse event to the agent
-func (v *Viewer) SendMouseEvent(x, y int, button string, eventType string) error {
-	// TODO: Implement mouse event sending via data channel
-	event := map[string]interface{}{
-		"type":   "mouse",
-		"x":      x,
-		"y":      y,
-		"button": button,
-		"event":  eventType,
-	}
-
-	eventJSON, _ := json.Marshal(event)
-	log.Printf("🖱️  Mouse event: %s", string(eventJSON))
+// setupInputForwarding configures input event forwarding to the agent
+func (v *Viewer) setupInputForwarding() {
+	log.Println("🎮 Setting up input forwarding...")
 	
-	return nil
+	// Create input handler if not exists
+	if v.inputHandler == nil {
+		v.inputHandler = NewInputHandler(v)
+	}
+	
+	// Set up mouse move callback
+	v.inputHandler.SetOnMouseMove(func(x, y float32) {
+		v.SendMouseMove(x, y)
+	})
+	
+	// Set up mouse button callback
+	v.inputHandler.SetOnMouseButton(func(button int, pressed bool) {
+		v.SendMouseButton(button, pressed)
+	})
+	
+	// Set up mouse scroll callback
+	v.inputHandler.SetOnMouseScroll(func(deltaX, deltaY float32) {
+		v.SendMouseScroll(deltaX, deltaY)
+	})
+	
+	// Set up keyboard callback
+	v.inputHandler.SetOnKeyPress(func(key string, pressed bool) {
+		v.SendKeyPress(key, pressed)
+	})
+	
+	// Attach to canvas
+	v.inputHandler.AttachToCanvas()
+	
+	log.Println("✅ Input forwarding enabled")
 }
 
-// SendKeyboardEvent sends a keyboard event to the agent
-func (v *Viewer) SendKeyboardEvent(key string, eventType string) error {
-	// TODO: Implement keyboard event sending via data channel
+// SendMouseMove sends a mouse move event to the agent
+func (v *Viewer) SendMouseMove(x, y float32) {
+	if v.webrtcClient == nil {
+		return
+	}
+	
 	event := map[string]interface{}{
-		"type":  "keyboard",
-		"key":   key,
-		"event": eventType,
+		"t": "mouse_move",
+		"x": x,
+		"y": y,
 	}
 
 	eventJSON, _ := json.Marshal(event)
-	log.Printf("⌨️  Keyboard event: %s", string(eventJSON))
 	
-	return nil
+	// Send via WebRTC data channel
+	if client, ok := v.webrtcClient.(*rtc.Client); ok {
+		client.SendInput(string(eventJSON))
+	}
+}
+
+// SendMouseButton sends a mouse button event to the agent
+func (v *Viewer) SendMouseButton(button int, pressed bool) {
+	if v.webrtcClient == nil {
+		return
+	}
+	
+	// Map button number to string
+	buttonStr := "left"
+	if button == 1 {
+		buttonStr = "middle"
+	} else if button == 2 {
+		buttonStr = "right"
+	}
+	
+	event := map[string]interface{}{
+		"t":      "mouse_click",
+		"button": buttonStr,
+		"down":   pressed,
+	}
+
+	eventJSON, _ := json.Marshal(event)
+	
+	if client, ok := v.webrtcClient.(*rtc.Client); ok {
+		client.SendInput(string(eventJSON))
+	}
+}
+
+// SendMouseScroll sends a mouse scroll event to the agent
+func (v *Viewer) SendMouseScroll(deltaX, deltaY float32) {
+	if v.webrtcClient == nil {
+		return
+	}
+	
+	event := map[string]interface{}{
+		"t":     "mouse_scroll",
+		"delta": deltaY, // Use Y delta for vertical scrolling
+	}
+
+	eventJSON, _ := json.Marshal(event)
+	
+	if client, ok := v.webrtcClient.(*rtc.Client); ok {
+		client.SendInput(string(eventJSON))
+	}
+}
+
+// SendKeyPress sends a keyboard event to the agent
+func (v *Viewer) SendKeyPress(key string, pressed bool) {
+	if v.webrtcClient == nil {
+		return
+	}
+	
+	event := map[string]interface{}{
+		"t":    "key",
+		"code": key,
+		"down": pressed,
+	}
+
+	eventJSON, _ := json.Marshal(event)
+	
+	if client, ok := v.webrtcClient.(*rtc.Client); ok {
+		client.SendInput(string(eventJSON))
+	}
 }

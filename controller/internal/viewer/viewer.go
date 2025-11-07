@@ -38,6 +38,10 @@ type Viewer struct {
 	// Buttons
 	fullscreenBtn   *widget.Button
 	
+	// WebRTC and Input
+	webrtcClient    interface{} // Will be *webrtc.Client
+	inputHandler    *InputHandler
+	
 	// Callbacks
 	onDisconnect    func()
 	onFileTransfer  func()
