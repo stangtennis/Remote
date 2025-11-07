@@ -39,13 +39,20 @@ type Viewer struct {
 	fullscreenBtn   *widget.Button
 	
 	// WebRTC and Input
-	webrtcClient    interface{} // Will be *webrtc.Client
-	inputHandler    *InputHandler
-	fileTransferMgr interface{} // Will be *filetransfer.Manager
+	webrtcClient     interface{} // Will be *webrtc.Client
+	inputHandler     *InputHandler
+	fileTransferMgr  interface{} // Will be *filetransfer.Manager
+	reconnectionMgr  interface{} // Will be *reconnection.Manager
+	
+	// Connection state
+	supabaseURL      string
+	anonKey          string
+	authToken        string
+	userID           string
 	
 	// Callbacks
-	onDisconnect    func()
-	onFileTransfer  func()
+	onDisconnect     func()
+	onFileTransfer   func()
 }
 
 // NewViewer creates a new remote desktop viewer
