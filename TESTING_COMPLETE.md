@@ -1,20 +1,24 @@
 # 🎉 Complete WebRTC Testing Guide
 
-## ✅ **Implementation Status: COMPLETE**
+## 🔧 **Current Implementation Status**
 
-All components are implemented and ready for testing!
+### ✅ Completed:
+- WebRTC client package (`controller/internal/webrtc/client.go`)
+- Signaling client (`controller/internal/webrtc/signaling.go`)
+- Agent WebRTC server (already exists)
+- Agent signaling listener (already exists)
+- ✅ **Viewer integration with WebRTC client** 🆕
+- ✅ **Video frame decoding and rendering** 🆕
+- ✅ **Input event forwarding (mouse/keyboard)** 🆕
+- ✅ **Connection UI feedback** 🆕
 
-### **What's Been Implemented:**
+### 🟡 Partially Implemented:
+- File transfer (40% complete - manager exists, needs UI integration)
 
-1. ✅ **Agent WebRTC Server**
-   - Polls `webrtc_sessions` table for new sessions
-   - Receives offers from controller
-   - Creates and sends answers
-   - Streams screen at 60 FPS, JPEG 95
-   - Handles mouse/keyboard input
-
-2. ✅ **Controller WebRTC Client**
-   - Creates sessions in `webrtc_sessions` table
+### ❌ Not Yet Implemented:
+- Audio streaming
+- Multiple simultaneous connections
+- Auto-reconnection on network interruptions
    - Generates SDP offers
    - Waits for answers from agent
    - Receives and decodes video frames

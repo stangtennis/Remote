@@ -92,6 +92,8 @@
 - ✅ Video frames decoded and rendered
 - ✅ FPS counter displays
 - ✅ Connection status indicators work
+- ✅ **Mouse/keyboard input forwarding** 🆕
+- ✅ **Real-time remote control** 🆕
 
 ## 🎉 **Ready for Testing!**
 
