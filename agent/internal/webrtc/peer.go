@@ -4,25 +4,29 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/pion/webrtc/v3"
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/device"
+	"github.com/stangtennis/remote-agent/internal/filetransfer"
 	"github.com/stangtennis/remote-agent/internal/input"
 	"github.com/stangtennis/remote-agent/internal/screen"
 )
 
 type Manager struct {
-	cfg             *config.Config
-	device          *device.Device
-	peerConnection  *webrtc.PeerConnection
-	dataChannel     *webrtc.DataChannel
-	screenCapturer  *screen.Capturer
-	mouseController *input.MouseController
-	keyController   *input.KeyboardController
-	sessionID       string
-	isStreaming     bool
+	cfg              *config.Config
+	device           *device.Device
+	peerConnection   *webrtc.PeerConnection
+	dataChannel      *webrtc.DataChannel
+	screenCapturer   *screen.Capturer
+	mouseController  *input.MouseController
+	keyController    *input.KeyboardController
+	fileTransferHandler *filetransfer.Handler
+	sessionID        string
+	isStreaming      bool
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
@@ -42,12 +46,20 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 		log.Printf("✅ Screen capturer initialized: %dx%d", width, height)
 	}
 
+	// Set up file transfer handler
+	// Use Downloads folder as default
+	homeDir, _ := os.UserHomeDir()
+	downloadDir := filepath.Join(homeDir, "Downloads", "RemoteDesktop")
+	fileTransferHandler := filetransfer.NewHandler(downloadDir)
+	log.Printf("✅ File transfer handler initialized: %s", downloadDir)
+
 	return &Manager{
-		cfg:             cfg,
-		device:          dev,
-		screenCapturer:  capturer,
-		mouseController: input.NewMouseController(width, height),
-		keyController:   input.NewKeyboardController(),
+		cfg:                 cfg,
+		device:              dev,
+		screenCapturer:      capturer,
+		mouseController:     input.NewMouseController(width, height),
+		keyController:       input.NewKeyboardController(),
+		fileTransferHandler: fileTransferHandler,
 	}, nil
 }
 
@@ -105,6 +117,16 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 func (m *Manager) setupDataChannelHandlers(dc *webrtc.DataChannel) {
 	dc.OnOpen(func() {
 		log.Println("✅ Data channel ready")
+		
+		// Set up file transfer send callback
+		if m.fileTransferHandler != nil {
+			m.fileTransferHandler.SetSendDataCallback(func(data []byte) error {
+				if m.dataChannel != nil && m.dataChannel.ReadyState() == webrtc.DataChannelStateOpen {
+					return m.dataChannel.Send(data)
+				}
+				return fmt.Errorf("data channel not ready")
+			})
+		}
 	})
 
 	dc.OnClose(func() {
@@ -124,6 +146,21 @@ func (m *Manager) setupDataChannelHandlers(dc *webrtc.DataChannel) {
 }
 
 func (m *Manager) handleControlEvent(event map[string]interface{}) {
+	// Check if this is a file transfer message
+	if msgType, ok := event["type"].(string); ok {
+		switch msgType {
+		case "file_transfer_start", "file_chunk", "file_transfer_complete", "file_transfer_error":
+			if m.fileTransferHandler != nil {
+				data, _ := json.Marshal(event)
+				if err := m.fileTransferHandler.HandleIncomingData(data); err != nil {
+					log.Printf("File transfer error: %v", err)
+				}
+			}
+			return
+		}
+	}
+
+	// Handle input events
 	eventType, ok := event["t"].(string)
 	if !ok {
 		return

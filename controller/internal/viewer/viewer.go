@@ -41,6 +41,7 @@ type Viewer struct {
 	// WebRTC and Input
 	webrtcClient    interface{} // Will be *webrtc.Client
 	inputHandler    *InputHandler
+	fileTransferMgr interface{} // Will be *filetransfer.Manager
 	
 	// Callbacks
 	onDisconnect    func()
@@ -147,7 +148,7 @@ func (v *Viewer) createToolbar() *fyne.Container {
 	
 	// File transfer button
 	fileTransferBtn := widget.NewButton("📁 Send File", func() {
-		v.handleFileTransfer()
+		v.SendFile()
 	})
 	
 	// Clipboard sync button

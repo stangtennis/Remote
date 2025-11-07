@@ -27,6 +27,20 @@ type Transfer struct {
 	onComplete   func(success bool, err error)
 }
 
+// SetOnProgress sets the progress callback
+func (t *Transfer) SetOnProgress(callback func(progress int64, total int64)) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.onProgress = callback
+}
+
+// SetOnComplete sets the completion callback
+func (t *Transfer) SetOnComplete(callback func(success bool, err error)) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.onComplete = callback
+}
+
 // Manager manages file transfers
 type Manager struct {
 	transfers    map[string]*Transfer
