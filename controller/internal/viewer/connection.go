@@ -11,6 +11,7 @@ import (
 
 	rtc "github.com/stangtennis/Remote/controller/internal/webrtc"
 	"github.com/stangtennis/Remote/controller/internal/filetransfer"
+	"github.com/stangtennis/Remote/controller/internal/reconnection"
 	"github.com/pion/webrtc/v3"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
@@ -19,6 +20,12 @@ import (
 // ConnectWebRTC initiates a WebRTC connection to the remote device
 func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) error {
 	log.Printf("🔗 Initiating WebRTC connection to device: %s", v.deviceID)
+	
+	// Store connection parameters for reconnection
+	v.supabaseURL = supabaseURL
+	v.anonKey = anonKey
+	v.authToken = authToken
+	v.userID = userID
 	
 	// Create WebRTC client
 	client, err := rtc.NewClient()
@@ -31,6 +38,9 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 
 	// Create signaling client
 	signalingClient := rtc.NewSignalingClient(supabaseURL, anonKey, authToken)
+	
+	// Set up reconnection manager
+	v.setupReconnection()
 
 	// Set up callbacks
 	client.SetOnFrame(func(frameData []byte) {
@@ -53,6 +63,14 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 		log.Println("❌ WebRTC disconnected")
 		v.connected = false
 		v.statusLabel.SetText("🔴 Disconnected")
+		
+		// Start auto-reconnection
+		if reconnMgr, ok := v.reconnectionMgr.(*reconnection.Manager); ok {
+			if !reconnMgr.IsReconnecting() {
+				log.Println("🔄 Starting auto-reconnection...")
+				reconnMgr.StartReconnection()
+			}
+		}
 	})
 
 	// Create peer connection with STUN servers
@@ -367,4 +385,47 @@ func (v *Viewer) HandleFileTransferData(data []byte) error {
 		return ftMgr.HandleIncomingData(data)
 	}
 	return fmt.Errorf("file transfer manager not initialized")
+}
+
+// setupReconnection initializes the reconnection manager
+func (v *Viewer) setupReconnection() {
+	reconnMgr := reconnection.NewManager()
+	
+	// Set reconnection function
+	reconnMgr.SetReconnectFunc(func() error {
+		log.Println("🔄 Attempting to reconnect...")
+		return v.ConnectWebRTC(v.supabaseURL, v.anonKey, v.authToken, v.userID)
+	})
+	
+	// Set callbacks
+	reconnMgr.SetOnReconnecting(func(attempt int, maxAttempts int, nextDelay time.Duration) {
+		statusText := fmt.Sprintf("🔄 Reconnecting... (%d/%d)", attempt, maxAttempts)
+		v.statusLabel.SetText(statusText)
+		log.Printf("🔄 Reconnection attempt %d/%d, next attempt in %v", attempt, maxAttempts, nextDelay)
+	})
+	
+	reconnMgr.SetOnReconnected(func() {
+		log.Println("✅ Reconnection successful!")
+		v.statusLabel.SetText("🟢 Connected")
+		dialog.ShowInformation("Reconnected", "Connection restored successfully!", v.window)
+	})
+	
+	reconnMgr.SetOnReconnectFailed(func() {
+		log.Println("❌ Reconnection failed after all attempts")
+		v.statusLabel.SetText("❌ Connection Failed")
+		dialog.ShowError(
+			fmt.Errorf("failed to reconnect after %d attempts", reconnMgr.GetMaxRetries()),
+			v.window,
+		)
+	})
+	
+	v.reconnectionMgr = reconnMgr
+	log.Println("✅ Reconnection manager initialized")
+}
+
+// CancelReconnection stops any ongoing reconnection attempts
+func (v *Viewer) CancelReconnection() {
+	if reconnMgr, ok := v.reconnectionMgr.(*reconnection.Manager); ok {
+		reconnMgr.Cancel()
+	}
 }
