@@ -181,6 +181,10 @@ func (m *Manager) handleSession(session Session) {
 	}
 
 	// Extract offer from session
+	log.Printf("🔍 DEBUG: session.Offer length: %d", len(session.Offer))
+	if len(session.Offer) > 0 {
+		log.Printf("🔍 DEBUG: First 100 chars of offer: %.100s", session.Offer)
+	}
 	if session.Offer == "" {
 		log.Println("❌ No offer found in session")
 		return
