@@ -49,8 +49,6 @@ func RegisterDevice(config RegistrationConfig) (*DeviceInfo, error) {
 
 // upsertDevice inserts or updates device in Supabase
 func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
-	url := fmt.Sprintf("%s/rest/v1/remote_devices", config.SupabaseURL)
-
 	// Create payload with all required fields
 	payload := map[string]interface{}{
 		"device_id":   device.DeviceID,
@@ -65,26 +63,58 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	// Try to update existing device first
+	updateURL := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, device.DeviceID)
+	req, err := http.NewRequest("PATCH", updateURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create update request: %w", err)
 	}
 
-	// Use anon key for anonymous registration
 	req.Header.Set("apikey", config.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+config.AnonKey)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Prefer", "resolution=merge-duplicates,return=representation")
+	req.Header.Set("Prefer", "return=representation")
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
+		return fmt.Errorf("failed to send update request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 
+	// If update succeeded (device exists), we're done
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
+		fmt.Println("✅ Device updated successfully (already registered)")
+		return nil
+	}
+
+	// If device doesn't exist, try to insert it
+	insertURL := fmt.Sprintf("%s/rest/v1/remote_devices", config.SupabaseURL)
+	req, err = http.NewRequest("POST", insertURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create insert request: %w", err)
+	}
+
+	req.Header.Set("apikey", config.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+config.AnonKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err = client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send insert request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ = io.ReadAll(resp.Body)
+
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		// If we get a duplicate key error, that's actually OK - device exists
+		if resp.StatusCode == http.StatusConflict || resp.StatusCode == 409 {
+			fmt.Println("✅ Device already registered (conflict resolved)")
+			return nil
+		}
 		return fmt.Errorf("registration failed: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
