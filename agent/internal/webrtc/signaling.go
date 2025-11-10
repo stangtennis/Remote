@@ -180,22 +180,15 @@ func (m *Manager) handleSession(session Session) {
 		return
 	}
 
-	// Extract offer from session - it's stored in turn_config
-	var offerJSON string
-	if session.TurnConfig != nil {
-		if offer, ok := session.TurnConfig["offer"].(string); ok {
-			offerJSON = offer
-		}
-	}
-
-	if offerJSON == "" {
+	// Extract offer from session
+	if session.Offer == "" {
 		log.Println("❌ No offer found in session")
 		return
 	}
 
 	// Parse the JSON-encoded SessionDescription
 	var sessionDesc webrtc.SessionDescription
-	if err := json.Unmarshal([]byte(offerJSON), &sessionDesc); err != nil {
+	if err := json.Unmarshal([]byte(session.Offer), &sessionDesc); err != nil {
 		log.Printf("❌ Failed to parse offer JSON: %v", err)
 		return
 	}
