@@ -84,11 +84,9 @@ func (s *SignalingClient) CreateSession(deviceID, userID string) (*Session, erro
 func (s *SignalingClient) SendOffer(sessionID, offer string) error {
 	url := fmt.Sprintf("%s/rest/v1/webrtc_sessions?session_id=eq.%s", s.supabaseURL, sessionID)
 	
-	// Store offer in turn_config as that's where the agent reads it from
+	// Store offer directly in the offer column
 	payload := map[string]interface{}{
-		"turn_config": map[string]interface{}{
-			"offer": offer,
-		},
+		"offer":  offer,
 		"status": "offer_sent",
 	}
 
