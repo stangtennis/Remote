@@ -118,7 +118,7 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 		answerJSON, err := signalingClient.WaitForAnswer(session.SessionID, 30*time.Second)
 		if err != nil {
 			log.Printf("❌ Failed to get answer: %v", err)
-			v.statusLabel.SetText("❌ Connection failed")
+			v.window.Canvas().Refresh(v.statusLabel)
 			return
 		}
 
@@ -127,7 +127,7 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 		// Set answer
 		if err := client.SetAnswer(answerJSON); err != nil {
 			log.Printf("❌ Failed to set answer: %v", err)
-			v.statusLabel.SetText("❌ Connection failed")
+			v.window.Canvas().Refresh(v.statusLabel)
 			return
 		}
 
