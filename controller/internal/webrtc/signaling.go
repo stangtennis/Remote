@@ -84,9 +84,11 @@ func (s *SignalingClient) CreateSession(deviceID, userID string) (*Session, erro
 func (s *SignalingClient) SendOffer(sessionID, offer string) error {
 	url := fmt.Sprintf("%s/rest/v1/webrtc_sessions?session_id=eq.%s", s.supabaseURL, sessionID)
 	
-	// offer is already JSON-encoded, so use json.RawMessage to avoid double-encoding
+	// Store offer in turn_config as that's where the agent reads it from
 	payload := map[string]interface{}{
-		"offer":  json.RawMessage(offer),
+		"turn_config": map[string]interface{}{
+			"offer": offer,
+		},
 		"status": "offer_sent",
 	}
 
