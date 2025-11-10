@@ -17,6 +17,7 @@ type Session struct {
 	Token     string                 `json:"token"`
 	PIN       string                 `json:"pin"`
 	ExpiresAt string                 `json:"expires_at"`
+	Offer     string                 `json:"offer"`
 	TurnConfig map[string]interface{} `json:"turn_config"`
 }
 
@@ -180,27 +181,21 @@ func (m *Manager) handleSession(session Session) {
 	}
 
 	// Extract offer from session
-	var offerSDP string
-	if session.TurnConfig != nil {
-		if offerJSON, ok := session.TurnConfig["offer"].(string); ok {
-			// Parse the JSON-encoded SessionDescription
-			var sessionDesc webrtc.SessionDescription
-			if err := json.Unmarshal([]byte(offerJSON), &sessionDesc); err != nil {
-				log.Printf("❌ Failed to parse offer JSON: %v", err)
-				return
-			}
-			offerSDP = sessionDesc.SDP
-		}
+	if session.Offer == "" {
+		log.Println("❌ No offer found in session")
+		return
 	}
 
-	if offerSDP == "" {
-		log.Println("❌ No offer found in session")
+	// Parse the JSON-encoded SessionDescription
+	var sessionDesc webrtc.SessionDescription
+	if err := json.Unmarshal([]byte(session.Offer), &sessionDesc); err != nil {
+		log.Printf("❌ Failed to parse offer JSON: %v", err)
 		return
 	}
 
 	// Process the offer immediately
 	log.Println("📨 Processing offer from controller...")
-	m.handleOfferDirect(session.ID, offerSDP)
+	m.handleOfferDirect(session.ID, sessionDesc.SDP)
 }
 
 func (m *Manager) waitForOffer(sessionID string) {
