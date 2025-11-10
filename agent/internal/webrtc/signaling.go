@@ -142,14 +142,8 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 		offer, _ := s["offer"].(string)
 		
 		session := Session{
-			ID: sessionID,
-		}
-		
-		// Store offer in TurnConfig for now (will be extracted in handleSession)
-		if offer != "" {
-			session.TurnConfig = map[string]interface{}{
-				"offer": offer,
-			}
+			ID:    sessionID,
+			Offer: offer, // Store offer in the Offer field
 		}
 		
 		result = append(result, session)
