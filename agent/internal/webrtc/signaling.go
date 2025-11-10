@@ -182,8 +182,14 @@ func (m *Manager) handleSession(session Session) {
 	// Extract offer from session
 	var offerSDP string
 	if session.TurnConfig != nil {
-		if offer, ok := session.TurnConfig["offer"].(string); ok {
-			offerSDP = offer
+		if offerJSON, ok := session.TurnConfig["offer"].(string); ok {
+			// Parse the JSON-encoded SessionDescription
+			var sessionDesc webrtc.SessionDescription
+			if err := json.Unmarshal([]byte(offerJSON), &sessionDesc); err != nil {
+				log.Printf("❌ Failed to parse offer JSON: %v", err)
+				return
+			}
+			offerSDP = sessionDesc.SDP
 		}
 	}
 
