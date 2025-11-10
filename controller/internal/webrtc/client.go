@@ -115,7 +115,14 @@ func (c *Client) CreateOffer() (string, error) {
 		return "", fmt.Errorf("failed to set local description: %w", err)
 	}
 
-	offerJSON, err := json.Marshal(offer)
+	// Wait for ICE gathering to complete
+	gatherComplete := webrtc.GatheringCompletePromise(c.peerConnection)
+	<-gatherComplete
+
+	// Get the complete offer with all ICE candidates
+	completeOffer := c.peerConnection.LocalDescription()
+	
+	offerJSON, err := json.Marshal(completeOffer)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal offer: %w", err)
 	}
