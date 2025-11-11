@@ -15,10 +15,23 @@ type Capturer struct {
 	displayIndex int
 	bounds       image.Rectangle
 	lastHash     []byte // Hash of last frame for change detection
+	dxgiCapturer *DXGICapturer // DXGI capturer if available (works better with RDP)
 }
 
 func NewCapturer() (*Capturer, error) {
-	// Get primary display bounds
+	// Try DXGI first (works better with RDP and modern Windows)
+	dxgi, err := NewDXGICapturer()
+	if err == nil {
+		// DXGI available - wrap it in a Capturer interface
+		bounds := dxgi.GetBounds()
+		return &Capturer{
+			displayIndex: 0,
+			bounds:       bounds,
+			dxgiCapturer: dxgi,
+		}, nil
+	}
+	
+	// Fallback to screenshot library (GDI-based)
 	n := screenshot.NumActiveDisplays()
 	if n == 0 {
 		return nil, fmt.Errorf("no active displays found")
@@ -33,7 +46,12 @@ func NewCapturer() (*Capturer, error) {
 }
 
 func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
-	// Capture screenshot
+	// Use DXGI if available (better for RDP)
+	if c.dxgiCapturer != nil {
+		return c.dxgiCapturer.CaptureJPEG(quality)
+	}
+	
+	// Fallback to screenshot library
 	img, err := screenshot.CaptureRect(c.bounds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to capture screen: %w", err)
@@ -61,7 +79,13 @@ func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
 // CaptureJPEGIfChanged only returns a frame if the screen has changed
 // Returns (nil, nil) if no change detected
 func (c *Capturer) CaptureJPEGIfChanged(quality int) ([]byte, error) {
-	// Capture screenshot
+	// Use DXGI if available (better for RDP)
+	if c.dxgiCapturer != nil {
+		// For DXGI, just capture every time (it's fast enough)
+		return c.dxgiCapturer.CaptureJPEG(quality)
+	}
+	
+	// Fallback to screenshot library with change detection
 	img, err := screenshot.CaptureRect(c.bounds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to capture screen: %w", err)
