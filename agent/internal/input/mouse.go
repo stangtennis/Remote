@@ -19,9 +19,9 @@ func NewMouseController(width, height int) *MouseController {
 }
 
 func (m *MouseController) Move(x, y float64) error {
-	// Convert normalized coordinates (0-1) to screen coordinates
-	screenX := int(x * float64(m.screenWidth))
-	screenY := int(y * float64(m.screenHeight))
+	// Coordinates are already in screen pixels
+	screenX := int(x)
+	screenY := int(y)
 
 	robotgo.Move(screenX, screenY)
 	return nil
