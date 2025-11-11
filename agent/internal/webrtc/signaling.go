@@ -258,8 +258,13 @@ func (m *Manager) handleOffer(sessionID string, sig SignalMessage) {
 		return
 	}
 
-	// Send answer
-	m.sendAnswer(sessionID, answer.SDP)
+	// Send answer - marshal the full SessionDescription to JSON
+	answerJSON, err := json.Marshal(answer)
+	if err != nil {
+		log.Printf("Failed to marshal answer: %v", err)
+		return
+	}
+	m.sendAnswer(sessionID, string(answerJSON))
 
 	// Continue listening for ICE candidates
 	go m.listenForICE(sessionID)
@@ -406,8 +411,13 @@ func (m *Manager) handleOfferDirect(sessionID, offerSDP string) {
 		return
 	}
 
-	// Send answer back to webrtc_sessions table
-	m.sendAnswer(sessionID, answer.SDP)
+	// Send answer back to webrtc_sessions table - marshal to JSON
+	answerJSON, err := json.Marshal(answer)
+	if err != nil {
+		log.Printf("Failed to marshal answer: %v", err)
+		return
+	}
+	m.sendAnswer(sessionID, string(answerJSON))
 }
 
 func (m *Manager) sendAnswer(sessionID, sdp string) {
