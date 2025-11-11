@@ -17,6 +17,7 @@ import (
 	"github.com/pion/webrtc/v3"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver/desktop"
 )
 
 // ConnectWebRTC initiates a WebRTC connection to the remote device
@@ -189,47 +190,59 @@ func (v *Viewer) updateCanvas(img image.Image) {
 func (v *Viewer) setupInputForwarding() {
 	log.Println("🎮 Setting up input forwarding...")
 	
-	// Create input handler if not exists
-	if v.inputHandler == nil {
-		v.inputHandler = NewInputHandler(v)
+	if v.interactiveCanvas == nil {
+		log.Println("⚠️  Interactive canvas not initialized")
+		return
 	}
 	
-	// Set up mouse move callback
-	v.inputHandler.SetOnMouseMove(func(x, y float32) {
+	// Hook up mouse move
+	v.interactiveCanvas.SetOnMouseMove(func(x, y float32) {
 		v.SendMouseMove(x, y)
 	})
 	
-	// Set up mouse button callback
-	v.inputHandler.SetOnMouseButton(func(button int, pressed bool) {
-		v.SendMouseButton(button, pressed)
+	// Hook up mouse buttons
+	v.interactiveCanvas.SetOnMouseButton(func(button desktop.MouseButton, pressed bool) {
+		buttonInt := int(button)
+		v.SendMouseButton(buttonInt, pressed)
 	})
 	
-	// Set up mouse scroll callback
-	v.inputHandler.SetOnMouseScroll(func(deltaX, deltaY float32) {
+	// Hook up mouse scroll
+	v.interactiveCanvas.SetOnMouseScroll(func(deltaX, deltaY float32) {
 		v.SendMouseScroll(deltaX, deltaY)
 	})
 	
-	// Set up keyboard callback
-	v.inputHandler.SetOnKeyPress(func(key string, pressed bool) {
-		v.SendKeyPress(key, pressed)
+	// Hook up keyboard
+	v.interactiveCanvas.SetOnKeyPress(func(key *fyne.KeyEvent) {
+		v.SendKeyPress(string(key.Name), true)
 	})
 	
-	// Attach to canvas
-	v.inputHandler.AttachToCanvas()
+	// Request focus so keyboard events are captured
+	v.window.Canvas().Focus(v.interactiveCanvas)
 	
 	log.Println("✅ Input forwarding enabled")
 }
 
 // SendMouseMove sends a mouse move event to the agent
 func (v *Viewer) SendMouseMove(x, y float32) {
-	if v.webrtcClient == nil {
+	if v.webrtcClient == nil || v.interactiveCanvas == nil {
 		return
 	}
 	
+	// Convert local coordinates to remote screen coordinates
+	canvasSize := v.interactiveCanvas.Size()
+	
+	// Assume remote is 1920x1080 (will be updated when we get actual resolution)
+	remoteWidth := float32(1920)
+	remoteHeight := float32(1080)
+	
+	// Scale coordinates
+	remoteX := (x / canvasSize.Width) * remoteWidth
+	remoteY := (y / canvasSize.Height) * remoteHeight
+	
 	event := map[string]interface{}{
 		"t": "mouse_move",
-		"x": x,
-		"y": y,
+		"x": remoteX,
+		"y": remoteY,
 	}
 
 	eventJSON, _ := json.Marshal(event)
