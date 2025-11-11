@@ -80,21 +80,21 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 
 	// Set up connection state handler
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		log.Printf("Connection state: %s", state.String())
+		log.Printf("🔄 Connection state changed: %s", state.String())
 		
 		switch state {
 		case webrtc.PeerConnectionStateConnected:
-			log.Println("✅ WebRTC connected!")
+			log.Println("✅ WebRTC CONNECTED! Starting screen streaming...")
 			m.isStreaming = true
 			go m.startScreenStreaming()
 		case webrtc.PeerConnectionStateDisconnected:
-			log.Println("⚠️  WebRTC disconnected")
+			log.Println("⚠️  WebRTC DISCONNECTED")
 			m.cleanupConnection("Disconnected")
 		case webrtc.PeerConnectionStateFailed:
-			log.Println("❌ WebRTC connection failed")
+			log.Println("❌ WebRTC CONNECTION FAILED")
 			m.cleanupConnection("Failed")
 		case webrtc.PeerConnectionStateClosed:
-			log.Println("🔒 WebRTC connection closed")
+			log.Println("🔒 WebRTC CONNECTION CLOSED")
 			m.cleanupConnection("Closed")
 		}
 	})
@@ -119,7 +119,7 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 
 func (m *Manager) setupDataChannelHandlers(dc *webrtc.DataChannel) {
 	dc.OnOpen(func() {
-		log.Println("✅ Data channel ready")
+		log.Println("✅ DATA CHANNEL READY - Controller can now receive frames!")
 		
 		// Set up file transfer send callback
 		if m.fileTransferHandler != nil {
@@ -132,11 +132,12 @@ func (m *Manager) setupDataChannelHandlers(dc *webrtc.DataChannel) {
 		}
 		
 		// Start clipboard monitoring
+		log.Println("📋 Starting clipboard monitoring...")
 		m.startClipboardMonitoring()
 	})
 
 	dc.OnClose(func() {
-		log.Println("❌ Data channel closed")
+		log.Println("❌ DATA CHANNEL CLOSED")
 		
 		// Stop clipboard monitoring
 		if m.clipboardMonitor != nil {
@@ -343,9 +344,9 @@ func (m *Manager) startScreenStreaming() {
 			log.Printf("Failed to send frame: %v", err)
 		} else {
 			frameCount++
-			// Log every 100 frames instead of 50 to reduce logging overhead
-			if frameCount%100 == 0 {
-				log.Printf("📊 Sent %d frames (latest: %d KB, %d errors, %d dropped)", 
+			// Log every 60 frames (once per second at 60 FPS)
+			if frameCount%60 == 0 {
+				log.Printf("📊 Streaming: %d frames sent | Latest: %d KB | Errors: %d | Dropped: %d", 
 					frameCount, len(jpeg)/1024, errorCount, droppedFrames)
 			}
 		}
