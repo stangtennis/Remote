@@ -20,12 +20,17 @@ type Client struct {
 	onDataChannelMessage func([]byte)
 	mu                  sync.Mutex
 	connected           bool
+	
+	// Frame reassembly
+	frameChunks      map[int][][]byte // chunk index -> chunk data
+	frameChunksMu    sync.Mutex
 }
 
 // NewClient creates a new WebRTC client
 func NewClient() (*Client, error) {
 	return &Client{
-		connected: false,
+		connected:    false,
+		frameChunks:  make(map[int][][]byte),
 	}, nil
 }
 
@@ -81,19 +86,7 @@ func (c *Client) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 		c.dataChannel = dc
 
 		dc.OnMessage(func(msg webrtc.DataChannelMessage) {
-			// Try to parse as JSON first (for clipboard and other messages)
-			var jsonMsg map[string]interface{}
-			if err := json.Unmarshal(msg.Data, &jsonMsg); err == nil {
-				// It's a JSON message (clipboard, file transfer, etc.)
-				if c.onDataChannelMessage != nil {
-					c.onDataChannelMessage(msg.Data)
-				}
-			} else {
-				// It's binary data (JPEG frame)
-				if c.onFrame != nil {
-					c.onFrame(msg.Data)
-				}
-			}
+			c.handleDataChannelMessage(msg.Data)
 		})
 	})
 
@@ -121,20 +114,7 @@ func (c *Client) CreateOffer() (string, error) {
 	
 	// Add OnMessage handler
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
-		log.Printf("📥 Received data on channel: %d bytes", len(msg.Data))
-		// Try to parse as JSON first (for clipboard and other messages)
-		var jsonMsg map[string]interface{}
-		if err := json.Unmarshal(msg.Data, &jsonMsg); err == nil {
-			// It's a JSON message (clipboard, file transfer, etc.)
-			if c.onDataChannelMessage != nil {
-				c.onDataChannelMessage(msg.Data)
-			}
-		} else {
-			// It's binary data (JPEG frame)
-			if c.onFrame != nil {
-				c.onFrame(msg.Data)
-			}
-		}
+		c.handleDataChannelMessage(msg.Data)
 	})
 	
 	log.Println("📡 Data channel created")
@@ -233,4 +213,70 @@ func (c *Client) Close() error {
 		return c.peerConnection.Close()
 	}
 	return nil
+}
+
+// handleDataChannelMessage processes incoming data channel messages with chunk reassembly
+func (c *Client) handleDataChannelMessage(data []byte) {
+	const chunkMagic = 0xFF
+	
+	// Check if this is a chunked frame
+	if len(data) >= 3 && data[0] == chunkMagic {
+		// Extract chunk metadata
+		chunkIndex := int(data[1])
+		totalChunks := int(data[2])
+		chunkData := data[3:]
+		
+		c.frameChunksMu.Lock()
+		
+		// Initialize chunk array if needed
+		if c.frameChunks[totalChunks] == nil {
+			c.frameChunks[totalChunks] = make([][]byte, totalChunks)
+		}
+		
+		// Store this chunk
+		c.frameChunks[totalChunks][chunkIndex] = chunkData
+		
+		// Check if we have all chunks
+		allChunks := true
+		for i := 0; i < totalChunks; i++ {
+			if c.frameChunks[totalChunks][i] == nil {
+				allChunks = false
+				break
+			}
+		}
+		
+		if allChunks {
+			// Reassemble the frame
+			var completeFrame []byte
+			for i := 0; i < totalChunks; i++ {
+				completeFrame = append(completeFrame, c.frameChunks[totalChunks][i]...)
+			}
+			
+			// Clear chunks for this frame
+			delete(c.frameChunks, totalChunks)
+			c.frameChunksMu.Unlock()
+			
+			// Send complete frame
+			if c.onFrame != nil {
+				c.onFrame(completeFrame)
+			}
+		} else {
+			c.frameChunksMu.Unlock()
+		}
+		return
+	}
+	
+	// Not a chunked frame - try to parse as JSON first (for clipboard and other messages)
+	var jsonMsg map[string]interface{}
+	if err := json.Unmarshal(data, &jsonMsg); err == nil {
+		// It's a JSON message (clipboard, file transfer, etc.)
+		if c.onDataChannelMessage != nil {
+			c.onDataChannelMessage(data)
+		}
+	} else {
+		// It's binary data (JPEG frame sent as single message)
+		if c.onFrame != nil {
+			c.onFrame(data)
+		}
+	}
 }
