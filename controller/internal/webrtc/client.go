@@ -106,6 +106,16 @@ func (c *Client) CreateOffer() (string, error) {
 		return "", fmt.Errorf("peer connection not initialized")
 	}
 
+	// Create a data channel to trigger ICE gathering
+	// The agent will use this channel to send video frames
+	dc, err := c.peerConnection.CreateDataChannel("data", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create data channel: %w", err)
+	}
+	c.dataChannel = dc
+	
+	log.Println("📡 Data channel created")
+
 	offer, err := c.peerConnection.CreateOffer(nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create offer: %w", err)
@@ -115,12 +125,17 @@ func (c *Client) CreateOffer() (string, error) {
 		return "", fmt.Errorf("failed to set local description: %w", err)
 	}
 
+	log.Println("⏳ Waiting for ICE gathering to complete...")
+	
 	// Wait for ICE gathering to complete
 	gatherComplete := webrtc.GatheringCompletePromise(c.peerConnection)
 	<-gatherComplete
+	
+	log.Println("✅ ICE gathering complete!")
 
 	// Get the complete offer with all ICE candidates
 	completeOffer := c.peerConnection.LocalDescription()
+	log.Printf("📊 Complete offer SDP length: %d", len(completeOffer.SDP))
 	
 	offerJSON, err := json.Marshal(completeOffer)
 	if err != nil {
