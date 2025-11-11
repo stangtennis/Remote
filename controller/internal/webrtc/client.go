@@ -114,6 +114,29 @@ func (c *Client) CreateOffer() (string, error) {
 	}
 	c.dataChannel = dc
 	
+	// Add OnOpen handler to see when the channel opens
+	dc.OnOpen(func() {
+		log.Println("📡 Data channel OPENED (controller side)")
+	})
+	
+	// Add OnMessage handler
+	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+		log.Printf("📥 Received data on channel: %d bytes", len(msg.Data))
+		// Try to parse as JSON first (for clipboard and other messages)
+		var jsonMsg map[string]interface{}
+		if err := json.Unmarshal(msg.Data, &jsonMsg); err == nil {
+			// It's a JSON message (clipboard, file transfer, etc.)
+			if c.onDataChannelMessage != nil {
+				c.onDataChannelMessage(msg.Data)
+			}
+		} else {
+			// It's binary data (JPEG frame)
+			if c.onFrame != nil {
+				c.onFrame(msg.Data)
+			}
+		}
+	})
+	
 	log.Println("📡 Data channel created")
 
 	offer, err := c.peerConnection.CreateOffer(nil)
@@ -136,6 +159,7 @@ func (c *Client) CreateOffer() (string, error) {
 	// Get the complete offer with all ICE candidates
 	completeOffer := c.peerConnection.LocalDescription()
 	log.Printf("📊 Complete offer SDP length: %d", len(completeOffer.SDP))
+	log.Printf("📊 Full SDP:\n%s", completeOffer.SDP)
 	
 	offerJSON, err := json.Marshal(completeOffer)
 	if err != nil {
@@ -151,8 +175,12 @@ func (c *Client) SetAnswer(answerJSON string) error {
 		return fmt.Errorf("peer connection not initialized")
 	}
 
+	log.Printf("📥 Received answer length: %d", len(answerJSON))
+	log.Printf("📥 First 100 chars: %.100s", answerJSON)
+
 	var answer webrtc.SessionDescription
 	if err := json.Unmarshal([]byte(answerJSON), &answer); err != nil {
+		log.Printf("❌ Failed to unmarshal. Full answer: %s", answerJSON)
 		return fmt.Errorf("failed to unmarshal answer: %w", err)
 	}
 
