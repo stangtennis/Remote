@@ -11,8 +11,10 @@ import (
 type InteractiveCanvas struct {
 	widget.BaseWidget
 	image         *canvas.Image
+	lastMouseX    float32
+	lastMouseY    float32
 	onMouseMove   func(x, y float32)
-	onMouseButton func(button desktop.MouseButton, pressed bool)
+	onMouseButton func(button desktop.MouseButton, pressed bool, x, y float32)
 	onMouseScroll func(deltaX, deltaY float32)
 	onKeyPress    func(key *fyne.KeyEvent)
 }
@@ -39,20 +41,26 @@ func (ic *InteractiveCanvas) MouseIn(*desktop.MouseEvent) {}
 func (ic *InteractiveCanvas) MouseOut() {}
 
 func (ic *InteractiveCanvas) MouseMoved(event *desktop.MouseEvent) {
+	ic.lastMouseX = event.Position.X
+	ic.lastMouseY = event.Position.Y
 	if ic.onMouseMove != nil {
 		ic.onMouseMove(event.Position.X, event.Position.Y)
 	}
 }
 
 func (ic *InteractiveCanvas) MouseDown(event *desktop.MouseEvent) {
+	ic.lastMouseX = event.Position.X
+	ic.lastMouseY = event.Position.Y
 	if ic.onMouseButton != nil {
-		ic.onMouseButton(event.Button, true)
+		ic.onMouseButton(event.Button, true, event.Position.X, event.Position.Y)
 	}
 }
 
 func (ic *InteractiveCanvas) MouseUp(event *desktop.MouseEvent) {
+	ic.lastMouseX = event.Position.X
+	ic.lastMouseY = event.Position.Y
 	if ic.onMouseButton != nil {
-		ic.onMouseButton(event.Button, false)
+		ic.onMouseButton(event.Button, false, event.Position.X, event.Position.Y)
 	}
 }
 
@@ -85,7 +93,7 @@ func (ic *InteractiveCanvas) SetOnMouseMove(callback func(x, y float32)) {
 	ic.onMouseMove = callback
 }
 
-func (ic *InteractiveCanvas) SetOnMouseButton(callback func(button desktop.MouseButton, pressed bool)) {
+func (ic *InteractiveCanvas) SetOnMouseButton(callback func(button desktop.MouseButton, pressed bool, x, y float32)) {
 	ic.onMouseButton = callback
 }
 

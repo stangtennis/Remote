@@ -201,9 +201,9 @@ func (v *Viewer) setupInputForwarding() {
 	})
 	
 	// Hook up mouse buttons
-	v.interactiveCanvas.SetOnMouseButton(func(button desktop.MouseButton, pressed bool) {
+	v.interactiveCanvas.SetOnMouseButton(func(button desktop.MouseButton, pressed bool, x, y float32) {
 		buttonInt := int(button)
-		v.SendMouseButton(buttonInt, pressed)
+		v.SendMouseButton(buttonInt, pressed, x, y)
 	})
 	
 	// Hook up mouse scroll
@@ -254,10 +254,21 @@ func (v *Viewer) SendMouseMove(x, y float32) {
 }
 
 // SendMouseButton sends a mouse button event to the agent
-func (v *Viewer) SendMouseButton(button int, pressed bool) {
-	if v.webrtcClient == nil {
+func (v *Viewer) SendMouseButton(button int, pressed bool, x, y float32) {
+	if v.webrtcClient == nil || v.interactiveCanvas == nil {
 		return
 	}
+	
+	// Convert local coordinates to remote screen coordinates
+	canvasSize := v.interactiveCanvas.Size()
+	
+	// Assume remote is 1920x1080 (will be updated when we get actual resolution)
+	remoteWidth := float32(1920)
+	remoteHeight := float32(1080)
+	
+	// Scale coordinates
+	remoteX := (x / canvasSize.Width) * remoteWidth
+	remoteY := (y / canvasSize.Height) * remoteHeight
 	
 	// Map button number to string
 	buttonStr := "left"
@@ -271,6 +282,8 @@ func (v *Viewer) SendMouseButton(button int, pressed bool) {
 		"t":      "mouse_click",
 		"button": buttonStr,
 		"down":   pressed,
+		"x":      remoteX,
+		"y":      remoteY,
 	}
 
 	eventJSON, _ := json.Marshal(event)
