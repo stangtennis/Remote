@@ -125,6 +125,25 @@ func (v *Viewer) buildUI() {
 	
 	// Handle window close
 	v.window.SetOnClosed(func() {
+		log.Println("Viewer window closing, cleaning up...")
+		
+		// Close WebRTC connection
+		if v.webrtcClient != nil {
+			if client, ok := v.webrtcClient.(interface{ Close() error }); ok {
+				if err := client.Close(); err != nil {
+					log.Printf("Error closing WebRTC client: %v", err)
+				}
+			}
+		}
+		
+		// Stop reconnection manager
+		if v.reconnectionMgr != nil {
+			if reconnMgr, ok := v.reconnectionMgr.(interface{ Stop() }); ok {
+				reconnMgr.Stop()
+			}
+		}
+		
+		// Call disconnect callback if set
 		if v.onDisconnect != nil {
 			v.onDisconnect()
 		}
@@ -277,9 +296,35 @@ func (v *Viewer) handleConnect() {
 
 func (v *Viewer) handleDisconnect() {
 	log.Println("Disconnecting from remote device...")
+	
+	// Close WebRTC connection
+	if v.webrtcClient != nil {
+		if client, ok := v.webrtcClient.(interface{ Close() error }); ok {
+			if err := client.Close(); err != nil {
+				log.Printf("Error closing WebRTC client: %v", err)
+			}
+		}
+		v.webrtcClient = nil
+	}
+	
+	// Stop reconnection manager
+	if v.reconnectionMgr != nil {
+		if reconnMgr, ok := v.reconnectionMgr.(interface{ Stop() }); ok {
+			reconnMgr.Stop()
+		}
+	}
+	
+	// Update status
+	v.connected = false
+	v.statusLabel.SetText("🔴 Disconnected")
+	
+	// Call disconnect callback if set
 	if v.onDisconnect != nil {
 		v.onDisconnect()
 	}
+	
+	// Close the viewer window
+	v.window.Close()
 }
 
 func (v *Viewer) toggleFullscreen() {
