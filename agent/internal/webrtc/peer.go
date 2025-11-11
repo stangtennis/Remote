@@ -183,14 +183,25 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 		x, _ := event["x"].(float64)
 		y, _ := event["y"].(float64)
 		if err := m.mouseController.Move(x, y); err != nil {
-			log.Printf("Mouse move error: %v", err)
+			log.Printf("❌ Mouse move error: %v", err)
 		}
 
 	case "mouse_click":
 		button, _ := event["button"].(string)
 		down, _ := event["down"].(bool)
+		x, hasX := event["x"].(float64)
+		y, hasY := event["y"].(float64)
+		
+		// Move mouse to click position if coordinates are provided
+		if hasX && hasY {
+			if err := m.mouseController.Move(x, y); err != nil {
+				log.Printf("❌ Mouse move to click position error: %v", err)
+			}
+		}
+		
+		log.Printf("🖱️  Mouse %s %s at (%.0f, %.0f)", button, map[bool]string{true: "down", false: "up"}[down], x, y)
 		if err := m.mouseController.Click(button, down); err != nil {
-			log.Printf("Mouse click error: %v", err)
+			log.Printf("❌ Mouse click error: %v", err)
 		}
 
 	case "mouse_scroll":
