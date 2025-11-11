@@ -269,11 +269,11 @@ func (m *Manager) startClipboardMonitoring() {
 
 func (m *Manager) startScreenStreaming() {
 	// Stream JPEG frames over data channel
-	// 60 FPS (16ms) = ultra-smooth experience for high bandwidth
-	ticker := time.NewTicker(16 * time.Millisecond)
+	// 30 FPS (33ms) = smooth experience with lower latency
+	ticker := time.NewTicker(33 * time.Millisecond)
 	defer ticker.Stop()
 
-	log.Println("🎥 Starting screen streaming at 60 FPS (MAXIMUM QUALITY MODE)...")
+	log.Println("🎥 Starting screen streaming at 30 FPS...")
 	
 	// If screen capturer not initialized (Session 0), try to initialize now
 	if m.screenCapturer == nil {
@@ -344,8 +344,8 @@ func (m *Manager) startScreenStreaming() {
 			log.Printf("Failed to send frame: %v", err)
 		} else {
 			frameCount++
-			// Log every 60 frames (once per second at 60 FPS)
-			if frameCount%60 == 0 {
+			// Log every 30 frames (once per second at 30 FPS)
+			if frameCount%30 == 0 {
 				log.Printf("📊 Streaming: %d frames sent | Latest: %d KB | Errors: %d | Dropped: %d", 
 					frameCount, len(jpeg)/1024, errorCount, droppedFrames)
 			}

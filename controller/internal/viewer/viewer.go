@@ -15,13 +15,14 @@ import (
 
 // Viewer represents the remote desktop viewer window
 type Viewer struct {
-	window          fyne.Window
-	videoCanvas     *canvas.Image
-	deviceID        string
-	deviceName      string
-	connected       bool
-	fullscreen      bool
-	toolbarVisible  bool
+	window             fyne.Window
+	videoCanvas        *canvas.Image
+	interactiveCanvas  *InteractiveCanvas
+	deviceID           string
+	deviceName         string
+	connected          bool
+	fullscreen         bool
+	toolbarVisible     bool
 	
 	// UI Components
 	toolbar         *fyne.Container
@@ -83,6 +84,9 @@ func (v *Viewer) buildUI() {
 	v.videoCanvas.FillMode = canvas.ImageFillContain
 	v.videoCanvas.ScaleMode = canvas.ImageScaleSmooth
 	
+	// Wrap in interactive canvas for input capture
+	v.interactiveCanvas = NewInteractiveCanvas(v.videoCanvas)
+	
 	// Build toolbar
 	v.toolbar = v.createToolbar()
 	
@@ -93,7 +97,7 @@ func (v *Viewer) buildUI() {
 	videoBorder := canvas.NewRectangle(color.RGBA{R: 40, G: 40, B: 40, A: 255})
 	v.videoContainer = container.NewStack(
 		videoBorder,
-		container.NewPadded(v.videoCanvas),
+		container.NewPadded(v.interactiveCanvas),
 	)
 	
 	// Main layout
