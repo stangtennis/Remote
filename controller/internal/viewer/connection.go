@@ -218,6 +218,25 @@ func (v *Viewer) setupInputForwarding() {
 	
 	// Hook up keyboard
 	v.interactiveCanvas.SetOnKeyPress(func(key *fyne.KeyEvent) {
+		// Intercept ESC for local fullscreen exit
+		if key.Name == fyne.KeyEscape && v.fullscreen {
+			log.Println("🔑 ESC pressed - exiting fullscreen locally")
+			fyne.Do(func() {
+				v.toggleFullscreen()
+			})
+			return // Don't send to remote
+		}
+		
+		// Intercept F11 for local fullscreen toggle
+		if key.Name == fyne.KeyF11 {
+			log.Println("🔑 F11 pressed - toggling fullscreen locally")
+			fyne.Do(func() {
+				v.toggleFullscreen()
+			})
+			return // Don't send to remote
+		}
+		
+		// Send other keys to remote
 		v.SendKeyPress(string(key.Name), true)
 	})
 	
@@ -286,6 +305,10 @@ func (v *Viewer) SendMouseButton(button int, pressed bool, x, y float32) {
 	// Scale coordinates from canvas to remote screen
 	remoteX := (x / canvasSize.Width) * remoteWidth
 	remoteY := (y / canvasSize.Height) * remoteHeight
+	
+	// Debug logging
+	log.Printf("🖱️  Click: canvas=(%.0f,%.0f) canvasSize=(%.0fx%.0f) remote=(%.0f,%.0f) remoteSize=(%.0fx%.0f)",
+		x, y, canvasSize.Width, canvasSize.Height, remoteX, remoteY, remoteWidth, remoteHeight)
 	
 	// Map button number to string
 	buttonStr := "left"
