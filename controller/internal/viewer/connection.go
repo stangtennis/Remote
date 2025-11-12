@@ -352,9 +352,37 @@ func (v *Viewer) SendMouseButton(button int, pressed bool, x, y float32) {
 	adjustedX := x - offsetX
 	adjustedY := y - offsetY
 	
+	// Clamp to image bounds (ignore clicks in black bars)
+	if adjustedX < 0 {
+		adjustedX = 0
+	}
+	if adjustedY < 0 {
+		adjustedY = 0
+	}
+	if adjustedX > scaledWidth {
+		adjustedX = scaledWidth
+	}
+	if adjustedY > scaledHeight {
+		adjustedY = scaledHeight
+	}
+	
 	// Convert to remote coordinates
 	remoteX := (adjustedX / scaledWidth) * imgWidth
 	remoteY := (adjustedY / scaledHeight) * imgHeight
+	
+	// Clamp to remote screen bounds
+	if remoteX < 0 {
+		remoteX = 0
+	}
+	if remoteY < 0 {
+		remoteY = 0
+	}
+	if remoteX >= imgWidth {
+		remoteX = imgWidth - 1
+	}
+	if remoteY >= imgHeight {
+		remoteY = imgHeight - 1
+	}
 	
 	// Debug logging
 	log.Printf("🖱️  Click: canvas=(%.0f,%.0f) canvasSize=(%.0fx%.0f) scaled=(%.0fx%.0f) offset=(%.0f,%.0f) adjusted=(%.0f,%.0f) remote=(%.0f,%.0f) imgSize=(%.0fx%.0f)",
