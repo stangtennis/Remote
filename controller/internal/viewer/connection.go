@@ -360,12 +360,15 @@ func (v *Viewer) SendMouseButton(button int, pressed bool, x, y float32) {
 	log.Printf("🖱️  Click: canvas=(%.0f,%.0f) canvasSize=(%.0fx%.0f) scaled=(%.0fx%.0f) offset=(%.0f,%.0f) adjusted=(%.0f,%.0f) remote=(%.0f,%.0f) imgSize=(%.0fx%.0f)",
 		x, y, canvasSize.Width, canvasSize.Height, scaledWidth, scaledHeight, offsetX, offsetY, adjustedX, adjustedY, remoteX, remoteY, imgWidth, imgHeight)
 	
-	// Map button number to string
+	// Map Fyne button to string
+	// Fyne uses: MouseButtonPrimary=1 (left), MouseButtonSecondary=2 (right), MouseButtonTertiary=3 (middle)
 	buttonStr := "left"
 	if button == 1 {
-		buttonStr = "middle"
+		buttonStr = "left"
 	} else if button == 2 {
 		buttonStr = "right"
+	} else if button == 3 {
+		buttonStr = "middle"
 	}
 	
 	event := map[string]interface{}{
