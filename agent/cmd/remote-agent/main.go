@@ -36,8 +36,8 @@ func setupLogging() error {
 	// Create log file in same directory as executable
 	logPath := filepath.Join(exeDir, "agent.log")
 	
-	// Open log file (append mode)
-	logFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// Open log file (truncate mode - clears previous logs)
+	logFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
