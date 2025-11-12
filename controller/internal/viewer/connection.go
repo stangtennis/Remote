@@ -260,15 +260,39 @@ func (v *Viewer) SendMouseMove(x, y float32) {
 	}
 	
 	bounds := img.Bounds()
-	remoteWidth := float32(bounds.Dx())
-	remoteHeight := float32(bounds.Dy())
+	imgWidth := float32(bounds.Dx())
+	imgHeight := float32(bounds.Dy())
 	
 	// Get canvas display size
 	canvasSize := v.interactiveCanvas.Size()
 	
-	// Scale coordinates from canvas to remote screen
-	remoteX := (x / canvasSize.Width) * remoteWidth
-	remoteY := (y / canvasSize.Height) * remoteHeight
+	// Calculate how the image is scaled within the canvas (ImageFillContain)
+	canvasAspect := canvasSize.Width / canvasSize.Height
+	imgAspect := imgWidth / imgHeight
+	
+	var scaledWidth, scaledHeight, offsetX, offsetY float32
+	
+	if canvasAspect > imgAspect {
+		// Canvas is wider - pillarboxing
+		scaledHeight = canvasSize.Height
+		scaledWidth = imgWidth * (canvasSize.Height / imgHeight)
+		offsetX = (canvasSize.Width - scaledWidth) / 2
+		offsetY = 0
+	} else {
+		// Canvas is taller - letterboxing
+		scaledWidth = canvasSize.Width
+		scaledHeight = imgHeight * (canvasSize.Width / imgWidth)
+		offsetX = 0
+		offsetY = (canvasSize.Height - scaledHeight) / 2
+	}
+	
+	// Adjust coordinates
+	adjustedX := x - offsetX
+	adjustedY := y - offsetY
+	
+	// Convert to remote coordinates
+	remoteX := (adjustedX / scaledWidth) * imgWidth
+	remoteY := (adjustedY / scaledHeight) * imgHeight
 	
 	event := map[string]interface{}{
 		"t": "mouse_move",
@@ -297,19 +321,44 @@ func (v *Viewer) SendMouseButton(button int, pressed bool, x, y float32) {
 	}
 	
 	bounds := img.Bounds()
-	remoteWidth := float32(bounds.Dx())
-	remoteHeight := float32(bounds.Dy())
+	imgWidth := float32(bounds.Dx())
+	imgHeight := float32(bounds.Dy())
 	
 	// Get canvas display size
 	canvasSize := v.interactiveCanvas.Size()
 	
-	// Scale coordinates from canvas to remote screen
-	remoteX := (x / canvasSize.Width) * remoteWidth
-	remoteY := (y / canvasSize.Height) * remoteHeight
+	// Calculate how the image is scaled within the canvas (ImageFillContain)
+	// The image maintains aspect ratio and is centered
+	canvasAspect := canvasSize.Width / canvasSize.Height
+	imgAspect := imgWidth / imgHeight
+	
+	var scaledWidth, scaledHeight, offsetX, offsetY float32
+	
+	if canvasAspect > imgAspect {
+		// Canvas is wider - image is limited by height (pillarboxing)
+		scaledHeight = canvasSize.Height
+		scaledWidth = imgWidth * (canvasSize.Height / imgHeight)
+		offsetX = (canvasSize.Width - scaledWidth) / 2
+		offsetY = 0
+	} else {
+		// Canvas is taller - image is limited by width (letterboxing)
+		scaledWidth = canvasSize.Width
+		scaledHeight = imgHeight * (canvasSize.Width / imgWidth)
+		offsetX = 0
+		offsetY = (canvasSize.Height - scaledHeight) / 2
+	}
+	
+	// Adjust click coordinates to account for scaling and offset
+	adjustedX := x - offsetX
+	adjustedY := y - offsetY
+	
+	// Convert to remote coordinates
+	remoteX := (adjustedX / scaledWidth) * imgWidth
+	remoteY := (adjustedY / scaledHeight) * imgHeight
 	
 	// Debug logging
-	log.Printf("🖱️  Click: canvas=(%.0f,%.0f) canvasSize=(%.0fx%.0f) remote=(%.0f,%.0f) remoteSize=(%.0fx%.0f)",
-		x, y, canvasSize.Width, canvasSize.Height, remoteX, remoteY, remoteWidth, remoteHeight)
+	log.Printf("🖱️  Click: canvas=(%.0f,%.0f) canvasSize=(%.0fx%.0f) scaled=(%.0fx%.0f) offset=(%.0f,%.0f) adjusted=(%.0f,%.0f) remote=(%.0f,%.0f) imgSize=(%.0fx%.0f)",
+		x, y, canvasSize.Width, canvasSize.Height, scaledWidth, scaledHeight, offsetX, offsetY, adjustedX, adjustedY, remoteX, remoteY, imgWidth, imgHeight)
 	
 	// Map button number to string
 	buttonStr := "left"
