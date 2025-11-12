@@ -208,6 +208,7 @@ func (v *Viewer) setupInputForwarding() {
 	// Hook up mouse buttons
 	v.interactiveCanvas.SetOnMouseButton(func(button desktop.MouseButton, pressed bool, x, y float32) {
 		buttonInt := int(button)
+		log.Printf("🖱️  Button event: button=%d (%v) pressed=%v", buttonInt, button, pressed)
 		v.SendMouseButton(buttonInt, pressed, x, y)
 	})
 	
