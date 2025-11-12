@@ -4,6 +4,61 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.2.0] - 2025-11-11 - **MAJOR MILESTONE: Full Remote Desktop Functionality!**
+
+### Added - WebRTC Video Streaming & Full Input Control
+- **WebRTC Video Streaming**: Live remote desktop view working!
+  - Frame chunk reassembly for large JPEG frames
+  - 30 FPS streaming optimized for latency
+  - Proper disconnect handling
+  - DXGI screen capture (works over RDP)
+  
+- **Full Input Control**: Mouse, keyboard, and scroll fully functional
+  - Interactive canvas widget captures all events
+  - Accurate coordinate scaling (canvas → remote screen)
+  - Mouse clicks include position data
+  - Keyboard events forwarded correctly
+  - Focus management for keyboard capture
+  
+- **Windows Service Support**: Agent can run as Windows Service
+  - Service mode detection
+  - `install-service.bat` installer script
+  - Works in Session 0 and RDP sessions
+  - Enhanced logging for debugging
+
+### Fixed - Critical Bugs
+- **Black Screen**: Implemented frame chunk reassembly (60KB chunks with 0xFF magic byte)
+- **No Input Control**: Created interactive canvas widget to capture events
+- **Mouse Position Wrong**: Fixed coordinate scaling (removed normalization, use absolute pixels)
+- **Clicks in Wrong Place**: Send mouse position with click events, move before clicking
+- **Agent Logs Not Updating**: Increased logging frequency to once per second
+- **Disconnect Not Working**: Properly close WebRTC connection and stop reconnection
+- **High Latency**: Reduced FPS from 60 to 30 for better responsiveness
+
+### Changed - Performance Improvements
+- Reduced streaming from 60 FPS to 30 FPS for lower latency (~1 second)
+- Agent logs every 30 frames (1 second) instead of every 100 frames
+- Enhanced connection state logging with emojis for visibility
+- Mouse controller uses absolute pixels instead of normalized coordinates
+
+### Technical Details
+- **Frame Chunking Protocol**: `[magic_byte:0xFF, chunk_index, total_chunks, ...data]`
+- **Interactive Canvas**: Custom Fyne widget implementing mouse/keyboard interfaces
+- **Coordinate Scaling**: `remoteX = (canvasX / canvasWidth) * remoteWidth`
+- **Click Protocol**: `{"t": "mouse_click", "button": "left", "down": true, "x": 960, "y": 540}`
+
+### Files Changed
+- `controller/internal/viewer/interactive_canvas.go` - NEW: Interactive canvas widget
+- `controller/internal/viewer/connection.go` - Frame reassembly, input forwarding
+- `controller/internal/viewer/viewer.go` - Disconnect cleanup
+- `controller/internal/webrtc/client.go` - Chunk reassembly logic
+- `agent/internal/webrtc/peer.go` - 30 FPS, enhanced logging, click positioning
+- `agent/internal/input/mouse.go` - Fixed coordinate handling
+- `agent/internal/screen/capture.go` - DXGI priority
+- `agent/install-service.bat` - NEW: Service installer
+
+## [2.0.0] - 2025-11-06 - Controller Application & Device Approval
+
 ## [0.2.0] - 2025-11-05 - Device Assignment System
 
 ### Added - TeamViewer-Style Device Management
