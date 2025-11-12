@@ -27,7 +27,7 @@ REM Build the agent
 echo.
 echo 🔧 Building with CGO_ENABLED=1...
 cd /d "%~dp0"
-go build -ldflags "-s -w -H windowsgui" -o remote-agent.exe ./cmd/remote-agent
+go build -ldflags "-s -w" -o remote-agent.exe ./cmd/remote-agent
 
 if %ERRORLEVEL% EQU 0 (
     echo.
