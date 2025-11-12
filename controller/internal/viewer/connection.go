@@ -384,9 +384,16 @@ func (v *Viewer) SendMouseButton(button int, pressed bool, x, y float32) {
 		remoteY = imgHeight - 1
 	}
 	
+	// Calculate percentages for easier debugging
+	canvasXPercent := (x / canvasSize.Width) * 100
+	canvasYPercent := (y / canvasSize.Height) * 100
+	remoteXPercent := (remoteX / imgWidth) * 100
+	remoteYPercent := (remoteY / imgHeight) * 100
+	
 	// Debug logging
-	log.Printf("🖱️  Click: canvas=(%.0f,%.0f) canvasSize=(%.0fx%.0f) scaled=(%.0fx%.0f) offset=(%.0f,%.0f) adjusted=(%.0f,%.0f) remote=(%.0f,%.0f) imgSize=(%.0fx%.0f)",
-		x, y, canvasSize.Width, canvasSize.Height, scaledWidth, scaledHeight, offsetX, offsetY, adjustedX, adjustedY, remoteX, remoteY, imgWidth, imgHeight)
+	log.Printf("🖱️  Click: canvas=(%.0f,%.0f [%.0f%%,%.0f%%]) → remote=(%.0f,%.0f [%.0f%%,%.0f%%]) | canvasSize=(%.0fx%.0f) scaled=(%.0fx%.0f) offset=(%.0f,%.0f)",
+		x, y, canvasXPercent, canvasYPercent, remoteX, remoteY, remoteXPercent, remoteYPercent, 
+		canvasSize.Width, canvasSize.Height, scaledWidth, scaledHeight, offsetX, offsetY)
 	
 	// Map Fyne button to string
 	// Fyne uses: MouseButtonPrimary=1 (left), MouseButtonSecondary=2 (right), MouseButtonTertiary=3 (middle)
