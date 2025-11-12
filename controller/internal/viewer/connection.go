@@ -174,16 +174,21 @@ func (v *Viewer) updateFPS() {
 		frameCount = 0
 		lastFrameTime = now
 		
-		// Update FPS label
-		v.fpsLabel.SetText(fmt.Sprintf("FPS: %d", currentFPS))
+		// Update FPS label on UI thread
+		fps := currentFPS
+		fyne.Do(func() {
+			v.fpsLabel.SetText(fmt.Sprintf("FPS: %d", fps))
+		})
 	}
 }
 
 // updateCanvas updates the video canvas with a new frame
 func (v *Viewer) updateCanvas(img image.Image) {
-	// Convert to canvas image
-	v.videoCanvas.Image = img
-	v.videoCanvas.Refresh()
+	// Update canvas on UI thread
+	fyne.Do(func() {
+		v.videoCanvas.Image = img
+		v.videoCanvas.Refresh()
+	})
 }
 
 // setupInputForwarding configures input event forwarding to the agent
