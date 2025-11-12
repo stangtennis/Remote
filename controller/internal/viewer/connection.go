@@ -224,18 +224,24 @@ func (v *Viewer) setupInputForwarding() {
 
 // SendMouseMove sends a mouse move event to the agent
 func (v *Viewer) SendMouseMove(x, y float32) {
-	if v.webrtcClient == nil || v.interactiveCanvas == nil {
+	if v.webrtcClient == nil || v.interactiveCanvas == nil || v.videoCanvas == nil {
 		return
 	}
 	
-	// Convert local coordinates to remote screen coordinates
+	// Get actual remote screen resolution from the video image
+	img := v.videoCanvas.Image
+	if img == nil {
+		return
+	}
+	
+	bounds := img.Bounds()
+	remoteWidth := float32(bounds.Dx())
+	remoteHeight := float32(bounds.Dy())
+	
+	// Get canvas display size
 	canvasSize := v.interactiveCanvas.Size()
 	
-	// Assume remote is 1920x1080 (will be updated when we get actual resolution)
-	remoteWidth := float32(1920)
-	remoteHeight := float32(1080)
-	
-	// Scale coordinates
+	// Scale coordinates from canvas to remote screen
 	remoteX := (x / canvasSize.Width) * remoteWidth
 	remoteY := (y / canvasSize.Height) * remoteHeight
 	
@@ -255,18 +261,24 @@ func (v *Viewer) SendMouseMove(x, y float32) {
 
 // SendMouseButton sends a mouse button event to the agent
 func (v *Viewer) SendMouseButton(button int, pressed bool, x, y float32) {
-	if v.webrtcClient == nil || v.interactiveCanvas == nil {
+	if v.webrtcClient == nil || v.interactiveCanvas == nil || v.videoCanvas == nil {
 		return
 	}
 	
-	// Convert local coordinates to remote screen coordinates
+	// Get actual remote screen resolution from the video image
+	img := v.videoCanvas.Image
+	if img == nil {
+		return
+	}
+	
+	bounds := img.Bounds()
+	remoteWidth := float32(bounds.Dx())
+	remoteHeight := float32(bounds.Dy())
+	
+	// Get canvas display size
 	canvasSize := v.interactiveCanvas.Size()
 	
-	// Assume remote is 1920x1080 (will be updated when we get actual resolution)
-	remoteWidth := float32(1920)
-	remoteHeight := float32(1080)
-	
-	// Scale coordinates
+	// Scale coordinates from canvas to remote screen
 	remoteX := (x / canvasSize.Width) * remoteWidth
 	remoteY := (y / canvasSize.Height) * remoteHeight
 	
