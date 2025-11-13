@@ -266,47 +266,10 @@ func (v *Viewer) SendMouseMove(x, y float32) {
 	// Get canvas display size
 	canvasSize := v.interactiveCanvas.Size()
 	
-	// Calculate how the image is scaled within the canvas (ImageFillContain)
-	canvasAspect := canvasSize.Width / canvasSize.Height
-	imgAspect := imgWidth / imgHeight
-	
-	var scaledWidth, scaledHeight, offsetX, offsetY float32
-	
-	if canvasAspect > imgAspect {
-		// Canvas is wider - pillarboxing
-		scaledHeight = canvasSize.Height
-		scaledWidth = imgWidth * (canvasSize.Height / imgHeight)
-		offsetX = (canvasSize.Width - scaledWidth) / 2
-		offsetY = 0
-	} else {
-		// Canvas is taller - letterboxing
-		scaledWidth = canvasSize.Width
-		scaledHeight = imgHeight * (canvasSize.Width / imgWidth)
-		offsetX = 0
-		offsetY = (canvasSize.Height - scaledHeight) / 2
-	}
-	
-	// Adjust coordinates
-	adjustedX := x - offsetX
-	adjustedY := y - offsetY
-	
-	// Clamp to image bounds (ignore moves in black bars)
-	if adjustedX < 0 {
-		adjustedX = 0
-	}
-	if adjustedY < 0 {
-		adjustedY = 0
-	}
-	if adjustedX > scaledWidth {
-		adjustedX = scaledWidth
-	}
-	if adjustedY > scaledHeight {
-		adjustedY = scaledHeight
-	}
-	
-	// Convert to remote coordinates
-	remoteX := (adjustedX / scaledWidth) * imgWidth
-	remoteY := (adjustedY / scaledHeight) * imgHeight
+	// ImageFillStretch: image fills entire canvas (no offset, simple scaling)
+	// Convert canvas coordinates directly to remote coordinates
+	remoteX := (x / canvasSize.Width) * imgWidth
+	remoteY := (y / canvasSize.Height) * imgHeight
 	
 	// Clamp to remote screen bounds
 	if remoteX < 0 {
@@ -355,48 +318,10 @@ func (v *Viewer) SendMouseButton(button int, pressed bool, x, y float32) {
 	// Get canvas display size
 	canvasSize := v.interactiveCanvas.Size()
 	
-	// Calculate how the image is scaled within the canvas (ImageFillContain)
-	// The image maintains aspect ratio and is centered
-	canvasAspect := canvasSize.Width / canvasSize.Height
-	imgAspect := imgWidth / imgHeight
-	
-	var scaledWidth, scaledHeight, offsetX, offsetY float32
-	
-	if canvasAspect > imgAspect {
-		// Canvas is wider - image is limited by height (pillarboxing)
-		scaledHeight = canvasSize.Height
-		scaledWidth = imgWidth * (canvasSize.Height / imgHeight)
-		offsetX = (canvasSize.Width - scaledWidth) / 2
-		offsetY = 0
-	} else {
-		// Canvas is taller - image is limited by width (letterboxing)
-		scaledWidth = canvasSize.Width
-		scaledHeight = imgHeight * (canvasSize.Width / imgWidth)
-		offsetX = 0
-		offsetY = (canvasSize.Height - scaledHeight) / 2
-	}
-	
-	// Adjust click coordinates to account for scaling and offset
-	adjustedX := x - offsetX
-	adjustedY := y - offsetY
-	
-	// Clamp to image bounds (ignore clicks in black bars)
-	if adjustedX < 0 {
-		adjustedX = 0
-	}
-	if adjustedY < 0 {
-		adjustedY = 0
-	}
-	if adjustedX > scaledWidth {
-		adjustedX = scaledWidth
-	}
-	if adjustedY > scaledHeight {
-		adjustedY = scaledHeight
-	}
-	
-	// Convert to remote coordinates
-	remoteX := (adjustedX / scaledWidth) * imgWidth
-	remoteY := (adjustedY / scaledHeight) * imgHeight
+	// ImageFillStretch: image fills entire canvas (no offset, simple scaling)
+	// Convert canvas coordinates directly to remote coordinates
+	remoteX := (x / canvasSize.Width) * imgWidth
+	remoteY := (y / canvasSize.Height) * imgHeight
 	
 	// Clamp to remote screen bounds
 	if remoteX < 0 {
@@ -419,9 +344,9 @@ func (v *Viewer) SendMouseButton(button int, pressed bool, x, y float32) {
 	remoteYPercent := (remoteY / imgHeight) * 100
 	
 	// Debug logging
-	log.Printf("🖱️  Click: canvas=(%.0f,%.0f [%.0f%%,%.0f%%]) → remote=(%.0f,%.0f [%.0f%%,%.0f%%]) | canvasSize=(%.0fx%.0f) scaled=(%.0fx%.0f) offset=(%.0f,%.0f)",
+	log.Printf("🖱️  Click: canvas=(%.0f,%.0f [%.0f%%,%.0f%%]) → remote=(%.0f,%.0f [%.0f%%,%.0f%%]) | canvasSize=(%.0fx%.0f) imgSize=(%.0fx%.0f)",
 		x, y, canvasXPercent, canvasYPercent, remoteX, remoteY, remoteXPercent, remoteYPercent, 
-		canvasSize.Width, canvasSize.Height, scaledWidth, scaledHeight, offsetX, offsetY)
+		canvasSize.Width, canvasSize.Height, imgWidth, imgHeight)
 	
 	// Map Fyne button to string
 	// Fyne uses: MouseButtonPrimary=1 (left), MouseButtonSecondary=2 (right), MouseButtonTertiary=3 (middle)

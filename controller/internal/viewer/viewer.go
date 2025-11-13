@@ -81,7 +81,7 @@ func NewViewer(app fyne.App, deviceID, deviceName string) *Viewer {
 func (v *Viewer) buildUI() {
 	// Create video canvas (black background initially)
 	v.videoCanvas = canvas.NewImageFromImage(createBlackImage(1920, 1080))
-	v.videoCanvas.FillMode = canvas.ImageFillContain
+	v.videoCanvas.FillMode = canvas.ImageFillStretch  // Stretch to fill - no black bars
 	v.videoCanvas.ScaleMode = canvas.ImageScaleSmooth
 	
 	// Wrap in interactive canvas for input capture
