@@ -6,18 +6,18 @@ import (
 )
 
 type Config struct {
-	SupabaseURL     string
-	SupabaseAnonKey string
-	DeviceName      string
-	DeviceID        string
-	APIKey          string // Stored after registration
+	SupabaseURL       string
+	SupabaseAnonKey   string
+	DeviceName        string
+	DeviceID          string
+	APIKey            string // Stored after registration
 	HeartbeatInterval int
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		SupabaseURL:       getEnv("SUPABASE_URL", "https://mnqtdugcvfyenjuqruol.supabase.co"),
-		SupabaseAnonKey:   getEnv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ucXRkdWdjdmZ5ZW5qdXFydW9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzMDEwODMsImV4cCI6MjA3NDg3NzA4M30.QKs8vMS9tQJgX11GHfarHdpWZHOcCpv0B-aiq7qc15E"),
+		SupabaseURL:       getEnv("SUPABASE_URL", "http://192.168.1.92:8888"),
+		SupabaseAnonKey:   getEnv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE"),
 		DeviceName:        getEnv("DEVICE_NAME", ""),
 		HeartbeatInterval: 30, // seconds
 	}
