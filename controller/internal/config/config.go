@@ -16,8 +16,8 @@ type Config struct {
 // Load loads configuration from .env file
 func Load() (*Config, error) {
 	config := &Config{
-		// Default values (from your existing setup)
-		SupabaseURL:     "https://mnqtdugcvfyenjuqruol.supabase.co",
+		// Default values (local Supabase instance for development/testing)
+		SupabaseURL:     "http://192.168.1.92:8888",
 		SupabaseAnonKey: "REDACTED_JWT",
 	}
 
@@ -32,7 +32,7 @@ func Load() (*Config, error) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		
+
 		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

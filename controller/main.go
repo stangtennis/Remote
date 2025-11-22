@@ -184,7 +184,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			authResp, err := supabaseClient.SignIn(email, password)
 			if err != nil {
 				logger.Error("Login failed for %s: %v", email, err)
-				time.AfterFunc(10*time.Millisecond, func() {
+				fyne.Do(func() {
 					statusLabel.SetText("❌ Login failed: " + err.Error())
 					loginButton.Enable()
 				})
@@ -199,7 +199,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			approved, err := supabaseClient.CheckApproval(currentUser.ID)
 			if err != nil {
 				logger.Error("Failed to check approval for user %s: %v", currentUser.ID, err)
-				time.AfterFunc(10*time.Millisecond, func() {
+				fyne.Do(func() {
 					statusLabel.SetText("❌ Failed to check approval")
 					loginButton.Enable()
 				})
@@ -209,14 +209,14 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			logger.Info("Approval status: %v", approved)
 			if !approved {
 				logger.Info("User %s is not approved yet", currentUser.Email)
-				time.AfterFunc(10*time.Millisecond, func() {
+				fyne.Do(func() {
 					statusLabel.SetText("⏸️ Account pending approval")
 					loginButton.Enable()
 				})
 				return
 			}
 
-			time.AfterFunc(10*time.Millisecond, func() {
+			fyne.Do(func() {
 				statusLabel.SetText("✅ Connected as: " + currentUser.Email)
 			})
 			
@@ -226,7 +226,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			if err != nil {
 				logger.Error("Failed to fetch devices for user %s: %v", currentUser.ID, err)
 				logger.Debug("Device fetch error details: %+v", err)
-				time.AfterFunc(10*time.Millisecond, func() {
+				fyne.Do(func() {
 					statusLabel.SetText("⚠️ Connected but failed to load devices")
 				})
 			} else {
@@ -237,7 +237,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 				}
 				
 				devicesData = devices
-				time.AfterFunc(10*time.Millisecond, func() {
+				fyne.Do(func() {
 					if deviceListWidget != nil {
 						deviceListWidget.Refresh()
 						logger.Debug("Device list widget refreshed with %d devices", len(devicesData))
@@ -390,18 +390,18 @@ func createModernUI(window fyne.Window) *fyne.Container {
 								err := supabaseClient.UnassignDevice(device.DeviceID, currentUser.ID)
 								if err != nil {
 									logger.Error("Failed to remove device: %v", err)
-									time.AfterFunc(10*time.Millisecond, func() {
+									fyne.Do(func() {
 										dialog.ShowError(fmt.Errorf("Failed to remove device: %v", err), window)
 									})
 								} else {
 									logger.Info("✅ Device removed: %s", device.DeviceName)
-									time.AfterFunc(10*time.Millisecond, func() {
+									fyne.Do(func() {
 										dialog.ShowInformation("Success", "Device removed from your account!", window)
 										// Refresh device list
 										go func() {
 											devices, _ := supabaseClient.GetDevices(currentUser.ID)
 											devicesData = devices
-											time.AfterFunc(10*time.Millisecond, func() {
+											fyne.Do(func() {
 												deviceListWidget.Refresh()
 											})
 										}()
@@ -446,7 +446,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			}
 			
 			pendingDevicesData = pending
-			time.AfterFunc(10*time.Millisecond, func() {
+			fyne.Do(func() {
 				if pendingDevicesWidget != nil {
 					pendingDevicesWidget.Refresh()
 					logger.Info("Refreshed pending devices: %d found", len(pending))
@@ -491,12 +491,12 @@ func createModernUI(window fyne.Window) *fyne.Container {
 								err := supabaseClient.AssignDevice(device.DeviceID, currentUser.ID)
 								if err != nil {
 									logger.Error("Failed to approve device: %v", err)
-									time.AfterFunc(10*time.Millisecond, func() {
+									fyne.Do(func() {
 										dialog.ShowError(fmt.Errorf("Failed to approve device: %v", err), window)
 									})
 								} else {
 									logger.Info("✅ Device approved: %s", device.DeviceName)
-									time.AfterFunc(10*time.Millisecond, func() {
+									fyne.Do(func() {
 										dialog.ShowInformation("Success", "Device approved successfully!", window)
 										refreshPendingDevices()
 										// Also refresh assigned devices
@@ -504,7 +504,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 											go func() {
 												devices, _ := supabaseClient.GetDevices(currentUser.ID)
 												devicesData = devices
-												time.AfterFunc(10*time.Millisecond, func() {
+												fyne.Do(func() {
 													deviceListWidget.Refresh()
 												})
 											}()
@@ -528,12 +528,12 @@ func createModernUI(window fyne.Window) *fyne.Container {
 								err := supabaseClient.DeleteDevice(device.DeviceID)
 								if err != nil {
 									logger.Error("Failed to delete device: %v", err)
-									time.AfterFunc(10*time.Millisecond, func() {
+									fyne.Do(func() {
 										dialog.ShowError(fmt.Errorf("Failed to delete device: %v", err), window)
 									})
 								} else {
 									logger.Info("✅ Device deleted: %s", device.DeviceName)
-									time.AfterFunc(10*time.Millisecond, func() {
+									fyne.Do(func() {
 										dialog.ShowInformation("Success", "Device permanently deleted!", window)
 										refreshPendingDevices()
 									})

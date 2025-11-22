@@ -6,17 +6,17 @@ import (
 )
 
 type Config struct {
-	SupabaseURL     string
-	SupabaseAnonKey string
-	DeviceName      string
-	DeviceID        string
-	APIKey          string // Stored after registration
+	SupabaseURL       string
+	SupabaseAnonKey   string
+	DeviceName        string
+	DeviceID          string
+	APIKey            string // Stored after registration
 	HeartbeatInterval int
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		SupabaseURL:       getEnv("SUPABASE_URL", "https://mnqtdugcvfyenjuqruol.supabase.co"),
+		SupabaseURL:       getEnv("SUPABASE_URL", "http://192.168.1.92:8888"),
 		SupabaseAnonKey:   getEnv("SUPABASE_ANON_KEY", "REDACTED_JWT"),
 		DeviceName:        getEnv("DEVICE_NAME", ""),
 		HeartbeatInterval: 30, // seconds
