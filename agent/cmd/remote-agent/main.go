@@ -10,7 +10,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/desktop"
@@ -19,6 +21,28 @@ import (
 	"github.com/stangtennis/remote-agent/internal/webrtc"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
+)
+
+var (
+	user32        = syscall.NewLazyDLL("user32.dll")
+	messageBoxW   = user32.NewProc("MessageBoxW")
+	shell32       = syscall.NewLazyDLL("shell32.dll")
+	shellExecuteW = shell32.NewProc("ShellExecuteW")
+)
+
+const (
+	MB_OK              = 0x00000000
+	MB_OKCANCEL        = 0x00000001
+	MB_YESNOCANCEL     = 0x00000003
+	MB_YESNO           = 0x00000004
+	MB_ICONQUESTION    = 0x00000020
+	MB_ICONINFORMATION = 0x00000040
+	MB_ICONWARNING     = 0x00000030
+	MB_ICONERROR       = 0x00000010
+	IDOK               = 1
+	IDCANCEL           = 2
+	IDYES              = 6
+	IDNO               = 7
 )
 
 var (
@@ -72,17 +96,53 @@ const serviceName = "RemoteDesktopAgent"
 const serviceDisplayName = "Remote Desktop Agent"
 const serviceDescription = "Provides remote desktop access with login screen support"
 
+// messageBox shows a Windows message box dialog
+func messageBox(title, message string, flags uint32) int {
+	titlePtr, _ := syscall.UTF16PtrFromString(title)
+	messagePtr, _ := syscall.UTF16PtrFromString(message)
+	ret, _, _ := messageBoxW.Call(0, uintptr(unsafe.Pointer(messagePtr)), uintptr(unsafe.Pointer(titlePtr)), uintptr(flags))
+	return int(ret)
+}
+
+// isAdmin checks if the current process has administrator privileges
+func isAdmin() bool {
+	_, err := os.Open("\\\\.\\PHYSICALDRIVE0")
+	return err == nil
+}
+
+// runAsAdmin restarts the current process with administrator privileges
+func runAsAdmin() error {
+	exePath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	verb, _ := syscall.UTF16PtrFromString("runas")
+	exe, _ := syscall.UTF16PtrFromString(exePath)
+	args, _ := syscall.UTF16PtrFromString("")
+	dir, _ := syscall.UTF16PtrFromString(filepath.Dir(exePath))
+
+	ret, _, _ := shellExecuteW.Call(0, uintptr(unsafe.Pointer(verb)), uintptr(unsafe.Pointer(exe)),
+		uintptr(unsafe.Pointer(args)), uintptr(unsafe.Pointer(dir)), 1)
+
+	if ret <= 32 {
+		return fmt.Errorf("ShellExecute failed with code %d", ret)
+	}
+	return nil
+}
+
 func main() {
-	// Parse command-line flags
+	// Parse command-line flags (keep for advanced users)
 	installFlag := flag.Bool("install", false, "Install as Windows Service")
 	uninstallFlag := flag.Bool("uninstall", false, "Uninstall Windows Service")
 	startFlag := flag.Bool("start", false, "Start the Windows Service")
 	stopFlag := flag.Bool("stop", false, "Stop the Windows Service")
 	statusFlag := flag.Bool("status", false, "Show service status")
 	helpFlag := flag.Bool("help", false, "Show help")
+	silentFlag := flag.Bool("silent", false, "Run without GUI prompts")
 	flag.Parse()
 
-	// Handle service management commands (no logging needed)
+	// Handle command-line flags (for advanced users / scripting)
 	if *helpFlag {
 		printUsage()
 		return
@@ -120,7 +180,35 @@ func main() {
 		return
 	}
 
-	// Setup logging for normal operation
+	// Check if running as Windows Service
+	isWindowsService, err := svc.IsWindowsService()
+	if err != nil {
+		fmt.Printf("Failed to determine if running as service: %v\n", err)
+		os.Exit(1)
+	}
+
+	if isWindowsService {
+		// Setup logging for service mode
+		if err := setupLogging(); err != nil {
+			os.Exit(1)
+		}
+		defer func() {
+			if logFile != nil {
+				logFile.Close()
+			}
+		}()
+		log.Println("🔧 Running as Windows Service")
+		runService()
+		return
+	}
+
+	// Interactive mode - show GUI dialog unless -silent flag
+	if !*silentFlag {
+		showStartupDialog()
+		return
+	}
+
+	// Silent mode - just run interactively
 	if err := setupLogging(); err != nil {
 		fmt.Printf("Failed to setup logging: %v\n", err)
 		os.Exit(1)
@@ -130,23 +218,180 @@ func main() {
 			logFile.Close()
 		}
 	}()
-
-	// Check if running as Windows Service
-	isWindowsService, err := svc.IsWindowsService()
-	if err != nil {
-		log.Fatalf("Failed to determine if running as service: %v", err)
-	}
-
-	if isWindowsService {
-		log.Println("🔧 Running as Windows Service")
-		// Run as Windows Service
-		runService()
-		return
-	}
-
 	log.Println("🔧 Running in interactive mode")
-	// Run interactively
 	runInteractive()
+}
+
+// showStartupDialog shows the main startup dialog with options
+func showStartupDialog() {
+	// Check if service is already installed
+	serviceInstalled := isServiceInstalled()
+	serviceRunning := false
+
+	if serviceInstalled {
+		serviceRunning = isServiceRunning()
+	}
+
+	var message string
+	var choice int
+
+	if serviceRunning {
+		// Service is running - offer to manage it
+		message = "Remote Desktop Agent v" + tray.VersionString + "\n\n" +
+			"✅ Service is RUNNING\n\n" +
+			"The agent is running as a Windows Service.\n" +
+			"It will start automatically when Windows boots.\n\n" +
+			"What would you like to do?\n\n" +
+			"YES = Stop and uninstall service\n" +
+			"NO = Keep running (close this dialog)"
+
+		choice = messageBox("Remote Desktop Agent", message, MB_YESNO|MB_ICONINFORMATION)
+
+		if choice == IDYES {
+			if !isAdmin() {
+				messageBox("Administrator Required",
+					"Please click OK to restart as Administrator.", MB_OK|MB_ICONWARNING)
+				runAsAdmin()
+				return
+			}
+
+			if err := stopService(); err != nil {
+				messageBox("Error", "Failed to stop service: "+err.Error(), MB_OK|MB_ICONERROR)
+				return
+			}
+			if err := uninstallService(); err != nil {
+				messageBox("Error", "Failed to uninstall service: "+err.Error(), MB_OK|MB_ICONERROR)
+				return
+			}
+			messageBox("Success", "✅ Service stopped and uninstalled.\n\nYou can run the agent again to reinstall.", MB_OK|MB_ICONINFORMATION)
+		}
+		return
+
+	} else if serviceInstalled {
+		// Service installed but not running
+		message = "Remote Desktop Agent v" + tray.VersionString + "\n\n" +
+			"⚠️ Service is INSTALLED but STOPPED\n\n" +
+			"What would you like to do?\n\n" +
+			"YES = Start the service\n" +
+			"NO = Uninstall the service"
+
+		choice = messageBox("Remote Desktop Agent", message, MB_YESNO|MB_ICONWARNING)
+
+		if choice == IDYES {
+			if err := startService(); err != nil {
+				messageBox("Error", "Failed to start service: "+err.Error(), MB_OK|MB_ICONERROR)
+				return
+			}
+			messageBox("Success", "✅ Service started!\n\nThe agent is now running in the background.", MB_OK|MB_ICONINFORMATION)
+		} else {
+			if !isAdmin() {
+				messageBox("Administrator Required",
+					"Please click OK to restart as Administrator.", MB_OK|MB_ICONWARNING)
+				runAsAdmin()
+				return
+			}
+			if err := uninstallService(); err != nil {
+				messageBox("Error", "Failed to uninstall service: "+err.Error(), MB_OK|MB_ICONERROR)
+				return
+			}
+			messageBox("Success", "✅ Service uninstalled.", MB_OK|MB_ICONINFORMATION)
+		}
+		return
+
+	} else {
+		// Service not installed - offer to install or run interactively
+		message = "Remote Desktop Agent v" + tray.VersionString + "\n\n" +
+			"How would you like to run the agent?\n\n" +
+			"YES = Install as Windows Service (recommended)\n" +
+			"        • Starts automatically with Windows\n" +
+			"        • Works on login screen\n" +
+			"        • Runs in background\n\n" +
+			"NO = Run interactively (this session only)\n" +
+			"        • Shows system tray icon\n" +
+			"        • Stops when you log out"
+
+		choice = messageBox("Remote Desktop Agent", message, MB_YESNO|MB_ICONQUESTION)
+
+		if choice == IDYES {
+			// Install as service
+			if !isAdmin() {
+				messageBox("Administrator Required",
+					"Installing as a service requires Administrator privileges.\n\n"+
+						"Click OK to restart as Administrator.", MB_OK|MB_ICONWARNING)
+				runAsAdmin()
+				return
+			}
+
+			if err := installService(); err != nil {
+				messageBox("Error", "Failed to install service:\n\n"+err.Error(), MB_OK|MB_ICONERROR)
+				return
+			}
+
+			if err := startService(); err != nil {
+				messageBox("Warning", "Service installed but failed to start:\n\n"+err.Error(), MB_OK|MB_ICONWARNING)
+				return
+			}
+
+			messageBox("Success",
+				"✅ Service installed and started!\n\n"+
+					"The Remote Desktop Agent is now running as a Windows Service.\n\n"+
+					"• It will start automatically when Windows boots\n"+
+					"• It can capture the login screen\n"+
+					"• Run this exe again to manage the service", MB_OK|MB_ICONINFORMATION)
+			return
+
+		} else {
+			// Run interactively
+			if err := setupLogging(); err != nil {
+				messageBox("Error", "Failed to setup logging: "+err.Error(), MB_OK|MB_ICONERROR)
+				return
+			}
+			defer func() {
+				if logFile != nil {
+					logFile.Close()
+				}
+			}()
+			log.Println("🔧 Running in interactive mode")
+			runInteractive()
+		}
+	}
+}
+
+// isServiceInstalled checks if the service is installed
+func isServiceInstalled() bool {
+	m, err := mgr.Connect()
+	if err != nil {
+		return false
+	}
+	defer m.Disconnect()
+
+	s, err := m.OpenService(serviceName)
+	if err != nil {
+		return false
+	}
+	s.Close()
+	return true
+}
+
+// isServiceRunning checks if the service is currently running
+func isServiceRunning() bool {
+	m, err := mgr.Connect()
+	if err != nil {
+		return false
+	}
+	defer m.Disconnect()
+
+	s, err := m.OpenService(serviceName)
+	if err != nil {
+		return false
+	}
+	defer s.Close()
+
+	status, err := s.Query()
+	if err != nil {
+		return false
+	}
+	return status.State == svc.Running
 }
 
 func printUsage() {
