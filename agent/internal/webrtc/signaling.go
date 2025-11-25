@@ -83,8 +83,8 @@ func (m *Manager) ListenForSessions() {
 }
 
 func (m *Manager) fetchPendingSessions() ([]Session, error) {
-	// Query remote_sessions for sessions with offers for this device
-	url := m.cfg.SupabaseURL + "/rest/v1/remote_sessions"
+	// Query webrtc_sessions for sessions with offers for this device
+	url := m.cfg.SupabaseURL + "/rest/v1/webrtc_sessions"
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -421,7 +421,7 @@ func (m *Manager) handleOfferDirect(sessionID, offerSDP string) {
 }
 
 func (m *Manager) sendAnswer(sessionID, sdp string) {
-	url := m.cfg.SupabaseURL + "/rest/v1/remote_sessions"
+	url := m.cfg.SupabaseURL + "/rest/v1/webrtc_sessions"
 
 	payload := map[string]interface{}{
 		"answer": sdp,
