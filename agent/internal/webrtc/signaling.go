@@ -13,11 +13,11 @@ import (
 )
 
 type Session struct {
-	ID        string                 `json:"session_id"`
-	Token     string                 `json:"token"`
-	PIN       string                 `json:"pin"`
-	ExpiresAt string                 `json:"expires_at"`
-	Offer     string                 `json:"offer"`
+	ID         string                 `json:"session_id"`
+	Token      string                 `json:"token"`
+	PIN        string                 `json:"pin"`
+	ExpiresAt  string                 `json:"expires_at"`
+	Offer      string                 `json:"offer"`
 	TurnConfig map[string]interface{} `json:"turn_config"`
 }
 
@@ -27,7 +27,7 @@ type SignalMessage struct {
 	FromSide  string `json:"from_side"`
 	MsgType   string `json:"msg_type"`
 	Payload   struct {
-		SDP       string                  `json:"sdp"`
+		SDP       string                   `json:"sdp"`
 		Candidate *webrtc.ICECandidateInit `json:"candidate"`
 	} `json:"payload"`
 }
@@ -39,9 +39,9 @@ func (m *Manager) ListenForSessions() {
 
 	handledSessions := make(map[string]bool)
 	errorCount := 0
-	
+
 	log.Println("🔄 Session polling started (checking every 2 seconds)")
-	
+
 	for range ticker.C {
 		sessions, err := m.fetchPendingSessions()
 		if err != nil {
@@ -52,7 +52,7 @@ func (m *Manager) ListenForSessions() {
 			}
 			continue
 		}
-		
+
 		// Reset error count on success
 		if errorCount > 0 {
 			log.Printf("✅ Session polling recovered after %d errors", errorCount)
@@ -64,18 +64,18 @@ func (m *Manager) ListenForSessions() {
 			if handledSessions[session.ID] {
 				continue
 			}
-			
+
 			// Skip if currently connected
 			if m.peerConnection != nil && m.peerConnection.ConnectionState() == webrtc.PeerConnectionStateConnected {
 				continue
 			}
-			
+
 			// Log only when we're actually starting a NEW session
 			log.Printf("📞 Incoming session: %s (PIN: %s)", session.ID, session.PIN)
 			log.Printf("   Device ID: %s", m.device.ID)
 			handledSessions[session.ID] = true
 			m.sessionID = session.ID
-			
+
 			// Handle this session in background
 			go m.handleSession(session)
 		}
@@ -83,9 +83,9 @@ func (m *Manager) ListenForSessions() {
 }
 
 func (m *Manager) fetchPendingSessions() ([]Session, error) {
-	// Query webrtc_sessions for sessions with offers for this device
-	url := m.cfg.SupabaseURL + "/rest/v1/webrtc_sessions"
-	
+	// Query remote_sessions for sessions with offers for this device
+	url := m.cfg.SupabaseURL + "/rest/v1/remote_sessions"
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -93,11 +93,11 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 
 	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
 	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
-	
+
 	q := req.URL.Query()
 	q.Add("device_id", "eq."+m.device.ID)
 	q.Add("offer", "not.is.null") // Has an offer waiting
-	q.Add("answer", "is.null")     // No answer yet
+	q.Add("answer", "is.null")    // No answer yet
 	q.Add("select", "*")
 	q.Add("order", "created_at.desc")
 	q.Add("limit", "1")
@@ -137,15 +137,15 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 			log.Printf("⚠️  Skipping session with invalid session_id: %+v", s)
 			continue
 		}
-		
+
 		// Get offer (SDP) from the session
 		offer, _ := s["offer"].(string)
-		
+
 		session := Session{
 			ID:    sessionID,
 			Offer: offer, // Store offer in the Offer field
 		}
-		
+
 		result = append(result, session)
 	}
 
@@ -154,7 +154,7 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 
 func (m *Manager) handleSession(session Session) {
 	log.Println("🔧 Setting up WebRTC connection...")
-	
+
 	// Ensure previous connection is fully cleaned up
 	if m.peerConnection != nil {
 		log.Println("⚠️  Previous connection still exists, cleaning up first...")
@@ -230,7 +230,7 @@ func (m *Manager) waitForOffer(sessionID string) {
 			}
 		}
 	}
-	
+
 	log.Println("🛑 Stopped signal polling - connection established")
 }
 
@@ -284,13 +284,13 @@ func (m *Manager) listenForICE(sessionID string) {
 			log.Println("🛑 Stopped ICE candidate polling - connection closed")
 			return
 		}
-		
+
 		state := m.peerConnection.ConnectionState()
-		
+
 		// Stop if connected (ICE negotiation complete) or failed/closed
-		if state == webrtc.PeerConnectionStateConnected || 
-		   state == webrtc.PeerConnectionStateFailed || 
-		   state == webrtc.PeerConnectionStateClosed {
+		if state == webrtc.PeerConnectionStateConnected ||
+			state == webrtc.PeerConnectionStateFailed ||
+			state == webrtc.PeerConnectionStateClosed {
 			log.Printf("🛑 Stopped ICE candidate polling - connection state: %s", state)
 			return
 		}
@@ -326,16 +326,16 @@ func (m *Manager) handleICECandidate(candidate *webrtc.ICECandidateInit) {
 		log.Println("⚠️  Cannot add ICE candidate - no peer connection")
 		return
 	}
-	
+
 	state := m.peerConnection.ConnectionState()
-	
+
 	// Only add ICE candidates during connection setup
 	// Don't try to add them if already connected, failed, or closed
 	if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed {
 		// Silently ignore - connection is already done
 		return
 	}
-	
+
 	if err := m.peerConnection.AddICECandidate(*candidate); err != nil {
 		// Only log as warning, not error - this can happen during normal operation
 		log.Printf("⚠️  Could not add ICE candidate (state: %s): %v", state, err)
@@ -346,7 +346,7 @@ func (m *Manager) handleICECandidate(candidate *webrtc.ICECandidateInit) {
 
 func (m *Manager) fetchSignalingMessages(sessionID, fromSide string) ([]SignalMessage, error) {
 	url := m.cfg.SupabaseURL + "/rest/v1/session_signaling"
-	
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -354,13 +354,13 @@ func (m *Manager) fetchSignalingMessages(sessionID, fromSide string) ([]SignalMe
 
 	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
 	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
-	
+
 	q := req.URL.Query()
 	q.Add("session_id", "eq."+sessionID)
 	q.Add("from_side", "eq."+fromSide)
 	q.Add("select", "*")
-	q.Add("order", "created_at.asc")  // Oldest first - get offer before ICE candidates
-	q.Add("limit", "50")  // Increased to handle all ICE candidates
+	q.Add("order", "created_at.asc") // Oldest first - get offer before ICE candidates
+	q.Add("limit", "50")             // Increased to handle all ICE candidates
 	req.URL.RawQuery = q.Encode()
 
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -372,7 +372,7 @@ func (m *Manager) fetchSignalingMessages(sessionID, fromSide string) ([]SignalMe
 
 	// Read response body for debugging
 	body, _ := io.ReadAll(resp.Body)
-	
+
 	var signals []SignalMessage
 	if err := json.Unmarshal(body, &signals); err != nil {
 		log.Printf("⚠️  Failed to parse signals: %v (body: %s)", err, string(body))
@@ -421,7 +421,7 @@ func (m *Manager) handleOfferDirect(sessionID, offerSDP string) {
 }
 
 func (m *Manager) sendAnswer(sessionID, sdp string) {
-	url := m.cfg.SupabaseURL + "/rest/v1/webrtc_sessions"
+	url := m.cfg.SupabaseURL + "/rest/v1/remote_sessions"
 
 	payload := map[string]interface{}{
 		"answer": sdp,
@@ -429,14 +429,14 @@ func (m *Manager) sendAnswer(sessionID, sdp string) {
 	}
 
 	jsonData, _ := json.Marshal(payload)
-	
+
 	// Create PATCH request with session_id filter
 	req, _ := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
 	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
 	req.Header.Set("Prefer", "return=minimal")
-	
+
 	// Add query parameter to target specific session
 	q := req.URL.Query()
 	q.Add("session_id", "eq."+sessionID)
@@ -465,11 +465,11 @@ func (m *Manager) updateSessionStatus(status string) {
 	}
 
 	url := m.cfg.SupabaseURL + "/rest/v1/remote_sessions"
-	
+
 	updateData := map[string]interface{}{
 		"status": status,
 	}
-	
+
 	jsonData, err := json.Marshal(updateData)
 	if err != nil {
 		log.Printf("Failed to marshal session update: %v", err)
@@ -486,7 +486,7 @@ func (m *Manager) updateSessionStatus(status string) {
 	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Prefer", "return=minimal")
-	
+
 	q := req.URL.Query()
 	q.Add("id", "eq."+m.sessionID)
 	req.URL.RawQuery = q.Encode()
