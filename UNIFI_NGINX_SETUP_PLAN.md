@@ -1,4 +1,4 @@
-# 🎯 Complete Setup Plan: Nginx + UniFi Dream Machine SE + hawkeye123.dk
+# 🎯 Complete Setup Plan: Nginx + Wildcard DNS + UniFi Dream Machine SE
 
 **Your Network:**
 - **Public IP:** 188.228.14.94
@@ -9,56 +9,68 @@
 
 ---
 
-## 📊 Network Topology
+## 📊 How It Works
 
 ```
-Internet (188.228.14.94)
-    ↓
-Nokia Fiber Box
-    ↓
-UniFi Dream Machine SE (192.168.1.1) [WAN: 188.228.14.94, LAN: 192.168.1.0/24]
-    ↓
-Ubuntu Server (192.168.1.92)
-    ↓
-├─ Nginx Proxy Manager (ports 80, 443, 81)
-├─ Supabase (port 8888)
-├─ Archon (port 3737)
-└─ Portainer (port 9000)
+Internet Request                         Nginx Routes by Hostname
+─────────────────                        ────────────────────────
+
+*.hawkeye123.dk → 188.228.14.94
+                        │
+                        ▼
+              UniFi Port Forward (80, 443)
+                        │
+                        ▼
+              Ubuntu Server (192.168.1.92)
+                        │
+                        ▼
+              ┌─────────────────────────────────────┐
+              │         Nginx Reverse Proxy         │
+              │   (reads Host header, routes to)    │
+              └─────────────────────────────────────┘
+                        │
+        ┌───────────────┼───────────────┬───────────────┐
+        ▼               ▼               ▼               ▼
+   supabase.*      archon.*       portainer.*      remote.*
+   localhost:8888  localhost:3737 localhost:9000   localhost:8080
 ```
+
+**Key Concept:** One wildcard DNS record + Nginx decides where each subdomain goes.
 
 ---
 
 ## ✅ Complete Step-by-Step Plan
 
-### Phase 1: DNS Configuration (5 minutes)
+### Phase 1: Wildcard DNS Configuration (5 minutes)
 
-**Goal:** Point your domain to your public IP
+**Goal:** Point ALL subdomains to your public IP with one record
 
-#### Step 1.1: Configure DNS Records
+#### Step 1.1: Configure Wildcard DNS
 
-Go to your DNS provider (where you manage hawkeye123.dk) and add these A records:
+Go to your DNS provider (where you manage hawkeye123.dk) and add:
 
-```
-Type    Name        Value           TTL
-A       supabase    188.228.14.94   300
-A       archon      188.228.14.94   300
-A       portainer   188.228.14.94   300
-A       remote      188.228.14.94   300
-```
-
-**Or use wildcard (if supported):**
 ```
 Type    Name    Value           TTL
-A       *       188.228.14.94   300
+A       @       188.228.14.94   300    (root domain)
+A       *       188.228.14.94   300    (all subdomains)
 ```
+
+**This single wildcard covers:**
+- supabase.hawkeye123.dk
+- archon.hawkeye123.dk
+- portainer.hawkeye123.dk
+- remote.hawkeye123.dk
+- anything.hawkeye123.dk
+- future-service.hawkeye123.dk
 
 #### Step 1.2: Verify DNS Propagation
 
 ```bash
 # From Windows (PowerShell)
 nslookup supabase.hawkeye123.dk
+nslookup anything-random.hawkeye123.dk
 
-# Should return: 188.228.14.94
+# Both should return: 188.228.14.94
 ```
 
 **Wait 5-10 minutes for DNS to propagate.**
@@ -98,199 +110,293 @@ nslookup supabase.hawkeye123.dk
 #### Step 2.3: Verify Port Forwarding
 
 ```bash
-# From external network (use phone hotspot or ask friend)
+# From external network (use phone hotspot)
 curl -I http://188.228.14.94
 
 # Or use online tool: https://www.yougetsignal.com/tools/open-ports/
-# Test ports 80 and 443
 ```
 
 ---
 
-### Phase 3: Ubuntu Server Firewall Configuration (5 minutes)
-
-**Goal:** Allow incoming traffic on ports 80 and 443
-
-#### Step 3.1: Configure UFW Firewall
+### Phase 3: Ubuntu Firewall Configuration (5 minutes)
 
 ```bash
 ssh ubuntu
-
-# Check current firewall status
-sudo ufw status
 
 # Allow HTTP and HTTPS
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
-
-# Enable firewall if not already enabled
 sudo ufw enable
-
-# Verify rules
-sudo ufw status numbered
-```
-
-**Expected output:**
-```
-Status: active
-
-To                         Action      From
---                         ------      ----
-80/tcp                     ALLOW       Anywhere
-443/tcp                    ALLOW       Anywhere
+sudo ufw status
 ```
 
 ---
 
-### Phase 4: Install Nginx Proxy Manager (10 minutes)
+### Phase 4: Install Native Nginx (10 minutes)
 
-**Goal:** Set up reverse proxy with automatic SSL
+**Goal:** Install Nginx directly (not Docker) for full control
 
-#### Step 4.1: Create Directory and Docker Compose
+#### Step 4.1: Install Nginx and Certbot
 
 ```bash
 ssh ubuntu
 
-# Create directory
-mkdir -p ~/nginx-proxy-manager
-cd ~/nginx-proxy-manager
+# Update packages
+sudo apt update
 
-# Create docker-compose.yml
-cat > docker-compose.yml << 'EOF'
-version: '3.8'
+# Install Nginx
+sudo apt install -y nginx
 
-services:
-  nginx-proxy-manager:
-    image: 'jc21/nginx-proxy-manager:latest'
-    container_name: nginx-proxy-manager
-    restart: unless-stopped
-    ports:
-      - '80:80'      # HTTP
-      - '443:443'    # HTTPS
-      - '81:81'      # Admin UI
-    volumes:
-      - ./data:/data
-      - ./letsencrypt:/etc/letsencrypt
-    environment:
-      # Optional: Uncomment to change default admin email
-      # DEFAULT_EMAIL: admin@hawkeye123.dk
-      DB_SQLITE_FILE: "/data/database.sqlite"
-    networks:
-      - npm-network
+# Install Certbot for SSL
+sudo apt install -y certbot python3-certbot-nginx
 
-networks:
-  npm-network:
-    driver: bridge
-EOF
+# Verify Nginx is running
+sudo systemctl status nginx
 ```
 
-#### Step 4.2: Start Nginx Proxy Manager
-
-```bash
-# Start the container
-docker compose up -d
-
-# Check it's running
-docker compose ps
-
-# View logs
-docker compose logs -f
-```
-
-**Expected output:**
-```
-NAME                    STATUS          PORTS
-nginx-proxy-manager     Up 10 seconds   0.0.0.0:80-81->80-81/tcp, 0.0.0.0:443->443/tcp
-```
-
-#### Step 4.3: Verify Local Access
+#### Step 4.2: Test Nginx
 
 ```bash
 # From Windows
-curl http://192.168.1.92:81
+curl http://192.168.1.92
 
-# Or open browser: http://192.168.1.92:81
+# Should show "Welcome to nginx!"
 ```
 
 ---
 
-### Phase 5: Configure Nginx Proxy Manager (15 minutes)
+### Phase 5: Get Wildcard SSL Certificate (10 minutes)
 
-**Goal:** Set up proxy hosts with SSL certificates
+**Goal:** One certificate for ALL subdomains
 
-#### Step 5.1: Access Admin UI
-
-1. Open browser: **http://192.168.1.92:81**
-2. **Default credentials:**
-   - Email: `admin@example.com`
-   - Password: `changeme`
-3. **IMPORTANT:** You'll be forced to change these on first login
-   - New Email: `your@email.com`
-   - New Password: `[strong password]`
-
-#### Step 5.2: Add Supabase Proxy Host
-
-1. Click **"Proxy Hosts"** tab
-2. Click **"Add Proxy Host"** button
-
-**Details Tab:**
-- **Domain Names:** `supabase.hawkeye123.dk`
-- **Scheme:** `http`
-- **Forward Hostname / IP:** `192.168.1.92`
-- **Forward Port:** `8888`
-- **Cache Assets:** ❌ Off
-- **Block Common Exploits:** ✅ On
-- **Websockets Support:** ✅ On ⚠️ **CRITICAL for Supabase Realtime!**
-- **Access List:** `Publicly Accessible`
-
-**Custom Locations (Optional):**
-- Leave empty for now
-
-**SSL Tab:**
-- **SSL Certificate:** `Request a new SSL Certificate`
-- **Force SSL:** ✅ On
-- **HTTP/2 Support:** ✅ On
-- **HSTS Enabled:** ✅ On
-- **HSTS Subdomains:** ❌ Off
-- **Email Address for Let's Encrypt:** `your@email.com`
-- **I Agree to the Let's Encrypt Terms of Service:** ✅ On
-
-3. Click **"Save"**
-
-**Wait 30-60 seconds for SSL certificate to be issued.**
-
-#### Step 5.3: Verify Supabase Access
+#### Step 5.1: Request Wildcard Certificate
 
 ```bash
-# Test from anywhere (Windows PowerShell)
-curl https://supabase.hawkeye123.dk
+ssh ubuntu
 
-# Should return Supabase response (not error)
+# Request wildcard certificate (requires DNS challenge)
+sudo certbot certonly --manual --preferred-challenges dns \
+    -d "hawkeye123.dk" -d "*.hawkeye123.dk"
 ```
 
-#### Step 5.4: Add Archon Proxy Host (Optional)
+#### Step 5.2: Add DNS TXT Record
 
-Repeat Step 5.2 with:
-- **Domain:** `archon.hawkeye123.dk`
-- **Forward Port:** `3737`
-- **Websockets:** ✅ On
-- **SSL:** ✅ Request new certificate
+Certbot will show something like:
+```
+Please deploy a DNS TXT record under the name:
+_acme-challenge.hawkeye123.dk
+with the following value:
+xXxXxXxXxXxXxXxXxXxXxXxXxXxXxXxXxXx
+```
 
-#### Step 5.5: Add Portainer Proxy Host (Optional)
+**Go to your DNS provider and add:**
+```
+Type    Name              Value                                    TTL
+TXT     _acme-challenge   xXxXxXxXxXxXxXxXxXxXxXxXxXxXxXxXxXx      300
+```
 
-Repeat Step 5.2 with:
-- **Domain:** `portainer.hawkeye123.dk`
-- **Forward Port:** `9000`
-- **Websockets:** ✅ On
-- **SSL:** ✅ Request new certificate
+**Wait 1-2 minutes, then press Enter in the terminal.**
+
+#### Step 5.3: Verify Certificate
+
+```bash
+# Check certificate files exist
+sudo ls -la /etc/letsencrypt/live/hawkeye123.dk/
+
+# Should show:
+# fullchain.pem
+# privkey.pem
+```
 
 ---
 
-### Phase 6: Update Application Configuration (10 minutes)
+### Phase 6: Configure Nginx Virtual Hosts (15 minutes)
+
+**Goal:** Create server blocks for each subdomain
+
+#### Step 6.1: Create Supabase Config
+
+```bash
+sudo nano /etc/nginx/sites-available/supabase.hawkeye123.dk
+```
+
+**Paste this content:**
+```nginx
+server {
+    listen 80;
+    server_name supabase.hawkeye123.dk;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name supabase.hawkeye123.dk;
+
+    # Wildcard SSL certificate
+    ssl_certificate /etc/letsencrypt/live/hawkeye123.dk/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/hawkeye123.dk/privkey.pem;
+
+    # SSL settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    ssl_prefer_server_ciphers off;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    location / {
+        proxy_pass http://localhost:8888;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support (critical for Supabase Realtime)
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 86400;
+    }
+}
+```
+
+**Save and exit (Ctrl+X, Y, Enter)**
+
+#### Step 6.2: Create Archon Config
+
+```bash
+sudo nano /etc/nginx/sites-available/archon.hawkeye123.dk
+```
+
+```nginx
+server {
+    listen 80;
+    server_name archon.hawkeye123.dk;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name archon.hawkeye123.dk;
+
+    ssl_certificate /etc/letsencrypt/live/hawkeye123.dk/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/hawkeye123.dk/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://localhost:3737;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+#### Step 6.3: Create Portainer Config
+
+```bash
+sudo nano /etc/nginx/sites-available/portainer.hawkeye123.dk
+```
+
+```nginx
+server {
+    listen 80;
+    server_name portainer.hawkeye123.dk;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name portainer.hawkeye123.dk;
+
+    ssl_certificate /etc/letsencrypt/live/hawkeye123.dk/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/hawkeye123.dk/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://localhost:9000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+#### Step 6.4: Enable All Sites
+
+```bash
+# Enable sites
+sudo ln -s /etc/nginx/sites-available/supabase.hawkeye123.dk /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/archon.hawkeye123.dk /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/portainer.hawkeye123.dk /etc/nginx/sites-enabled/
+
+# Test configuration
+sudo nginx -t
+
+# Reload Nginx
+sudo systemctl reload nginx
+```
+
+---
+
+### Phase 7: Adding New Subdomains (Future)
+
+**This is the power of this setup!** To add a new subdomain:
+
+```bash
+# 1. Create config file
+sudo nano /etc/nginx/sites-available/newservice.hawkeye123.dk
+
+# 2. Paste template (change server_name and proxy_pass port)
+server {
+    listen 80;
+    server_name newservice.hawkeye123.dk;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name newservice.hawkeye123.dk;
+
+    ssl_certificate /etc/letsencrypt/live/hawkeye123.dk/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/hawkeye123.dk/privkey.pem;
+
+    location / {
+        proxy_pass http://localhost:YOUR_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+# 3. Enable and reload
+sudo ln -s /etc/nginx/sites-available/newservice.hawkeye123.dk /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**No DNS changes needed!** The wildcard already covers it.
+
+---
+
+### Phase 8: Update Application Configuration (10 minutes)
 
 **Goal:** Configure apps to use new HTTPS URLs
 
-#### Step 6.1: Update Controller .env
+#### Step 8.1: Update Controller .env
 
 ```bash
 # Location: f:\#Remote\controller\.env
@@ -303,7 +409,7 @@ SUPABASE_URL=https://supabase.hawkeye123.dk
 SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE
 ```
 
-#### Step 6.2: Update Agent .env
+#### Step 8.2: Update Agent .env
 
 ```bash
 # Location: f:\#Remote\agent\.env
@@ -317,7 +423,7 @@ API_KEY=optional-api-key
 HEARTBEAT_INTERVAL=30
 ```
 
-#### Step 6.3: Update .env.example Files
+#### Step 8.3: Update .env.example Files
 
 ```bash
 # Update controller/.env.example
@@ -330,7 +436,7 @@ SUPABASE_ANON_KEY=your_anon_key_here
 DEVICE_NAME=MyDevice
 ```
 
-#### Step 6.4: Update CONFIGURATION.md
+#### Step 8.4: Update CONFIGURATION.md
 
 Add section about production configuration:
 
@@ -351,7 +457,7 @@ DEVICE_NAME=MyDevice
 
 ---
 
-### Phase 7: Testing (15 minutes)
+### Phase 9: Testing (15 minutes)
 
 **Goal:** Verify everything works end-to-end
 
@@ -419,10 +525,9 @@ curl https://supabase.hawkeye123.dk
 ## 📋 Complete Checklist
 
 ### DNS Configuration
-- [ ] A record for supabase.hawkeye123.dk → 188.228.14.94
-- [ ] A record for archon.hawkeye123.dk → 188.228.14.94
-- [ ] A record for portainer.hawkeye123.dk → 188.228.14.94
-- [ ] DNS propagation verified (nslookup)
+- [ ] Wildcard A record: *.hawkeye123.dk → 188.228.14.94
+- [ ] Root A record: hawkeye123.dk → 188.228.14.94
+- [ ] DNS propagation verified (nslookup any-subdomain.hawkeye123.dk)
 
 ### UniFi Dream Machine SE
 - [ ] Port forwarding: 80 → 192.168.1.92:80
@@ -433,19 +538,21 @@ curl https://supabase.hawkeye123.dk
 ### Ubuntu Server
 - [ ] UFW firewall allows port 80
 - [ ] UFW firewall allows port 443
-- [ ] Nginx Proxy Manager installed
-- [ ] Nginx Proxy Manager running (docker compose ps)
-- [ ] Admin UI accessible (http://192.168.1.92:81)
+- [ ] Nginx installed (apt install nginx)
+- [ ] Certbot installed (apt install certbot python3-certbot-nginx)
 
-### Nginx Proxy Manager
-- [ ] Default password changed
-- [ ] Supabase proxy host created
-- [ ] SSL certificate issued for supabase.hawkeye123.dk
-- [ ] Websockets support enabled
-- [ ] Force SSL enabled
-- [ ] HTTPS access verified
-- [ ] (Optional) Archon proxy host created
-- [ ] (Optional) Portainer proxy host created
+### SSL Certificate
+- [ ] Wildcard certificate requested (certbot --manual --preferred-challenges dns)
+- [ ] DNS TXT record added for _acme-challenge
+- [ ] Certificate files exist in /etc/letsencrypt/live/hawkeye123.dk/
+
+### Nginx Virtual Hosts
+- [ ] supabase.hawkeye123.dk config created
+- [ ] archon.hawkeye123.dk config created
+- [ ] portainer.hawkeye123.dk config created
+- [ ] All sites enabled (ln -s to sites-enabled)
+- [ ] nginx -t passes
+- [ ] nginx reloaded
 
 ### Application Configuration
 - [ ] controller/.env updated with HTTPS URL
