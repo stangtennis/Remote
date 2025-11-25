@@ -12,6 +12,7 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/stangtennis/remote-agent/internal/clipboard"
 	"github.com/stangtennis/remote-agent/internal/config"
+	"github.com/stangtennis/remote-agent/internal/desktop"
 	"github.com/stangtennis/remote-agent/internal/device"
 	"github.com/stangtennis/remote-agent/internal/filetransfer"
 	"github.com/stangtennis/remote-agent/internal/input"
@@ -30,15 +31,41 @@ type Manager struct {
 	clipboardMonitor    *clipboard.Monitor
 	sessionID           string
 	isStreaming         bool
+	isSession0          bool // Running in Session 0 (before user login)
+	currentDesktop      desktop.DesktopType
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
-	// Try to initialize screen capturer, but don't fail if it's not available
-	// (happens in Session 0 / before user login)
-	capturer, err := screen.NewCapturer()
+	// Check if we're in Session 0 (login screen / no user desktop)
+	isSession0 := false
+	currentDesktopType := desktop.DesktopDefault
+
+	desktopName, err := desktop.GetInputDesktop()
+	if err != nil {
+		log.Printf("⚠️  Cannot detect desktop: %v", err)
+		log.Println("   Assuming Session 0 (pre-login) mode")
+		isSession0 = true
+	} else {
+		currentDesktopType = desktop.GetDesktopType(desktopName)
+		if currentDesktopType == desktop.DesktopWinlogon {
+			log.Println("🔒 Running on login screen (Winlogon desktop)")
+			isSession0 = true
+		} else {
+			log.Printf("🖥️  Running on desktop: %s", desktopName)
+		}
+	}
+
+	// Try to initialize screen capturer
+	// For Session 0, use GDI mode which works better
+	var capturer *screen.Capturer
+	if isSession0 {
+		capturer, err = screen.NewCapturerForSession0()
+	} else {
+		capturer, err = screen.NewCapturer()
+	}
+
 	if err != nil {
 		log.Printf("⚠️  Screen capturer not available: %v", err)
-		log.Println("   This is normal before user login (Session 0)")
 		log.Println("   Screen capture will be initialized on first connection")
 	}
 
@@ -46,24 +73,79 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 	width, height := 1920, 1080
 	if capturer != nil {
 		width, height = capturer.GetResolution()
-		log.Printf("✅ Screen capturer initialized: %dx%d", width, height)
+		log.Printf("✅ Screen capturer initialized: %dx%d (Session0: %v)", width, height, isSession0)
 	}
 
 	// Set up file transfer handler
-	// Use Downloads folder as default
-	homeDir, _ := os.UserHomeDir()
-	downloadDir := filepath.Join(homeDir, "Downloads", "RemoteDesktop")
+	// Use Downloads folder as default (or temp folder for Session 0)
+	var downloadDir string
+	if isSession0 {
+		downloadDir = filepath.Join(os.TempDir(), "RemoteDesktop")
+	} else {
+		homeDir, _ := os.UserHomeDir()
+		downloadDir = filepath.Join(homeDir, "Downloads", "RemoteDesktop")
+	}
 	fileTransferHandler := filetransfer.NewHandler(downloadDir)
 	log.Printf("✅ File transfer handler initialized: %s", downloadDir)
 
-	return &Manager{
+	mgr := &Manager{
 		cfg:                 cfg,
 		device:              dev,
 		screenCapturer:      capturer,
 		mouseController:     input.NewMouseController(width, height),
 		keyController:       input.NewKeyboardController(),
 		fileTransferHandler: fileTransferHandler,
-	}, nil
+		isSession0:          isSession0,
+		currentDesktop:      currentDesktopType,
+	}
+
+	// Start desktop monitoring to handle login/logout transitions
+	go mgr.monitorDesktopChanges()
+
+	return mgr, nil
+}
+
+// monitorDesktopChanges watches for desktop switches (login screen <-> user desktop)
+func (m *Manager) monitorDesktopChanges() {
+	log.Println("👁️  Starting desktop change monitor...")
+
+	desktop.MonitorDesktopSwitch(func(dt desktop.DesktopType) {
+		if dt == m.currentDesktop {
+			return // No change
+		}
+
+		oldDesktop := m.currentDesktop
+		m.currentDesktop = dt
+
+		switch dt {
+		case desktop.DesktopWinlogon:
+			log.Println("🔒 Desktop switched to login screen")
+			m.isSession0 = true
+			// Reinitialize capturer for login screen
+			if m.screenCapturer != nil {
+				log.Println("🔄 Reinitializing screen capturer for login screen...")
+				if err := m.screenCapturer.Reinitialize(true); err != nil {
+					log.Printf("❌ Failed to reinitialize capturer: %v", err)
+				}
+			}
+		case desktop.DesktopDefault:
+			log.Println("🔓 Desktop switched to user desktop")
+			m.isSession0 = false
+			// Reinitialize capturer for user desktop (prefer DXGI)
+			if m.screenCapturer != nil {
+				log.Println("🔄 Reinitializing screen capturer for user desktop...")
+				if err := m.screenCapturer.Reinitialize(false); err != nil {
+					log.Printf("❌ Failed to reinitialize capturer: %v", err)
+				}
+				// Update mouse controller with new resolution
+				width, height := m.screenCapturer.GetResolution()
+				m.mouseController = input.NewMouseController(width, height)
+				log.Printf("✅ Updated screen resolution: %dx%d", width, height)
+			}
+		default:
+			log.Printf("⚠️  Desktop switched to unknown type: %d (was: %d)", dt, oldDesktop)
+		}
+	})
 }
 
 func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
@@ -81,7 +163,7 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	// Set up connection state handler
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("🔄 Connection state changed: %s", state.String())
-		
+
 		switch state {
 		case webrtc.PeerConnectionStateConnected:
 			log.Println("✅ WebRTC CONNECTED! Starting screen streaming...")
@@ -120,7 +202,7 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 func (m *Manager) setupDataChannelHandlers(dc *webrtc.DataChannel) {
 	dc.OnOpen(func() {
 		log.Println("✅ DATA CHANNEL READY - Controller can now receive frames!")
-		
+
 		// Set up file transfer send callback
 		if m.fileTransferHandler != nil {
 			m.fileTransferHandler.SetSendDataCallback(func(data []byte) error {
@@ -130,7 +212,7 @@ func (m *Manager) setupDataChannelHandlers(dc *webrtc.DataChannel) {
 				return fmt.Errorf("data channel not ready")
 			})
 		}
-		
+
 		// Start clipboard monitoring
 		log.Println("📋 Starting clipboard monitoring...")
 		m.startClipboardMonitoring()
@@ -138,7 +220,7 @@ func (m *Manager) setupDataChannelHandlers(dc *webrtc.DataChannel) {
 
 	dc.OnClose(func() {
 		log.Println("❌ DATA CHANNEL CLOSED")
-		
+
 		// Stop clipboard monitoring
 		if m.clipboardMonitor != nil {
 			m.clipboardMonitor.Stop()
@@ -191,14 +273,14 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 		down, _ := event["down"].(bool)
 		x, hasX := event["x"].(float64)
 		y, hasY := event["y"].(float64)
-		
+
 		// Move mouse to click position if coordinates are provided
 		if hasX && hasY {
 			if err := m.mouseController.Move(x, y); err != nil {
 				log.Printf("❌ Mouse move to click position error: %v", err)
 			}
 		}
-		
+
 		log.Printf("🖱️  Mouse %s %s at (%.0f, %.0f)", button, map[bool]string{true: "down", false: "up"}[down], x, y)
 		if err := m.mouseController.Click(button, down); err != nil {
 			log.Printf("❌ Mouse click error: %v", err)
@@ -222,56 +304,56 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 func (m *Manager) startClipboardMonitoring() {
 	// Initialize clipboard monitor
 	m.clipboardMonitor = clipboard.NewMonitor()
-	
+
 	// Set up text clipboard callback
 	m.clipboardMonitor.SetOnTextChange(func(text string) {
 		if m.dataChannel == nil || m.dataChannel.ReadyState() != webrtc.DataChannelStateOpen {
 			return
 		}
-		
+
 		// Send text clipboard to controller
 		msg := map[string]interface{}{
 			"type":    "clipboard_text",
 			"content": text,
 		}
-		
+
 		data, err := json.Marshal(msg)
 		if err != nil {
 			log.Printf("❌ Failed to marshal clipboard text: %v", err)
 			return
 		}
-		
+
 		if err := m.dataChannel.Send(data); err != nil {
 			log.Printf("❌ Failed to send clipboard text: %v", err)
 		}
 	})
-	
+
 	// Set up image clipboard callback
 	m.clipboardMonitor.SetOnImageChange(func(imageData []byte) {
 		if m.dataChannel == nil || m.dataChannel.ReadyState() != webrtc.DataChannelStateOpen {
 			return
 		}
-		
+
 		// Encode image to base64 for JSON transmission
 		imageB64 := base64.StdEncoding.EncodeToString(imageData)
-		
+
 		// Send image clipboard to controller
 		msg := map[string]interface{}{
 			"type":    "clipboard_image",
 			"content": imageB64,
 		}
-		
+
 		data, err := json.Marshal(msg)
 		if err != nil {
 			log.Printf("❌ Failed to marshal clipboard image: %v", err)
 			return
 		}
-		
+
 		if err := m.dataChannel.Send(data); err != nil {
 			log.Printf("❌ Failed to send clipboard image: %v", err)
 		}
 	})
-	
+
 	// Start monitoring
 	if err := m.clipboardMonitor.Start(); err != nil {
 		log.Printf("❌ Failed to start clipboard monitor: %v", err)
@@ -285,19 +367,29 @@ func (m *Manager) startScreenStreaming() {
 	defer ticker.Stop()
 
 	log.Println("🎥 Starting screen streaming at 30 FPS...")
-	
-	// If screen capturer not initialized (Session 0), try to initialize now
+
+	// If screen capturer not initialized, try to initialize now
 	if m.screenCapturer == nil {
 		log.Println("⚠️  Screen capturer not initialized, attempting to initialize now...")
-		capturer, err := screen.NewCapturer()
+		var capturer *screen.Capturer
+		var err error
+
+		// Use appropriate capturer based on current desktop
+		if m.isSession0 {
+			log.Println("   Using GDI mode for Session 0...")
+			capturer, err = screen.NewCapturerForSession0()
+		} else {
+			capturer, err = screen.NewCapturer()
+		}
+
 		if err != nil {
 			log.Printf("❌ Failed to initialize screen capturer: %v", err)
 			log.Println("   Cannot stream screen - user might need to log in first")
 			return
 		}
 		m.screenCapturer = capturer
-		log.Println("✅ Screen capturer initialized successfully!")
-		
+		log.Printf("✅ Screen capturer initialized successfully! (GDI mode: %v)", capturer.IsGDIMode())
+
 		// Update screen dimensions
 		width, height := capturer.GetResolution()
 		m.mouseController = input.NewMouseController(width, height)
@@ -308,7 +400,7 @@ func (m *Manager) startScreenStreaming() {
 	errorCount := 0
 	consecutiveErrors := 0
 	droppedFrames := 0
-	
+
 	for m.isStreaming {
 		<-ticker.C
 
@@ -332,21 +424,21 @@ func (m *Manager) startScreenStreaming() {
 		if err != nil {
 			errorCount++
 			consecutiveErrors++
-			
+
 			// Only log every 50th error to avoid spam, but ALWAYS show the error message
 			if errorCount%50 == 1 {
 				log.Printf("⚠️ Screen capture failing (total: %d errors) - Error: %v", errorCount, err)
 			}
-			
+
 			// If too many consecutive errors, something is seriously wrong
 			if consecutiveErrors > 100 {
 				log.Printf("❌ Too many consecutive capture failures (%d), stopping stream", consecutiveErrors)
 				break
 			}
-			
+
 			continue
 		}
-		
+
 		// Reset consecutive error counter on success
 		consecutiveErrors = 0
 
@@ -357,89 +449,89 @@ func (m *Manager) startScreenStreaming() {
 			frameCount++
 			// Log every 30 frames (once per second at 30 FPS)
 			if frameCount%30 == 0 {
-				log.Printf("📊 Streaming: %d frames sent | Latest: %d KB | Errors: %d | Dropped: %d", 
+				log.Printf("📊 Streaming: %d frames sent | Latest: %d KB | Errors: %d | Dropped: %d",
 					frameCount, len(jpeg)/1024, errorCount, droppedFrames)
 			}
 		}
 	}
 
-	log.Printf("🛑 Screen streaming stopped (sent %d frames, %d errors, %d dropped)", 
+	log.Printf("🛑 Screen streaming stopped (sent %d frames, %d errors, %d dropped)",
 		frameCount, errorCount, droppedFrames)
 }
 
 func (m *Manager) sendFrameChunked(data []byte) error {
 	const maxChunkSize = 60000 // 60KB chunks (safely under 64KB limit)
-	const chunkMagic = 0xFF // Magic byte to identify chunked frames
-	
+	const chunkMagic = 0xFF    // Magic byte to identify chunked frames
+
 	// If data fits in one message, send directly
 	if len(data) <= maxChunkSize {
 		return m.dataChannel.Send(data)
 	}
-	
+
 	// Otherwise, chunk it
 	totalChunks := (len(data) + maxChunkSize - 1) / maxChunkSize
-	
+
 	for i := 0; i < totalChunks; i++ {
 		start := i * maxChunkSize
 		end := start + maxChunkSize
 		if end > len(data) {
 			end = len(data)
 		}
-		
+
 		// Create chunk with header: [magic, chunk_index, total_chunks, ...data]
 		chunk := make([]byte, 3+len(data[start:end]))
 		chunk[0] = chunkMagic
 		chunk[1] = byte(i)
 		chunk[2] = byte(totalChunks)
 		copy(chunk[3:], data[start:end])
-		
+
 		if err := m.dataChannel.Send(chunk); err != nil {
 			return err
 		}
-		
+
 		// Small delay between chunks to avoid overwhelming the channel
 		time.Sleep(1 * time.Millisecond)
 	}
-	
+
 	return nil
 }
 
 func (m *Manager) cleanupConnection(reason string) {
 	log.Printf("🧹 Cleaning up connection (reason: %s)", reason)
-	
+
 	// Stop streaming
 	m.isStreaming = false
-	
+
 	// Update session status to ended
 	if m.sessionID != "" {
 		m.updateSessionStatus("ended")
 	}
-	
+
 	// Close data channel
 	if m.dataChannel != nil {
 		m.dataChannel.Close()
 		m.dataChannel = nil
 	}
-	
+
 	// Close peer connection
 	if m.peerConnection != nil {
 		m.peerConnection.Close()
 		m.peerConnection = nil
 	}
-	
+
 	// Reset session ID for next connection
 	m.sessionID = ""
-	
+
 	log.Println("✅ Connection cleaned up - ready for new connections")
 }
 
 func (m *Manager) Close() {
 	m.isStreaming = false
-	
+
 	if m.dataChannel != nil {
 		m.dataChannel.Close()
 	}
-	
+
 	if m.peerConnection != nil {
 		m.peerConnection.Close()
 	}
