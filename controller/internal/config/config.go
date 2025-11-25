@@ -16,8 +16,8 @@ type Config struct {
 // Load loads configuration from .env file
 func Load() (*Config, error) {
 	config := &Config{
-		// Default values (local Supabase instance for development/testing)
-		SupabaseURL:     "http://192.168.1.92:8888",
+		// Default values (public HTTPS URL for remote access)
+		SupabaseURL:     "https://supabase.hawkeye123.dk",
 		SupabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE",
 	}
 
