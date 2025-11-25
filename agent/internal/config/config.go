@@ -16,7 +16,7 @@ type Config struct {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		SupabaseURL:       getEnv("SUPABASE_URL", "http://192.168.1.92:8888"),
+		SupabaseURL:       getEnv("SUPABASE_URL", "https://supabase.hawkeye123.dk"),
 		SupabaseAnonKey:   getEnv("SUPABASE_ANON_KEY", "REDACTED_JWT"),
 		DeviceName:        getEnv("DEVICE_NAME", ""),
 		HeartbeatInterval: 30, // seconds
