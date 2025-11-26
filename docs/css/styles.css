@@ -1153,7 +1153,7 @@ body::before {
   min-height: calc(100vh - 120px);
 }
 
-@media (min-width: 1201px) {
+@media (min-width: 1101px) {
   .dashboard-grid {
     grid-template-columns: 1fr 420px;
   }
@@ -1892,7 +1892,7 @@ body::before {
 }
 
 /* ===== Responsive ===== */
-@media (max-width: 1200px) {
+@media (max-width: 1100px) {
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
