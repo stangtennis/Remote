@@ -21,33 +21,155 @@
 
   <!-- Main Content -->
   <main class="dashboard-main">
-    <!-- Devices Section -->
-    <section class="devices-section">
-      <div class="section-header">
-        <h2>Your Devices</h2>
-        <button id="refreshDevicesBtn" class="btn btn-icon" title="Refresh">
-          🔄
-        </button>
+    <!-- Dashboard Grid Layout -->
+    <div class="dashboard-grid">
+      <!-- Left Column: Remote Preview -->
+      <div class="dashboard-left">
+        <!-- Remote Preview Window -->
+        <section class="remote-preview-section">
+          <div class="section-header">
+            <h2>Remote Preview</h2>
+            <div class="preview-controls">
+              <button id="previewFullscreenBtn" class="btn btn-icon" title="Fullscreen">⛶</button>
+              <button id="previewSettingsBtn" class="btn btn-icon" title="Settings">⚙️</button>
+            </div>
+          </div>
+          
+          <div class="remote-preview-container" id="remotePreviewContainer">
+            <!-- Preview Screen -->
+            <div class="preview-screen" id="previewScreen">
+              <video id="previewVideo" autoplay playsinline></video>
+              <canvas id="previewCanvas"></canvas>
+              
+              <!-- Idle State -->
+              <div class="preview-idle" id="previewIdle">
+                <div class="preview-idle-content">
+                  <div class="preview-icon">🖥️</div>
+                  <h3>No Active Connection</h3>
+                  <p>Select a device below to start a remote session</p>
+                  <div class="preview-features">
+                    <span class="feature-tag">🔒 Encrypted</span>
+                    <span class="feature-tag">⚡ Low Latency</span>
+                    <span class="feature-tag">🎯 Full Control</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Connecting State -->
+              <div class="preview-connecting" id="previewConnecting" style="display: none;">
+                <div class="connecting-animation">
+                  <div class="connecting-ring"></div>
+                  <div class="connecting-ring"></div>
+                  <div class="connecting-ring"></div>
+                </div>
+                <p>Establishing secure connection...</p>
+                <span class="connecting-device" id="connectingDeviceName"></span>
+              </div>
+            </div>
+            
+            <!-- Preview Toolbar -->
+            <div class="preview-toolbar" id="previewToolbar" style="display: none;">
+              <div class="toolbar-left">
+                <span class="connection-indicator online"></span>
+                <span id="connectedDeviceName">Device Name</span>
+              </div>
+              <div class="toolbar-center">
+                <button class="toolbar-btn" title="Clipboard Sync">📋</button>
+                <button class="toolbar-btn" title="File Transfer">📁</button>
+                <button class="toolbar-btn" title="Screenshot">📸</button>
+                <button class="toolbar-btn" title="Quality">🎚️</button>
+              </div>
+              <div class="toolbar-right">
+                <span class="connection-stats">
+                  <span id="previewLatency">-- ms</span>
+                  <span id="previewFps">-- fps</span>
+                </span>
+                <button id="disconnectBtn" class="btn btn-danger btn-sm">Disconnect</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Connection Stats Panel -->
+        <section class="connection-stats-section" id="connectionStatsSection" style="display: none;">
+          <div class="stats-grid-mini">
+            <div class="stat-mini">
+              <span class="stat-mini-value" id="statLatency">--</span>
+              <span class="stat-mini-label">Latency</span>
+            </div>
+            <div class="stat-mini">
+              <span class="stat-mini-value" id="statFPS">--</span>
+              <span class="stat-mini-label">FPS</span>
+            </div>
+            <div class="stat-mini">
+              <span class="stat-mini-value" id="statBandwidth">--</span>
+              <span class="stat-mini-label">Bandwidth</span>
+            </div>
+            <div class="stat-mini">
+              <span class="stat-mini-value" id="statResolution">--</span>
+              <span class="stat-mini-label">Resolution</span>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <!-- Device List -->
-      <div id="devicesList" class="devices-list">
-        <!-- Devices will be inserted here -->
-      </div>
+      <!-- Right Column: Devices & Queue -->
+      <div class="dashboard-right">
+        <!-- Support Queue Section -->
+        <section class="queue-section" id="queueSection">
+          <div class="section-header">
+            <h2>Support Queue</h2>
+            <span class="queue-badge" id="queueCount">0</span>
+          </div>
+          
+          <div class="queue-container" id="queueContainer">
+            <!-- Empty Queue State -->
+            <div class="queue-empty" id="queueEmpty">
+              <span class="queue-empty-icon">✨</span>
+              <p>No pending support requests</p>
+            </div>
+            
+            <!-- Queue Items -->
+            <div class="queue-list" id="queueList" style="display: none;">
+              <!-- Queue items will be inserted here -->
+            </div>
+          </div>
+          
+          <!-- Request Support Button (for users) -->
+          <button class="btn btn-primary btn-block" id="requestSupportBtn" style="display: none;">
+            🎫 Request Support
+          </button>
+        </section>
 
-      <!-- Empty State -->
-      <div id="emptyState" class="empty-state" style="display: none;">
-        <p>📱 No devices registered yet</p>
-        <p class="muted">Download and run the agent on a computer to get started</p>
-        <button class="btn btn-primary" id="downloadAgentBtn">Download Agent</button>
-      </div>
+        <!-- Devices Section -->
+        <section class="devices-section">
+          <div class="section-header">
+            <h2>Your Devices</h2>
+            <button id="refreshDevicesBtn" class="btn btn-icon" title="Refresh">
+              🔄
+            </button>
+          </div>
 
-      <!-- Loading State -->
-      <div id="loadingDevices" class="loading" style="display: none;">
-        <div class="spinner"></div>
-        <p>Loading devices...</p>
+          <!-- Device List -->
+          <div id="devicesList" class="devices-list">
+            <!-- Devices will be inserted here -->
+          </div>
+
+          <!-- Empty State -->
+          <div id="emptyState" class="empty-state" style="display: none;">
+            <p>📱 No devices registered yet</p>
+            <p class="muted">Download and run the agent on a computer to get started</p>
+            <button class="btn btn-primary" id="downloadAgentBtn">Download Agent</button>
+          </div>
+
+          <!-- Loading State -->
+          <div id="loadingDevices" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading devices...</p>
+          </div>
+        </section>
       </div>
-    </section>
+    </div>
 
     <!-- Active Session Section -->
     <section class="session-section" id="sessionSection" style="display: none;">
