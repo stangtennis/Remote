@@ -1,7 +1,7 @@
 // Authentication Module
 // Handles user login, signup, and session management
 
-const SUPABASE_URL = 'https://mnqtdugcvfyenjuqruol.supabase.co';
+const SUPABASE_URL = 'https://supabase.hawkeye123.dk';
 const SUPABASE_ANON_KEY = 'REDACTED_JWT';
 
 // Initialize Supabase client

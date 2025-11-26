@@ -1,7 +1,7 @@
 // Web Agent - Browser-based remote desktop agent
 
 // Supabase configuration
-const SUPABASE_URL = 'https://mnqtdugcvfyenjuqruol.supabase.co';
+const SUPABASE_URL = 'https://supabase.hawkeye123.dk';
 const SUPABASE_ANON_KEY = 'REDACTED_JWT';
 
 // Initialize Supabase client

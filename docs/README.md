@@ -38,7 +38,7 @@ dashboard/
 
 ### Configuration
 Supabase credentials are in `js/auth.js`:
-- `SUPABASE_URL`: https://mnqtdugcvfyenjuqruol.supabase.co
+- `SUPABASE_URL`: https://supabase.hawkeye123.dk
 - `SUPABASE_ANON_KEY`: Your anon key
 
 ## Deployment to GitHub Pages
