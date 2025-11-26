@@ -129,6 +129,19 @@
         return;
       }
       
+      // Check if user is admin
+      const { data: approval } = await supabase
+        .from('user_approvals')
+        .select('role')
+        .eq('user_id', session.user.id)
+        .single();
+      
+      if (!approval || approval.role !== 'admin') {
+        alert('⛔ Access denied. Admin privileges required.');
+        window.location.href = 'dashboard.html';
+        return;
+      }
+      
       // Load initial data
       await loadUsers();
       

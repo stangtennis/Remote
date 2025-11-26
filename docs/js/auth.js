@@ -160,11 +160,25 @@ if (document.getElementById('loginForm')) {
 if (document.getElementById('logoutBtn')) {
   const logoutBtn = document.getElementById('logoutBtn');
   const userEmail = document.getElementById('userEmail');
+  const adminLink = document.getElementById('adminLink');
 
-  // Display user email
-  checkAuth().then(session => {
+  // Display user email and check admin status
+  checkAuth().then(async (session) => {
     if (session && session.user) {
       userEmail.textContent = session.user.email;
+      
+      // Check if user is admin
+      if (adminLink) {
+        const { data: approval } = await supabase
+          .from('user_approvals')
+          .select('role')
+          .eq('user_id', session.user.id)
+          .single();
+        
+        if (approval && approval.role === 'admin') {
+          adminLink.style.display = 'inline-flex';
+        }
+      }
     }
   });
 
