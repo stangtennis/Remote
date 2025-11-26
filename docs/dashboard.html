@@ -41,6 +41,9 @@
               <video id="previewVideo" autoplay playsinline></video>
               <canvas id="previewCanvas"></canvas>
               
+              <!-- Fullscreen Toggle Button -->
+              <button class="fullscreen-toggle" id="fullscreenToggle" title="Toggle Fullscreen (F11)">⛶</button>
+              
               <!-- Idle State -->
               <div class="preview-idle" id="previewIdle">
                 <div class="preview-idle-content">
@@ -263,5 +266,60 @@
   <script src="js/devices.js"></script>
   <script src="js/webrtc.js"></script>
   <script src="js/signaling.js"></script>
+  
+  <!-- Fullscreen Preview Script -->
+  <script>
+    (function() {
+      const container = document.getElementById('remotePreviewContainer');
+      const toggleBtn = document.getElementById('fullscreenToggle');
+      const headerToggleBtn = document.getElementById('previewFullscreenBtn');
+      
+      function toggleFullscreen() {
+        if (container.classList.contains('fullscreen')) {
+          // Exit fullscreen
+          container.classList.remove('fullscreen');
+          document.body.style.overflow = '';
+          toggleBtn.textContent = '⛶';
+          toggleBtn.title = 'Enter Fullscreen (F11)';
+        } else {
+          // Enter fullscreen
+          container.classList.add('fullscreen');
+          document.body.style.overflow = 'hidden';
+          toggleBtn.textContent = '⛶';
+          toggleBtn.title = 'Exit Fullscreen (ESC)';
+        }
+      }
+      
+      // Toggle button click
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', toggleFullscreen);
+      }
+      
+      // Header button click
+      if (headerToggleBtn) {
+        headerToggleBtn.addEventListener('click', toggleFullscreen);
+      }
+      
+      // ESC key to exit fullscreen
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && container.classList.contains('fullscreen')) {
+          toggleFullscreen();
+        }
+        // F11 to toggle fullscreen
+        if (e.key === 'F11') {
+          e.preventDefault();
+          toggleFullscreen();
+        }
+      });
+      
+      // Double-click to toggle fullscreen
+      container.addEventListener('dblclick', function(e) {
+        if (e.target.closest('.preview-toolbar') || e.target.closest('button')) {
+          return; // Don't toggle if clicking toolbar or buttons
+        }
+        toggleFullscreen();
+      });
+    })();
+  </script>
 </body>
 </html>

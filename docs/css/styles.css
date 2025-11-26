@@ -1188,6 +1188,74 @@ body::before {
   flex-direction: column;
   min-height: 450px;
   box-shadow: var(--shadow-md);
+  transition: all 0.3s ease;
+}
+
+/* Fullscreen mode for remote preview */
+.remote-preview-container.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  z-index: 9999;
+  border-radius: 0;
+  border: none;
+  margin: 0;
+}
+
+.remote-preview-container.fullscreen .preview-screen {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.remote-preview-container.fullscreen .preview-toolbar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.remote-preview-container.fullscreen:hover .preview-toolbar {
+  opacity: 1;
+}
+
+.remote-preview-container.fullscreen .preview-idle-content {
+  transform: scale(1.2);
+}
+
+/* Fullscreen button styling */
+.fullscreen-toggle {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 20;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius);
+  color: white;
+  cursor: pointer;
+  transition: var(--transition);
+  opacity: 0;
+}
+
+.preview-screen:hover .fullscreen-toggle,
+.remote-preview-container.fullscreen .fullscreen-toggle {
+  opacity: 1;
+}
+
+.fullscreen-toggle:hover {
+  background: rgba(0, 0, 0, 0.7);
+  border-color: var(--primary);
 }
 
 .preview-screen {
