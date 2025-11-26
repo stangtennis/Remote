@@ -1148,9 +1148,15 @@ body::before {
 /* ===== Dashboard Grid Layout ===== */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1fr 400px;
+  grid-template-columns: 1fr 420px;
   gap: 1.5rem;
-  min-height: calc(100vh - 100px);
+  min-height: calc(100vh - 120px);
+}
+
+@media (min-width: 1201px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr 420px;
+  }
 }
 
 .dashboard-left {
@@ -1174,15 +1180,14 @@ body::before {
 
 .remote-preview-container {
   flex: 1;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
+  background: var(--surface-solid);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 500px;
+  min-height: 450px;
+  box-shadow: var(--shadow-md);
 }
 
 .preview-screen {
