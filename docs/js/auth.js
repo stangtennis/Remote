@@ -1,8 +1,8 @@
 // Authentication Module
 // Handles user login, signup, and session management
 
-const SUPABASE_URL = 'https://mnqtdugcvfyenjuqruol.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ucXRkdWdjdmZ5ZW5qdXFydW9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzMDEwODMsImV4cCI6MjA3NDg3NzA4M30.QKs8vMS9tQJgX11GHfarHdpWZHOcCpv0B-aiq7qc15E';
+const SUPABASE_URL = 'https://supabase.hawkeye123.dk';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE';
 
 // Initialize Supabase client
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
