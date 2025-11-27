@@ -374,10 +374,11 @@ body::before {
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--glass-border);
-  padding: 1rem 2rem;
+  padding: 0.75rem 1.5rem;
   position: sticky;
   top: 0;
   z-index: 100;
+  flex-shrink: 0;
 }
 
 .header-content {
@@ -390,7 +391,7 @@ body::before {
 }
 
 .header-content h1 {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
   background: var(--gradient-primary);
   -webkit-background-clip: text;
