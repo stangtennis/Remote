@@ -1150,7 +1150,8 @@ body::before {
   display: grid;
   grid-template-columns: 1fr 420px;
   gap: 1.5rem;
-  min-height: calc(100vh - 120px);
+  height: calc(100vh - 120px);
+  min-height: 500px;
 }
 
 @media (min-width: 1101px) {
@@ -1163,12 +1164,17 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  height: 100%;
+  min-height: 0;
 }
 
 .dashboard-right {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* ===== Remote Preview Section ===== */
@@ -1186,7 +1192,7 @@ body::before {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 450px;
+  min-height: 300px;
   box-shadow: var(--shadow-md);
   transition: all 0.3s ease;
 }
