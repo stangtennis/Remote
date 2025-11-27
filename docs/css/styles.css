@@ -272,6 +272,13 @@ body::before {
   border-color: var(--border-light);
 }
 
+/* Header buttons - smaller */
+.header-actions .btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  width: auto;
+}
+
 .btn-danger {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   color: white;
