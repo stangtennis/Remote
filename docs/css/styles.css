@@ -91,6 +91,7 @@
 html {
   scroll-behavior: smooth;
   height: 100%;
+  width: 100%;
 }
 
 body {
@@ -99,12 +100,11 @@ body {
   color: var(--text);
   line-height: 1.6;
   height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow: hidden;
-}
-
-body.dashboard-page {
   overflow: hidden;
 }
 
@@ -386,11 +386,12 @@ body::before {
   top: 0;
   z-index: 100;
   flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .header-content {
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -426,13 +427,14 @@ body::before {
 }
 
 .dashboard-main {
-  max-width: 100%;
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   padding: 0.5rem 1rem;
   height: calc(100vh - 57px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
 
 .section-header {
