@@ -419,8 +419,8 @@ body::before {
 .dashboard-main {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 1rem 1.5rem;
-  height: calc(100vh - 70px);
+  padding: 0.75rem 1.5rem;
+  height: calc(100vh - 65px);
   overflow: hidden;
 }
 
@@ -428,7 +428,8 @@ body::before {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
+  flex-shrink: 0;
 }
 
 .section-header h2 {
@@ -1161,7 +1162,7 @@ body::before {
   display: grid;
   grid-template-columns: 1fr 380px;
   gap: 1rem;
-  height: calc(100vh - 90px);
+  height: 100%;
   overflow: hidden;
 }
 
