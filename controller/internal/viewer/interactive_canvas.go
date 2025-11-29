@@ -1,11 +1,17 @@
 package viewer
 
 import (
+	"sync"
+	"time"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 )
+
+// Mouse move throttle interval (16ms = ~60 FPS)
+const mouseThrottleInterval = 16 * time.Millisecond
 
 // InteractiveCanvas is a canvas that captures mouse and keyboard events
 type InteractiveCanvas struct {
@@ -17,6 +23,14 @@ type InteractiveCanvas struct {
 	onMouseButton func(button desktop.MouseButton, pressed bool, x, y float32)
 	onMouseScroll func(deltaX, deltaY float32)
 	onKeyPress    func(key *fyne.KeyEvent)
+
+	// Throttling for mouse move
+	lastMoveTime  time.Time
+	pendingMove   bool
+	pendingX      float32
+	pendingY      float32
+	throttleMu    sync.Mutex
+	throttleTimer *time.Timer
 }
 
 // NewInteractiveCanvas creates a new interactive canvas
@@ -38,13 +52,55 @@ func (ic *InteractiveCanvas) CreateRenderer() fyne.WidgetRenderer {
 
 // Mouse events
 func (ic *InteractiveCanvas) MouseIn(*desktop.MouseEvent) {}
-func (ic *InteractiveCanvas) MouseOut() {}
+func (ic *InteractiveCanvas) MouseOut()                   {}
 
 func (ic *InteractiveCanvas) MouseMoved(event *desktop.MouseEvent) {
 	ic.lastMouseX = event.Position.X
 	ic.lastMouseY = event.Position.Y
-	if ic.onMouseMove != nil {
-		ic.onMouseMove(event.Position.X, event.Position.Y)
+
+	if ic.onMouseMove == nil {
+		return
+	}
+
+	ic.throttleMu.Lock()
+	defer ic.throttleMu.Unlock()
+
+	now := time.Now()
+	timeSinceLastMove := now.Sub(ic.lastMoveTime)
+
+	// If enough time has passed, send immediately
+	if timeSinceLastMove >= mouseThrottleInterval {
+		ic.lastMoveTime = now
+		ic.pendingMove = false
+		if ic.throttleTimer != nil {
+			ic.throttleTimer.Stop()
+			ic.throttleTimer = nil
+		}
+		// Send the move event
+		go ic.onMouseMove(event.Position.X, event.Position.Y)
+		return
+	}
+
+	// Otherwise, store pending move and schedule send
+	ic.pendingX = event.Position.X
+	ic.pendingY = event.Position.Y
+	ic.pendingMove = true
+
+	// Schedule a timer to send the pending move if not already scheduled
+	if ic.throttleTimer == nil {
+		remaining := mouseThrottleInterval - timeSinceLastMove
+		ic.throttleTimer = time.AfterFunc(remaining, func() {
+			ic.throttleMu.Lock()
+			defer ic.throttleMu.Unlock()
+
+			if ic.pendingMove && ic.onMouseMove != nil {
+				ic.lastMoveTime = time.Now()
+				ic.pendingMove = false
+				x, y := ic.pendingX, ic.pendingY
+				go ic.onMouseMove(x, y)
+			}
+			ic.throttleTimer = nil
+		})
 	}
 }
 
@@ -85,7 +141,7 @@ func (ic *InteractiveCanvas) FocusGained() {}
 func (ic *InteractiveCanvas) FocusLost()   {}
 
 // Tappable (for mobile/touch)
-func (ic *InteractiveCanvas) Tapped(*fyne.PointEvent) {}
+func (ic *InteractiveCanvas) Tapped(*fyne.PointEvent)          {}
 func (ic *InteractiveCanvas) TappedSecondary(*fyne.PointEvent) {}
 
 // Setters for callbacks

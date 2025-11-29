@@ -2,6 +2,7 @@ package input
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/go-vgo/robotgo"
 )
@@ -19,9 +20,23 @@ func NewMouseController(width, height int) *MouseController {
 }
 
 func (m *MouseController) Move(x, y float64) error {
-	// Coordinates are already in screen pixels
-	screenX := int(x)
-	screenY := int(y)
+	// Use proper rounding instead of truncation to reduce drift
+	screenX := int(math.Round(x))
+	screenY := int(math.Round(y))
+
+	// Clamp to screen bounds to prevent out-of-bounds issues
+	if screenX < 0 {
+		screenX = 0
+	}
+	if screenY < 0 {
+		screenY = 0
+	}
+	if m.screenWidth > 0 && screenX >= m.screenWidth {
+		screenX = m.screenWidth - 1
+	}
+	if m.screenHeight > 0 && screenY >= m.screenHeight {
+		screenY = m.screenHeight - 1
+	}
 
 	robotgo.Move(screenX, screenY)
 	return nil
