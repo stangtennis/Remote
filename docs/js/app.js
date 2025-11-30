@@ -35,8 +35,15 @@ function setupEventListeners() {
   const downloadBtn = document.getElementById('downloadAgentBtn');
   if (downloadBtn) {
     downloadBtn.addEventListener('click', () => {
-      alert('Agent download will be available once the Windows agent is built.');
-      // TODO: Link to agents bucket in Supabase Storage
+      window.open('https://github.com/stangtennis/Remote/releases/latest/download/remote-agent.exe', '_blank');
+    });
+  }
+
+  // Download controller button
+  const downloadControllerBtn = document.getElementById('downloadControllerBtn');
+  if (downloadControllerBtn) {
+    downloadControllerBtn.addEventListener('click', () => {
+      window.open('https://github.com/stangtennis/Remote/releases/latest/download/controller.exe', '_blank');
     });
   }
 
