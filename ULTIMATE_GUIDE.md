@@ -1,13 +1,281 @@
 # 🚀 ULTIMATE COMPLETE GUIDE
 **Everything About Your Ubuntu + Archon + Windsurf Setup in ONE Document**
 
-Last Updated: 2025-11-22 | Server: 192.168.1.92 | User: dennis
+Last Updated: 2025-12-01 | Server: 192.168.1.92 | User: dennis
 
-## QUICK ACCESS
-- Archon UI: http://192.168.1.92:3737
-- Supabase: http://192.168.1.92:8888
-- Portainer: http://192.168.1.92:9000
-- Drives: P:\ (projects) | O:\ (home)
+---
+
+## 🌐 QUICK ACCESS - ALL SERVICES
+
+### Public HTTPS (via Nginx Proxy Manager)
+| Service | URL | Login |
+|---------|-----|-------|
+| **Supabase Studio** | https://supabase.hawkeye123.dk | `supabase` / `this_password_is_insecure_and_should_be_updated` |
+
+### Local Only (Internal Network)
+| Service | URL | Login |
+|---------|-----|-------|
+| **Nginx Proxy Manager** | http://192.168.1.92:81 | `admin@example.com` / `Suzuki77wW!!` |
+| **Archon UI** | http://192.168.1.92:3737 | No login |
+| **Supabase Studio** | http://192.168.1.92:8888 | `supabase` / `this_password_is_insecure_and_should_be_updated` |
+| **Portainer** | http://192.168.1.92:9000 | Your Portainer credentials |
+| **Ollama API** | http://192.168.1.92:11434 | No login |
+
+### Network Drives
+| Drive | Path |
+|-------|------|
+| **P:\\** | `\\192.168.1.92\projekter` (projects) |
+| **O:\\** | `\\192.168.1.92\home` (full home) |
+
+---
+
+## 🔐 ALL CREDENTIALS (Master List)
+
+| Service | Username | Password/Key |
+|---------|----------|--------------|
+| **Ubuntu SSH** | dennis | SSH key (no password) |
+| **Samba/Network Drives** | dennis | `Suzuki77wW!!` |
+| **Nginx Proxy Manager** | admin@example.com | `Suzuki77wW!!` |
+| **Supabase Studio** | supabase | `this_password_is_insecure_and_should_be_updated` |
+| **PostgreSQL** | postgres | `postgres` |
+| **Portainer API Token** | - | `ptr_XxKkdO1CQy8QyF1FGx0lymIj3/sPl2iEthNBNltrMAY=` |
+
+---
+
+## 🌍 PUBLIC HTTPS ACCESS
+
+### Domain & SSL
+```yaml
+Domain: *.hawkeye123.dk (wildcard)
+Public IP: 188.228.14.94
+SSL Certificate: Let's Encrypt Wildcard (auto-renewed)
+Managed by: Nginx Proxy Manager
+```
+
+### Public Endpoints
+```yaml
+# Only Supabase is exposed publicly (for Remote Desktop app)
+Supabase: https://supabase.hawkeye123.dk → http://192.168.1.92:8888
+
+# These are LOCAL ONLY (not exposed to internet for security)
+Archon: http://192.168.1.92:3737 (local only)
+Portainer: http://192.168.1.92:9000 (local only)
+```
+
+### Why Only Supabase is Public?
+- Remote Desktop app needs Supabase for authentication and signaling
+- Archon and Portainer are admin tools - no need for public access
+- Reduces attack surface - fewer exposed services = better security
+
+---
+
+## 🔧 NGINX PROXY MANAGER
+
+### Access
+```yaml
+URL: http://192.168.1.92:81
+Email: admin@example.com
+Password: Suzuki77wW!!
+```
+
+### Location
+```bash
+Directory: ~/nginx-proxy-manager/
+Docker Compose: ~/nginx-proxy-manager/docker-compose.yml
+```
+
+### Docker Compose Configuration
+```yaml
+# ~/nginx-proxy-manager/docker-compose.yml
+version: '3.8'
+services:
+  app:
+    image: 'jc21/nginx-proxy-manager:latest'
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '81:81'
+      - '443:443'
+    volumes:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
+```
+
+### NPM Commands
+```bash
+# Start NPM
+cd ~/nginx-proxy-manager && docker compose up -d
+
+# Stop NPM
+cd ~/nginx-proxy-manager && docker compose down
+
+# View logs
+docker logs nginx-proxy-manager-app-1 --tail 50
+
+# Restart
+docker restart nginx-proxy-manager-app-1
+```
+
+### From Windows
+```powershell
+# Start NPM
+ssh ubuntu "cd ~/nginx-proxy-manager && docker compose up -d"
+
+# Check status
+ssh ubuntu "docker ps | grep nginx"
+```
+
+### Current Proxy Hosts
+| Domain | Forward To | SSL |
+|--------|------------|-----|
+| supabase.hawkeye123.dk | http://192.168.1.92:8888 | ✅ Wildcard Cert |
+
+---
+
+## ⚡ SUPABASE EDGE FUNCTIONS
+
+### What Are Edge Functions?
+Serverless TypeScript/Deno functions that run on Supabase. Better security than direct database access.
+
+### Deployed Functions
+| Function | Endpoint | Purpose |
+|----------|----------|---------|
+| **device-register** | `/functions/v1/device-register` | Register new devices |
+| **session-token** | `/functions/v1/session-token` | Create sessions with PIN/TURN |
+| **session-cleanup** | `/functions/v1/session-cleanup` | Cleanup old sessions |
+| **file-transfer** | `/functions/v1/file-transfer` | Handle file transfers |
+
+### Function Location
+```bash
+# On Ubuntu server
+~/supabase-local/volumes/functions/
+
+# Source code (in Remote Desktop repo)
+f:\#Remote\supabase\functions\
+```
+
+### Test Edge Function
+```bash
+# Test device-register
+curl -X POST http://192.168.1.92:8888/functions/v1/device-register \
+  -H "Content-Type: application/json" \
+  -H "apikey: YOUR_ANON_KEY" \
+  -d '{"device_id":"test-123","platform":"windows","arch":"amd64"}'
+```
+
+### Deploy New Functions
+```bash
+# Copy functions to server
+scp -r f:\#Remote\supabase\functions\* dennis@192.168.1.92:~/supabase-local/volumes/functions/
+
+# Fix permissions
+ssh ubuntu "chmod -R 755 ~/supabase-local/volumes/functions/*"
+
+# Restart edge runtime
+ssh ubuntu "docker restart supabase-edge-functions"
+```
+
+---
+
+## 🤖 ARCHON MCP SERVER
+
+### What is Archon?
+Project management and knowledge base system with MCP (Model Context Protocol) integration for AI assistants like Windsurf.
+
+### Access URLs
+```yaml
+Archon UI: http://192.168.1.92:3737
+Archon API: http://192.168.1.92:8181
+Archon MCP: http://192.168.1.92:8051/mcp
+```
+
+### MCP Tools Available
+```
+- find_projects / manage_project
+- find_tasks / manage_task
+- find_documents / manage_document
+- rag_search_knowledge_base
+- rag_search_code_examples
+- health_check
+```
+
+### Windsurf MCP Configuration
+**Location**: `C:\Users\server\.codeium\windsurf\mcp_config.json`
+
+```json
+{
+  "mcpServers": {
+    "archon": {
+      "serverUrl": "http://192.168.1.92:8051/mcp"
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "mcp-playwright": {
+      "command": "npx",
+      "args": ["@anthropic/mcp-playwright"]
+    }
+  }
+}
+```
+
+### Test Archon MCP
+In Windsurf, type:
+```
+list all projects
+```
+or
+```
+find tasks with status todo
+```
+
+### Archon Commands
+```bash
+# Start Archon
+ssh ubuntu "cd ~/projects/archon && docker compose up -d"
+
+# Stop Archon
+ssh ubuntu "cd ~/projects/archon && docker compose down"
+
+# View logs
+ssh ubuntu "docker logs archon-mcp --tail 50"
+
+# Restart
+ssh ubuntu "cd ~/projects/archon && docker compose restart"
+```
+
+---
+
+## 📊 REMOTE DESKTOP PROJECT (Archon Tracking)
+
+### Project Info
+```yaml
+Project ID: 70bbe84f-e9da-4816-8312-d79770d369a2
+Repository: https://github.com/stangtennis/Remote
+Current Version: v2.2.0
+```
+
+### Active Tasks (check with Archon)
+```
+find_tasks(filter_by="status", filter_value="todo")
+```
+
+### Update Task Status
+```
+manage_task("update", task_id="...", status="doing")
+manage_task("update", task_id="...", status="done")
+```
+
+---
 
 ---
 
@@ -2242,7 +2510,170 @@ Get-ChildItem P:\
 
 ---
 
-**Last Updated**: 2025-11-22  
+**Last Updated**: 2025-12-01  
 **Server**: Ubuntu 22.04 LTS @ 192.168.1.92  
 **User**: dennis  
 **Created for**: Easy setup on new Windsurf instances
+
+---
+
+## 🐳 DOCKER SERVICES OVERVIEW
+
+### All Running Containers
+```bash
+# Check all containers
+ssh ubuntu "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
+```
+
+### Service Groups
+
+**Nginx Proxy Manager** (~/nginx-proxy-manager/)
+```
+nginx-proxy-manager-app-1    Ports: 80, 81, 443
+```
+
+**Supabase** (~/supabase-local/)
+```
+supabase-kong               Port: 8888 (API Gateway)
+supabase-studio             Port: 3000 (internal)
+supabase-db                 Port: 5432 (PostgreSQL)
+supabase-auth               (GoTrue auth)
+supabase-rest               (PostgREST)
+supabase-realtime           (Realtime subscriptions)
+supabase-storage            (File storage)
+supabase-edge-functions     (Edge Functions runtime)
+supabase-meta               (Metadata)
+supabase-analytics          Port: 4000
+supabase-imgproxy           (Image processing)
+supabase-vector             (Vector/logging)
+supabase-pooler             Ports: 5432, 6543
+```
+
+**Archon** (~/projects/archon/)
+```
+archon-mcp                  Port: 8051 (MCP server)
+archon-server               Port: 8181 (API)
+archon-ui                   Port: 3737 (Web UI)
+```
+
+**Portainer** (standalone)
+```
+portainer                   Port: 9000
+```
+
+### Start All Services (One Command)
+```bash
+ssh ubuntu "cd ~/nginx-proxy-manager && docker compose up -d && cd ~/supabase-local && docker compose up -d && cd ~/projects/archon && docker compose up -d"
+```
+
+### Stop All Services
+```bash
+ssh ubuntu "cd ~/projects/archon && docker compose down && cd ~/supabase-local && docker compose down && cd ~/nginx-proxy-manager && docker compose down"
+```
+
+---
+
+## 📡 API ENDPOINTS REFERENCE
+
+### Supabase API
+```yaml
+Base URL: https://supabase.hawkeye123.dk (public)
+         http://192.168.1.92:8888 (local)
+
+# REST API
+GET/POST/PATCH/DELETE: /rest/v1/{table_name}
+
+# Edge Functions
+POST: /functions/v1/{function_name}
+
+# Auth
+POST: /auth/v1/signup
+POST: /auth/v1/token?grant_type=password
+POST: /auth/v1/logout
+
+# Headers Required
+apikey: {ANON_KEY}
+Authorization: Bearer {JWT_TOKEN}
+Content-Type: application/json
+```
+
+### Supabase Keys
+```bash
+# Anon Key (public, safe to expose)
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE
+
+# Service Role Key (SECRET - never expose!)
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q
+```
+
+### Archon API
+```yaml
+Base URL: http://192.168.1.92:8181
+
+# Health Check
+GET: /health
+
+# Projects
+GET: /api/projects
+POST: /api/projects
+GET: /api/projects/{id}
+
+# Tasks
+GET: /api/tasks
+POST: /api/tasks
+PATCH: /api/tasks/{id}
+```
+
+### Archon MCP
+```yaml
+MCP Endpoint: http://192.168.1.92:8051/mcp
+
+# Available Tools (via Windsurf)
+- find_projects
+- manage_project
+- find_tasks
+- manage_task
+- find_documents
+- manage_document
+- rag_search_knowledge_base
+- rag_search_code_examples
+- health_check
+```
+
+### Portainer API
+```yaml
+Base URL: http://192.168.1.92:9000/api
+
+# Headers
+X-API-Key: ptr_XxKkdO1CQy8QyF1FGx0lymIj3/sPl2iEthNBNltrMAY=
+
+# Endpoints
+GET: /endpoints
+GET: /endpoints/{id}/docker/containers/json
+POST: /endpoints/{id}/docker/containers/{id}/start
+POST: /endpoints/{id}/docker/containers/{id}/stop
+```
+
+---
+
+## 🔄 CHANGELOG
+
+### 2025-12-01
+- ✅ Migrated to Nginx Proxy Manager (from native Nginx)
+- ✅ Implemented Supabase Edge Functions
+- ✅ Updated agent to use Edge Functions for device registration
+- ✅ Removed public access to Archon and Portainer (security)
+- ✅ Only Supabase exposed publicly (required for Remote Desktop app)
+- ✅ Updated all credentials and documentation
+
+### 2025-11-30
+- ✅ Set up Authelia 2FA (later removed - not needed)
+- ✅ Configured wildcard SSL certificate
+- ✅ Set up Nginx Proxy Manager
+
+### 2025-11-22
+- ✅ Initial Ubuntu server setup
+- ✅ Supabase local installation
+- ✅ Archon installation and configuration
+- ✅ Samba network drives
+- ✅ SSH passwordless authentication
