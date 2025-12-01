@@ -47,15 +47,17 @@ func RegisterDevice(config RegistrationConfig) (*DeviceInfo, error) {
 	return device, nil
 }
 
-// upsertDevice inserts or updates device in Supabase
+// upsertDevice registers device using Edge Function (better security)
 func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
-	// Create payload with all required fields
+	// Use Edge Function instead of direct DB access
+	edgeFunctionURL := fmt.Sprintf("%s/functions/v1/device-register", config.SupabaseURL)
+	
+	// Create payload for Edge Function
 	payload := map[string]interface{}{
 		"device_id":   device.DeviceID,
 		"device_name": device.DeviceName,
 		"platform":    device.Platform,
-		"status":      device.Status,
-		"last_seen":   time.Now().Format(time.RFC3339),
+		"arch":        "amd64", // TODO: Get from runtime
 	}
 
 	jsonData, err := json.Marshal(payload)
@@ -63,62 +65,40 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	// Try to update existing device first
-	updateURL := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, device.DeviceID)
-	req, err := http.NewRequest("PATCH", updateURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", edgeFunctionURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("failed to create update request: %w", err)
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("apikey", config.AnonKey)
 	req.Header.Set("Authorization", "Bearer "+config.AnonKey)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Prefer", "return=representation")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to send update request: %w", err)
+		return fmt.Errorf("failed to call Edge Function: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 
-	// If update succeeded (device exists), we're done
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
-		fmt.Println("✅ Device updated successfully (already registered)")
+	// Edge Function returns 201 for new registration, 200 for approved, 202 for pending
+	if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusAccepted {
+		var result map[string]interface{}
+		if err := json.Unmarshal(body, &result); err == nil {
+			if status, ok := result["status"].(string); ok {
+				if status == "pending_approval" {
+					fmt.Println("✅ Device registered successfully (awaiting approval)")
+				} else if status == "approved" {
+					fmt.Println("✅ Device registered and approved")
+				}
+			}
+		}
 		return nil
 	}
 
-	// If device doesn't exist, try to insert it
-	insertURL := fmt.Sprintf("%s/rest/v1/remote_devices", config.SupabaseURL)
-	req, err = http.NewRequest("POST", insertURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create insert request: %w", err)
-	}
-
-	req.Header.Set("apikey", config.AnonKey)
-	req.Header.Set("Authorization", "Bearer "+config.AnonKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err = client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send insert request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, _ = io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		// If we get a duplicate key error, that's actually OK - device exists
-		if resp.StatusCode == http.StatusConflict || resp.StatusCode == 409 {
-			fmt.Println("✅ Device already registered (conflict resolved)")
-			return nil
-		}
-		return fmt.Errorf("registration failed: %s (status: %d)", string(body), resp.StatusCode)
-	}
-
-	return nil
+	return fmt.Errorf("registration failed: %s (status: %d)", string(body), resp.StatusCode)
 }
 
 // UpdateHeartbeat updates the device heartbeat
