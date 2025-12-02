@@ -20,6 +20,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
+          cache-dependency-path: |
+            agent/go.sum
 
       - name: Install MinGW (GCC for Windows)
         run: |
@@ -43,19 +45,28 @@ jobs:
         id: get_version
         run: |
           $version = $env:GITHUB_REF -replace 'refs/tags/', ''
-          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "version=$version" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create ZIP with installation scripts
+        working-directory: ./agent
+        run: |
+          $files = @(
+            "remote-agent.exe",
+            "setup-startup.bat",
+            "uninstall-service.bat",
+            "view-logs.bat"
+          )
+          Compress-Archive -Path $files -DestinationPath remote-agent-windows.zip
+        shell: pwsh
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
-          release_name: Remote Desktop Agent ${{ steps.get_version.outputs.VERSION }}
+          name: Remote Desktop Agent ${{ steps.get_version.outputs.version }}
           body: |
-            ## 🎉 Remote Desktop Agent ${{ steps.get_version.outputs.VERSION }}
+            ## 🎉 Remote Desktop Agent ${{ steps.get_version.outputs.version }}
             
             ### 🆕 What's New in v0.2.0
             
@@ -98,37 +109,8 @@ jobs:
             5. User can now connect via controller app
             
             For full documentation, see the [README](https://github.com/stangtennis/Remote/blob/main/README.md).
-          draft: false
-          prerelease: false
-
-      - name: Upload Agent Binary
-        uses: actions/upload-release-asset@v1
+          files: |
+            ./agent/remote-agent.exe
+            ./agent/remote-agent-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./agent/remote-agent.exe
-          asset_name: remote-agent.exe
-          asset_content_type: application/octet-stream
-
-      - name: Create ZIP with installation scripts
-        working-directory: ./agent
-        run: |
-          $files = @(
-            "remote-agent.exe",
-            "setup-startup.bat",
-            "uninstall-service.bat",
-            "view-logs.bat"
-          )
-          Compress-Archive -Path $files -DestinationPath remote-agent-windows.zip
-        shell: pwsh
-
-      - name: Upload ZIP Package
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./agent/remote-agent-windows.zip
-          asset_name: remote-agent-windows.zip
-          asset_content_type: application/zip
