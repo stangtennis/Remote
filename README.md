@@ -500,6 +500,29 @@ See [RELEASE.md](./RELEASE.md) for details.
 - **[RELEASE_NOTES_v2.0.0.md](./RELEASE_NOTES_v2.0.0.md)** - Previous release notes (2025-11-06)
 - **[RELEASE_NOTES_v1.1.7.md](./RELEASE_NOTES_v1.1.7.md)** - Earlier release notes
 
+## 🔨 Build & Release (Linux Host)
+
+- **Prereqs:** Go 1.25.x and MinGW for Windows CGO, or Docker (recommended). Repo root: `/home/dennis/projekter/Remote Desktop`.
+- **Preferred (GitHub Actions):**
+  1. `git tag v2.5.0`
+  2. `git push origin v2.5.0`
+  3. Workflows (`.github/workflows/release*.yml`) run on `windows-latest` with Go 1.25, build both EXEs, and attach them to the release.
+- **Local cross-build via Docker (Linux → Windows):**
+  ```
+  docker run --rm -v "$PWD":/app -w /app golang:1.25 bash -lc '
+    set -euo pipefail
+    apt-get update -qq
+    apt-get install -y -qq --no-install-recommends mingw-w64 > /dev/null
+    export GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc
+    mkdir -p /app/build
+    cd agent && go build -ldflags "-s -w" -o /app/build/remote-agent.exe ./cmd/remote-agent
+    cd /app/controller && go build -ldflags "-s -w -H windowsgui" -o /app/build/controller.exe .
+  '
+  ```
+  Outputs: `build/remote-agent.exe`, `build/controller.exe`.
+- **Flags:** `-ldflags "-s -w"` strips debug info; controller adds `-H windowsgui` to hide console. `CGO_ENABLED=1` is required for robotgo on the agent.
+- **Releases:** Download from https://github.com/stangtennis/Remote/releases
+
 ## 🤝 Contributing
 
 1. Fork the repository
