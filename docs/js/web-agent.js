@@ -76,9 +76,12 @@ async function login() {
     await registerDevice();
 
     // Update UI
-    document.getElementById('loginSection').classList.add('hidden');
-    document.getElementById('deviceSection').classList.remove('hidden');
+    document.getElementById('loginSection').style.display = 'none';
+    document.getElementById('deviceSection').style.display = 'block';
     document.getElementById('userEmail').textContent = currentUser.email;
+    
+    // Update header status
+    updateHeaderStatus('online', 'Connected');
 
   } catch (error) {
     console.error('Login error:', error);
@@ -106,10 +109,15 @@ async function logout() {
   await supabase.auth.signOut();
 
   // Reset UI
-  document.getElementById('deviceSection').classList.add('hidden');
-  document.getElementById('loginSection').classList.remove('hidden');
+  document.getElementById('deviceSection').style.display = 'none';
+  document.getElementById('sessionSection').style.display = 'none';
+  document.getElementById('connectedSection').style.display = 'none';
+  document.getElementById('loginSection').style.display = 'block';
   document.getElementById('email').value = '';
   document.getElementById('password').value = '';
+  
+  // Update header status
+  updateHeaderStatus('offline', 'Not Connected');
 
   currentUser = null;
   deviceId = null;
@@ -263,10 +271,10 @@ async function startSharing() {
     preview.srcObject = mediaStream;
 
     // Update UI
-    document.getElementById('startBtn').classList.add('hidden');
-    document.getElementById('stopBtn').classList.remove('hidden');
-    document.getElementById('statusBadge').textContent = 'Sharing';
-    document.getElementById('statusBadge').className = 'status-badge sharing';
+    document.getElementById('startBtn').style.display = 'none';
+    document.getElementById('stopBtn').style.display = 'inline-flex';
+    document.getElementById('previewWindow').style.display = 'block';
+    updateHeaderStatus('online', 'Sharing Screen');
 
     // Listen for user stopping the share (via browser controls)
     mediaStream.getVideoTracks()[0].addEventListener('ended', () => {
@@ -312,11 +320,12 @@ async function stopSharing() {
   }
 
   // Update UI
-  document.getElementById('startBtn').classList.remove('hidden');
-  document.getElementById('stopBtn').classList.add('hidden');
-  document.getElementById('statusBadge').textContent = 'Online';
-  document.getElementById('statusBadge').className = 'status-badge online';
-  document.getElementById('connectedSection').classList.add('hidden');
+  document.getElementById('startBtn').style.display = 'inline-flex';
+  document.getElementById('stopBtn').style.display = 'none';
+  document.getElementById('previewWindow').style.display = 'none';
+  document.getElementById('connectedSection').style.display = 'none';
+  updateHeaderStatus('online', 'Connected');
+  stopSessionTimer();
 
   console.log('✅ Screen sharing stopped');
 }
@@ -327,11 +336,7 @@ function checkExtensionAvailable() {
   window.addEventListener('message', (event) => {
     if (event.data.type === 'extension_ready') {
       console.log('✅ Extension detected - remote control available');
-      const controlStatus = document.getElementById('controlStatus');
-      controlStatus.classList.remove('hidden', 'disabled');
-      controlStatus.classList.add('enabled');
-      document.getElementById('controlText').textContent = '🎮 Remote Control: Enabled';
-      controlStatus.querySelector('small').textContent = 'Full remote control available';
+      // Extension detected - could enable additional features here
     }
   });
 }
@@ -370,8 +375,8 @@ function startSessionPolling() {
 }
 
 function showPinPrompt() {
-  document.getElementById('deviceSection').classList.add('hidden');
-  document.getElementById('sessionSection').classList.remove('hidden');
+  document.getElementById('deviceSection').style.display = 'none';
+  document.getElementById('sessionSection').style.display = 'block';
   document.getElementById('pinInput').focus();
 }
 
@@ -401,14 +406,15 @@ async function acceptSession() {
       .eq('id', currentSession.id);
 
     // Hide PIN prompt
-    document.getElementById('sessionSection').classList.add('hidden');
+    document.getElementById('sessionSection').style.display = 'none';
 
     // Start WebRTC connection
     await startWebRTC();
 
     // Show connected section
-    document.getElementById('connectedSection').classList.remove('hidden');
-    document.getElementById('sessionStart').textContent = new Date().toLocaleString();
+    document.getElementById('connectedSection').style.display = 'block';
+    updateHeaderStatus('online', 'Session Active');
+    startSessionTimer();
 
   } catch (error) {
     console.error('Failed to accept session:', error);
@@ -429,9 +435,10 @@ function rejectSession() {
   }
 
   currentSession = null;
-  document.getElementById('sessionSection').classList.add('hidden');
-  document.getElementById('deviceSection').classList.remove('hidden');
+  document.getElementById('sessionSection').style.display = 'none';
+  document.getElementById('deviceSection').style.display = 'block';
   document.getElementById('pinInput').value = '';
+  updateHeaderStatus('online', 'Connected');
 }
 
 async function endSession() {
@@ -463,8 +470,10 @@ async function endSession() {
   }
 
   // Update UI
-  document.getElementById('connectedSection').classList.add('hidden');
-  document.getElementById('deviceSection').classList.remove('hidden');
+  document.getElementById('connectedSection').style.display = 'none';
+  document.getElementById('deviceSection').style.display = 'block';
+  updateHeaderStatus('online', 'Connected');
+  stopSessionTimer();
 
   console.log('✅ Session ended');
 }
@@ -607,6 +616,59 @@ function handleRemoteInput(event) {
 }
 
 // ============================================================================
+// UI Helper Functions
+// ============================================================================
+
+function updateHeaderStatus(status, text) {
+  const headerStatus = document.getElementById('headerStatus');
+  if (headerStatus) {
+    const dot = headerStatus.querySelector('.status-dot');
+    const textEl = headerStatus.querySelector('.status-text');
+    if (dot) {
+      dot.className = 'status-dot ' + status;
+    }
+    if (textEl) {
+      textEl.textContent = text;
+    }
+  }
+}
+
+function showMessage(message, type = 'error') {
+  const msgBox = document.getElementById('loginMessage');
+  if (msgBox) {
+    msgBox.textContent = message;
+    msgBox.className = 'message-box ' + type;
+    msgBox.style.display = 'block';
+    setTimeout(() => {
+      msgBox.style.display = 'none';
+    }, 5000);
+  }
+}
+
+let sessionTimer = null;
+let sessionStartTime = null;
+
+function startSessionTimer() {
+  sessionStartTime = Date.now();
+  sessionTimer = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+    const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const seconds = (elapsed % 60).toString().padStart(2, '0');
+    const durationEl = document.getElementById('sessionDuration');
+    if (durationEl) {
+      durationEl.textContent = `${minutes}:${seconds}`;
+    }
+  }, 1000);
+}
+
+function stopSessionTimer() {
+  if (sessionTimer) {
+    clearInterval(sessionTimer);
+    sessionTimer = null;
+  }
+}
+
+// ============================================================================
 // Global Functions (called from HTML)
 // ============================================================================
 
@@ -632,9 +694,10 @@ supabase.auth.getSession().then(({ data: { session } }) => {
     console.log('Already logged in, initializing...');
     currentUser = session.user;
     registerDevice().then(() => {
-      document.getElementById('loginSection').classList.add('hidden');
-      document.getElementById('deviceSection').classList.remove('hidden');
+      document.getElementById('loginSection').style.display = 'none';
+      document.getElementById('deviceSection').style.display = 'block';
       document.getElementById('userEmail').textContent = currentUser.email;
+      updateHeaderStatus('online', 'Connected');
     });
   }
 });

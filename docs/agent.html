@@ -3,377 +3,245 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🌐 Web Agent - Remote Desktop</title>
+  <title>Remote Agent - Share Your Screen</title>
   <link rel="stylesheet" href="css/styles.css">
-  <style>
-    .agent-container {
-      max-width: 800px;
-      margin: 50px auto;
-      padding: 30px;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-
-    .agent-header {
-      text-align: center;
-      margin-bottom: 30px;
-    }
-
-    .agent-header h1 {
-      font-size: 2.5em;
-      margin-bottom: 10px;
-      color: #2c3e50;
-    }
-
-    .agent-header p {
-      color: #7f8c8d;
-      font-size: 1.1em;
-    }
-
-    .section {
-      margin-bottom: 30px;
-      padding: 20px;
-      border: 1px solid #ecf0f1;
-      border-radius: 8px;
-    }
-
-    .section.hidden {
-      display: none;
-    }
-
-    .section h2 {
-      margin-top: 0;
-      color: #34495e;
-      font-size: 1.5em;
-      margin-bottom: 15px;
-    }
-
-    .status-badge {
-      display: inline-block;
-      padding: 6px 16px;
-      border-radius: 20px;
-      font-weight: 600;
-      font-size: 0.9em;
-      margin-left: 10px;
-    }
-
-    .status-badge.offline {
-      background: #e74c3c;
-      color: white;
-    }
-
-    .status-badge.online {
-      background: #27ae60;
-      color: white;
-    }
-
-    .status-badge.sharing {
-      background: #3498db;
-      color: white;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
-    }
-
-    .form-group {
-      margin-bottom: 20px;
-    }
-
-    .form-group label {
-      display: block;
-      margin-bottom: 8px;
-      font-weight: 600;
-      color: #34495e;
-    }
-
-    .form-group input {
-      width: 100%;
-      padding: 12px;
-      border: 2px solid #ecf0f1;
-      border-radius: 6px;
-      font-size: 1em;
-      transition: border-color 0.3s;
-    }
-
-    .form-group input:focus {
-      outline: none;
-      border-color: #3498db;
-    }
-
-    .btn {
-      padding: 12px 24px;
-      border: none;
-      border-radius: 6px;
-      font-size: 1em;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s;
-      margin-right: 10px;
-    }
-
-    .btn-primary {
-      background: #3498db;
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background: #2980b9;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
-    }
-
-    .btn-success {
-      background: #27ae60;
-      color: white;
-    }
-
-    .btn-success:hover {
-      background: #229954;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 8px rgba(39, 174, 96, 0.3);
-    }
-
-    .btn-danger {
-      background: #e74c3c;
-      color: white;
-    }
-
-    .btn-danger:hover {
-      background: #c0392b;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 8px rgba(231, 76, 60, 0.3);
-    }
-
-    .btn-secondary {
-      background: #95a5a6;
-      color: white;
-    }
-
-    .btn-secondary:hover {
-      background: #7f8c8d;
-    }
-
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      transform: none !important;
-    }
-
-    .info-box {
-      padding: 15px;
-      background: #ecf0f1;
-      border-radius: 6px;
-      margin-bottom: 20px;
-    }
-
-    .info-box p {
-      margin: 8px 0;
-      color: #34495e;
-    }
-
-    .info-box strong {
-      color: #2c3e50;
-    }
-
-    .preview-container {
-      margin-top: 20px;
-      text-align: center;
-    }
-
-    #preview {
-      max-width: 100%;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-      background: #000;
-    }
-
-    .pin-prompt {
-      text-align: center;
-      padding: 30px;
-    }
-
-    .pin-prompt h3 {
-      color: #3498db;
-      margin-bottom: 10px;
-      font-size: 1.8em;
-    }
-
-    .pin-prompt p {
-      color: #7f8c8d;
-      margin-bottom: 20px;
-    }
-
-    .pin-input {
-      width: 200px !important;
-      text-align: center;
-      font-size: 1.5em !important;
-      letter-spacing: 0.5em;
-      font-weight: 600;
-    }
-
-    .alert {
-      padding: 15px;
-      border-radius: 6px;
-      margin-bottom: 20px;
-    }
-
-    .alert-info {
-      background: #d1ecf1;
-      border: 1px solid #bee5eb;
-      color: #0c5460;
-    }
-
-    .alert-warning {
-      background: #fff3cd;
-      border: 1px solid #ffeaa7;
-      color: #856404;
-    }
-
-    .alert-success {
-      background: #d4edda;
-      border: 1px solid #c3e6cb;
-      color: #155724;
-    }
-
-    .control-status {
-      margin-top: 15px;
-      padding: 10px;
-      border-radius: 6px;
-      text-align: center;
-      font-weight: 600;
-    }
-
-    .control-status.enabled {
-      background: #d4edda;
-      color: #155724;
-    }
-
-    .control-status.disabled {
-      background: #fff3cd;
-      color: #856404;
-    }
-  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-<body>
-  <div class="agent-container">
+<body class="agent-page">
+  <!-- Animated Background -->
+  <div class="animated-bg">
+    <div class="gradient-orb orb-1"></div>
+    <div class="gradient-orb orb-2"></div>
+    <div class="gradient-orb orb-3"></div>
+  </div>
+
+  <!-- Main Container -->
+  <div class="agent-wrapper">
     <!-- Header -->
-    <div class="agent-header">
-      <h1>🌐 Web Agent</h1>
-      <p>Browser-based remote desktop agent - no installation required!</p>
-    </div>
+    <header class="agent-header">
+      <div class="logo">
+        <div class="logo-icon">
+          <i class="fas fa-desktop"></i>
+        </div>
+        <div class="logo-text">
+          <h1>Remote Agent</h1>
+          <span class="tagline">Share your screen securely</span>
+        </div>
+      </div>
+      <div class="header-status" id="headerStatus">
+        <span class="status-dot offline"></span>
+        <span class="status-text">Not Connected</span>
+      </div>
+    </header>
 
-    <!-- Login Section -->
-    <div id="loginSection" class="section">
-      <h2>Login</h2>
-      <div class="alert alert-info">
-        <strong>📌 Note:</strong> Your account must be approved by an administrator before you can use the web agent.
-      </div>
-      <div class="form-group">
-        <label for="email">Email</label>
-        <input type="email" id="email" placeholder="your@email.com" autocomplete="email">
-      </div>
-      <div class="form-group">
-        <label for="password">Password</label>
-        <input type="password" id="password" placeholder="Your password" autocomplete="current-password">
-      </div>
-      <button class="btn btn-primary" onclick="login()">Login</button>
-      <p style="margin-top: 15px; color: #7f8c8d;">
-        Don't have an account? <a href="index.html">Sign up here</a>
-      </p>
-    </div>
-
-    <!-- Device Section -->
-    <div id="deviceSection" class="section hidden">
-      <h2>
-        Device Status
-        <span id="statusBadge" class="status-badge offline">Offline</span>
-      </h2>
-      
-      <div class="info-box">
-        <p><strong>Device Name:</strong> <span id="deviceName">-</span></p>
-        <p><strong>Platform:</strong> Web Browser</p>
-        <p><strong>Browser:</strong> <span id="browserInfo">-</span></p>
-        <p><strong>User:</strong> <span id="userEmail">-</span></p>
+    <!-- Login Card -->
+    <div id="loginSection" class="glass-card login-card">
+      <div class="card-header">
+        <div class="card-icon">
+          <i class="fas fa-user-shield"></i>
+        </div>
+        <h2>Sign In</h2>
+        <p>Login to start sharing your screen</p>
       </div>
 
-      <div class="alert alert-warning">
-        <strong>⚠️ Important:</strong> Keep this tab open while sharing your screen. Closing the tab will stop the connection.
-      </div>
+      <form id="loginForm" class="auth-form" onsubmit="event.preventDefault(); login();">
+        <div class="input-group">
+          <div class="input-icon">
+            <i class="fas fa-envelope"></i>
+          </div>
+          <input type="email" id="email" placeholder="Email address" required autocomplete="email">
+        </div>
 
-      <div>
-        <button id="startBtn" class="btn btn-success" onclick="startSharing()">
-          🎥 Start Screen Sharing
+        <div class="input-group">
+          <div class="input-icon">
+            <i class="fas fa-lock"></i>
+          </div>
+          <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-glow btn-block">
+          <i class="fas fa-sign-in-alt"></i>
+          <span>Sign In</span>
         </button>
-        <button id="stopBtn" class="btn btn-danger hidden" onclick="stopSharing()">
-          🛑 Stop Sharing
+      </form>
+
+      <div class="card-footer">
+        <p>Don't have an account? <a href="index.html" class="link-primary">Create one</a></p>
+      </div>
+
+      <div id="loginMessage" class="message-box" style="display: none;"></div>
+    </div>
+
+    <!-- Device Status Card -->
+    <div id="deviceSection" class="glass-card device-card" style="display: none;">
+      <div class="card-header">
+        <div class="card-icon pulse-icon">
+          <i class="fas fa-broadcast-tower"></i>
+        </div>
+        <h2>Ready to Share</h2>
+        <p>Your device is registered and ready</p>
+      </div>
+
+      <!-- Device Info Grid -->
+      <div class="device-info-grid">
+        <div class="info-item">
+          <div class="info-icon"><i class="fas fa-laptop"></i></div>
+          <div class="info-content">
+            <span class="info-label">Device</span>
+            <span class="info-value" id="deviceName">-</span>
+          </div>
+        </div>
+        <div class="info-item">
+          <div class="info-icon"><i class="fas fa-globe"></i></div>
+          <div class="info-content">
+            <span class="info-label">Browser</span>
+            <span class="info-value" id="browserInfo">-</span>
+          </div>
+        </div>
+        <div class="info-item">
+          <div class="info-icon"><i class="fas fa-user"></i></div>
+          <div class="info-content">
+            <span class="info-label">User</span>
+            <span class="info-value" id="userEmail">-</span>
+          </div>
+        </div>
+        <div class="info-item">
+          <div class="info-icon"><i class="fas fa-shield-alt"></i></div>
+          <div class="info-content">
+            <span class="info-label">Encryption</span>
+            <span class="info-value">End-to-End</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="action-buttons">
+        <button id="startBtn" class="btn btn-success btn-glow btn-lg" onclick="startSharing()">
+          <i class="fas fa-play-circle"></i>
+          <span>Start Screen Sharing</span>
         </button>
-        <button class="btn btn-secondary" onclick="logout()">Logout</button>
+        <button id="stopBtn" class="btn btn-danger btn-lg" onclick="stopSharing()" style="display: none;">
+          <i class="fas fa-stop-circle"></i>
+          <span>Stop Sharing</span>
+        </button>
       </div>
 
-      <!-- Control Status -->
-      <div id="controlStatus" class="control-status disabled hidden">
-        <span id="controlText">Remote Control: View-Only Mode</span><br>
-        <small>Install the browser extension for full remote control</small>
+      <!-- Preview Window -->
+      <div class="preview-window" id="previewWindow" style="display: none;">
+        <div class="preview-header">
+          <span><i class="fas fa-eye"></i> Live Preview</span>
+          <div class="preview-controls">
+            <span class="live-indicator"><span class="live-dot"></span> LIVE</span>
+          </div>
+        </div>
+        <div class="preview-content">
+          <video id="preview" autoplay muted playsinline></video>
+        </div>
       </div>
 
-      <!-- Preview -->
-      <div class="preview-container">
-        <h3>Preview</h3>
-        <video id="preview" autoplay muted playsinline></video>
+      <!-- Logout Button -->
+      <div class="card-footer">
+        <button class="btn btn-ghost" onclick="logout()">
+          <i class="fas fa-sign-out-alt"></i>
+          <span>Sign Out</span>
+        </button>
       </div>
     </div>
 
-    <!-- Session Section (PIN Entry) -->
-    <div id="sessionSection" class="section hidden">
-      <div class="pin-prompt">
-        <h3>🔔 Connection Request</h3>
-        <p>Someone wants to connect to your screen</p>
-        <p style="font-size: 0.9em; color: #95a5a6;">Enter the 6-digit PIN to accept the connection</p>
-        
-        <div class="form-group">
+    <!-- Connection Request Card -->
+    <div id="sessionSection" class="glass-card session-card" style="display: none;">
+      <div class="card-header">
+        <div class="card-icon ring-animation">
+          <i class="fas fa-bell"></i>
+        </div>
+        <h2>Incoming Connection</h2>
+        <p>Someone wants to view your screen</p>
+      </div>
+
+      <div class="pin-entry">
+        <p class="pin-instruction">Enter the 6-digit PIN to accept</p>
+        <div class="pin-input-wrapper">
           <input 
             type="text" 
             id="pinInput" 
             class="pin-input" 
-            placeholder="------" 
+            placeholder="• • • • • •" 
             maxlength="6"
             autocomplete="off"
+            inputmode="numeric"
+            pattern="[0-9]*"
           >
         </div>
-        
-        <button class="btn btn-success" onclick="acceptSession()">
-          ✅ Accept Connection
+      </div>
+
+      <div class="session-actions">
+        <button class="btn btn-success btn-glow" onclick="acceptSession()">
+          <i class="fas fa-check-circle"></i>
+          <span>Accept</span>
         </button>
         <button class="btn btn-danger" onclick="rejectSession()">
-          ❌ Reject
+          <i class="fas fa-times-circle"></i>
+          <span>Decline</span>
         </button>
       </div>
     </div>
 
-    <!-- Connected Session -->
-    <div id="connectedSection" class="section hidden">
-      <h2>
-        🟢 Connected
-        <span class="status-badge sharing">Sharing Screen</span>
-      </h2>
-      
-      <div class="alert alert-success">
-        <strong>✅ Session Active:</strong> Your screen is being shared. The viewer can see everything on your screen.
+    <!-- Active Session Card -->
+    <div id="connectedSection" class="glass-card connected-card" style="display: none;">
+      <div class="card-header">
+        <div class="card-icon connected-icon">
+          <i class="fas fa-link"></i>
+        </div>
+        <h2>Session Active</h2>
+        <p>Your screen is being shared</p>
       </div>
 
-      <div class="info-box">
-        <p><strong>Session Started:</strong> <span id="sessionStart">-</span></p>
-        <p><strong>Status:</strong> <span id="connectionStatus">Connected via WebRTC</span></p>
+      <!-- Session Stats -->
+      <div class="session-stats">
+        <div class="stat-item">
+          <div class="stat-icon"><i class="fas fa-clock"></i></div>
+          <div class="stat-content">
+            <span class="stat-label">Duration</span>
+            <span class="stat-value" id="sessionDuration">00:00</span>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-icon"><i class="fas fa-signal"></i></div>
+          <div class="stat-content">
+            <span class="stat-label">Connection</span>
+            <span class="stat-value" id="connectionQuality">Excellent</span>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-icon"><i class="fas fa-shield-alt"></i></div>
+          <div class="stat-content">
+            <span class="stat-label">Security</span>
+            <span class="stat-value">Encrypted</span>
+          </div>
+        </div>
       </div>
 
-      <button class="btn btn-danger" onclick="endSession()">
-        🛑 End Session
+      <!-- Live Indicator -->
+      <div class="live-banner">
+        <span class="live-dot"></span>
+        <span>LIVE - Your screen is visible to the remote viewer</span>
+      </div>
+
+      <button class="btn btn-danger btn-lg btn-block" onclick="endSession()">
+        <i class="fas fa-phone-slash"></i>
+        <span>End Session</span>
       </button>
     </div>
+
+    <!-- Footer -->
+    <footer class="agent-footer">
+      <div class="security-badges">
+        <span class="badge"><i class="fas fa-lock"></i> End-to-End Encrypted</span>
+        <span class="badge"><i class="fas fa-bolt"></i> WebRTC Powered</span>
+        <span class="badge"><i class="fas fa-shield-alt"></i> Secure Connection</span>
+      </div>
+      <p class="copyright">Remote Desktop © 2025</p>
+    </footer>
   </div>
 
   <!-- Scripts -->
