@@ -199,7 +199,10 @@
       usersList.innerHTML = filteredUsers.map(user => `
         <div class="pending-user ${user.approved ? 'approved' : ''}">
           <div class="user-header">
-            <div class="user-email">${user.email}</div>
+            <div class="user-email">
+              ${user.email}
+              ${user.role === 'admin' ? '<span class="admin-badge">👑 Admin</span>' : ''}
+            </div>
             <span class="user-status ${user.approved ? 'status-approved' : 'status-pending'}">
               ${user.approved ? '✅ Approved' : '⏸️ Pending'}
             </span>
@@ -208,6 +211,7 @@
             <div>Requested: ${new Date(user.requested_at).toLocaleString()}</div>
             ${user.approved ? `<div>Approved: ${new Date(user.approved_at).toLocaleString()}</div>` : ''}
             ${user.notes ? `<div>Notes: ${user.notes}</div>` : ''}
+            <div>Role: ${user.role || 'user'}</div>
           </div>
           <div class="user-actions">
             <button 
@@ -217,6 +221,22 @@
             >
               ${user.approved ? 'Already Approved' : 'Approve User'}
             </button>
+            ${user.approved && user.role !== 'admin' ? `
+              <button 
+                class="admin-btn" 
+                onclick="makeAdmin('${user.user_id}', '${user.email}')"
+              >
+                👑 Make Admin
+              </button>
+            ` : ''}
+            ${user.role === 'admin' ? `
+              <button 
+                class="revoke-admin-btn" 
+                onclick="revokeAdmin('${user.user_id}', '${user.email}')"
+              >
+                ❌ Remove Admin
+              </button>
+            ` : ''}
           </div>
         </div>
       `).join('');
@@ -298,6 +318,51 @@ Remote Desktop © 2025
     window.logout = async function() {
       await supabase.auth.signOut();
       window.location.href = 'index.html';
+    };
+
+    window.makeAdmin = async function(userId, email) {
+      if (!confirm(`👑 Make ${email} an admin?\n\nThis user will be able to:\n• Approve new users\n• Manage devices\n• Make other users admin`)) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('user_approvals')
+          .update({ role: 'admin' })
+          .eq('user_id', userId);
+
+        if (error) throw error;
+
+        alert(`✅ ${email} is now an admin!`);
+        await loadUsers();
+      } catch (error) {
+        console.error('Error making admin:', error);
+        alert('Failed to make admin: ' + error.message);
+      }
+    };
+
+    window.revokeAdmin = async function(userId, email) {
+      // Get current user to prevent self-demotion
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session.user.id === userId) {
+        alert('⚠️ You cannot remove your own admin privileges!');
+        return;
+      }
+
+      if (!confirm(`❌ Remove admin privileges from ${email}?\n\nThis user will no longer be able to access the admin panel.`)) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('user_approvals')
+          .update({ role: 'user' })
+          .eq('user_id', userId);
+
+        if (error) throw error;
+
+        alert(`✅ Admin privileges removed from ${email}`);
+        await loadUsers();
+      } catch (error) {
+        console.error('Error revoking admin:', error);
+        alert('Failed to revoke admin: ' + error.message);
+      }
     };
 
     // ===== DEVICE MANAGEMENT =====
