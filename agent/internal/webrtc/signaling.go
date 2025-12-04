@@ -33,7 +33,7 @@ type SignalMessage struct {
 }
 
 func (m *Manager) ListenForSessions() {
-	// Poll for new sessions from dashboard
+	// Poll for new sessions from BOTH controller (webrtc_sessions) AND dashboard (session_signaling)
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
@@ -41,45 +41,256 @@ func (m *Manager) ListenForSessions() {
 	errorCount := 0
 
 	log.Println("🔄 Session polling started (checking every 2 seconds)")
+	log.Println("   Listening on: webrtc_sessions (controller) + session_signaling (dashboard)")
 
 	for range ticker.C {
-		sessions, err := m.fetchPendingSessions()
-		if err != nil {
-			errorCount++
-			// Log every 30th error to avoid spam (once per minute)
-			if errorCount%30 == 1 {
-				log.Printf("⚠️  Error fetching sessions (count: %d): %v", errorCount, err)
-			}
+		// Skip if currently connected
+		if m.peerConnection != nil && m.peerConnection.ConnectionState() == webrtc.PeerConnectionStateConnected {
 			continue
 		}
 
-		// Reset error count on success
-		if errorCount > 0 {
+		// 1. Check webrtc_sessions (Go controller)
+		sessions, err := m.fetchPendingSessions()
+		if err != nil {
+			errorCount++
+			if errorCount%30 == 1 {
+				log.Printf("⚠️  Error fetching webrtc_sessions (count: %d): %v", errorCount, err)
+			}
+		} else if errorCount > 0 {
 			log.Printf("✅ Session polling recovered after %d errors", errorCount)
 			errorCount = 0
 		}
 
 		for _, session := range sessions {
-			// Skip if already handling this session
 			if handledSessions[session.ID] {
 				continue
 			}
-
-			// Skip if currently connected
-			if m.peerConnection != nil && m.peerConnection.ConnectionState() == webrtc.PeerConnectionStateConnected {
-				continue
-			}
-
-			// Log only when we're actually starting a NEW session
-			log.Printf("📞 Incoming session: %s (PIN: %s)", session.ID, session.PIN)
+			log.Printf("📞 Incoming session (controller): %s", session.ID)
 			log.Printf("   Device ID: %s", m.device.ID)
 			handledSessions[session.ID] = true
 			m.sessionID = session.ID
-
-			// Handle this session in background
 			go m.handleSession(session)
 		}
+
+		// 2. Check session_signaling (Web dashboard)
+		webSessions, err := m.fetchWebDashboardSessions()
+		if err != nil {
+			// Only log occasionally
+			if errorCount%30 == 1 {
+				log.Printf("⚠️  Error fetching session_signaling: %v", err)
+			}
+		}
+
+		for _, session := range webSessions {
+			if handledSessions[session.ID] {
+				continue
+			}
+			log.Printf("📞 Incoming session (web dashboard): %s", session.ID)
+			log.Printf("   Device ID: %s", m.device.ID)
+			handledSessions[session.ID] = true
+			m.sessionID = session.ID
+			go m.handleWebSession(session)
+		}
 	}
+}
+
+// fetchWebDashboardSessions checks session_signaling for offers from web dashboard
+func (m *Manager) fetchWebDashboardSessions() ([]Session, error) {
+	url := m.cfg.SupabaseURL + "/rest/v1/session_signaling"
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
+	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+
+	q := req.URL.Query()
+	q.Add("msg_type", "eq.offer")
+	q.Add("from_side", "eq.dashboard")
+	q.Add("select", "*")
+	q.Add("order", "created_at.desc")
+	q.Add("limit", "10")
+	req.URL.RawQuery = q.Encode()
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var signals []SignalMessage
+	if err := json.NewDecoder(resp.Body).Decode(&signals); err != nil {
+		return nil, fmt.Errorf("JSON decode failed: %w", err)
+	}
+
+	// Convert signals to sessions, filtering by device ID
+	var result []Session
+	for _, sig := range signals {
+		// We need to check if this session is for our device
+		// The session_signaling table doesn't have device_id directly,
+		// so we need to look up the session in remote_sessions
+		isForDevice, pin := m.checkSessionDevice(sig.SessionID)
+		if !isForDevice {
+			continue
+		}
+
+		session := Session{
+			ID:    sig.SessionID,
+			Offer: sig.Payload.SDP,
+			PIN:   pin,
+		}
+		result = append(result, session)
+	}
+
+	return result, nil
+}
+
+// checkSessionDevice checks if a session belongs to this device
+func (m *Manager) checkSessionDevice(sessionID string) (bool, string) {
+	url := m.cfg.SupabaseURL + "/rest/v1/remote_sessions"
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return false, ""
+	}
+
+	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
+	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+
+	q := req.URL.Query()
+	q.Add("session_id", "eq."+sessionID)
+	q.Add("device_id", "eq."+m.device.ID)
+	q.Add("select", "session_id,pin,status")
+	q.Add("limit", "1")
+	req.URL.RawQuery = q.Encode()
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, ""
+	}
+	defer resp.Body.Close()
+
+	var sessions []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&sessions); err != nil {
+		return false, ""
+	}
+
+	if len(sessions) == 0 {
+		return false, ""
+	}
+
+	// Check status - only handle pending/connecting sessions
+	status, _ := sessions[0]["status"].(string)
+	if status == "connected" || status == "ended" {
+		return false, ""
+	}
+
+	pin, _ := sessions[0]["pin"].(string)
+	return true, pin
+}
+
+// handleWebSession handles a session from the web dashboard
+func (m *Manager) handleWebSession(session Session) {
+	log.Println("🔧 Setting up WebRTC connection (web dashboard)...")
+
+	// Ensure previous connection is fully cleaned up
+	if m.peerConnection != nil {
+		log.Println("⚠️  Previous connection still exists, cleaning up first...")
+		m.cleanupConnection("Preparing for new session")
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Use default STUN servers
+	iceServers := []webrtc.ICEServer{
+		{URLs: []string{"stun:stun.l.google.com:19302"}},
+		{URLs: []string{"stun:stun1.l.google.com:19302"}},
+	}
+
+	if err := m.CreatePeerConnection(iceServers); err != nil {
+		log.Printf("Failed to create peer connection: %v", err)
+		return
+	}
+
+	if session.Offer == "" {
+		log.Println("❌ No offer found in web session")
+		return
+	}
+
+	// Set remote description (offer from dashboard)
+	offer := webrtc.SessionDescription{
+		Type: webrtc.SDPTypeOffer,
+		SDP:  session.Offer,
+	}
+
+	if err := m.peerConnection.SetRemoteDescription(offer); err != nil {
+		log.Printf("Failed to set remote description: %v", err)
+		return
+	}
+
+	// Create answer
+	answer, err := m.peerConnection.CreateAnswer(nil)
+	if err != nil {
+		log.Printf("Failed to create answer: %v", err)
+		return
+	}
+
+	if err := m.peerConnection.SetLocalDescription(answer); err != nil {
+		log.Printf("Failed to set local description: %v", err)
+		return
+	}
+
+	// Send answer to session_signaling table (for web dashboard)
+	m.sendAnswerToSignaling(session.ID, answer.SDP)
+
+	// Continue listening for ICE candidates from dashboard
+	go m.listenForICE(session.ID)
+}
+
+// sendAnswerToSignaling sends answer to session_signaling table for web dashboard
+func (m *Manager) sendAnswerToSignaling(sessionID, sdp string) {
+	url := m.cfg.SupabaseURL + "/rest/v1/session_signaling"
+
+	payload := map[string]interface{}{
+		"session_id": sessionID,
+		"from_side":  "agent",
+		"msg_type":   "answer",
+		"payload": map[string]interface{}{
+			"type": "answer",
+			"sdp":  sdp,
+		},
+	}
+
+	jsonData, _ := json.Marshal(payload)
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
+	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+	req.Header.Set("Prefer", "return=minimal")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("❌ Failed to send answer to signaling: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("❌ Failed to send answer to signaling: HTTP %d - %s", resp.StatusCode, string(body))
+		return
+	}
+
+	log.Println("📤 Sent answer to web dashboard")
 }
 
 func (m *Manager) fetchPendingSessions() ([]Session, error) {
