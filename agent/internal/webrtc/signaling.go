@@ -166,9 +166,9 @@ func (m *Manager) checkSessionDevice(sessionID string) (bool, string) {
 	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
 
 	q := req.URL.Query()
-	q.Add("session_id", "eq."+sessionID)
+	q.Add("id", "eq."+sessionID) // Use 'id' not 'session_id'
 	q.Add("device_id", "eq."+m.device.ID)
-	q.Add("select", "session_id,pin,status")
+	q.Add("select", "id,pin,status")
 	q.Add("limit", "1")
 	req.URL.RawQuery = q.Encode()
 
