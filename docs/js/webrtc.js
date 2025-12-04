@@ -358,7 +358,8 @@ function setupInputCapture() {
     sendControlEvent({
       t: 'mouse_move',
       x: Math.round(coords.x * 10000) / 10000,
-      y: Math.round(coords.y * 10000) / 10000
+      y: Math.round(coords.y * 10000) / 10000,
+      rel: true  // Flag for relative coordinates (0-1)
     });
   };
   target.addEventListener('mousemove', mouseMoveHandler);
