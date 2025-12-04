@@ -231,7 +231,7 @@
     };
 
     window.approveUser = async function(userId, email) {
-      if (!confirm(`Approve user: ${email}?`)) return;
+      if (!confirm(`Approve user: ${email}?\n\nA welcome email will be sent to the user.`)) return;
 
       try {
         // Call the approve_user function
@@ -242,7 +242,30 @@
 
         if (error) throw error;
 
-        alert(`✅ User approved: ${email}`);
+        // Send welcome email
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const emailResponse = await fetch(`${SUPABASE_URL}/functions/v1/send-welcome-email`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email })
+          });
+          
+          const emailResult = await emailResponse.json();
+          if (emailResult.success) {
+            console.log('✅ Welcome email sent:', emailResult);
+          } else {
+            console.warn('⚠️ Email not sent:', emailResult.message || emailResult.error);
+          }
+        } catch (emailError) {
+          console.warn('⚠️ Could not send welcome email:', emailError);
+          // Don't fail the approval if email fails
+        }
+
+        alert(`✅ User approved: ${email}\n\nWelcome email sent!`);
         await loadUsers();
       } catch (error) {
         console.error('Error approving user:', error);
