@@ -377,13 +377,31 @@ Remote Desktop © 2025
 
         if (devicesError) throw devicesError;
 
-        // Get all assignments
+        // Get all assignments (without join to user_approvals)
         const { data: assignments, error: assignError } = await supabase
           .from('device_assignments')
-          .select('*, user_approvals!inner(email)')
+          .select('*')
           .is('revoked_at', null);
 
         if (assignError) throw assignError;
+
+        // Get user emails for assignments
+        if (assignments && assignments.length > 0) {
+          const userIds = [...new Set(assignments.map(a => a.user_id))];
+          const { data: users } = await supabase
+            .from('user_approvals')
+            .select('user_id, email')
+            .in('user_id', userIds);
+          
+          // Map emails to assignments
+          const userMap = {};
+          if (users) {
+            users.forEach(u => userMap[u.user_id] = u.email);
+          }
+          assignments.forEach(a => {
+            a.user_email = userMap[a.user_id] || 'Unknown';
+          });
+        }
 
         allDevices = devices || [];
         assignedDevices = assignments || [];
@@ -442,7 +460,7 @@ Remote Desktop © 2025
               <div>Platform: ${device.platform || 'Unknown'}</div>
               <div>Created: ${new Date(device.created_at).toLocaleString()}</div>
               ${device.last_heartbeat ? `<div>Last Seen: ${new Date(device.last_heartbeat).toLocaleString()}</div>` : ''}
-              ${isAssigned ? `<div>✅ Assigned to: ${assignment.user_approvals.email}</div>` : '<div>⚠️ Not assigned to any user</div>'}
+              ${isAssigned ? `<div>✅ Assigned to: ${assignment.user_email}</div>` : '<div>⚠️ Not assigned to any user</div>'}
               ${device.approved ? '<div>✅ Approved for use</div>' : '<div>⏸️ Pending approval</div>'}
             </div>
             <div class="device-actions">
