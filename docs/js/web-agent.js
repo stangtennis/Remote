@@ -73,12 +73,18 @@ async function login() {
     }
 
     // Register device
-    await registerDevice();
+    try {
+      await registerDevice();
+    } catch (regError) {
+      console.warn('Device registration warning:', regError);
+      // Continue anyway - device section will still show
+    }
 
     // Update UI
     document.getElementById('loginSection').style.display = 'none';
     document.getElementById('deviceSection').style.display = 'block';
-    document.getElementById('userEmail').textContent = currentUser.email;
+    const userEmailEl = document.getElementById('userEmail');
+    if (userEmailEl) userEmailEl.textContent = currentUser.email;
     
     // Update header status
     updateHeaderStatus('online', 'Connected');
@@ -257,10 +263,11 @@ async function registerDevice() {
       deviceId = data.device_id;
     }
 
-    document.getElementById('deviceName').textContent = deviceName;
-    document.getElementById('browserInfo').textContent = browserInfo;
-    document.getElementById('statusBadge').textContent = 'Online';
-    document.getElementById('statusBadge').className = 'status-badge online';
+    // Update UI elements (with null checks for missing elements)
+    const deviceNameEl = document.getElementById('deviceName');
+    const browserInfoEl = document.getElementById('browserInfo');
+    if (deviceNameEl) deviceNameEl.textContent = deviceName;
+    if (browserInfoEl) browserInfoEl.textContent = browserInfo;
 
     console.log('✅ Device registered:', deviceId);
 
@@ -272,7 +279,8 @@ async function registerDevice() {
 
   } catch (error) {
     console.error('Device registration failed:', error);
-    alert('Failed to register device: ' + error.message);
+    // Don't show alert - just log the error
+    throw error; // Re-throw so caller can handle it
   }
 }
 
@@ -586,8 +594,15 @@ async function startWebRTC() {
     // Handle connection state changes
     peerConnection.onconnectionstatechange = () => {
       console.log('Connection state:', peerConnection.connectionState);
-      document.getElementById('connectionStatus').textContent =
-        `Connection: ${peerConnection.connectionState}`;
+      const connStatusEl = document.getElementById('connectionStatus');
+      if (connStatusEl) {
+        connStatusEl.textContent = `Connection: ${peerConnection.connectionState}`;
+      }
+      // Update connection quality indicator
+      const qualityEl = document.getElementById('connectionQuality');
+      if (qualityEl) {
+        qualityEl.textContent = peerConnection.connectionState === 'connected' ? 'Excellent' : peerConnection.connectionState;
+      }
 
       if (peerConnection.connectionState === 'disconnected' ||
           peerConnection.connectionState === 'failed') {
@@ -763,7 +778,16 @@ supabase.auth.getSession().then(({ data: { session } }) => {
     registerDevice().then(() => {
       document.getElementById('loginSection').style.display = 'none';
       document.getElementById('deviceSection').style.display = 'block';
-      document.getElementById('userEmail').textContent = currentUser.email;
+      const userEmailEl = document.getElementById('userEmail');
+      if (userEmailEl) userEmailEl.textContent = currentUser.email;
+      updateHeaderStatus('online', 'Connected');
+    }).catch(err => {
+      console.error('Device registration error:', err);
+      // Still show device section even if registration fails
+      document.getElementById('loginSection').style.display = 'none';
+      document.getElementById('deviceSection').style.display = 'block';
+      const userEmailEl = document.getElementById('userEmail');
+      if (userEmailEl) userEmailEl.textContent = currentUser.email;
       updateHeaderStatus('online', 'Connected');
     });
   }
