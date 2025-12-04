@@ -37,7 +37,7 @@ async function login() {
   const password = document.getElementById('password').value;
 
   if (!email || !password) {
-    alert('Please enter both email and password');
+    showMessage('Please enter both email and password', 'error');
     return;
   }
 
@@ -61,13 +61,13 @@ async function login() {
 
     if (approvalError) {
       console.error('Error checking approval:', approvalError);
-      alert('Error checking account approval. Please contact support.');
+      showMessage('Error checking account approval. Please contact support.', 'error');
       await supabase.auth.signOut();
       return;
     }
 
     if (!approval || !approval.approved) {
-      alert('⏸️ Your account is pending approval.\n\nPlease wait for an administrator to approve your account before you can use the web agent.');
+      showMessage('⏸️ Your account is pending approval. Please wait for an administrator to approve your account.', 'error');
       await supabase.auth.signOut();
       return;
     }
@@ -85,8 +85,72 @@ async function login() {
 
   } catch (error) {
     console.error('Login error:', error);
-    alert('Login failed: ' + error.message);
+    showMessage('Login failed: ' + error.message, 'error');
   }
+}
+
+async function signup() {
+  const email = document.getElementById('signupEmail').value.trim();
+  const password = document.getElementById('signupPassword').value;
+  const passwordConfirm = document.getElementById('signupPasswordConfirm').value;
+
+  if (!email || !password) {
+    showMessage('Please enter email and password', 'error');
+    return;
+  }
+
+  if (password !== passwordConfirm) {
+    showMessage('Passwords do not match', 'error');
+    return;
+  }
+
+  if (password.length < 6) {
+    showMessage('Password must be at least 6 characters', 'error');
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password
+    });
+
+    if (error) throw error;
+
+    console.log('✅ Account created:', email);
+    showMessage('✅ Account created! Please wait for admin approval before logging in.', 'success');
+    
+    // Clear form and switch back to login after 3 seconds
+    document.getElementById('signupEmail').value = '';
+    document.getElementById('signupPassword').value = '';
+    document.getElementById('signupPasswordConfirm').value = '';
+    
+    setTimeout(() => {
+      showLogin();
+    }, 3000);
+
+  } catch (error) {
+    console.error('Signup error:', error);
+    showMessage('Signup failed: ' + error.message, 'error');
+  }
+}
+
+function showSignup() {
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('signupForm').style.display = 'block';
+  document.getElementById('authTitle').textContent = 'Create Account';
+  document.getElementById('authSubtitle').textContent = 'Register to share your screen';
+  document.getElementById('authToggleText').innerHTML = 'Already have an account? <a href="#" onclick="showLogin(); return false;" class="link-primary">Sign in</a>';
+  document.getElementById('loginMessage').style.display = 'none';
+}
+
+function showLogin() {
+  document.getElementById('signupForm').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'block';
+  document.getElementById('authTitle').textContent = 'Sign In';
+  document.getElementById('authSubtitle').textContent = 'Login to start sharing your screen';
+  document.getElementById('authToggleText').innerHTML = 'Don\'t have an account? <a href="#" onclick="showSignup(); return false;" class="link-primary">Create one</a>';
+  document.getElementById('loginMessage').style.display = 'none';
 }
 
 async function logout() {
@@ -674,6 +738,9 @@ function stopSessionTimer() {
 
 window.login = login;
 window.logout = logout;
+window.signup = signup;
+window.showSignup = showSignup;
+window.showLogin = showLogin;
 window.startSharing = startSharing;
 window.stopSharing = stopSharing;
 window.acceptSession = acceptSession;

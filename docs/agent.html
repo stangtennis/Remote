@@ -40,10 +40,11 @@
         <div class="card-icon">
           <i class="fas fa-user-shield"></i>
         </div>
-        <h2>Sign In</h2>
-        <p>Login to start sharing your screen</p>
+        <h2 id="authTitle">Sign In</h2>
+        <p id="authSubtitle">Login to start sharing your screen</p>
       </div>
 
+      <!-- Login Form -->
       <form id="loginForm" class="auth-form" onsubmit="event.preventDefault(); login();">
         <div class="input-group">
           <div class="input-icon">
@@ -65,8 +66,37 @@
         </button>
       </form>
 
+      <!-- Signup Form (hidden by default) -->
+      <form id="signupForm" class="auth-form" style="display: none;" onsubmit="event.preventDefault(); signup();">
+        <div class="input-group">
+          <div class="input-icon">
+            <i class="fas fa-envelope"></i>
+          </div>
+          <input type="email" id="signupEmail" placeholder="Email address" required autocomplete="email">
+        </div>
+
+        <div class="input-group">
+          <div class="input-icon">
+            <i class="fas fa-lock"></i>
+          </div>
+          <input type="password" id="signupPassword" placeholder="Password (min 6 characters)" required autocomplete="new-password" minlength="6">
+        </div>
+
+        <div class="input-group">
+          <div class="input-icon">
+            <i class="fas fa-lock"></i>
+          </div>
+          <input type="password" id="signupPasswordConfirm" placeholder="Confirm password" required autocomplete="new-password" minlength="6">
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-glow btn-block">
+          <i class="fas fa-user-plus"></i>
+          <span>Create Account</span>
+        </button>
+      </form>
+
       <div class="card-footer">
-        <p>Don't have an account? <a href="index.html" class="link-primary">Create one</a></p>
+        <p id="authToggleText">Don't have an account? <a href="#" onclick="showSignup(); return false;" class="link-primary">Create one</a></p>
       </div>
 
       <div id="loginMessage" class="message-box" style="display: none;"></div>
