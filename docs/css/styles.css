@@ -1809,6 +1809,58 @@ body::before {
   transform: translateY(-2px);
 }
 
+/* Admin Badge */
+.admin-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.2rem 0.5rem;
+  background: linear-gradient(135deg, #f59e0b 0%, #eab308 100%);
+  color: #1e293b;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+/* Make Admin Button */
+.admin-btn {
+  flex: 1;
+  padding: 0.625rem 1rem;
+  background: linear-gradient(135deg, #f59e0b 0%, #eab308 100%);
+  color: #1e293b;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.admin-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+}
+
+/* Revoke Admin Button */
+.revoke-admin-btn {
+  flex: 1;
+  padding: 0.625rem 1rem;
+  background: var(--danger-light);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.revoke-admin-btn:hover {
+  background: var(--danger);
+  color: white;
+  transform: translateY(-2px);
+}
+
 /* Admin Tabs Enhancement */
 .admin-tabs {
   display: flex;
