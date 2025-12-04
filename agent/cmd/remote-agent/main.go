@@ -14,6 +14,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/stangtennis/remote-agent/internal/auth"
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/desktop"
 	"github.com/stangtennis/remote-agent/internal/device"
@@ -46,10 +47,11 @@ const (
 )
 
 var (
-	cfg     *config.Config
-	dev     *device.Device
-	rtc     *webrtc.Manager
-	logFile *os.File
+	cfg         *config.Config
+	dev         *device.Device
+	rtc         *webrtc.Manager
+	logFile     *os.File
+	currentUser *auth.Credentials
 )
 
 func setupLogging() error {
@@ -620,6 +622,44 @@ func showServiceStatus() {
 }
 
 func runInteractive() {
+	// Check if already logged in
+	if !auth.IsLoggedIn() {
+		// Show login dialog
+		log.Println("🔐 Login required...")
+
+		// Load config for auth
+		tempCfg, err := config.Load()
+		if err != nil {
+			log.Fatalf("Failed to load config: %v", err)
+		}
+
+		authConfig := auth.AuthConfig{
+			SupabaseURL: tempCfg.SupabaseURL,
+			AnonKey:     tempCfg.SupabaseAnonKey,
+		}
+
+		result := auth.ShowLoginDialog(authConfig)
+		if result == nil || !result.Success {
+			log.Println("❌ Login cancelled or failed")
+			return
+		}
+
+		log.Printf("✅ Logged in as: %s", result.Email)
+	} else {
+		// Load existing credentials
+		creds, err := auth.GetCurrentUser()
+		if err != nil {
+			log.Println("⚠️  Could not load saved credentials, please login again")
+			auth.ClearCredentials()
+			runInteractive() // Retry with login
+			return
+		}
+		log.Printf("✅ Already logged in as: %s", creds.Email)
+	}
+
+	// Load current user credentials
+	currentUser, _ = auth.GetCurrentUser()
+
 	// Check current desktop (non-fatal if fails)
 	desktopName, err := desktop.GetInputDesktop()
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/stangtennis/remote-agent/internal/auth"
 	"github.com/stangtennis/remote-agent/internal/config"
 )
 
@@ -17,6 +18,7 @@ type Device struct {
 	RAMBytes int64
 	APIKey   string
 	cfg      *config.Config
+	userID   string
 }
 
 type RegisterResponse struct {
@@ -60,14 +62,22 @@ func New(cfg *config.Config) (*Device, error) {
 }
 
 func (d *Device) Register() error {
-	// Use new anonymous registration system
-	config := RegistrationConfig{
-		SupabaseURL: d.cfg.SupabaseURL,
-		AnonKey:     d.cfg.SupabaseAnonKey,
+	// Get current user credentials
+	creds, err := auth.GetCurrentUser()
+	if err != nil {
+		return fmt.Errorf("not logged in: %w", err)
 	}
 
-	// Register device anonymously
-	deviceInfo, err := RegisterDevice(config)
+	// Use authenticated registration
+	regConfig := RegistrationConfig{
+		SupabaseURL: d.cfg.SupabaseURL,
+		AnonKey:     d.cfg.SupabaseAnonKey,
+		AccessToken: creds.AccessToken,
+		UserID:      creds.UserID,
+	}
+
+	// Register device with user authentication
+	deviceInfo, err := RegisterDevice(regConfig)
 	if err != nil {
 		return fmt.Errorf("failed to register device: %w", err)
 	}
@@ -75,12 +85,12 @@ func (d *Device) Register() error {
 	// Update device info
 	d.ID = deviceInfo.DeviceID
 	d.Name = deviceInfo.DeviceName
+	d.userID = creds.UserID
 
 	fmt.Println("✅ Device registered successfully!")
 	fmt.Printf("   Device ID: %s\n", d.ID)
 	fmt.Printf("   Device Name: %s\n", d.Name)
-	fmt.Println("   ⏳ Waiting for admin to assign this device...")
-	fmt.Println("   💡 Admin can assign this device in the admin panel")
+	fmt.Printf("   Owner: %s\n", creds.Email)
 
 	return nil
 }
