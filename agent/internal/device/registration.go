@@ -13,6 +13,8 @@ import (
 type RegistrationConfig struct {
 	SupabaseURL string
 	AnonKey     string
+	AccessToken string // User's access token after login
+	UserID      string // User's ID after login
 }
 
 // DeviceInfo represents device information
@@ -47,17 +49,20 @@ func RegisterDevice(config RegistrationConfig) (*DeviceInfo, error) {
 	return device, nil
 }
 
-// upsertDevice registers device using Edge Function (better security)
+// upsertDevice registers device with user authentication
 func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
-	// Use Edge Function instead of direct DB access
-	edgeFunctionURL := fmt.Sprintf("%s/functions/v1/device-register", config.SupabaseURL)
-	
-	// Create payload for Edge Function
+	// Use direct REST API with user's access token for authenticated registration
+	url := fmt.Sprintf("%s/rest/v1/remote_devices", config.SupabaseURL)
+
+	// Create payload
 	payload := map[string]interface{}{
 		"device_id":   device.DeviceID,
 		"device_name": device.DeviceName,
 		"platform":    device.Platform,
-		"arch":        "amd64", // TODO: Get from runtime
+		"arch":        "amd64",
+		"owner_id":    config.UserID,
+		"is_online":   true,
+		"last_seen":   time.Now().Format(time.RFC3339),
 	}
 
 	jsonData, err := json.Marshal(payload)
@@ -65,36 +70,61 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", edgeFunctionURL, bytes.NewBuffer(jsonData))
+	// Try upsert
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("apikey", config.AnonKey)
-	req.Header.Set("Authorization", "Bearer "+config.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+config.AccessToken)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "resolution=merge-duplicates")
 
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to call Edge Function: %w", err)
+		return fmt.Errorf("failed to register device: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 
-	// Edge Function returns 201 for new registration, 200 for approved, 202 for pending
-	if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusAccepted {
-		var result map[string]interface{}
-		if err := json.Unmarshal(body, &result); err == nil {
-			if status, ok := result["status"].(string); ok {
-				if status == "pending_approval" {
-					fmt.Println("✅ Device registered successfully (awaiting approval)")
-				} else if status == "approved" {
-					fmt.Println("✅ Device registered and approved")
-				}
-			}
+	// Check for conflict (device exists) - try update instead
+	if resp.StatusCode == http.StatusConflict || resp.StatusCode == http.StatusBadRequest {
+		// Device exists, update it
+		updateURL := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, device.DeviceID)
+
+		updatePayload := map[string]interface{}{
+			"device_name": device.DeviceName,
+			"owner_id":    config.UserID,
+			"is_online":   true,
+			"last_seen":   time.Now().Format(time.RFC3339),
 		}
+
+		updateData, _ := json.Marshal(updatePayload)
+		updateReq, _ := http.NewRequest("PATCH", updateURL, bytes.NewBuffer(updateData))
+		updateReq.Header.Set("apikey", config.AnonKey)
+		updateReq.Header.Set("Authorization", "Bearer "+config.AccessToken)
+		updateReq.Header.Set("Content-Type", "application/json")
+
+		updateResp, err := client.Do(updateReq)
+		if err != nil {
+			return fmt.Errorf("failed to update device: %w", err)
+		}
+		defer updateResp.Body.Close()
+
+		if updateResp.StatusCode == http.StatusOK || updateResp.StatusCode == http.StatusNoContent {
+			fmt.Println("✅ Device updated successfully (already registered)")
+			return nil
+		}
+
+		updateBody, _ := io.ReadAll(updateResp.Body)
+		return fmt.Errorf("device update failed: %s (status: %d)", string(updateBody), updateResp.StatusCode)
+	}
+
+	if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
+		fmt.Println("✅ Device registered successfully")
 		return nil
 	}
 

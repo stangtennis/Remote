@@ -1,0 +1,46 @@
+2025/12/04 21:07:12.863142 ========================================
+2025/12/04 21:07:12.977012 🖥️  Remote Desktop Agent Starting...
+2025/12/04 21:07:12.977524 📦 Version: v2.3.0 (2025-11-25)
+2025/12/04 21:07:12.977599 📝 Log file: C:\Users\DennisAndersen\Downloads\agent.log
+2025/12/04 21:07:12.977599 ========================================
+2025/12/04 21:07:12.977599 🔧 Running in interactive mode
+2025/12/04 21:07:12.978109 🖥️  Current desktop: Default
+2025/12/04 21:07:12.978109 📱 Registering device...
+✅ Device updated successfully (already registered)
+✅ Device registered successfully!
+   Device ID: device_a7eba43fba079757b164b9ddc5dbba23
+   Device Name: DENNIS-B’RBAR
+   ⏳ Waiting for admin to assign this device...
+   💡 Admin can assign this device in the admin panel
+2025/12/04 21:07:13.048836 ✅ Device registered: device_a7eba43fba079757b164b9ddc5dbba23
+2025/12/04 21:07:13.048836    Name: DENNIS-B’RBAR
+2025/12/04 21:07:13.048836    Platform: windows
+2025/12/04 21:07:13.048836    Arch: amd64
+2025/12/04 21:07:13.048836 🖥️  Running on desktop: Default
+2025/12/04 21:07:13.082552 ✅ DXGI capturer ready: 1920x1080
+2025/12/04 21:07:13.089894 ✅ Screen capturer initialized: 1920x1080 (Session0: false)
+2025/12/04 21:07:13.089894 ✅ File transfer handler initialized: C:\Users\DennisAndersen\Downloads\RemoteDesktop
+2025/12/04 21:07:13.089894 👂 Listening for incoming connections...
+2025/12/04 21:07:13.090457 🔔 Starting system tray...
+2025/12/04 21:07:13.089894 👁️  Starting desktop change monitor...
+2025/12/04 21:07:13.090457 🔄 Session polling started (checking every 2 seconds)
+2025/12/04 21:07:13.091621 Desktop switched to: Default (type: 1)
+2025/12/04 21:08:01.095371 🔍 No pending sessions found for device: device_a7eba43fba079757b164b9ddc5dbba23
+2025/12/04 21:09:01.097859 🔍 No pending sessions found for device: device_a7eba43fba079757b164b9ddc5dbba23
+2025/12/04 21:10:01.096665 🔍 No pending sessions found for device: device_a7eba43fba079757b164b9ddc5dbba23
+
+
+Invoke-RestMethod -Uri "https://supabase.hawkeye123.dk/functions/v1/device-register" -Method POST -Headers @{"apikey"="REDACTED_JWT";"Content-Type"="application/json"} -Body '{"device_id":"laptop-test","device_name":"DENNIS-LAPTOP","platform":"windows","arch":"amd64"}'
+
+
+
+
+
+PS C:\Windows\system32> Invoke-RestMethod -Uri "https://supabase.hawkeye123.dk/functions/v1/device-register" -Method POST -Headers @{"apikey"="REDACTED_JWT";"Content-Type"="application/json"} -Body '{"device_id":"laptop-test","device_name":"DENNIS-LAPTOP","platform":"windows","arch":"amd64"}'
+
+status           message                                     device_id
+------           -------                                     ---------
+pending_approval Device registered. Awaiting owner approval. laptop-test
+
+
+PS C:\Windows\system32>
