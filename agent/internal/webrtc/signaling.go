@@ -727,12 +727,32 @@ func (m *Manager) sendICECandidate(candidate *webrtc.ICECandidate) {
 	url := m.cfg.SupabaseURL + "/rest/v1/session_signaling"
 
 	candidateInit := candidate.ToJSON()
+
+	// Build candidate object with required fields for browser compatibility
+	// Browser requires non-empty sdpMid and valid sdpMLineIndex
+	sdpMid := "0"
+	sdpMLineIndex := uint16(0)
+
+	// Use values from candidateInit if available and non-empty
+	if candidateInit.SDPMid != nil && *candidateInit.SDPMid != "" {
+		sdpMid = *candidateInit.SDPMid
+	}
+	if candidateInit.SDPMLineIndex != nil {
+		sdpMLineIndex = *candidateInit.SDPMLineIndex
+	}
+
+	candidateObj := map[string]interface{}{
+		"candidate":     candidateInit.Candidate,
+		"sdpMid":        sdpMid,
+		"sdpMLineIndex": sdpMLineIndex,
+	}
+
 	payload := map[string]interface{}{
 		"session_id": m.sessionID,
 		"from_side":  "agent",
 		"msg_type":   "ice",
 		"payload": map[string]interface{}{
-			"candidate": candidateInit,
+			"candidate": candidateObj,
 		},
 	}
 

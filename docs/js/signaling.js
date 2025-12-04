@@ -129,6 +129,12 @@ async function handleSignal(signal) {
   // Ignore our own signals
   if (signal.from_side === 'dashboard') return;
 
+  // Skip already processed signals (prevents duplicates from realtime + polling)
+  if (processedSignalIds.has(signal.id)) {
+    return;
+  }
+  processedSignalIds.add(signal.id);
+
   console.log('🔵 Processing signal:', signal.msg_type, 'from', signal.from_side);
 
   const peerConnection = window.peerConnection;
@@ -140,8 +146,11 @@ async function handleSignal(signal) {
   try {
     switch (signal.msg_type) {
       case 'answer':
-        // Dashboard sent answer (we're agent receiving)
-        // Payload has {type, sdp} structure
+        // Only set answer if we're in have-local-offer state
+        if (peerConnection.signalingState !== 'have-local-offer') {
+          console.log('⏭️ Skipping answer - already in state:', peerConnection.signalingState);
+          return;
+        }
         const answer = new RTCSessionDescription(signal.payload);
         await peerConnection.setRemoteDescription(answer);
         console.log('✅ Remote description set (answer)');
@@ -149,11 +158,12 @@ async function handleSignal(signal) {
 
       case 'ice':
         // Agent sent ICE candidate
-        // The payload IS the candidate object directly
-        if (signal.payload) {
-          console.log('📥 Received ICE candidate from agent:', signal.payload.type || 'candidate');
+        // The payload has { candidate: { candidate, sdpMid, sdpMLineIndex } }
+        const candidateData = signal.payload.candidate || signal.payload;
+        if (candidateData && candidateData.candidate) {
+          console.log('📥 Received ICE candidate from agent');
           await peerConnection.addIceCandidate(
-            new RTCIceCandidate(signal.payload)
+            new RTCIceCandidate(candidateData)
           );
           console.log('✅ ICE candidate added successfully');
         }
