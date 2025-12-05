@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package desktop
@@ -13,13 +14,13 @@ import (
 )
 
 var (
-	user32                   = windows.NewLazySystemDLL("user32.dll")
-	procGetThreadDesktop     = user32.NewProc("GetThreadDesktop")
+	user32                        = windows.NewLazySystemDLL("user32.dll")
+	procGetThreadDesktop          = user32.NewProc("GetThreadDesktop")
 	procGetUserObjectInformationW = user32.NewProc("GetUserObjectInformationW")
-	procOpenInputDesktop     = user32.NewProc("OpenInputDesktop")
-	procCloseDesktop         = user32.NewProc("CloseDesktop")
-	procSwitchDesktop        = user32.NewProc("SwitchDesktop")
-	procGetCurrentThreadId   = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetCurrentThreadId")
+	procOpenInputDesktop          = user32.NewProc("OpenInputDesktop")
+	procCloseDesktop              = user32.NewProc("CloseDesktop")
+	procSwitchDesktop             = user32.NewProc("SwitchDesktop")
+	procGetCurrentThreadId        = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetCurrentThreadId")
 )
 
 const (
@@ -29,10 +30,10 @@ const (
 type DesktopType int
 
 const (
-	DesktopUnknown DesktopType = iota
-	DesktopDefault              // Normal user desktop
-	DesktopWinlogon             // Windows login screen
-	DesktopScreenSaver          // Screen saver
+	DesktopUnknown     DesktopType = iota
+	DesktopDefault                 // Normal user desktop
+	DesktopWinlogon                // Windows login screen
+	DesktopScreenSaver             // Screen saver
 )
 
 // GetCurrentDesktop returns the name of the current desktop
@@ -53,8 +54,8 @@ func GetCurrentDesktop() (string, error) {
 // GetInputDesktop returns the name of the current input desktop
 func GetInputDesktop() (string, error) {
 	hDesktop, _, err := procOpenInputDesktop.Call(
-		0,     // dwFlags
-		0,     // fInherit
+		0,      // dwFlags
+		0,      // fInherit
 		0x0001, // DESKTOP_READOBJECTS
 	)
 	if hDesktop == 0 {
@@ -123,40 +124,55 @@ func IsOnLoginScreen() bool {
 // MonitorDesktopSwitch monitors for desktop changes
 func MonitorDesktopSwitch(onChange func(DesktopType)) {
 	var currentDesktop string
-	
+
 	for {
 		desktop, err := GetInputDesktop()
 		if err == nil && desktop != currentDesktop {
 			currentDesktop = desktop
 			desktopType := GetDesktopType(desktop)
-			
+
 			log.Printf("Desktop switched to: %s (type: %d)", desktop, desktopType)
 			if onChange != nil {
 				onChange(desktopType)
 			}
 		}
-		
+
 		// Check every 2 seconds
 		time.Sleep(2 * time.Second)
 	}
 }
 
-// SwitchToInputDesktop switches the thread to the input desktop
+var (
+	procSetThreadDesktop = user32.NewProc("SetThreadDesktop")
+)
+
+// SwitchToInputDesktop switches the current thread to the input desktop
+// This is required for Session 0 / login screen interaction
 func SwitchToInputDesktop() error {
+	// Open the input desktop with full access
 	hDesktop, _, err := procOpenInputDesktop.Call(
-		0,      // dwFlags
-		0,      // fInherit
-		0x01FF, // GENERIC_ALL
+		0,          // dwFlags
+		uintptr(1), // fInherit = TRUE
+		0x0001|0x0002|0x0004| // DESKTOP_READOBJECTS | DESKTOP_CREATEWINDOW | DESKTOP_CREATEMENU
+			0x0008|0x0010|0x0020| // DESKTOP_HOOKCONTROL | DESKTOP_JOURNALRECORD | DESKTOP_JOURNALPLAYBACK
+			0x0040|0x0080|0x0100, // DESKTOP_ENUMERATE | DESKTOP_WRITEOBJECTS | DESKTOP_SWITCHDESKTOP
 	)
 	if hDesktop == 0 {
 		return fmt.Errorf("failed to open input desktop: %w", err)
 	}
 
-	ret, _, err := procSwitchDesktop.Call(hDesktop)
+	// Set this thread's desktop to the input desktop
+	ret, _, err := procSetThreadDesktop.Call(hDesktop)
 	if ret == 0 {
-		procCloseDesktop.Call(hDesktop)
-		return fmt.Errorf("failed to switch desktop: %w", err)
+		// SetThreadDesktop failed - this can happen if thread has windows
+		// Try SwitchDesktop instead
+		ret, _, err = procSwitchDesktop.Call(hDesktop)
+		if ret == 0 {
+			procCloseDesktop.Call(hDesktop)
+			return fmt.Errorf("failed to switch desktop: %w", err)
+		}
 	}
 
+	// Don't close the desktop handle - we need it for the thread
 	return nil
 }

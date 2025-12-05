@@ -329,6 +329,13 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 		return
 	}
 
+	// Switch to input desktop before handling input (required for Session 0 / login screen)
+	if m.isSession0 {
+		if err := desktop.SwitchToInputDesktop(); err != nil {
+			log.Printf("⚠️  Failed to switch to input desktop: %v", err)
+		}
+	}
+
 	switch eventType {
 	case "mouse_move":
 		x, _ := event["x"].(float64)
