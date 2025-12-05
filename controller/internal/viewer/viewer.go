@@ -405,19 +405,31 @@ func (v *Viewer) SetOnFileTransfer(callback func()) {
 	v.onFileTransfer = callback
 }
 
-// startCanvasRefreshLoop periodically refreshes the canvas to handle minimize/restore
+// startCanvasRefreshLoop periodically checks if canvas needs refresh (for minimize/restore)
 func (v *Viewer) startCanvasRefreshLoop() {
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
+	var lastRefreshTime time.Time
+
 	for range ticker.C {
-		// Only refresh if connected and we have a cached frame
+		// Only do periodic refresh if connected and we have a cached frame
+		// and it's been more than 1 second since last normal frame update
 		if v.connected && v.lastFrame != nil {
-			fyne.Do(func() {
-				// Force refresh the canvas with the latest frame
-				v.videoCanvas.Image = v.lastFrame
-				v.videoCanvas.Refresh()
-			})
+			// Check if canvas image is nil or stale (window was minimized)
+			if v.videoCanvas.Image == nil {
+				fyne.Do(func() {
+					v.videoCanvas.Image = v.lastFrame
+					v.videoCanvas.Refresh()
+				})
+				lastRefreshTime = time.Now()
+			} else if time.Since(lastRefreshTime) > 2*time.Second {
+				// Periodic refresh to ensure canvas stays updated
+				fyne.Do(func() {
+					v.videoCanvas.Refresh()
+				})
+				lastRefreshTime = time.Now()
+			}
 		}
 	}
 }
