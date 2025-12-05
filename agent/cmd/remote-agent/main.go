@@ -45,6 +45,15 @@ const (
 	IDCANCEL           = 2
 	IDYES              = 6
 	IDNO               = 7
+
+	// Menu options
+	MENU_LOGIN           = 1
+	MENU_INSTALL_SERVICE = 2
+	MENU_UNINSTALL       = 3
+	MENU_RUN_ONCE        = 4
+	MENU_UPDATE          = 5
+	MENU_LOGOUT          = 6
+	MENU_EXIT            = 7
 )
 
 var (
@@ -293,123 +302,88 @@ func main() {
 
 // showStartupDialog shows the main startup dialog with options
 func showStartupDialog() {
-	// Check if service is already installed
+	// Check login status
+	isLoggedIn := auth.IsLoggedIn()
+	var userEmail string
+	if isLoggedIn {
+		if creds, err := auth.GetCurrentUser(); err == nil {
+			userEmail = creds.Email
+		}
+	}
+
+	// Check service status
 	serviceInstalled := isServiceInstalled()
 	serviceRunning := false
-
 	if serviceInstalled {
 		serviceRunning = isServiceRunning()
 	}
 
-	var message string
-	var choice int
+	// Build status message
+	statusLine := ""
+	if isLoggedIn {
+		statusLine = "👤 Logged in as: " + userEmail + "\n"
+	} else {
+		statusLine = "⚠️ Not logged in\n"
+	}
 
 	if serviceRunning {
-		// Service is running - offer to manage it
-		message = "Remote Desktop Agent v" + tray.VersionString + "\n\n" +
-			"✅ Service is RUNNING\n\n" +
-			"The agent is running as a Windows Service.\n" +
-			"It will start automatically when Windows boots.\n\n" +
-			"What would you like to do?\n\n" +
-			"YES = Stop and uninstall service\n" +
-			"NO = Keep running (close this dialog)"
-
-		choice = messageBox("Remote Desktop Agent", message, MB_YESNO|MB_ICONINFORMATION)
-
-		if choice == IDYES {
-			if !isAdmin() {
-				messageBox("Administrator Required",
-					"Please click OK to restart as Administrator.", MB_OK|MB_ICONWARNING)
-				runAsAdmin()
-				return
-			}
-
-			if err := stopService(); err != nil {
-				messageBox("Error", "Failed to stop service: "+err.Error(), MB_OK|MB_ICONERROR)
-				return
-			}
-			if err := uninstallService(); err != nil {
-				messageBox("Error", "Failed to uninstall service: "+err.Error(), MB_OK|MB_ICONERROR)
-				return
-			}
-			messageBox("Success", "✅ Service stopped and uninstalled.\n\nYou can run the agent again to reinstall.", MB_OK|MB_ICONINFORMATION)
-		}
-		return
-
+		statusLine += "✅ Service: RUNNING\n"
 	} else if serviceInstalled {
-		// Service installed but not running
-		message = "Remote Desktop Agent v" + tray.VersionString + "\n\n" +
-			"⚠️ Service is INSTALLED but STOPPED\n\n" +
-			"What would you like to do?\n\n" +
-			"YES = Start the service\n" +
-			"NO = Uninstall the service"
-
-		choice = messageBox("Remote Desktop Agent", message, MB_YESNO|MB_ICONWARNING)
-
-		if choice == IDYES {
-			if err := startService(); err != nil {
-				messageBox("Error", "Failed to start service: "+err.Error(), MB_OK|MB_ICONERROR)
-				return
-			}
-			messageBox("Success", "✅ Service started!\n\nThe agent is now running in the background.", MB_OK|MB_ICONINFORMATION)
-		} else {
-			if !isAdmin() {
-				messageBox("Administrator Required",
-					"Please click OK to restart as Administrator.", MB_OK|MB_ICONWARNING)
-				runAsAdmin()
-				return
-			}
-			if err := uninstallService(); err != nil {
-				messageBox("Error", "Failed to uninstall service: "+err.Error(), MB_OK|MB_ICONERROR)
-				return
-			}
-			messageBox("Success", "✅ Service uninstalled.", MB_OK|MB_ICONINFORMATION)
-		}
-		return
-
+		statusLine += "⏸️ Service: STOPPED\n"
 	} else {
-		// Service not installed - offer to install or run interactively
-		message = "Remote Desktop Agent v" + tray.VersionString + "\n\n" +
-			"How would you like to run the agent?\n\n" +
-			"YES = Install as Windows Service (recommended)\n" +
-			"        • Starts automatically with Windows\n" +
-			"        • Works on login screen\n" +
-			"        • Runs in background\n\n" +
-			"NO = Run interactively (this session only)\n" +
-			"        • Shows system tray icon\n" +
-			"        • Stops when you log out"
+		statusLine += "❌ Service: Not installed\n"
+	}
 
-		choice = messageBox("Remote Desktop Agent", message, MB_YESNO|MB_ICONQUESTION)
+	// Show main menu
+	for {
+		menuOptions := buildMenuOptions(isLoggedIn, serviceInstalled, serviceRunning)
 
-		if choice == IDYES {
-			// Install as service
-			if !isAdmin() {
-				messageBox("Administrator Required",
-					"Installing as a service requires Administrator privileges.\n\n"+
-						"Click OK to restart as Administrator.", MB_OK|MB_ICONWARNING)
-				runAsAdmin()
-				return
+		message := "Remote Desktop Agent v" + tray.VersionString + "\n\n" +
+			statusLine + "\n" +
+			"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
+			menuOptions + "\n\n" +
+			"Enter number (or Cancel to exit):"
+
+		// Use input dialog
+		choice := showInputDialog("Remote Desktop Agent", message)
+
+		if choice == "" || choice == "0" {
+			return // Exit
+		}
+
+		action := handleMenuChoice(choice, isLoggedIn, serviceInstalled, serviceRunning)
+
+		if action == "refresh" {
+			// Refresh status
+			isLoggedIn = auth.IsLoggedIn()
+			if isLoggedIn {
+				if creds, err := auth.GetCurrentUser(); err == nil {
+					userEmail = creds.Email
+				}
+			} else {
+				userEmail = ""
+			}
+			serviceInstalled = isServiceInstalled()
+			if serviceInstalled {
+				serviceRunning = isServiceRunning()
+			} else {
+				serviceRunning = false
 			}
 
-			if err := installService(); err != nil {
-				messageBox("Error", "Failed to install service:\n\n"+err.Error(), MB_OK|MB_ICONERROR)
-				return
+			// Update status line
+			if isLoggedIn {
+				statusLine = "👤 Logged in as: " + userEmail + "\n"
+			} else {
+				statusLine = "⚠️ Not logged in\n"
 			}
-
-			if err := startService(); err != nil {
-				messageBox("Warning", "Service installed but failed to start:\n\n"+err.Error(), MB_OK|MB_ICONWARNING)
-				return
+			if serviceRunning {
+				statusLine += "✅ Service: RUNNING\n"
+			} else if serviceInstalled {
+				statusLine += "⏸️ Service: STOPPED\n"
+			} else {
+				statusLine += "❌ Service: Not installed\n"
 			}
-
-			messageBox("Success",
-				"✅ Service installed and started!\n\n"+
-					"The Remote Desktop Agent is now running as a Windows Service.\n\n"+
-					"• It will start automatically when Windows boots\n"+
-					"• It can capture the login screen\n"+
-					"• Run this exe again to manage the service", MB_OK|MB_ICONINFORMATION)
-			return
-
-		} else {
+		} else if action == "run_interactive" {
 			// Run interactively
 			if err := setupLogging(); err != nil {
 				messageBox("Error", "Failed to setup logging: "+err.Error(), MB_OK|MB_ICONERROR)
@@ -422,8 +396,317 @@ func showStartupDialog() {
 			}()
 			log.Println("🔧 Running in interactive mode")
 			runInteractive()
+			return
+		} else if action == "exit" {
+			return
 		}
 	}
+}
+
+// buildMenuOptions builds the menu based on current state
+func buildMenuOptions(isLoggedIn, serviceInstalled, serviceRunning bool) string {
+	options := ""
+	num := 1
+
+	if !isLoggedIn {
+		options += fmt.Sprintf("[%d] 🔑 Login\n", num)
+		num++
+	}
+
+	if isLoggedIn {
+		if !serviceInstalled {
+			options += fmt.Sprintf("[%d] 📦 Install as Service (recommended)\n", num)
+			num++
+			options += fmt.Sprintf("[%d] ▶️ Run Once (this session only)\n", num)
+			num++
+		} else if !serviceRunning {
+			options += fmt.Sprintf("[%d] ▶️ Start Service\n", num)
+			num++
+			options += fmt.Sprintf("[%d] 🗑️ Uninstall Service\n", num)
+			num++
+		} else {
+			options += fmt.Sprintf("[%d] ⏹️ Stop Service\n", num)
+			num++
+			options += fmt.Sprintf("[%d] 🗑️ Uninstall Service\n", num)
+			num++
+		}
+
+		options += fmt.Sprintf("[%d] 🔄 Check for Updates\n", num)
+		num++
+		options += fmt.Sprintf("[%d] 🚪 Logout / Switch Account\n", num)
+		num++
+	}
+
+	options += fmt.Sprintf("[0] ❌ Exit")
+	return options
+}
+
+// handleMenuChoice processes the user's menu selection
+func handleMenuChoice(choice string, isLoggedIn, serviceInstalled, serviceRunning bool) string {
+	// Map choice to action based on current state
+	num := 1
+
+	if !isLoggedIn {
+		if choice == fmt.Sprintf("%d", num) {
+			// Login
+			doLogin()
+			return "refresh"
+		}
+		num++
+	}
+
+	if isLoggedIn {
+		if !serviceInstalled {
+			if choice == fmt.Sprintf("%d", num) {
+				// Install service
+				doInstallService()
+				return "refresh"
+			}
+			num++
+			if choice == fmt.Sprintf("%d", num) {
+				// Run once
+				return "run_interactive"
+			}
+			num++
+		} else if !serviceRunning {
+			if choice == fmt.Sprintf("%d", num) {
+				// Start service
+				if err := startService(); err != nil {
+					messageBox("Error", "Failed to start service: "+err.Error(), MB_OK|MB_ICONERROR)
+				} else {
+					messageBox("Success", "✅ Service started!", MB_OK|MB_ICONINFORMATION)
+				}
+				return "refresh"
+			}
+			num++
+			if choice == fmt.Sprintf("%d", num) {
+				// Uninstall
+				doUninstallService()
+				return "refresh"
+			}
+			num++
+		} else {
+			if choice == fmt.Sprintf("%d", num) {
+				// Stop service
+				if err := stopService(); err != nil {
+					messageBox("Error", "Failed to stop service: "+err.Error(), MB_OK|MB_ICONERROR)
+				} else {
+					messageBox("Success", "✅ Service stopped!", MB_OK|MB_ICONINFORMATION)
+				}
+				return "refresh"
+			}
+			num++
+			if choice == fmt.Sprintf("%d", num) {
+				// Uninstall
+				doUninstallService()
+				return "refresh"
+			}
+			num++
+		}
+
+		if choice == fmt.Sprintf("%d", num) {
+			// Check for updates
+			doCheckUpdates()
+			return "refresh"
+		}
+		num++
+		if choice == fmt.Sprintf("%d", num) {
+			// Logout
+			if err := auth.ClearCredentials(); err != nil {
+				messageBox("Error", "Failed to logout: "+err.Error(), MB_OK|MB_ICONERROR)
+			} else {
+				messageBox("Success", "✅ Logged out successfully!", MB_OK|MB_ICONINFORMATION)
+			}
+			return "refresh"
+		}
+		num++
+	}
+
+	return "refresh"
+}
+
+// showInputDialog shows an input dialog and returns the user's input
+func showInputDialog(title, message string) string {
+	// Windows doesn't have a native input dialog, so we use a series of Yes/No dialogs
+	// For simplicity, show numbered options and use Yes/No to navigate
+
+	// Show the menu and ask for first digit
+	result := messageBox(title, message+"\n\nClick YES for option 1, NO for other options", MB_YESNO|MB_ICONQUESTION)
+
+	if result == IDYES {
+		return "1"
+	}
+
+	// Ask for next option
+	result = messageBox(title, "Option 2?\n\nYES = Select option 2\nNO = More options", MB_YESNO|MB_ICONQUESTION)
+	if result == IDYES {
+		return "2"
+	}
+
+	result = messageBox(title, "Option 3?\n\nYES = Select option 3\nNO = More options", MB_YESNO|MB_ICONQUESTION)
+	if result == IDYES {
+		return "3"
+	}
+
+	result = messageBox(title, "Option 4?\n\nYES = Select option 4\nNO = More options", MB_YESNO|MB_ICONQUESTION)
+	if result == IDYES {
+		return "4"
+	}
+
+	result = messageBox(title, "Option 5?\n\nYES = Select option 5\nNO = Exit", MB_YESNO|MB_ICONQUESTION)
+	if result == IDYES {
+		return "5"
+	}
+
+	return "0" // Exit
+}
+
+// doLogin handles the login process
+func doLogin() {
+	// Load config for Supabase credentials
+	cfg, err := config.Load()
+	if err != nil {
+		messageBox("Error", "Failed to load config: "+err.Error(), MB_OK|MB_ICONERROR)
+		return
+	}
+
+	// Get email
+	email := showTextInputDialog("Login - Email", "Enter your email address:")
+	if email == "" {
+		return
+	}
+
+	// Get password
+	password := showTextInputDialog("Login - Password", "Enter your password:")
+	if password == "" {
+		return
+	}
+
+	// Attempt login
+	authConfig := auth.AuthConfig{
+		SupabaseURL: cfg.SupabaseURL,
+		AnonKey:     cfg.SupabaseAnonKey,
+	}
+
+	result, err := auth.Login(authConfig, email, password)
+	if err != nil {
+		messageBox("Login Failed", "Error: "+err.Error(), MB_OK|MB_ICONERROR)
+		return
+	}
+
+	if !result.Success {
+		messageBox("Login Failed", result.Message, MB_OK|MB_ICONWARNING)
+		return
+	}
+
+	messageBox("Login Successful", "✅ Welcome, "+result.Email+"!\n\nYou can now install the service.", MB_OK|MB_ICONINFORMATION)
+}
+
+// showTextInputDialog shows a simple text input dialog using PowerShell
+func showTextInputDialog(title, prompt string) string {
+	// Since Windows MessageBox doesn't support text input,
+	// we'll use PowerShell's InputBox
+
+	// Escape single quotes in prompt and title
+	escapedPrompt := escapeForPowerShell(prompt)
+	escapedTitle := escapeForPowerShell(title)
+
+	psScript := fmt.Sprintf(`
+Add-Type -AssemblyName Microsoft.VisualBasic
+[Microsoft.VisualBasic.Interaction]::InputBox('%s', '%s', '')
+`, escapedPrompt, escapedTitle)
+
+	cmd := exec.Command("powershell", "-Command", psScript)
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+
+	// Trim whitespace and newlines
+	result := string(output)
+	// Remove trailing \r\n if present
+	for len(result) > 0 && (result[len(result)-1] == '\n' || result[len(result)-1] == '\r') {
+		result = result[:len(result)-1]
+	}
+	return result
+}
+
+// escapeForPowerShell escapes single quotes for PowerShell strings
+func escapeForPowerShell(s string) string {
+	result := ""
+	for _, c := range s {
+		if c == '\'' {
+			result += "''"
+		} else {
+			result += string(c)
+		}
+	}
+	return result
+}
+
+// doInstallService handles service installation
+func doInstallService() {
+	if !isAdmin() {
+		messageBox("Administrator Required",
+			"Installing as a service requires Administrator privileges.\n\n"+
+				"Click OK to restart as Administrator.", MB_OK|MB_ICONWARNING)
+		runAsAdmin()
+		return
+	}
+
+	if err := installService(); err != nil {
+		messageBox("Error", "Failed to install service:\n\n"+err.Error(), MB_OK|MB_ICONERROR)
+		return
+	}
+
+	if err := startService(); err != nil {
+		messageBox("Warning", "Service installed but failed to start:\n\n"+err.Error(), MB_OK|MB_ICONWARNING)
+		return
+	}
+
+	messageBox("Success",
+		"✅ Service installed and started!\n\n"+
+			"The Remote Desktop Agent is now running as a Windows Service.\n\n"+
+			"• It will start automatically when Windows boots\n"+
+			"• It can capture the login screen\n"+
+			"• Run this exe again to manage the service", MB_OK|MB_ICONINFORMATION)
+}
+
+// doUninstallService handles service uninstallation
+func doUninstallService() {
+	if !isAdmin() {
+		messageBox("Administrator Required",
+			"Please click OK to restart as Administrator.", MB_OK|MB_ICONWARNING)
+		runAsAdmin()
+		return
+	}
+
+	// Stop first if running
+	if isServiceRunning() {
+		if err := stopService(); err != nil {
+			messageBox("Error", "Failed to stop service: "+err.Error(), MB_OK|MB_ICONERROR)
+			return
+		}
+	}
+
+	if err := uninstallService(); err != nil {
+		messageBox("Error", "Failed to uninstall service: "+err.Error(), MB_OK|MB_ICONERROR)
+		return
+	}
+
+	messageBox("Success", "✅ Service uninstalled.", MB_OK|MB_ICONINFORMATION)
+}
+
+// doCheckUpdates checks for updates from GitHub
+func doCheckUpdates() {
+	messageBox("Check for Updates",
+		"To update the agent:\n\n"+
+			"1. Download the latest version from:\n"+
+			"   https://github.com/stangtennis/Remote/releases\n\n"+
+			"2. Stop the current service (if running)\n"+
+			"3. Replace this exe with the new one\n"+
+			"4. Start the service again\n\n"+
+			"Current version: v"+tray.VersionString, MB_OK|MB_ICONINFORMATION)
 }
 
 // isServiceInstalled checks if the service is installed
