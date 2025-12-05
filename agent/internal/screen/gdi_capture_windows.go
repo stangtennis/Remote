@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package screen
@@ -17,15 +18,33 @@ typedef struct {
     BITMAPINFO bmi;
 } GDICapture;
 
+// Switch to input desktop before capture (for Session 0 support)
+int SwitchToInputDesktopGDI() {
+    HDESK hDesk = OpenInputDesktop(0, TRUE,
+        DESKTOP_READOBJECTS | DESKTOP_CREATEWINDOW | DESKTOP_CREATEMENU |
+        DESKTOP_HOOKCONTROL | DESKTOP_JOURNALRECORD | DESKTOP_JOURNALPLAYBACK |
+        DESKTOP_ENUMERATE | DESKTOP_WRITEOBJECTS | DESKTOP_SWITCHDESKTOP);
+    if (!hDesk) {
+        return 0;
+    }
+
+    BOOL result = SetThreadDesktop(hDesk);
+    // Don't close the desktop handle - we need it
+    return result ? 1 : 0;
+}
+
 GDICapture* InitGDI() {
+    // Switch to input desktop first (required for Session 0 / login screen)
+    SwitchToInputDesktopGDI();
+
     // Get screen dimensions
     int width = GetSystemMetrics(SM_CXSCREEN);
     int height = GetSystemMetrics(SM_CYSCREEN);
-    
+
     if (width == 0 || height == 0) {
         return NULL;
     }
-    
+
     // Create screen DC using DISPLAY driver (more reliable than GetDC)
     HDC screenDC = CreateDC("DISPLAY", NULL, NULL, NULL);
     if (!screenDC) {
@@ -35,14 +54,14 @@ GDICapture* InitGDI() {
             return NULL;
         }
     }
-    
+
     // Create compatible DC
     HDC memDC = CreateCompatibleDC(screenDC);
     if (!memDC) {
         DeleteDC(screenDC);  // Use DeleteDC instead of ReleaseDC for CreateDC
         return NULL;
     }
-    
+
     // Create compatible bitmap
     HBITMAP bitmap = CreateCompatibleBitmap(screenDC, width, height);
     if (!bitmap) {
@@ -50,10 +69,10 @@ GDICapture* InitGDI() {
         DeleteDC(screenDC);
         return NULL;
     }
-    
+
     // Select bitmap into DC
     SelectObject(memDC, bitmap);
-    
+
     // Allocate structure
     GDICapture* cap = (GDICapture*)malloc(sizeof(GDICapture));
     cap->width = width;
@@ -61,7 +80,7 @@ GDICapture* InitGDI() {
     cap->screenDC = screenDC;
     cap->memDC = memDC;
     cap->bitmap = bitmap;
-    
+
     // Setup BITMAPINFO for GetDIBits
     ZeroMemory(&cap->bmi, sizeof(BITMAPINFO));
     cap->bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -70,7 +89,7 @@ GDICapture* InitGDI() {
     cap->bmi.bmiHeader.biPlanes = 1;
     cap->bmi.bmiHeader.biBitCount = 32; // BGRA
     cap->bmi.bmiHeader.biCompression = BI_RGB;
-    
+
     return cap;
 }
 
@@ -78,37 +97,40 @@ int CaptureGDI(GDICapture* cap, unsigned char* buffer, int bufferSize) {
     if (!cap || !buffer) {
         return -1;
     }
-    
+
     int expectedSize = cap->width * cap->height * 4;
     if (bufferSize < expectedSize) {
         return -2;
     }
-    
+
+    // Switch to input desktop before each capture (handles desktop switches)
+    SwitchToInputDesktopGDI();
+
     // Direct BitBlt from screen DC to memory DC
     // SRCCOPY | CAPTUREBLT ensures we capture layered windows
-    if (!BitBlt(cap->memDC, 0, 0, cap->width, cap->height, 
+    if (!BitBlt(cap->memDC, 0, 0, cap->width, cap->height,
                 cap->screenDC, 0, 0, SRCCOPY | CAPTUREBLT)) {
         // Get last error for debugging
         DWORD error = GetLastError();
         return -3;
     }
-    
+
     // Get bitmap bits
-    if (!GetDIBits(cap->memDC, cap->bitmap, 0, cap->height, 
+    if (!GetDIBits(cap->memDC, cap->bitmap, 0, cap->height,
                    buffer, &cap->bmi, DIB_RGB_COLORS)) {
         return -4;
     }
-    
+
     return 0;
 }
 
 void CloseGDI(GDICapture* cap) {
     if (!cap) return;
-    
+
     if (cap->bitmap) DeleteObject(cap->bitmap);
     if (cap->memDC) DeleteDC(cap->memDC);
     if (cap->screenDC) DeleteDC(cap->screenDC);  // Use DeleteDC for CreateDC
-    
+
     free(cap);
 }
 */
@@ -134,7 +156,7 @@ func NewGDICapturer() (*GDICapturer, error) {
 	}
 
 	cap := (*C.GDICapture)(handle)
-	
+
 	return &GDICapturer{
 		handle: unsafe.Pointer(handle),
 		width:  int(cap.width),
