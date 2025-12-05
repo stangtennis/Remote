@@ -113,6 +113,12 @@ func isAdmin() bool {
 	return err == nil
 }
 
+// askYesNo prompts the user for a yes/no answer
+func askYesNo(question string) bool {
+	result := messageBox("Remote Desktop Agent", question, MB_YESNO|MB_ICONQUESTION)
+	return result == IDYES
+}
+
 // setupFirewallRules adds Windows Firewall rules to allow the agent
 func setupFirewallRules() {
 	exePath, err := os.Executable()
@@ -487,8 +493,34 @@ func installService() error {
 	// Check if service already exists
 	s, err := m.OpenService(serviceName)
 	if err == nil {
+		// Service exists - check if it's a different executable
+		cfg, err := s.Config()
 		s.Close()
-		return fmt.Errorf("service %s already exists - use -uninstall first", serviceName)
+
+		if err == nil && cfg.BinaryPathName != exePath {
+			fmt.Println("⚠️  Service already exists with different executable:")
+			fmt.Printf("   Current: %s\n", cfg.BinaryPathName)
+			fmt.Printf("   New:     %s\n", exePath)
+			fmt.Println()
+
+			// Ask user if they want to upgrade
+			if askYesNo("Do you want to upgrade to the new version?") {
+				fmt.Println("🔄 Upgrading service...")
+				if err := uninstallService(); err != nil {
+					return fmt.Errorf("failed to uninstall old service: %w", err)
+				}
+				// Reconnect after uninstall
+				m, err = mgr.Connect()
+				if err != nil {
+					return fmt.Errorf("failed to reconnect to service manager: %w", err)
+				}
+				defer m.Disconnect()
+			} else {
+				return fmt.Errorf("service upgrade cancelled")
+			}
+		} else {
+			return fmt.Errorf("service %s already exists - use -uninstall first", serviceName)
+		}
 	}
 
 	// Create the service
