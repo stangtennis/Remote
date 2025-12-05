@@ -23,6 +23,18 @@ echo ✅ GCC found
 REM Enable CGO
 set CGO_ENABLED=1
 
+REM Generate resource file with manifest (requires rsrc)
+echo.
+echo 🔧 Generating Windows resource file with admin manifest...
+cd /d "%~dp0\cmd\remote-agent"
+del /f rsrc.syso 2>nul
+del /f resource.syso 2>nul
+rsrc -manifest remote-agent.manifest -arch amd64 -o rsrc.syso 2>nul || (
+    echo ⚠️ rsrc not found, installing...
+    go install github.com/akavel/rsrc@latest
+    rsrc -manifest remote-agent.manifest -arch amd64 -o rsrc.syso
+)
+
 REM Build the agent
 echo.
 echo 🔧 Building with CGO_ENABLED=1...
