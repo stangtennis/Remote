@@ -151,7 +151,7 @@ func (v *Viewer) handleVideoFrame(frameData []byte) {
 	// Decode JPEG frame
 	img, err := jpeg.Decode(bytes.NewReader(frameData))
 	if err != nil {
-		log.Printf("⚠️  Failed to decode frame: %v", err)
+		log.Printf("⚠️  Failed to decode frame (%d bytes): %v", len(frameData), err)
 		return
 	}
 
