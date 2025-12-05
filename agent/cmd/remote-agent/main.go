@@ -816,6 +816,33 @@ func startAgent() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Check and refresh credentials if needed (important for service mode)
+	if !auth.IsLoggedIn() {
+		log.Println("⚠️  No valid credentials found")
+		// Try to refresh token
+		creds, err := auth.LoadCredentials()
+		if err == nil && creds.RefreshToken != "" {
+			log.Println("🔄 Attempting to refresh token...")
+			authConfig := auth.AuthConfig{
+				SupabaseURL: cfg.SupabaseURL,
+				AnonKey:     cfg.SupabaseAnonKey,
+			}
+			result, err := auth.RefreshToken(authConfig, creds.RefreshToken)
+			if err == nil && result.Success {
+				log.Printf("✅ Token refreshed for: %s", result.Email)
+				currentUser, _ = auth.GetCurrentUser()
+			} else {
+				log.Println("❌ Token refresh failed - please run agent interactively to login")
+				return fmt.Errorf("authentication required - run agent interactively first")
+			}
+		} else {
+			return fmt.Errorf("no credentials found - run agent interactively to login first")
+		}
+	} else {
+		currentUser, _ = auth.GetCurrentUser()
+		log.Printf("✅ Using saved credentials for: %s", currentUser.Email)
+	}
+
 	// Initialize device
 	dev, err = device.New(cfg)
 	if err != nil {

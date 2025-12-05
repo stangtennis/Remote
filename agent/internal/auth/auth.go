@@ -168,7 +168,18 @@ func CheckUserApproval(config AuthConfig, accessToken, userID string) (bool, err
 }
 
 // GetCredentialsPath returns the path to the credentials file
+// Uses ProgramData for service compatibility (accessible by SYSTEM account)
 func GetCredentialsPath() string {
+	// Try ProgramData first (works for services)
+	programData := os.Getenv("ProgramData")
+	if programData != "" {
+		credDir := filepath.Join(programData, "RemoteDesktopAgent")
+		// Create directory if it doesn't exist
+		os.MkdirAll(credDir, 0755)
+		return filepath.Join(credDir, ".credentials")
+	}
+
+	// Fallback to exe directory
 	exePath, _ := os.Executable()
 	exeDir := filepath.Dir(exePath)
 	return filepath.Join(exeDir, ".credentials")
