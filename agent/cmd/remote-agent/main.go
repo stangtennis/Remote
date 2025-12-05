@@ -196,6 +196,7 @@ func main() {
 	startFlag := flag.Bool("start", false, "Start the Windows Service")
 	stopFlag := flag.Bool("stop", false, "Stop the Windows Service")
 	statusFlag := flag.Bool("status", false, "Show service status")
+	logoutFlag := flag.Bool("logout", false, "Log out and clear saved credentials")
 	helpFlag := flag.Bool("help", false, "Show help")
 	silentFlag := flag.Bool("silent", false, "Run without GUI prompts")
 	flag.Parse()
@@ -235,6 +236,16 @@ func main() {
 	}
 	if *statusFlag {
 		showServiceStatus()
+		return
+	}
+	if *logoutFlag {
+		if err := auth.ClearCredentials(); err != nil {
+			fmt.Printf("❌ Failed to clear credentials: %v\n", err)
+		} else {
+			fmt.Println("✅ Logged out successfully!")
+			fmt.Println("   Credentials have been cleared.")
+			fmt.Println("   Run the agent again to log in with a different account.")
+		}
 		return
 	}
 
