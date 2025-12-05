@@ -192,6 +192,9 @@ func (v *Viewer) updateFPS() {
 
 // updateCanvas updates the video canvas with a new frame
 func (v *Viewer) updateCanvas(img image.Image) {
+	// Cache the frame for restore after minimize
+	v.lastFrame = img
+
 	// Update canvas on UI thread
 	fyne.Do(func() {
 		v.videoCanvas.Image = img
