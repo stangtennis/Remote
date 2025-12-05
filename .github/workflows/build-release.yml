@@ -1,0 +1,119 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v2.7.0)'
+        required: true
+        default: 'v2.7.0'
+
+jobs:
+  build-agent:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Install MinGW
+        run: |
+          choco install mingw -y
+          echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" >> $env:GITHUB_PATH
+
+      - name: Install rsrc tool
+        run: go install github.com/akavel/rsrc@latest
+
+      - name: Generate Windows manifest resource
+        working-directory: agent/cmd/remote-agent
+        run: |
+          rsrc -manifest remote-agent.manifest -arch amd64 -o rsrc.syso
+
+      - name: Build Agent
+        working-directory: agent
+        env:
+          CGO_ENABLED: 1
+          CC: gcc
+        run: |
+          go build -ldflags "-s -w" -o remote-agent.exe ./cmd/remote-agent
+
+      - name: Upload Agent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-agent
+          path: agent/remote-agent.exe
+
+  build-controller:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Install MinGW
+        run: |
+          choco install mingw -y
+          echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" >> $env:GITHUB_PATH
+
+      - name: Build Controller
+        working-directory: controller
+        env:
+          CGO_ENABLED: 1
+          CC: gcc
+        run: |
+          go build -ldflags "-s -w -H windowsgui" -o remote-controller.exe .
+
+      - name: Upload Controller artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-controller
+          path: controller/remote-controller.exe
+
+  release:
+    needs: [build-agent, build-controller]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Agent artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: remote-agent
+
+      - name: Download Controller artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: remote-controller
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create or Update Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: Release ${{ steps.version.outputs.VERSION }}
+          files: |
+            remote-agent.exe
+            remote-controller.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
