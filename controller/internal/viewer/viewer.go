@@ -48,6 +48,7 @@ type Viewer struct {
 	reconnectionMgr   interface{} // Will be *reconnection.Manager
 	clipboardReceiver interface{} // Will be *clipboard.Receiver
 	clipboardMonitor  interface{} // Will be *clipboard.Monitor
+	fileBrowser       interface{} // Will be *filebrowser.FileBrowser
 
 	// Connection state
 	supabaseURL string
@@ -183,9 +184,9 @@ func (v *Viewer) createToolbar() *fyne.Container {
 		v.toggleFullscreen()
 	})
 
-	// File transfer button
-	fileTransferBtn := widget.NewButton("📁 Send File", func() {
-		v.SendFile()
+	// File transfer button - opens Total Commander style browser
+	fileTransferBtn := widget.NewButton("📁 File Browser", func() {
+		v.OpenFileBrowser()
 	})
 
 	// Clipboard sync button

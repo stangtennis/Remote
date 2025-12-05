@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"github.com/pion/webrtc/v3"
 	"github.com/stangtennis/Remote/controller/internal/clipboard"
+	"github.com/stangtennis/Remote/controller/internal/filebrowser"
 	"github.com/stangtennis/Remote/controller/internal/filetransfer"
 	"github.com/stangtennis/Remote/controller/internal/reconnection"
 	rtc "github.com/stangtennis/Remote/controller/internal/webrtc"
@@ -601,6 +602,128 @@ func (v *Viewer) HandleFileTransferData(data []byte) error {
 	return fmt.Errorf("file transfer manager not initialized")
 }
 
+// OpenFileBrowser opens the Total Commander-style file browser
+func (v *Viewer) OpenFileBrowser() {
+	if !v.connected {
+		dialog.ShowInformation("Not Connected", "Please connect to a device first", v.window)
+		return
+	}
+
+	log.Println("📁 Opening file browser...")
+
+	// Create file browser if not exists
+	fb := filebrowser.NewFileBrowser(v.window)
+	v.fileBrowser = fb
+
+	// Set up callbacks
+	fb.SetOnRequestRemoteDir(func(path string) {
+		v.requestRemoteDirListing(path)
+	})
+
+	fb.SetOnSendFile(func(localPath, remotePath string) error {
+		return v.sendFileToRemote(localPath, remotePath)
+	})
+
+	fb.SetOnReceiveFile(func(remotePath, localPath string) error {
+		return v.receiveFileFromRemote(remotePath, localPath)
+	})
+
+	fb.Show()
+
+	// Request initial remote directory and drives
+	v.requestRemoteDirListing("C:\\")
+	v.requestRemoteDrives()
+}
+
+// requestRemoteDirListing requests directory listing from remote agent
+func (v *Viewer) requestRemoteDirListing(path string) {
+	if client, ok := v.webrtcClient.(*rtc.Client); ok {
+		request := map[string]string{
+			"type": "dir_list",
+			"path": path,
+		}
+		data, _ := json.Marshal(request)
+		if err := client.SendData(data); err != nil {
+			log.Printf("❌ Failed to request dir listing: %v", err)
+		} else {
+			log.Printf("📂 Requested dir listing: %s", path)
+		}
+	}
+}
+
+// requestRemoteDrives requests drive list from remote agent
+func (v *Viewer) requestRemoteDrives() {
+	if client, ok := v.webrtcClient.(*rtc.Client); ok {
+		request := map[string]string{
+			"type": "drives_list",
+		}
+		data, _ := json.Marshal(request)
+		if err := client.SendData(data); err != nil {
+			log.Printf("❌ Failed to request drives: %v", err)
+		} else {
+			log.Println("💾 Requested remote drives")
+		}
+	}
+}
+
+// sendFileToRemote sends a file to the remote agent
+func (v *Viewer) sendFileToRemote(localPath, remotePath string) error {
+	log.Printf("📤 Sending file: %s -> %s", localPath, remotePath)
+
+	if ftMgr, ok := v.fileTransferMgr.(*filetransfer.Manager); ok {
+		_, err := ftMgr.SendFile(localPath)
+		return err
+	}
+	return fmt.Errorf("file transfer not available")
+}
+
+// receiveFileFromRemote requests a file from the remote agent
+func (v *Viewer) receiveFileFromRemote(remotePath, localPath string) error {
+	log.Printf("📥 Requesting file: %s -> %s", remotePath, localPath)
+
+	if client, ok := v.webrtcClient.(*rtc.Client); ok {
+		request := map[string]interface{}{
+			"type":       "file_request",
+			"remotePath": remotePath,
+			"localPath":  localPath,
+		}
+		data, _ := json.Marshal(request)
+		return client.SendData(data)
+	}
+	return fmt.Errorf("not connected")
+}
+
+// handleFileBrowserMessage handles file browser related messages from agent
+func (v *Viewer) handleFileBrowserMessage(data map[string]interface{}) {
+	msgType, _ := data["type"].(string)
+
+	switch msgType {
+	case "dir_list_response":
+		// Parse files from response
+		filesData, _ := json.Marshal(data["files"])
+		var files []filebrowser.FileInfo
+		json.Unmarshal(filesData, &files)
+
+		if fb, ok := v.fileBrowser.(*filebrowser.FileBrowser); ok {
+			fb.SetRemoteFiles(files)
+		}
+
+	case "drives_list_response":
+		// Parse drives from response
+		drivesData, _ := data["drives"].([]interface{})
+		drives := make([]string, 0, len(drivesData))
+		for _, d := range drivesData {
+			if drive, ok := d.(string); ok {
+				drives = append(drives, drive)
+			}
+		}
+
+		if fb, ok := v.fileBrowser.(*filebrowser.FileBrowser); ok {
+			fb.SetRemoteDrives(drives)
+		}
+	}
+}
+
 // InitializeClipboard initializes the clipboard receiver and monitor for bidirectional sync
 func (v *Viewer) InitializeClipboard() {
 	log.Println("📋 Initializing clipboard sync...")
@@ -684,6 +807,10 @@ func (v *Viewer) handleDataChannelMessage(msg []byte) {
 				}
 			}
 		}
+
+	case "dir_list_response", "drives_list_response":
+		// Handle file browser responses
+		v.handleFileBrowserMessage(data)
 	}
 }
 

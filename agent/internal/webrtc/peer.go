@@ -309,7 +309,7 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 		}
 	}
 
-	// Check if this is a file transfer message
+	// Check if this is a file transfer or file browser message
 	if msgType, ok := event["type"].(string); ok {
 		switch msgType {
 		case "file_transfer_start", "file_chunk", "file_transfer_complete", "file_transfer_error":
@@ -319,6 +319,23 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 					log.Printf("File transfer error: %v", err)
 				}
 			}
+			return
+
+		case "dir_list":
+			// Handle directory listing request
+			path, _ := event["path"].(string)
+			m.handleDirListRequest(path)
+			return
+
+		case "drives_list":
+			// Handle drives listing request
+			m.handleDrivesListRequest()
+			return
+
+		case "file_request":
+			// Handle file download request from controller
+			remotePath, _ := event["remotePath"].(string)
+			m.handleFileRequest(remotePath)
 			return
 		}
 	}
@@ -620,5 +637,115 @@ func (m *Manager) Close() {
 
 	if m.peerConnection != nil {
 		m.peerConnection.Close()
+	}
+}
+
+// handleDirListRequest handles directory listing requests from controller
+func (m *Manager) handleDirListRequest(path string) {
+	log.Printf("📂 Directory listing requested: %s", path)
+
+	type FileInfo struct {
+		Name    string `json:"name"`
+		Path    string `json:"path"`
+		Size    int64  `json:"size"`
+		IsDir   bool   `json:"is_dir"`
+		ModTime int64  `json:"mod_time"`
+	}
+
+	response := map[string]interface{}{
+		"type":  "dir_list_response",
+		"path":  path,
+		"files": []FileInfo{},
+		"error": "",
+	}
+
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		response["error"] = err.Error()
+		m.sendResponse(response)
+		return
+	}
+
+	files := make([]FileInfo, 0, len(entries))
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		files = append(files, FileInfo{
+			Name:    entry.Name(),
+			Path:    filepath.Join(path, entry.Name()),
+			Size:    info.Size(),
+			IsDir:   entry.IsDir(),
+			ModTime: info.ModTime().Unix(),
+		})
+	}
+
+	response["files"] = files
+	m.sendResponse(response)
+}
+
+// handleDrivesListRequest handles drive listing requests from controller
+func (m *Manager) handleDrivesListRequest() {
+	log.Println("💾 Drives listing requested")
+
+	drives := []string{}
+
+	// Windows: Check all drive letters
+	for letter := 'A'; letter <= 'Z'; letter++ {
+		drive := string(letter) + ":\\"
+		if _, err := os.Stat(drive); err == nil {
+			drives = append(drives, drive)
+		}
+	}
+
+	response := map[string]interface{}{
+		"type":   "drives_list_response",
+		"drives": drives,
+	}
+
+	m.sendResponse(response)
+}
+
+// handleFileRequest handles file download requests from controller
+func (m *Manager) handleFileRequest(remotePath string) {
+	log.Printf("📥 File request: %s", remotePath)
+
+	// Read file
+	data, err := os.ReadFile(remotePath)
+	if err != nil {
+		response := map[string]interface{}{
+			"type":  "file_response_error",
+			"path":  remotePath,
+			"error": err.Error(),
+		}
+		m.sendResponse(response)
+		return
+	}
+
+	// Send file in chunks via file transfer handler
+	if m.fileTransferHandler != nil {
+		// Use existing file transfer mechanism
+		log.Printf("📤 Sending file: %s (%d bytes)", remotePath, len(data))
+		// TODO: Implement proper chunked transfer
+	}
+}
+
+// sendResponse sends a JSON response over the data channel
+func (m *Manager) sendResponse(data map[string]interface{}) {
+	if m.dataChannel == nil {
+		log.Println("❌ Cannot send response: data channel not available")
+		return
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		log.Printf("❌ Failed to marshal response: %v", err)
+		return
+	}
+
+	if err := m.dataChannel.Send(jsonData); err != nil {
+		log.Printf("❌ Failed to send response: %v", err)
 	}
 }
