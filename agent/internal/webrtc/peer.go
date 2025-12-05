@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/pion/webrtc/v3"
@@ -470,10 +469,8 @@ func (m *Manager) startScreenStreaming() {
 
 	frameCount := 0
 	errorCount := 0
-	consecutiveRealErrors := 0
 	droppedFrames := 0
-	noNewFrameCount := 0
-	var lastFrame []byte // Cache last frame for when screen is static
+	var lastFrame []byte // Cache last frame for resend when capture fails
 
 	for m.isStreaming {
 		<-ticker.C
@@ -483,55 +480,33 @@ func (m *Manager) startScreenStreaming() {
 		}
 
 		// Check if data channel is backed up (buffered amount > 10MB)
-		// High threshold for maximum quality with high bandwidth
 		if m.dataChannel.BufferedAmount() > 10*1024*1024 {
 			droppedFrames++
 			if droppedFrames%10 == 1 {
-				log.Printf("⚠️ Network congestion detected - dropped %d frames to prevent lag", droppedFrames)
+				log.Printf("⚠️ Network congestion - dropped %d frames", droppedFrames)
 			}
 			continue
 		}
 
 		// Capture with MAXIMUM quality (95 = near-lossless)
-		// Quality 95 provides exceptional visual fidelity for high bandwidth
 		jpeg, err := m.screenCapturer.CaptureJPEG(95)
 		if err != nil {
-			errStr := err.Error()
-
-			// "no new frame" is normal when screen is static - not a real error
-			if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "no new frame") {
-				noNewFrameCount++
-				// Send last frame periodically to keep connection alive (every 30 ticks = ~1 second)
-				if lastFrame != nil && noNewFrameCount%30 == 0 {
-					if err := m.sendFrameChunked(lastFrame); err == nil {
-						frameCount++
-					}
+			// On any error, resend last frame to keep stream alive
+			if lastFrame != nil {
+				if err := m.sendFrameChunked(lastFrame); err == nil {
+					frameCount++
 				}
-				continue
+			} else {
+				errorCount++
+				if errorCount%100 == 1 {
+					log.Printf("⚠️ Screen capture error (no cached frame): %v", err)
+				}
 			}
-
-			// Real error
-			errorCount++
-			consecutiveRealErrors++
-
-			// Only log every 50th error to avoid spam
-			if errorCount%50 == 1 {
-				log.Printf("⚠️ Screen capture failing (total: %d errors) - Error: %v", errorCount, err)
-			}
-
-			// If too many consecutive REAL errors, something is seriously wrong
-			if consecutiveRealErrors > 100 {
-				log.Printf("❌ Too many consecutive capture failures (%d), stopping stream", consecutiveRealErrors)
-				break
-			}
-
 			continue
 		}
 
-		// Reset consecutive error counter on success
-		consecutiveRealErrors = 0
-		noNewFrameCount = 0
-		lastFrame = jpeg // Cache this frame
+		// Cache this frame
+		lastFrame = jpeg
 
 		// Send frame over data channel (with chunking if needed)
 		if err := m.sendFrameChunked(jpeg); err != nil {
