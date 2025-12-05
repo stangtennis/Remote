@@ -137,7 +137,7 @@ func UpdateHeartbeat(config RegistrationConfig, deviceID string) error {
 
 	now := time.Now().Format(time.RFC3339)
 	payload := map[string]interface{}{
-		"status":    "online",
+		"is_online": true,
 		"last_seen": now,
 	}
 
@@ -179,4 +179,36 @@ func StartHeartbeat(config RegistrationConfig, deviceID string, interval time.Du
 			fmt.Printf("⚠️  Heartbeat failed: %v\n", err)
 		}
 	}
+}
+
+// SetOffline marks the device as offline in the database
+func SetOffline(config RegistrationConfig, deviceID string) error {
+	url := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, deviceID)
+
+	payload := map[string]interface{}{
+		"is_online": false,
+		"last_seen": time.Now().Format(time.RFC3339),
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("apikey", config.AnonKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	return nil
 }
