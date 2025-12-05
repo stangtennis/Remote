@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"log"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -23,6 +24,7 @@ type Viewer struct {
 	connected         bool
 	fullscreen        bool
 	toolbarVisible    bool
+	lastFrame         image.Image // Cache last frame for restore
 
 	// UI Components
 	toolbar        *fyne.Container
@@ -127,6 +129,9 @@ func (v *Viewer) buildUI() {
 			v.toggleFullscreen()
 		}
 	})
+
+	// Start periodic canvas refresh to handle minimize/restore
+	go v.startCanvasRefreshLoop()
 
 	// Handle window close
 	v.window.SetOnClosed(func() {
@@ -398,6 +403,23 @@ func (v *Viewer) SetOnDisconnect(callback func()) {
 // SetOnFileTransfer sets the file transfer callback
 func (v *Viewer) SetOnFileTransfer(callback func()) {
 	v.onFileTransfer = callback
+}
+
+// startCanvasRefreshLoop periodically refreshes the canvas to handle minimize/restore
+func (v *Viewer) startCanvasRefreshLoop() {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		// Only refresh if connected and we have a cached frame
+		if v.connected && v.lastFrame != nil {
+			fyne.Do(func() {
+				// Force refresh the canvas with the latest frame
+				v.videoCanvas.Image = v.lastFrame
+				v.videoCanvas.Refresh()
+			})
+		}
+	}
 }
 
 // Helper functions
