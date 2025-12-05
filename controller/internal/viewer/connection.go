@@ -603,27 +603,32 @@ func (v *Viewer) HandleFileTransferData(data []byte) error {
 
 // InitializeClipboard initializes the clipboard receiver and monitor for bidirectional sync
 func (v *Viewer) InitializeClipboard() {
+	log.Println("📋 Initializing clipboard sync...")
+
 	receiver := clipboard.NewReceiver()
 	if err := receiver.Initialize(); err != nil {
-		log.Printf("? Failed to initialize clipboard receiver: %v", err)
+		log.Printf("❌ Failed to initialize clipboard receiver: %v", err)
 		return
 	}
 
 	v.clipboardReceiver = receiver
-	log.Println("? Clipboard receiver initialized")
+	log.Println("✅ Clipboard receiver initialized")
 
 	// Start monitoring local clipboard to push updates to agent
 	mon := clipboard.NewMonitor()
 	mon.SetOnTextChange(func(text string) {
+		log.Printf("📋 Local clipboard changed, sending to agent (%d bytes)", len(text))
 		v.sendClipboardText(text)
 	})
 	mon.SetOnImageChange(func(img []byte) {
+		log.Printf("📋 Local clipboard image changed, sending to agent (%d bytes)", len(img))
 		v.sendClipboardImage(img)
 	})
 	if err := mon.Start(); err != nil {
-		log.Printf("? Failed to start clipboard monitor: %v", err)
+		log.Printf("❌ Failed to start clipboard monitor: %v", err)
 	} else {
 		v.clipboardMonitor = mon
+		log.Println("✅ Clipboard monitor started - auto-sync enabled!")
 	}
 
 	// Set up message handler for clipboard data
@@ -631,6 +636,7 @@ func (v *Viewer) InitializeClipboard() {
 		client.SetOnDataChannelMessage(func(msg []byte) {
 			v.handleDataChannelMessage(msg)
 		})
+		log.Println("✅ Clipboard message handler registered")
 	}
 }
 
@@ -649,11 +655,15 @@ func (v *Viewer) handleDataChannelMessage(msg []byte) {
 	switch msgType {
 	case "clipboard_text":
 		if content, ok := data["content"].(string); ok {
+			log.Printf("📋 Received clipboard text from agent (%d bytes)", len(content))
 			if receiver, ok := v.clipboardReceiver.(*clipboard.Receiver); ok {
 				if err := receiver.SetText(content); err != nil {
-					log.Printf("? Failed to set clipboard text: %v", err)
-				} else if mon, ok := v.clipboardMonitor.(*clipboard.Monitor); ok {
-					mon.RememberText(content)
+					log.Printf("❌ Failed to set clipboard text: %v", err)
+				} else {
+					log.Println("✅ Clipboard text set locally")
+					if mon, ok := v.clipboardMonitor.(*clipboard.Monitor); ok {
+						mon.RememberText(content)
+					}
 				}
 			}
 		}
