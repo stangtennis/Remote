@@ -85,7 +85,7 @@ func (m *Monitor) checkClipboard() {
 		text := string(textData)
 		hash := hashString(text)
 
-		if hash != m.lastTextHash && m.onTextChange != nil {
+		if hash != m.lastTextHash {
 			m.lastTextHash = hash
 
 			// Size limit: 10MB
@@ -94,8 +94,12 @@ func (m *Monitor) checkClipboard() {
 				return
 			}
 
-			log.Printf("📋 Text clipboard changed (%d bytes)", len(text))
-			m.onTextChange(text)
+			log.Printf("📋 Text clipboard changed (%d bytes): %s...", len(text), truncateString(text, 50))
+			if m.onTextChange != nil {
+				m.onTextChange(text)
+			} else {
+				log.Println("⚠️ No text change callback set!")
+			}
 		}
 	}
 
@@ -148,6 +152,14 @@ func hashBytes(data []byte) string {
 	h := sha256.New()
 	h.Write(data)
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen]
 }
 
 // convertImageToPNG converts image data to PNG format
