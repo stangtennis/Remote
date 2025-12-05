@@ -202,6 +202,10 @@ func (m *Manager) checkSessionDevice(sessionID string) (bool, string) {
 func (m *Manager) handleWebSession(session Session) {
 	log.Println("🔧 Setting up WebRTC connection (web dashboard)...")
 
+	// Reset ICE candidate buffer for new session
+	m.pendingCandidates = nil
+	m.answerSent = false
+
 	// Ensure previous connection is fully cleaned up
 	if m.peerConnection != nil {
 		log.Println("⚠️  Previous connection still exists, cleaning up first...")
@@ -291,6 +295,16 @@ func (m *Manager) sendAnswerToSignaling(sessionID, sdp string) {
 	}
 
 	log.Println("📤 Sent answer to web dashboard")
+
+	// Mark answer as sent and flush buffered ICE candidates
+	m.answerSent = true
+	if len(m.pendingCandidates) > 0 {
+		log.Printf("📤 Sending %d buffered ICE candidates...", len(m.pendingCandidates))
+		for _, candidate := range m.pendingCandidates {
+			m.sendICECandidate(candidate)
+		}
+		m.pendingCandidates = nil
+	}
 }
 
 func (m *Manager) fetchPendingSessions() ([]Session, error) {
