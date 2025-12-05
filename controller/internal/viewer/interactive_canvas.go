@@ -10,8 +10,8 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// Mouse move throttle interval (16ms = ~60 FPS)
-const mouseThrottleInterval = 16 * time.Millisecond
+// Mouse move throttle interval (8ms = ~120 FPS for instant response)
+const mouseThrottleInterval = 8 * time.Millisecond
 
 // InteractiveCanvas is a canvas that captures mouse and keyboard events
 type InteractiveCanvas struct {
