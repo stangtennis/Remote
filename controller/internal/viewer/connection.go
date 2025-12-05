@@ -455,6 +455,18 @@ func (v *Viewer) InitializeFileTransfer() {
 
 // SendFile opens a file picker and sends the selected file
 func (v *Viewer) SendFile() {
+	// Check if connected
+	if !v.connected {
+		dialog.ShowInformation("Not Connected", "Please connect to a device first", v.window)
+		return
+	}
+
+	// Check if file transfer manager is initialized
+	if v.fileTransferMgr == nil {
+		dialog.ShowInformation("Not Ready", "File transfer is not ready yet. Please wait.", v.window)
+		return
+	}
+
 	fileDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
 		if err != nil {
 			dialog.ShowError(err, v.window)
@@ -477,6 +489,8 @@ func (v *Viewer) SendFile() {
 
 			// Show progress dialog
 			v.showFileTransferProgress(transfer)
+		} else {
+			dialog.ShowError(fmt.Errorf("file transfer not available"), v.window)
 		}
 	}, v.window)
 
