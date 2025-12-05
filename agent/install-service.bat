@@ -61,6 +61,12 @@ sc description RemoteDesktopAgent "Provides remote desktop access with lock scre
 REM Configure service to restart on failure
 sc failure RemoteDesktopAgent reset= 86400 actions= restart/5000/restart/10000/restart/30000
 
+REM Add Windows Firewall rules to allow the agent
+echo Adding firewall rules...
+netsh advfirewall firewall delete rule name="Remote Desktop Agent" >nul 2>&1
+netsh advfirewall firewall add rule name="Remote Desktop Agent" dir=in action=allow program="%EXE_PATH%" enable=yes profile=any
+netsh advfirewall firewall add rule name="Remote Desktop Agent" dir=out action=allow program="%EXE_PATH%" enable=yes profile=any
+
 echo.
 echo ✅ Service installed successfully!
 echo.

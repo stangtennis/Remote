@@ -248,8 +248,13 @@ func (v *Viewer) setupInputForwarding() {
 			return // Don't send to remote
 		}
 
-		// Send other keys to remote
-		v.SendKeyPress(string(key.Name), true)
+		// Map Fyne key names to JavaScript KeyboardEvent.code format
+		jsCode := mapFyneKeyToJSCode(key.Name)
+		if jsCode != "" {
+			// Send key down and immediately key up (tap)
+			v.SendKeyPress(jsCode, true)
+			v.SendKeyPress(jsCode, false)
+		}
 	})
 
 	// Request focus so keyboard events are captured
@@ -429,6 +434,69 @@ func (v *Viewer) SendKeyPress(key string, pressed bool) {
 	if client, ok := v.webrtcClient.(*rtc.Client); ok {
 		client.SendInput(string(eventJSON))
 	}
+}
+
+// mapFyneKeyToJSCode maps Fyne key names to JavaScript KeyboardEvent.code format
+func mapFyneKeyToJSCode(keyName fyne.KeyName) string {
+	keyMap := map[fyne.KeyName]string{
+		// Special keys
+		fyne.KeyTab:       "Tab",
+		fyne.KeyReturn:    "Enter",
+		fyne.KeyEnter:     "Enter",
+		fyne.KeySpace:     "Space",
+		fyne.KeyBackspace: "Backspace",
+		fyne.KeyDelete:    "Delete",
+		fyne.KeyInsert:    "Insert",
+		fyne.KeyHome:      "Home",
+		fyne.KeyEnd:       "End",
+		fyne.KeyPageUp:    "PageUp",
+		fyne.KeyPageDown:  "PageDown",
+		fyne.KeyEscape:    "Escape",
+
+		// Arrow keys
+		fyne.KeyUp:    "ArrowUp",
+		fyne.KeyDown:  "ArrowDown",
+		fyne.KeyLeft:  "ArrowLeft",
+		fyne.KeyRight: "ArrowRight",
+
+		// Function keys
+		fyne.KeyF1:  "F1",
+		fyne.KeyF2:  "F2",
+		fyne.KeyF3:  "F3",
+		fyne.KeyF4:  "F4",
+		fyne.KeyF5:  "F5",
+		fyne.KeyF6:  "F6",
+		fyne.KeyF7:  "F7",
+		fyne.KeyF8:  "F8",
+		fyne.KeyF9:  "F9",
+		fyne.KeyF10: "F10",
+		fyne.KeyF11: "F11",
+		fyne.KeyF12: "F12",
+	}
+
+	if code, ok := keyMap[keyName]; ok {
+		return code
+	}
+
+	// For letters and numbers, convert to JavaScript format
+	name := string(keyName)
+	if len(name) == 1 {
+		char := name[0]
+		// Letters A-Z
+		if char >= 'A' && char <= 'Z' {
+			return "Key" + name
+		}
+		if char >= 'a' && char <= 'z' {
+			return "Key" + string(char-32) // Convert to uppercase
+		}
+		// Numbers 0-9
+		if char >= '0' && char <= '9' {
+			return "Digit" + name
+		}
+	}
+
+	// Return empty for unmapped keys
+	return ""
 }
 
 // InitializeFileTransfer sets up the file transfer manager
