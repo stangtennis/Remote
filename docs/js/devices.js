@@ -20,12 +20,26 @@ async function loadDevices() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
-    // Fetch devices owned by current user OR pending approval (owner_id = null)
-    const { data: devices, error } = await supabase
+    // Check if user is admin/super_admin
+    const { data: approval } = await supabase
+      .from('user_approvals')
+      .select('role')
+      .eq('user_id', session.user.id)
+      .single();
+    
+    const isAdmin = approval && (approval.role === 'admin' || approval.role === 'super_admin');
+
+    // Admins see ALL devices, regular users see only their own or unassigned
+    let query = supabase
       .from('remote_devices')
       .select('*')
-      .or(`owner_id.eq.${session.user.id},owner_id.is.null`)
       .order('last_seen', { ascending: false });
+    
+    if (!isAdmin) {
+      query = query.or(`owner_id.eq.${session.user.id},owner_id.is.null`);
+    }
+    
+    const { data: devices, error } = await query;
 
     if (error) throw error;
 
@@ -92,11 +106,11 @@ function createDeviceCard(device) {
         </button>
       </div>
     `}
-    ${!device.approved_at ? `
+    ${!device.owner_id ? `
       <div class="device-actions">
-        <span class="status-badge pending">Pending Approval</span>
-        <button class="btn btn-primary approve-btn" data-device-id="${device.device_id}">
-          Approve
+        <span class="status-badge pending">Unassigned</span>
+        <button class="btn btn-primary claim-btn" data-device-id="${device.device_id}">
+          🔗 Claim Device
         </button>
       </div>
     ` : ''}
@@ -111,11 +125,11 @@ function createDeviceCard(device) {
     });
   }
 
-  const approveBtn = card.querySelector('.approve-btn');
-  if (approveBtn) {
-    approveBtn.addEventListener('click', async (e) => {
+  const claimBtn = card.querySelector('.claim-btn');
+  if (claimBtn) {
+    claimBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      await approveDevice(device);
+      await claimDevice(device);
     });
   }
 
@@ -130,40 +144,48 @@ function createDeviceCard(device) {
   return card;
 }
 
-async function approveDevice(device) {
+async function claimDevice(device) {
+  if (!confirm(`Claim device "${device.device_name || device.device_id}"?\n\nThis will assign the device to your account.`)) {
+    return;
+  }
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
-    // Update device with approval
+    // Update device with owner
     const { error } = await supabase
       .from('remote_devices')
       .update({
+        owner_id: session.user.id,
         approved_by: session.user.id,
-        approved_at: new Date().toISOString(),
-        owner_id: session.user.id
+        approved_at: new Date().toISOString()
       })
       .eq('device_id', device.device_id);
 
     if (error) throw error;
 
     // Log audit event
-    await supabase.rpc('log_audit_event', {
-      p_session_id: null,
-      p_device_id: device.device_id,
-      p_event: 'DEVICE_APPROVED',
-      p_details: { device_name: device.device_name },
-      p_severity: 'info'
-    });
+    try {
+      await supabase.rpc('log_audit_event', {
+        p_session_id: null,
+        p_device_id: device.device_id,
+        p_event: 'DEVICE_CLAIMED',
+        p_details: { device_name: device.device_name, claimed_by: session.user.email },
+        p_severity: 'info'
+      });
+    } catch (e) {
+      console.warn('Audit log failed:', e);
+    }
 
     // Reload devices
     await loadDevices();
 
-    alert('Device approved successfully!');
+    alert('✅ Device claimed successfully!\n\nYou can now connect to this device.');
 
   } catch (error) {
-    console.error('Failed to approve device:', error);
-    alert('Failed to approve device: ' + error.message);
+    console.error('Failed to claim device:', error);
+    alert('Failed to claim device: ' + error.message);
   }
 }
 
