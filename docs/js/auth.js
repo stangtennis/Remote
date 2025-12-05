@@ -167,7 +167,7 @@ if (document.getElementById('logoutBtn')) {
     if (session && session.user) {
       userEmail.textContent = session.user.email;
       
-      // Check if user is admin
+      // Check if user is admin or super_admin
       if (adminLink) {
         const { data: approval } = await supabase
           .from('user_approvals')
@@ -175,7 +175,7 @@ if (document.getElementById('logoutBtn')) {
           .eq('user_id', session.user.id)
           .single();
         
-        if (approval && approval.role === 'admin') {
+        if (approval && (approval.role === 'admin' || approval.role === 'super_admin')) {
           adminLink.style.display = 'inline-flex';
         }
       }
