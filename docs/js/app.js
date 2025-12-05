@@ -47,10 +47,18 @@ function setupEventListeners() {
     });
   }
 
-  // End session button
+  // End session button (old UI)
   const endSessionBtn = document.getElementById('endSessionBtn');
   if (endSessionBtn) {
     endSessionBtn.addEventListener('click', async () => {
+      await endSession();
+    });
+  }
+
+  // Disconnect button (new preview toolbar)
+  const disconnectBtn = document.getElementById('disconnectBtn');
+  if (disconnectBtn) {
+    disconnectBtn.addEventListener('click', async () => {
       await endSession();
     });
   }
@@ -193,34 +201,60 @@ async function startSession(device) {
 async function endSession() {
   if (!currentSession) return;
 
+  const sessionId = currentSession.session_id;
+  const deviceId = currentSession.device_id;
+  
+  console.log('🔌 Ending session:', sessionId);
+
   try {
-    // Update session status
+    // Update session status in database
     await supabase
       .from('remote_sessions')
       .update({ status: 'ended', ended_at: new Date().toISOString() })
-      .eq('id', currentSession.session_id);
+      .eq('id', sessionId);
 
-    // Clean up input capture
-    if (typeof cleanupInputCapture === 'function') {
-      cleanupInputCapture();
+    // Clean up WebRTC connection
+    if (typeof window.cleanupWebRTC === 'function') {
+      window.cleanupWebRTC();
     }
     
-    // Close WebRTC connection
-    if (window.peerConnection) {
-      window.peerConnection.close();
-      window.peerConnection = null;
+    // Stop signaling polling
+    if (typeof window.stopPolling === 'function') {
+      window.stopPolling();
     }
 
-    // Hide session UI
-    document.getElementById('sessionSection').style.display = 'none';
+    // Close session tab if SessionManager is available
+    if (window.SessionManager && deviceId) {
+      window.SessionManager.closeSession(deviceId);
+    }
+
+    // Hide session UI elements
+    const sessionSection = document.getElementById('sessionSection');
+    if (sessionSection) sessionSection.style.display = 'none';
     
+    const previewToolbar = document.getElementById('previewToolbar');
+    if (previewToolbar) previewToolbar.style.display = 'none';
+    
+    const previewIdle = document.getElementById('previewIdle');
+    if (previewIdle) previewIdle.style.display = 'flex';
+    
+    const previewConnecting = document.getElementById('previewConnecting');
+    if (previewConnecting) previewConnecting.style.display = 'none';
+    
+    // Clear session state
     currentSession = null;
+    window.currentSession = null;
     currentDevice = null;
+    
+    console.log('✅ Session ended successfully');
 
   } catch (error) {
-    console.error('Failed to end session:', error);
+    console.error('❌ Failed to end session:', error);
   }
 }
+
+// Expose for disconnect button
+window.disconnectFromDevice = endSession;
 
 // Clean up session on page unload/refresh
 window.addEventListener('beforeunload', (e) => {
