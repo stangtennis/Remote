@@ -105,15 +105,27 @@ function setupPeerConnectionHandlers() {
     const statusElement = document.getElementById('sessionStatus');
     const overlay = document.getElementById('viewerOverlay');
 
+    // Update SessionManager if available
+    const deviceId = window.currentSession?.device_id;
+    if (window.SessionManager && deviceId) {
+      const sessionStatus = state === 'connected' ? 'connected' : 
+                           state === 'connecting' ? 'connecting' : 'disconnected';
+      window.SessionManager.updateSessionStatus(deviceId, sessionStatus);
+    }
+
     switch (state) {
       case 'connecting':
-        statusElement.textContent = 'Connecting...';
-        statusElement.className = 'status-badge pending';
+        if (statusElement) {
+          statusElement.textContent = 'Connecting...';
+          statusElement.className = 'status-badge pending';
+        }
         break;
       case 'connected':
-        statusElement.textContent = 'Connected';
-        statusElement.className = 'status-badge online';
-        overlay.style.display = 'none';
+        if (statusElement) {
+          statusElement.textContent = 'Connected';
+          statusElement.className = 'status-badge online';
+        }
+        if (overlay) overlay.style.display = 'none';
         updateConnectionStats();
         // Stop polling since we're connected
         if (window.stopPolling) {
@@ -122,14 +134,20 @@ function setupPeerConnectionHandlers() {
         }
         break;
       case 'disconnected':
-        statusElement.textContent = 'Disconnected';
-        statusElement.className = 'status-badge offline';
+        if (statusElement) {
+          statusElement.textContent = 'Disconnected';
+          statusElement.className = 'status-badge offline';
+        }
         break;
       case 'failed':
-        statusElement.textContent = 'Connection Failed';
-        statusElement.className = 'status-badge offline';
-        overlay.style.display = 'flex';
-        overlay.innerHTML = '<p>Connection failed. Please try again.</p>';
+        if (statusElement) {
+          statusElement.textContent = 'Connection Failed';
+          statusElement.className = 'status-badge offline';
+        }
+        if (overlay) {
+          overlay.style.display = 'flex';
+          overlay.innerHTML = '<p>Connection failed. Please try again.</p>';
+        }
         break;
     }
   };
@@ -594,7 +612,8 @@ async function updateConnectionType() {
 
 // Display video frame on canvas
 function displayVideoFrame(data) {
-  const canvas = document.getElementById('remoteCanvas');
+  // Use preview canvas (new dashboard) or remote canvas (old)
+  const canvas = document.getElementById('previewCanvas') || document.getElementById('remoteCanvas');
   if (!canvas) {
     console.error('Canvas not found!');
     return;
@@ -604,8 +623,6 @@ function displayVideoFrame(data) {
   
   // Convert data to blob if it's an ArrayBuffer
   const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
-  
-  console.log(`🖼️ Displaying frame: ${blob.size} bytes`);
   
   // Create image from blob
   const img = new Image();
@@ -617,7 +634,17 @@ function displayVideoFrame(data) {
     // Draw image on canvas
     ctx.drawImage(img, 0, 0);
     
-    console.log(`✅ Frame drawn: ${img.width}x${img.height}`);
+    // Store frame in SessionManager for tab switching
+    const deviceId = window.currentSession?.device_id;
+    if (window.SessionManager && deviceId) {
+      // Convert to base64 for storage (only every 10th frame to save memory)
+      if (Math.random() < 0.1) {
+        blob.arrayBuffer().then(buffer => {
+          const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+          window.SessionManager.storeFrame(deviceId, base64);
+        });
+      }
+    }
     
     // Clean up
     URL.revokeObjectURL(img.src);
