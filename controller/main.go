@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	Version     = "v2.6.0"
-	BuildDate   = "2025-12-04"
+	Version     = "v2.7.0"
+	BuildDate   = "2025-12-05"
 	VersionInfo = Version + " (" + BuildDate + ")"
 )
 
@@ -55,7 +55,7 @@ func main() {
 		logger.Error("Failed to load settings, using defaults: %v", err)
 		appSettings = settings.Default()
 	}
-	logger.Info("Settings loaded: Quality=%s, Resolution=%s, FPS=%d", 
+	logger.Info("Settings loaded: Quality=%s, Resolution=%s, FPS=%d",
 		appSettings.GetQualityDescription(), appSettings.MaxResolution, appSettings.TargetFPS)
 
 	// Load configuration
@@ -84,7 +84,7 @@ func main() {
 	} else {
 		myApp.Settings().SetTheme(theme.LightTheme())
 	}
-	
+
 	windowTitle := "Remote Desktop Controller " + Version
 	if appSettings.HighQualityMode {
 		windowTitle += " - High-Performance Mode"
@@ -109,7 +109,7 @@ func main() {
 func createModernUI(window fyne.Window) *fyne.Container {
 	// Title with modern styling
 	title := widget.NewLabelWithStyle(
-		"🎮 Remote Desktop Controller " + Version,
+		"🎮 Remote Desktop Controller "+Version,
 		fyne.TextAlignCenter,
 		fyne.TextStyle{Bold: true},
 	)
@@ -122,16 +122,16 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	// Login section
 	emailEntry := widget.NewEntry()
 	emailEntry.SetPlaceHolder("Email Address")
-	
+
 	passwordEntry := widget.NewPasswordEntry()
 	passwordEntry.SetPlaceHolder("Password")
 
 	// Remember me checkbox
 	rememberCheck := widget.NewCheck("Remember Me", nil)
-	
+
 	statusLabel := widget.NewLabel("Ready to connect")
 	statusLabel.Alignment = fyne.TextAlignCenter
-	
+
 	// Device list (will be populated after login)
 	var deviceListWidget *widget.List
 	var devicesData []supabase.Device
@@ -155,7 +155,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	loginButton = widget.NewButton("Login", func() {
 		email := emailEntry.Text
 		password := passwordEntry.Text
-		
+
 		if email == "" || password == "" {
 			statusLabel.SetText("❌ Please enter email and password")
 			return
@@ -163,7 +163,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 
 		statusLabel.SetText("🔄 Connecting to Supabase...")
 		loginButton.Disable()
-		
+
 		// Save credentials if remember me is checked
 		if rememberCheck.Checked {
 			creds := &credentials.Credentials{
@@ -177,7 +177,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 		} else {
 			credentials.Delete()
 		}
-		
+
 		// Authenticate with Supabase in background
 		go func() {
 			logger.Info("Attempting login for user: %s", email)
@@ -219,7 +219,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			fyne.Do(func() {
 				statusLabel.SetText("✅ Connected as: " + currentUser.Email)
 			})
-			
+
 			// Fetch devices assigned to this user
 			logger.Info("Fetching devices for user: %s", currentUser.ID)
 			devices, err := supabaseClient.GetDevices(currentUser.ID)
@@ -232,10 +232,10 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			} else {
 				logger.Info("✅ Successfully loaded %d assigned devices", len(devices))
 				for i, device := range devices {
-					logger.Debug("Device %d: Name=%s, ID=%s, Platform=%s, Status=%s", 
+					logger.Debug("Device %d: Name=%s, ID=%s, Platform=%s, Status=%s",
 						i+1, device.DeviceName, device.DeviceID, device.Platform, device.Status)
 				}
-				
+
 				devicesData = devices
 				fyne.Do(func() {
 					if deviceListWidget != nil {
@@ -273,7 +273,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 
 	// Restart button
 	restartButton := widget.NewButton("🔄 Restart App", func() {
-		dialog.ShowConfirm("Restart Application", 
+		dialog.ShowConfirm("Restart Application",
 			"Are you sure you want to restart the application?",
 			func(confirmed bool) {
 				if confirmed {
@@ -320,18 +320,18 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			if id >= len(devicesData) {
 				return
 			}
-			
+
 			device := devicesData[id]
-			
+
 			box := obj.(*fyne.Container)
 			label := box.Objects[0].(*widget.Label)
 			connectBtn := box.Objects[1].(*widget.Button)
 			removeBtn := box.Objects[2].(*widget.Button)
-			
+
 			// Format device name with status indicator and time info
 			var statusIcon string
 			var statusText string
-			
+
 			if device.Status == "online" {
 				statusIcon = "🟢"
 				statusText = "Online"
@@ -359,10 +359,10 @@ func createModernUI(window fyne.Window) *fyne.Container {
 					statusText = "Offline"
 				}
 			}
-			
+
 			displayName := fmt.Sprintf("%s %s (%s) - %s", statusIcon, device.DeviceName, device.Platform, statusText)
 			label.SetText(displayName)
-			
+
 			// Configure connect button
 			if device.Status != "online" {
 				connectBtn.Disable()
@@ -377,7 +377,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 					connectToDevice(device)
 				}
 			}
-			
+
 			// Configure remove button
 			removeBtn.SetText("🗑️ Remove")
 			removeBtn.Importance = widget.DangerImportance
@@ -424,7 +424,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 
 	// Login tab with both login form and logged-in view
 	loginTab := container.NewStack(loginForm, loggedInContainer)
-	
+
 	// Pending devices tab for approval
 	refreshPendingDevices = func() {
 		if currentUser == nil {
@@ -436,7 +436,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 				logger.Error("Failed to fetch all devices: %v", err)
 				return
 			}
-			
+
 			// Filter for unassigned devices (owner_id is empty)
 			var pending []supabase.Device
 			for _, dev := range allDevices {
@@ -444,7 +444,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 					pending = append(pending, dev)
 				}
 			}
-			
+
 			pendingDevicesData = pending
 			fyne.Do(func() {
 				if pendingDevicesWidget != nil {
@@ -454,7 +454,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			})
 		}()
 	}
-	
+
 	pendingDevicesWidget = widget.NewList(
 		func() int {
 			return len(pendingDevicesData)
@@ -470,15 +470,15 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			if id >= len(pendingDevicesData) {
 				return
 			}
-			
+
 			device := pendingDevicesData[id]
 			box := obj.(*fyne.Container)
 			label := box.Objects[0].(*widget.Label)
 			approveBtn := box.Objects[1].(*widget.Button)
 			deleteBtn := box.Objects[2].(*widget.Button)
-			
+
 			label.SetText(fmt.Sprintf("📱 %s (%s) - ID: %s", device.DeviceName, device.Platform, device.DeviceID))
-			
+
 			// Configure approve button
 			approveBtn.SetText("✅ Approve")
 			approveBtn.Importance = widget.SuccessImportance
@@ -515,7 +515,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 						}
 					}, window)
 			}
-			
+
 			// Configure delete button
 			deleteBtn.SetText("🗑️ Delete")
 			deleteBtn.Importance = widget.DangerImportance
@@ -544,7 +544,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			}
 		},
 	)
-	
+
 	pendingDevicesSection := container.NewBorder(
 		container.NewVBox(
 			widget.NewLabel("⏳ Pending Devices (Waiting for Approval)"),
@@ -555,7 +555,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 		nil, nil, nil,
 		pendingDevicesWidget,
 	)
-	
+
 	// Main layout with tabs
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Login", loginTab),
@@ -593,7 +593,7 @@ func createSettingsTab() *fyne.Container {
 		logger.Info("High-performance mode: %v", checked)
 	})
 	highQualityCheck.Checked = appSettings.HighQualityMode
-	
+
 	// Quality Preset Buttons
 	presetUltra := widget.NewButton("Ultra (4K, 60 FPS)", func() {
 		appSettings.ApplyPreset("ultra")
@@ -602,21 +602,21 @@ func createSettingsTab() *fyne.Container {
 		logger.Info("Applied Ultra preset")
 	})
 	presetUltra.Importance = widget.HighImportance
-	
+
 	presetHigh := widget.NewButton("High (1440p, 60 FPS)", func() {
 		appSettings.ApplyPreset("high")
 		settings.Save(appSettings)
 		dialog.ShowInformation("Preset Applied", "High quality preset applied. Restart for full effect.", myWindow)
 		logger.Info("Applied High preset")
 	})
-	
+
 	presetLow := widget.NewButton("Low (1080p, 30 FPS)", func() {
 		appSettings.ApplyPreset("low")
 		settings.Save(appSettings)
 		dialog.ShowInformation("Preset Applied", "Low quality preset applied. Restart for full effect.", myWindow)
 		logger.Info("Applied Low preset")
 	})
-	
+
 	// Resolution Selection
 	resolutionSelect := widget.NewSelect([]string{"720p", "1080p", "1440p", "4K"}, func(value string) {
 		appSettings.MaxResolution = value
@@ -624,7 +624,7 @@ func createSettingsTab() *fyne.Container {
 		logger.Info("Resolution changed to: %s", value)
 	})
 	resolutionSelect.SetSelected(appSettings.MaxResolution)
-	
+
 	// FPS Selection
 	fpsSelect := widget.NewSelect([]string{"30", "60", "120"}, func(value string) {
 		if value == "30" {
@@ -638,7 +638,7 @@ func createSettingsTab() *fyne.Container {
 		logger.Info("Target FPS changed to: %d", appSettings.TargetFPS)
 	})
 	fpsSelect.SetSelected(fmt.Sprintf("%d", appSettings.TargetFPS))
-	
+
 	// Video Quality Slider
 	qualitySlider := widget.NewSlider(1, 100)
 	qualitySlider.Value = float64(appSettings.VideoQuality)
@@ -649,7 +649,7 @@ func createSettingsTab() *fyne.Container {
 		qualityLabel.SetText(fmt.Sprintf("Video Quality: %d%%", int(value)))
 		settings.Save(appSettings)
 	}
-	
+
 	// Codec Selection
 	codecSelect := widget.NewSelect([]string{"H.264", "H.265", "VP9"}, func(value string) {
 		appSettings.Codec = value
@@ -657,7 +657,7 @@ func createSettingsTab() *fyne.Container {
 		logger.Info("Codec changed to: %s", value)
 	})
 	codecSelect.SetSelected(appSettings.Codec)
-	
+
 	// Bitrate Slider
 	bitrateSlider := widget.NewSlider(5, 100)
 	bitrateSlider.Value = float64(appSettings.MaxBitrate)
@@ -668,48 +668,48 @@ func createSettingsTab() *fyne.Container {
 		bitrateLabel.SetText(fmt.Sprintf("Max Bitrate: %d Mbps", int(value)))
 		settings.Save(appSettings)
 	}
-	
+
 	// Feature Toggles
 	adaptiveBitrateCheck := widget.NewCheck("Adaptive Bitrate", func(checked bool) {
 		appSettings.AdaptiveBitrate = checked
 		settings.Save(appSettings)
 	})
 	adaptiveBitrateCheck.Checked = appSettings.AdaptiveBitrate
-	
+
 	hardwareAccelCheck := widget.NewCheck("Hardware Acceleration", func(checked bool) {
 		appSettings.HardwareAcceleration = checked
 		settings.Save(appSettings)
 	})
 	hardwareAccelCheck.Checked = appSettings.HardwareAcceleration
-	
+
 	lowLatencyCheck := widget.NewCheck("Low Latency Mode", func(checked bool) {
 		appSettings.LowLatencyMode = checked
 		settings.Save(appSettings)
 	})
 	lowLatencyCheck.Checked = appSettings.LowLatencyMode
-	
+
 	fileTransferCheck := widget.NewCheck("Enable File Transfer", func(checked bool) {
 		appSettings.EnableFileTransfer = checked
 		settings.Save(appSettings)
 	})
 	fileTransferCheck.Checked = appSettings.EnableFileTransfer
-	
+
 	clipboardCheck := widget.NewCheck("Enable Clipboard Sync", func(checked bool) {
 		appSettings.EnableClipboardSync = checked
 		settings.Save(appSettings)
 	})
 	clipboardCheck.Checked = appSettings.EnableClipboardSync
-	
+
 	audioCheck := widget.NewCheck("Enable Audio Streaming", func(checked bool) {
 		appSettings.EnableAudio = checked
 		settings.Save(appSettings)
 	})
 	audioCheck.Checked = appSettings.EnableAudio
-	
+
 	// Theme Selection
 	themeSelect := widget.NewSelect([]string{"dark", "light"}, nil)
 	themeSelect.SetSelected(appSettings.Theme)
-	
+
 	// Now attach the callback after setting initial value
 	themeSelect.OnChanged = func(value string) {
 		if value == appSettings.Theme {
@@ -720,10 +720,10 @@ func createSettingsTab() *fyne.Container {
 		dialog.ShowInformation("Theme Changed", "Please restart the application to apply the new theme.", myWindow)
 		logger.Info("Theme changed to: %s", value)
 	}
-	
+
 	// Reset to Defaults Button
 	resetButton := widget.NewButton("Reset to Defaults", func() {
-		dialog.ShowConfirm("Reset Settings", 
+		dialog.ShowConfirm("Reset Settings",
 			"Are you sure you want to reset all settings to defaults?",
 			func(confirmed bool) {
 				if confirmed {
@@ -735,7 +735,7 @@ func createSettingsTab() *fyne.Container {
 			}, myWindow)
 	})
 	resetButton.Importance = widget.DangerImportance
-	
+
 	// Current Settings Display
 	currentSettings := widget.NewLabel(fmt.Sprintf(
 		"Current: %s | %s @ %d FPS | Quality: %d%% | Bitrate: %d Mbps",
@@ -746,16 +746,16 @@ func createSettingsTab() *fyne.Container {
 		appSettings.MaxBitrate,
 	))
 	currentSettings.Wrapping = fyne.TextWrapWord
-	
+
 	// Layout
 	return container.NewVBox(
 		widget.NewLabelWithStyle("⚙️ Performance Settings", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		widget.NewSeparator(),
-		
+
 		highQualityCheck,
 		widget.NewLabel("Quick Presets:"),
 		container.NewGridWithColumns(3, presetUltra, presetHigh, presetLow),
-		
+
 		widget.NewSeparator(),
 		widget.NewLabel("Video Settings:"),
 		container.NewGridWithColumns(2,
@@ -765,30 +765,30 @@ func createSettingsTab() *fyne.Container {
 		),
 		qualityLabel,
 		qualitySlider,
-		
+
 		widget.NewSeparator(),
 		widget.NewLabel("Network Settings:"),
 		bitrateLabel,
 		bitrateSlider,
 		adaptiveBitrateCheck,
-		
+
 		widget.NewSeparator(),
 		widget.NewLabel("Advanced Options:"),
 		hardwareAccelCheck,
 		lowLatencyCheck,
-		
+
 		widget.NewSeparator(),
 		widget.NewLabel("Features:"),
 		fileTransferCheck,
 		clipboardCheck,
 		audioCheck,
-		
+
 		widget.NewSeparator(),
 		widget.NewLabel("Appearance:"),
 		container.NewGridWithColumns(2,
 			widget.NewLabel("Theme:"), themeSelect,
 		),
-		
+
 		widget.NewSeparator(),
 		currentSettings,
 		resetButton,
@@ -798,13 +798,13 @@ func createSettingsTab() *fyne.Container {
 // connectToDevice initiates a connection to a remote device with high-quality settings
 func connectToDevice(device supabase.Device) {
 	logger.Info("🔗 Opening high-performance viewer for: %s", device.DeviceName)
-	
+
 	// Create and show the modern viewer
 	v := viewer.NewViewer(myApp, device.DeviceID, device.DeviceName)
 	v.Show()
-	
+
 	logger.Info("Viewer window opened for device: %s", device.DeviceID)
-	
+
 	// Initiate WebRTC connection
 	if currentUser != nil {
 		go func() {
@@ -823,15 +823,15 @@ func connectToDevice(device supabase.Device) {
 // restartApplication restarts the application
 func restartApplication() {
 	logger.Info("Restarting application...")
-	
+
 	// Show progress dialog
-	progressDialog := dialog.NewCustom("Restarting", "Cancel", 
+	progressDialog := dialog.NewCustom("Restarting", "Cancel",
 		container.NewVBox(
 			widget.NewLabel("Restarting application..."),
 			widget.NewProgressBarInfinite(),
 		), myWindow)
 	progressDialog.Show()
-	
+
 	// Get the current executable path
 	executable, err := os.Executable()
 	if err != nil {
@@ -840,14 +840,14 @@ func restartApplication() {
 		dialog.ShowError(fmt.Errorf("Failed to restart: %v", err), myWindow)
 		return
 	}
-	
+
 	logger.Info("Executable path: %s", executable)
-	
+
 	// Start a new instance in background
 	go func() {
 		// Small delay to ensure UI updates
 		time.Sleep(500 * time.Millisecond)
-		
+
 		// On Windows, use cmd.exe to start the process detached
 		var cmd *exec.Cmd
 		if os.PathSeparator == '\\' { // Windows
@@ -858,21 +858,21 @@ func restartApplication() {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 		}
-		
+
 		logger.Info("Starting new instance with command: %v", cmd.Args)
-		
+
 		if err := cmd.Start(); err != nil {
 			logger.Error("Failed to start new instance: %v", err)
 			progressDialog.Hide()
 			dialog.ShowError(fmt.Errorf("Failed to restart: %v", err), myWindow)
 			return
 		}
-		
+
 		logger.Info("New instance started successfully, shutting down current instance")
-		
+
 		// Small delay to let new instance initialize
 		time.Sleep(1000 * time.Millisecond)
-		
+
 		// Exit current instance
 		myApp.Quit()
 	}()
