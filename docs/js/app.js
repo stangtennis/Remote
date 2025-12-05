@@ -88,6 +88,14 @@ function subscribeToRealtime() {
 async function startSession(device) {
   currentDevice = device;
   
+  // Create session tab if SessionManager is available
+  if (window.SessionManager) {
+    const existingSession = window.SessionManager.createSession(device.device_id, device.device_name);
+    if (!existingSession) {
+      return; // Max sessions reached or already exists
+    }
+  }
+  
   try {
     // Clean up any old pending sessions for this device first
     console.log('🧹 Cleaning old pending sessions for device:', device.device_id);
@@ -135,14 +143,36 @@ async function startSession(device) {
     }
 
     currentSession = data;
-    window.currentSession = data; // Expose globally for WebRTC module
+    currentSession.device_id = device.device_id; // Store device_id for SessionManager
+    window.currentSession = currentSession; // Expose globally for WebRTC module
     
-    // Show session UI
-    document.getElementById('sessionSection').style.display = 'block';
-    document.getElementById('sessionDeviceName').textContent = device.device_name;
-    document.getElementById('sessionPin').textContent = data.pin;
-    document.getElementById('sessionStatus').textContent = 'Connecting...';
-    document.getElementById('sessionStatus').className = 'status-badge pending';
+    // Show preview UI elements
+    const previewIdle = document.getElementById('previewIdle');
+    const previewConnecting = document.getElementById('previewConnecting');
+    const connectingDeviceName = document.getElementById('connectingDeviceName');
+    const previewToolbar = document.getElementById('previewToolbar');
+    const connectedDeviceName = document.getElementById('connectedDeviceName');
+    
+    if (previewIdle) previewIdle.style.display = 'none';
+    if (previewConnecting) {
+      previewConnecting.style.display = 'flex';
+      if (connectingDeviceName) connectingDeviceName.textContent = device.device_name;
+    }
+    
+    // Also update old session UI if present
+    const sessionSection = document.getElementById('sessionSection');
+    if (sessionSection) {
+      sessionSection.style.display = 'block';
+      const sessionDeviceName = document.getElementById('sessionDeviceName');
+      const sessionPin = document.getElementById('sessionPin');
+      const sessionStatus = document.getElementById('sessionStatus');
+      if (sessionDeviceName) sessionDeviceName.textContent = device.device_name;
+      if (sessionPin) sessionPin.textContent = data.pin;
+      if (sessionStatus) {
+        sessionStatus.textContent = 'Connecting...';
+        sessionStatus.className = 'status-badge pending';
+      }
+    }
 
     // Initialize WebRTC
     await initWebRTC(currentSession);
@@ -152,6 +182,10 @@ async function startSession(device) {
 
   } catch (error) {
     console.error('Failed to start session:', error);
+    // Remove session tab on error
+    if (window.SessionManager) {
+      window.SessionManager.closeSession(device.device_id);
+    }
     alert('Failed to start session: ' + error.message);
   }
 }
