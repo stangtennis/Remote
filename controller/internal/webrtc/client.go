@@ -11,26 +11,26 @@ import (
 
 // Client represents a WebRTC client for the controller
 type Client struct {
-	peerConnection      *webrtc.PeerConnection
-	dataChannel         *webrtc.DataChannel
-	videoTrack          *webrtc.TrackRemote
-	onFrame             func([]byte)
-	onConnected         func()
-	onDisconnected      func()
+	peerConnection       *webrtc.PeerConnection
+	dataChannel          *webrtc.DataChannel
+	videoTrack           *webrtc.TrackRemote
+	onFrame              func([]byte)
+	onConnected          func()
+	onDisconnected       func()
 	onDataChannelMessage func([]byte)
-	mu                  sync.Mutex
-	connected           bool
-	
+	mu                   sync.Mutex
+	connected            bool
+
 	// Frame reassembly
-	frameChunks      map[int][][]byte // chunk index -> chunk data
-	frameChunksMu    sync.Mutex
+	frameChunks   map[int][][]byte // chunk index -> chunk data
+	frameChunksMu sync.Mutex
 }
 
 // NewClient creates a new WebRTC client
 func NewClient() (*Client, error) {
 	return &Client{
-		connected:    false,
-		frameChunks:  make(map[int][][]byte),
+		connected:   false,
+		frameChunks: make(map[int][][]byte),
 	}, nil
 }
 
@@ -50,7 +50,7 @@ func (c *Client) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	// Handle connection state changes
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("WebRTC connection state: %s", state.String())
-		
+
 		switch state {
 		case webrtc.PeerConnectionStateConnected:
 			log.Println("✅ WebRTC connected!")
@@ -75,7 +75,7 @@ func (c *Client) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		log.Printf("📺 Received track: %s", track.Kind().String())
 		c.videoTrack = track
-		
+
 		// This would be for RTP video, but we're using data channel for JPEG
 		// Keep for future H.264 implementation
 	})
@@ -106,17 +106,17 @@ func (c *Client) CreateOffer() (string, error) {
 		return "", fmt.Errorf("failed to create data channel: %w", err)
 	}
 	c.dataChannel = dc
-	
+
 	// Add OnOpen handler to see when the channel opens
 	dc.OnOpen(func() {
 		log.Println("📡 Data channel OPENED (controller side)")
 	})
-	
+
 	// Add OnMessage handler
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
 		c.handleDataChannelMessage(msg.Data)
 	})
-	
+
 	log.Println("📡 Data channel created")
 
 	offer, err := c.peerConnection.CreateOffer(nil)
@@ -129,18 +129,18 @@ func (c *Client) CreateOffer() (string, error) {
 	}
 
 	log.Println("⏳ Waiting for ICE gathering to complete...")
-	
+
 	// Wait for ICE gathering to complete
 	gatherComplete := webrtc.GatheringCompletePromise(c.peerConnection)
 	<-gatherComplete
-	
+
 	log.Println("✅ ICE gathering complete!")
 
 	// Get the complete offer with all ICE candidates
 	completeOffer := c.peerConnection.LocalDescription()
 	log.Printf("📊 Complete offer SDP length: %d", len(completeOffer.SDP))
 	log.Printf("📊 Full SDP:\n%s", completeOffer.SDP)
-	
+
 	offerJSON, err := json.Marshal(completeOffer)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal offer: %w", err)
@@ -178,6 +178,15 @@ func (c *Client) SendInput(inputJSON string) error {
 	}
 
 	return c.dataChannel.SendText(inputJSON)
+}
+
+// SendData sends raw bytes over the data channel
+func (c *Client) SendData(data []byte) error {
+	if c.dataChannel == nil || c.dataChannel.ReadyState() != webrtc.DataChannelStateOpen {
+		return fmt.Errorf("data channel not ready")
+	}
+
+	return c.dataChannel.Send(data)
 }
 
 // SetOnFrame sets the callback for received video frames
@@ -218,24 +227,24 @@ func (c *Client) Close() error {
 // handleDataChannelMessage processes incoming data channel messages with chunk reassembly
 func (c *Client) handleDataChannelMessage(data []byte) {
 	const chunkMagic = 0xFF
-	
+
 	// Check if this is a chunked frame
 	if len(data) >= 3 && data[0] == chunkMagic {
 		// Extract chunk metadata
 		chunkIndex := int(data[1])
 		totalChunks := int(data[2])
 		chunkData := data[3:]
-		
+
 		c.frameChunksMu.Lock()
-		
+
 		// Initialize chunk array if needed
 		if c.frameChunks[totalChunks] == nil {
 			c.frameChunks[totalChunks] = make([][]byte, totalChunks)
 		}
-		
+
 		// Store this chunk
 		c.frameChunks[totalChunks][chunkIndex] = chunkData
-		
+
 		// Check if we have all chunks
 		allChunks := true
 		for i := 0; i < totalChunks; i++ {
@@ -244,18 +253,18 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 				break
 			}
 		}
-		
+
 		if allChunks {
 			// Reassemble the frame
 			var completeFrame []byte
 			for i := 0; i < totalChunks; i++ {
 				completeFrame = append(completeFrame, c.frameChunks[totalChunks][i]...)
 			}
-			
+
 			// Clear chunks for this frame
 			delete(c.frameChunks, totalChunks)
 			c.frameChunksMu.Unlock()
-			
+
 			// Send complete frame
 			if c.onFrame != nil {
 				c.onFrame(completeFrame)
@@ -265,7 +274,7 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 		}
 		return
 	}
-	
+
 	// Not a chunked frame - try to parse as JSON first (for clipboard and other messages)
 	var jsonMsg map[string]interface{}
 	if err := json.Unmarshal(data, &jsonMsg); err == nil {
