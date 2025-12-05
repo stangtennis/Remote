@@ -280,9 +280,9 @@ func main() {
 		return
 	}
 
-	// Interactive mode - show GUI dialog unless -silent flag
+	// Interactive mode - show GUI unless -silent flag
 	if !*silentFlag {
-		showStartupDialog()
+		showGUI()
 		return
 	}
 
