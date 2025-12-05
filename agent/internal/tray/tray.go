@@ -54,6 +54,7 @@ func (t *TrayApp) onReady() {
 
 	systray.AddSeparator()
 
+	mLogout := systray.AddMenuItem("Switch Account / Logout", "Log out and switch to different account")
 	mQuit := systray.AddMenuItem("Exit", "Quit the agent")
 
 	// Handle menu clicks
@@ -64,6 +65,9 @@ func (t *TrayApp) onReady() {
 				openConsole()
 			case <-mLogs.ClickedCh:
 				openLogFile()
+			case <-mLogout.ClickedCh:
+				log.Println("🔄 Logout requested from system tray")
+				clearCredentialsAndRestart()
 			case <-mQuit.ClickedCh:
 				log.Println("🛑 Exit requested from system tray")
 				systray.Quit()
@@ -128,6 +132,42 @@ func openLogFile() {
 	if err := cmd.Start(); err != nil {
 		log.Printf("Failed to open log file: %v", err)
 	}
+}
+
+// clearCredentialsAndRestart clears saved credentials and restarts the agent
+func clearCredentialsAndRestart() {
+	// Get credentials path
+	programData := os.Getenv("ProgramData")
+	var credPath string
+	if programData != "" {
+		credPath = filepath.Join(programData, "RemoteDesktopAgent", ".credentials")
+	} else {
+		exePath, _ := os.Executable()
+		credPath = filepath.Join(filepath.Dir(exePath), ".credentials")
+	}
+
+	// Remove credentials file
+	if err := os.Remove(credPath); err != nil && !os.IsNotExist(err) {
+		log.Printf("⚠️ Failed to remove credentials: %v", err)
+	} else {
+		log.Println("✅ Credentials cleared")
+	}
+
+	// Restart the agent
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Printf("❌ Failed to get executable path: %v", err)
+		return
+	}
+
+	log.Println("🔄 Restarting agent for new login...")
+
+	// Start new instance
+	cmd := exec.Command(exePath)
+	cmd.Start()
+
+	// Exit current instance
+	systray.Quit()
 }
 
 // getIcon returns a valid ICO file for the system tray
