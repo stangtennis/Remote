@@ -3,9 +3,53 @@
 let peerConnection = null;
 let dataChannel = null;
 
+// Clean up existing connection before creating new one
+function cleanupWebRTC() {
+  console.log('🧹 Cleaning up WebRTC connection...');
+  
+  // Clean up input capture
+  if (typeof cleanupInputCapture === 'function') {
+    cleanupInputCapture();
+  }
+  
+  // Close data channel
+  if (dataChannel) {
+    try {
+      dataChannel.close();
+    } catch (e) {}
+    dataChannel = null;
+  }
+  window.dataChannel = null;
+  
+  // Close peer connection
+  if (peerConnection) {
+    try {
+      peerConnection.close();
+    } catch (e) {}
+    peerConnection = null;
+  }
+  window.peerConnection = null;
+  
+  // Reset frame state
+  frameChunks = [];
+  expectedChunks = 0;
+  if (frameTimeout) {
+    clearTimeout(frameTimeout);
+    frameTimeout = null;
+  }
+  
+  console.log('✅ WebRTC cleanup complete');
+}
+
+// Expose cleanup globally
+window.cleanupWebRTC = cleanupWebRTC;
+
 async function initWebRTC(session) {
   try {
     console.log('🚀 initWebRTC called with session:', session);
+    
+    // Clean up any existing connection first
+    cleanupWebRTC();
     
     if (!session || !session.session_id) {
       throw new Error('Invalid session object - missing session_id');
