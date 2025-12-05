@@ -98,9 +98,20 @@ func (d *Device) Register() error {
 // Old registration code removed - using new anonymous registration system
 
 func (d *Device) SetOffline() error {
-	// Update device status to offline
-	// This will be handled by heartbeat timeout in presence.go
+	// Update device status to offline in database
 	fmt.Println("📴 Setting device offline...")
+
+	config := RegistrationConfig{
+		SupabaseURL: d.cfg.SupabaseURL,
+		AnonKey:     d.cfg.SupabaseAnonKey,
+	}
+
+	if err := SetOffline(config, d.ID); err != nil {
+		fmt.Printf("⚠️  Failed to set offline status: %v\n", err)
+		return err
+	}
+
+	fmt.Println("✅ Device marked as offline")
 	return nil
 }
 
