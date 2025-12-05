@@ -2,14 +2,14 @@
   "FixedFileInfo": {
     "FileVersion": {
       "Major": 2,
-      "Minor": 6,
-      "Patch": 5,
+      "Minor": 7,
+      "Patch": 0,
       "Build": 0
     },
     "ProductVersion": {
       "Major": 2,
-      "Minor": 6,
-      "Patch": 5,
+      "Minor": 7,
+      "Patch": 0,
       "Build": 0
     },
     "FileFlagsMask": "3f",
@@ -22,14 +22,14 @@
     "Comments": "Remote Desktop Agent for Windows",
     "CompanyName": "Remote Desktop",
     "FileDescription": "Remote Desktop Agent",
-    "FileVersion": "v2.6.5",
+    "FileVersion": "v2.7.0",
     "InternalName": "remote-agent",
     "LegalCopyright": "Copyright 2025",
     "LegalTrademarks": "",
     "OriginalFilename": "remote-agent.exe",
     "PrivateBuild": "",
     "ProductName": "Remote Desktop Agent",
-    "ProductVersion": "v2.6.5",
+    "ProductVersion": "v2.7.0",
     "SpecialBuild": ""
   },
   "VarFileInfo": {
