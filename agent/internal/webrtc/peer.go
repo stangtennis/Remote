@@ -433,11 +433,11 @@ func (m *Manager) startClipboardMonitoring() {
 
 func (m *Manager) startScreenStreaming() {
 	// Stream JPEG frames over data channel
-	// 30 FPS (33ms) = smooth experience with lower latency
-	ticker := time.NewTicker(33 * time.Millisecond)
+	// 60 FPS (16ms) = ultra-smooth, instant response
+	ticker := time.NewTicker(16 * time.Millisecond)
 	defer ticker.Stop()
 
-	log.Println("🎥 Starting screen streaming at 30 FPS...")
+	log.Println("🎥 Starting screen streaming at 60 FPS (low-latency mode)...")
 
 	// If screen capturer not initialized, try to initialize now
 	if m.screenCapturer == nil {
@@ -479,8 +479,8 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
-		// Check if data channel is backed up (buffered amount > 10MB)
-		if m.dataChannel.BufferedAmount() > 10*1024*1024 {
+		// Check if data channel is backed up (buffered amount > 2MB = react faster)
+		if m.dataChannel.BufferedAmount() > 2*1024*1024 {
 			droppedFrames++
 			if droppedFrames%10 == 1 {
 				log.Printf("⚠️ Network congestion - dropped %d frames", droppedFrames)
@@ -488,8 +488,8 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
-		// Capture with MAXIMUM quality (95 = near-lossless)
-		jpeg, err := m.screenCapturer.CaptureJPEG(95)
+		// Capture with high quality (85 = excellent quality, smaller size = lower latency)
+		jpeg, err := m.screenCapturer.CaptureJPEG(85)
 		if err != nil {
 			// On any error, resend last frame to keep stream alive
 			if lastFrame != nil {
@@ -513,8 +513,8 @@ func (m *Manager) startScreenStreaming() {
 			log.Printf("Failed to send frame: %v", err)
 		} else {
 			frameCount++
-			// Log every 30 frames (once per second at 30 FPS)
-			if frameCount%30 == 0 {
+			// Log every 60 frames (once per second at 60 FPS)
+			if frameCount%60 == 0 {
 				log.Printf("📊 Streaming: %d frames sent | Latest: %d KB | Errors: %d | Dropped: %d",
 					frameCount, len(jpeg)/1024, errorCount, droppedFrames)
 			}
@@ -555,8 +555,7 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 			return err
 		}
 
-		// Small delay between chunks to avoid overwhelming the channel
-		time.Sleep(1 * time.Millisecond)
+		// No delay - send chunks as fast as possible for lowest latency
 	}
 
 	return nil
