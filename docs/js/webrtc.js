@@ -251,6 +251,14 @@ function setupDataChannelHandlers() {
     } else if (event.data instanceof Blob) {
       displayVideoFrame(event.data);
       framesReceived++;
+    } else if (typeof event.data === 'string') {
+      // Handle JSON messages (clipboard, etc.)
+      try {
+        const msg = JSON.parse(event.data);
+        handleAgentMessage(msg);
+      } catch (e) {
+        console.warn('Failed to parse message:', e);
+      }
     }
   };
   
@@ -421,8 +429,19 @@ function setupInputCapture() {
   // Track pressed keys to prevent duplicates from key repeat
   const pressedKeys = new Set();
   
-  const keyDownHandler = (e) => {
+  const keyDownHandler = async (e) => {
     if (!dataChannel || dataChannel.readyState !== 'open') return;
+    
+    // Handle Ctrl+V - paste from local clipboard to agent
+    if (e.ctrlKey && e.code === 'KeyV') {
+      e.preventDefault();
+      e.stopPropagation();
+      await sendClipboardToAgent();
+      return;
+    }
+    
+    // Handle Ctrl+C - let the key go through to agent, clipboard will sync back
+    // (agent monitors its clipboard and sends changes)
     
     // Ignore key repeat events (only send first press)
     if (pressedKeys.has(e.code)) return;
@@ -648,6 +667,90 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+// ==================== CLIPBOARD SYNC ====================
+
+// Handle messages from agent (clipboard, etc.)
+function handleAgentMessage(msg) {
+  if (!msg.type) return;
+  
+  switch (msg.type) {
+    case 'clipboard_text':
+      if (msg.content) {
+        // Write text to local clipboard
+        navigator.clipboard.writeText(msg.content).then(() => {
+          console.log('📋 Clipboard received from agent (text:', msg.content.length, 'bytes)');
+        }).catch(err => {
+          console.warn('Failed to write clipboard:', err);
+        });
+      }
+      break;
+      
+    case 'clipboard_image':
+      if (msg.content) {
+        // Decode base64 image and write to clipboard
+        try {
+          const binary = atob(msg.content);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: 'image/png' });
+          navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]).then(() => {
+            console.log('📋 Clipboard received from agent (image:', bytes.length, 'bytes)');
+          }).catch(err => {
+            console.warn('Failed to write image clipboard:', err);
+          });
+        } catch (e) {
+          console.warn('Failed to decode clipboard image:', e);
+        }
+      }
+      break;
+  }
+}
+
+// Send clipboard to agent
+async function sendClipboardToAgent() {
+  if (!dataChannel || dataChannel.readyState !== 'open') return;
+  
+  try {
+    // Try to read text first
+    const text = await navigator.clipboard.readText();
+    if (text) {
+      sendControlEvent({
+        type: 'clipboard_text',
+        content: text
+      });
+      console.log('📋 Clipboard sent to agent (text:', text.length, 'bytes)');
+      return;
+    }
+  } catch (e) {
+    // Text read failed, try image
+  }
+  
+  try {
+    // Try to read image
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      if (item.types.includes('image/png')) {
+        const blob = await item.getType('image/png');
+        const buffer = await blob.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        sendControlEvent({
+          type: 'clipboard_image',
+          content: base64
+        });
+        console.log('📋 Clipboard sent to agent (image:', buffer.byteLength, 'bytes)');
+        return;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to read clipboard:', e);
+  }
+}
+
 // Export
 window.initWebRTC = initWebRTC;
 window.peerConnection = peerConnection;
+window.sendClipboardToAgent = sendClipboardToAgent;
