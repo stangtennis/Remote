@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 	"time"
@@ -110,6 +111,55 @@ func messageBox(title, message string, flags uint32) int {
 func isAdmin() bool {
 	_, err := os.Open("\\\\.\\PHYSICALDRIVE0")
 	return err == nil
+}
+
+// setupFirewallRules adds Windows Firewall rules to allow the agent
+func setupFirewallRules() {
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Printf("⚠️ Could not get executable path for firewall: %v", err)
+		return
+	}
+
+	// Only try if we have admin rights
+	if !isAdmin() {
+		log.Println("⚠️ Not running as admin - skipping firewall setup")
+		return
+	}
+
+	log.Println("🔥 Setting up Windows Firewall rules...")
+
+	// Delete existing rules first (ignore errors)
+	deleteCmd := exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name=Remote Desktop Agent")
+	deleteCmd.Run()
+
+	// Add inbound rule
+	inCmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule",
+		"name=Remote Desktop Agent",
+		"dir=in",
+		"action=allow",
+		"program="+exePath,
+		"enable=yes",
+		"profile=any")
+	if err := inCmd.Run(); err != nil {
+		log.Printf("⚠️ Failed to add inbound firewall rule: %v", err)
+	} else {
+		log.Println("✅ Inbound firewall rule added")
+	}
+
+	// Add outbound rule
+	outCmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule",
+		"name=Remote Desktop Agent",
+		"dir=out",
+		"action=allow",
+		"program="+exePath,
+		"enable=yes",
+		"profile=any")
+	if err := outCmd.Run(); err != nil {
+		log.Printf("⚠️ Failed to add outbound firewall rule: %v", err)
+	} else {
+		log.Println("✅ Outbound firewall rule added")
+	}
 }
 
 // runAsAdmin restarts the current process with administrator privileges
@@ -622,6 +672,9 @@ func showServiceStatus() {
 }
 
 func runInteractive() {
+	// Setup firewall rules (requires admin, will skip if not admin)
+	setupFirewallRules()
+
 	// Check if already logged in
 	if !auth.IsLoggedIn() {
 		// Show login dialog
@@ -694,6 +747,9 @@ func runInteractive() {
 func runService() {
 	// Windows Service mode
 	log.Println("Starting as Windows Service...")
+
+	// Setup firewall rules (service runs as SYSTEM, has admin rights)
+	setupFirewallRules()
 
 	serviceName := "RemoteDesktopAgent"
 
