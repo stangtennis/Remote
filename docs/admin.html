@@ -657,7 +657,7 @@ Remote Desktop © 2025
       const total = allDevices.length;
       const assigned = assignedDevices.length;
       const unassigned = total - assigned;
-      const online = allDevices.filter(d => d.status === 'online').length;
+      const online = allDevices.filter(d => d.is_online).length;
 
       document.getElementById('totalDevices').textContent = total;
       document.getElementById('unassignedDevices').textContent = unassigned;
@@ -685,8 +685,8 @@ Remote Desktop © 2025
       devicesList.innerHTML = filteredDevices.map(device => {
         const assignment = assignedDevices.find(a => a.device_id === device.device_id);
         const isAssigned = !!assignment;
-        const statusClass = device.status === 'online' ? 'status-online' : 'status-offline';
-        const statusText = device.status === 'online' ? '🟢 Online' : '🔴 Offline';
+        const statusClass = device.is_online ? 'status-online' : 'status-offline';
+        const statusText = device.is_online ? '🟢 Online' : '🔴 Offline';
 
         return `
           <div class="device-card ${isAssigned ? 'assigned' : 'unassigned'}">
@@ -700,7 +700,7 @@ Remote Desktop © 2025
               <div>Created: ${new Date(device.created_at).toLocaleString()}</div>
               ${device.last_heartbeat ? `<div>Last Seen: ${new Date(device.last_heartbeat).toLocaleString()}</div>` : ''}
               ${isAssigned ? `<div>✅ Assigned to: ${assignment.user_email}</div>` : '<div>⚠️ Not assigned to any user</div>'}
-              ${device.approved ? '<div>✅ Approved for use</div>' : '<div>⏸️ Pending approval</div>'}
+              ${device.approved_at ? '<div>✅ Approved for use</div>' : '<div>⏸️ Pending approval</div>'}
             </div>
             <div class="device-actions">
               ${!isAssigned ? `
