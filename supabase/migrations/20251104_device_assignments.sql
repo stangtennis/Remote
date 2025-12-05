@@ -155,11 +155,11 @@ DECLARE
     v_admin_id UUID;
     v_result JSONB;
 BEGIN
-    -- Check if caller is admin
+    -- Check if caller is admin or super_admin
     SELECT user_id::uuid INTO v_admin_id
     FROM user_approvals 
     WHERE user_id::uuid = auth.uid()
-    AND role = 'admin';
+    AND role IN ('admin', 'super_admin');
     
     IF v_admin_id IS NULL THEN
         RAISE EXCEPTION 'Access denied: Admin role required';
