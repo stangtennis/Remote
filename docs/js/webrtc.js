@@ -458,17 +458,18 @@ function setupInputCapture() {
       return;
     }
     
-    // Handle Ctrl+C - let the key go through to agent, clipboard will sync back
-    // (agent monitors its clipboard and sends changes)
-    
     // Ignore key repeat events (only send first press)
     if (pressedKeys.has(e.code)) return;
     pressedKeys.add(e.code);
     
+    // Send modifier state with each key press for better compatibility
     sendControlEvent({
       t: 'key',
       code: e.code,
-      down: true
+      down: true,
+      ctrl: e.ctrlKey,
+      shift: e.shiftKey,
+      alt: e.altKey
     });
     e.preventDefault();
     e.stopPropagation();

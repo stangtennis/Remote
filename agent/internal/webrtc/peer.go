@@ -366,7 +366,12 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 	case "key":
 		code, _ := event["code"].(string)
 		down, _ := event["down"].(bool)
-		if err := m.keyController.SendKey(code, down); err != nil {
+		ctrl, _ := event["ctrl"].(bool)
+		shift, _ := event["shift"].(bool)
+		alt, _ := event["alt"].(bool)
+
+		// Send key with modifiers
+		if err := m.keyController.SendKeyWithModifiers(code, down, ctrl, shift, alt); err != nil {
 			log.Printf("Key event error: %v", err)
 		}
 	}

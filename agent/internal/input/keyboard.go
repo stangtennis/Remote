@@ -29,6 +29,53 @@ func (k *KeyboardController) SendKey(code string, down bool) error {
 	return nil
 }
 
+// SendKeyWithModifiers sends a key with modifier keys (Ctrl, Shift, Alt)
+func (k *KeyboardController) SendKeyWithModifiers(code string, down bool, ctrl, shift, alt bool) error {
+	// Map JavaScript KeyboardEvent.code to robotgo key codes
+	key := mapKeyCode(code)
+	if key == "" {
+		return fmt.Errorf("unknown key code: %s", code)
+	}
+
+	// Skip if this is a modifier key itself (they're handled separately)
+	if key == "ctrl" || key == "shift" || key == "alt" || key == "cmd" {
+		if down {
+			robotgo.KeyDown(key)
+		} else {
+			robotgo.KeyUp(key)
+		}
+		return nil
+	}
+
+	// For non-modifier keys with modifiers pressed, use robotgo.KeyTap with modifiers
+	if down {
+		if ctrl || shift || alt {
+			// Build modifier list
+			var modifiers []interface{}
+			if ctrl {
+				modifiers = append(modifiers, "ctrl")
+			}
+			if shift {
+				modifiers = append(modifiers, "shift")
+			}
+			if alt {
+				modifiers = append(modifiers, "alt")
+			}
+			// Use KeyTap for key combinations (sends down+up)
+			robotgo.KeyTap(key, modifiers...)
+		} else {
+			robotgo.KeyDown(key)
+		}
+	} else {
+		// Only send key up if no modifiers (modifiers use KeyTap which includes up)
+		if !ctrl && !shift && !alt {
+			robotgo.KeyUp(key)
+		}
+	}
+
+	return nil
+}
+
 func mapKeyCode(code string) string {
 	// Common key mappings from JavaScript to robotgo
 	keyMap := map[string]string{
@@ -68,26 +115,26 @@ func mapKeyCode(code string) string {
 		"ArrowRight": "right",
 
 		// Modifiers
-		"ShiftLeft":   "shift",
-		"ShiftRight":  "shift",
-		"ControlLeft": "ctrl",
-		"ControlRight":"ctrl",
-		"AltLeft":     "alt",
-		"AltRight":    "alt",
-		"MetaLeft":    "cmd",
-		"MetaRight":   "cmd",
+		"ShiftLeft":    "shift",
+		"ShiftRight":   "shift",
+		"ControlLeft":  "ctrl",
+		"ControlRight": "ctrl",
+		"AltLeft":      "alt",
+		"AltRight":     "alt",
+		"MetaLeft":     "cmd",
+		"MetaRight":    "cmd",
 
 		// Punctuation
-		"Comma":     ",",
-		"Period":    ".",
-		"Slash":     "/",
-		"Semicolon": ";",
-		"Quote":     "'",
-		"BracketLeft": "[",
+		"Comma":        ",",
+		"Period":       ".",
+		"Slash":        "/",
+		"Semicolon":    ";",
+		"Quote":        "'",
+		"BracketLeft":  "[",
 		"BracketRight": "]",
-		"Backslash":   "\\",
-		"Minus":       "-",
-		"Equal":       "=",
+		"Backslash":    "\\",
+		"Minus":        "-",
+		"Equal":        "=",
 	}
 
 	if mapped, ok := keyMap[code]; ok {
