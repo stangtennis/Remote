@@ -116,8 +116,8 @@ func (v *Viewer) buildUI() {
 
 	// Setup keyboard shortcuts
 	v.window.Canvas().SetOnTypedKey(func(key *fyne.KeyEvent) {
-		// Ctrl+Alt+Home to toggle toolbar in fullscreen
-		if key.Name == fyne.KeyHome && v.fullscreen {
+		// Home to toggle toolbar visibility
+		if key.Name == fyne.KeyHome {
 			v.toggleToolbarVisibility()
 		}
 		// F11 for fullscreen toggle
