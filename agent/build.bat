@@ -35,11 +35,11 @@ rsrc -manifest remote-agent.manifest -arch amd64 -o rsrc.syso 2>nul || (
     rsrc -manifest remote-agent.manifest -arch amd64 -o rsrc.syso
 )
 
-REM Build the agent
+REM Build the agent (with -H windowsgui to hide console window)
 echo.
 echo 🔧 Building with CGO_ENABLED=1...
 cd /d "%~dp0"
-go build -ldflags "-s -w" -o remote-agent.exe ./cmd/remote-agent
+go build -ldflags "-s -w -H windowsgui" -o remote-agent.exe ./cmd/remote-agent
 
 if %ERRORLEVEL% EQU 0 (
     echo.
