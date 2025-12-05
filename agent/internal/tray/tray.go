@@ -12,8 +12,8 @@ import (
 )
 
 // Version of the agent - update this with each release
-const Version = "v2.6.1"
-const BuildDate = "2025-12-04"
+const Version = "v2.6.8"
+const BuildDate = "2025-12-05"
 const VersionString = Version + " (" + BuildDate + ")"
 
 type TrayApp struct {

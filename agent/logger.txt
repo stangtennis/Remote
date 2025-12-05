@@ -1,46 +1,83 @@
-2025/12/04 21:07:12.863142 ========================================
-2025/12/04 21:07:12.977012 🖥️  Remote Desktop Agent Starting...
-2025/12/04 21:07:12.977524 📦 Version: v2.3.0 (2025-11-25)
-2025/12/04 21:07:12.977599 📝 Log file: C:\Users\DennisAndersen\Downloads\agent.log
-2025/12/04 21:07:12.977599 ========================================
-2025/12/04 21:07:12.977599 🔧 Running in interactive mode
-2025/12/04 21:07:12.978109 🖥️  Current desktop: Default
-2025/12/04 21:07:12.978109 📱 Registering device...
+2025/12/04 23:59:07.662745 ========================================
+2025/12/04 23:59:07.696880 🖥️  Remote Desktop Agent Starting...
+2025/12/04 23:59:07.697047 📦 Version: v2.6.7 (2025-12-04)
+2025/12/04 23:59:07.697047 📝 Log file: C:\Users\DennisAndersen\Downloads\agent.log
+2025/12/04 23:59:07.697047 ========================================
+2025/12/04 23:59:07.697047 🔧 Running in interactive mode
+2025/12/04 23:59:07.697703 ✅ Already logged in as: hansemand@gmail.com
+2025/12/04 23:59:07.698362 🖥️  Current desktop: Default
+2025/12/04 23:59:07.698362 📱 Registering device...
 ✅ Device updated successfully (already registered)
 ✅ Device registered successfully!
    Device ID: device_a7eba43fba079757b164b9ddc5dbba23
    Device Name: DENNIS-B’RBAR
-   ⏳ Waiting for admin to assign this device...
-   💡 Admin can assign this device in the admin panel
-2025/12/04 21:07:13.048836 ✅ Device registered: device_a7eba43fba079757b164b9ddc5dbba23
-2025/12/04 21:07:13.048836    Name: DENNIS-B’RBAR
-2025/12/04 21:07:13.048836    Platform: windows
-2025/12/04 21:07:13.048836    Arch: amd64
-2025/12/04 21:07:13.048836 🖥️  Running on desktop: Default
-2025/12/04 21:07:13.082552 ✅ DXGI capturer ready: 1920x1080
-2025/12/04 21:07:13.089894 ✅ Screen capturer initialized: 1920x1080 (Session0: false)
-2025/12/04 21:07:13.089894 ✅ File transfer handler initialized: C:\Users\DennisAndersen\Downloads\RemoteDesktop
-2025/12/04 21:07:13.089894 👂 Listening for incoming connections...
-2025/12/04 21:07:13.090457 🔔 Starting system tray...
-2025/12/04 21:07:13.089894 👁️  Starting desktop change monitor...
-2025/12/04 21:07:13.090457 🔄 Session polling started (checking every 2 seconds)
-2025/12/04 21:07:13.091621 Desktop switched to: Default (type: 1)
-2025/12/04 21:08:01.095371 🔍 No pending sessions found for device: device_a7eba43fba079757b164b9ddc5dbba23
-2025/12/04 21:09:01.097859 🔍 No pending sessions found for device: device_a7eba43fba079757b164b9ddc5dbba23
-2025/12/04 21:10:01.096665 🔍 No pending sessions found for device: device_a7eba43fba079757b164b9ddc5dbba23
-
-
-Invoke-RestMethod -Uri "https://supabase.hawkeye123.dk/functions/v1/device-register" -Method POST -Headers @{"apikey"="REDACTED_JWT";"Content-Type"="application/json"} -Body '{"device_id":"laptop-test","device_name":"DENNIS-LAPTOP","platform":"windows","arch":"amd64"}'
-
-
-
-
-
-PS C:\Windows\system32> Invoke-RestMethod -Uri "https://supabase.hawkeye123.dk/functions/v1/device-register" -Method POST -Headers @{"apikey"="REDACTED_JWT";"Content-Type"="application/json"} -Body '{"device_id":"laptop-test","device_name":"DENNIS-LAPTOP","platform":"windows","arch":"amd64"}'
-
-status           message                                     device_id
-------           -------                                     ---------
-pending_approval Device registered. Awaiting owner approval. laptop-test
-
-
-PS C:\Windows\system32>
+   Owner: hansemand@gmail.com
+2025/12/04 23:59:07.760789 ✅ Device registered: device_a7eba43fba079757b164b9ddc5dbba23
+2025/12/04 23:59:07.760789    Name: DENNIS-B’RBAR
+2025/12/04 23:59:07.760789    Platform: windows
+2025/12/04 23:59:07.761316    Arch: amd64
+2025/12/04 23:59:07.761316 🖥️  Running on desktop: Default
+2025/12/04 23:59:07.785456 ✅ DXGI capturer ready: 1920x1080
+2025/12/04 23:59:07.799483 ✅ Screen capturer initialized: 1920x1080 (Session0: false)
+2025/12/04 23:59:07.800226 ✅ File transfer handler initialized: C:\Users\DennisAndersen\Downloads\RemoteDesktop
+2025/12/04 23:59:07.800828 👂 Listening for incoming connections...
+2025/12/04 23:59:07.800828 🔔 Starting system tray...
+2025/12/04 23:59:07.800828 👁️  Starting desktop change monitor...
+2025/12/04 23:59:07.800828 🔄 Session polling started (checking every 2 seconds)
+2025/12/04 23:59:07.801418    Listening on: webrtc_sessions (controller) + session_signaling (dashboard)
+2025/12/04 23:59:07.801418 Desktop switched to: Default (type: 1)
+2025/12/04 23:59:35.807362 📞 Incoming session (controller): 04d08cc5-8697-4dd9-87e2-6366843862ae
+2025/12/04 23:59:35.807362    Device ID: device_a7eba43fba079757b164b9ddc5dbba23
+2025/12/04 23:59:35.807879 🔧 Setting up WebRTC connection...
+2025/12/04 23:59:35.809563 🔍 DEBUG: session.Offer length: 1063
+2025/12/04 23:59:35.809624 🔍 DEBUG: First 100 chars of offer: {"type":"offer","sdp":"v=0\r\no=- 2931668247140021906 1764889174 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\na
+2025/12/04 23:59:35.810138 📨 Processing offer from controller...
+2025/12/04 23:59:35.875094 🔄 Connection state changed: connecting
+2025/12/04 23:59:35.875603 📤 Generated ICE candidate: host
+2025/12/04 23:59:35.877265    Buffered (waiting for answer to be sent first)
+2025/12/04 23:59:35.885279 📤 Sent answer to controller
+2025/12/04 23:59:35.917818 📤 Generated ICE candidate: srflx
+2025/12/04 23:59:35.923185    Buffered (waiting for answer to be sent first)
+2025/12/04 23:59:35.923185 📤 Generated ICE candidate: srflx
+2025/12/04 23:59:35.923185    Buffered (waiting for answer to be sent first)
+2025/12/04 23:59:37.152447 🔄 Connection state changed: connected
+2025/12/04 23:59:37.152565 ✅ WebRTC CONNECTED! Starting screen streaming...
+2025/12/04 23:59:37.153080 🖱️ Local cursor hidden
+2025/12/04 23:59:37.153389 🎥 Starting screen streaming at 30 FPS...
+2025/12/04 23:59:37.157642 📡 Data channel opened: data
+2025/12/04 23:59:37.157642 ✅ DATA CHANNEL READY - Controller can now receive frames!
+2025/12/04 23:59:37.158244 📋 Starting clipboard monitoring...
+2025/12/04 23:59:37.158312 📋 Clipboard monitor started
+2025/12/04 23:59:37.451712 ⚠️ Screen capture failing (total: 1 errors) - Error: DXGI capture failed: timeout (no new frame)
+2025/12/04 23:59:37.654831 ?? Clipboard receiver (agent) initialized
+2025/12/04 23:59:37.655343 ?? Agent clipboard updated with text (3385 bytes)
+2025/12/04 23:59:41.112841 📊 Streaming: 30 frames sent | Latest: 437 KB | Errors: 12 | Dropped: 0
+2025/12/04 23:59:44.636030 📊 Streaming: 60 frames sent | Latest: 534 KB | Errors: 20 | Dropped: 0
+2025/12/04 23:59:48.838580 📊 Streaming: 90 frames sent | Latest: 538 KB | Errors: 32 | Dropped: 0
+2025/12/04 23:59:51.436834 📊 Streaming: 120 frames sent | Latest: 539 KB | Errors: 34 | Dropped: 0
+2025/12/04 23:59:54.306093 📊 Streaming: 150 frames sent | Latest: 536 KB | Errors: 39 | Dropped: 0
+2025/12/04 23:59:56.701881 📊 Streaming: 180 frames sent | Latest: 541 KB | Errors: 39 | Dropped: 0
+2025/12/05 00:00:00.004770 ⚠️ Screen capture failing (total: 51 errors) - Error: DXGI capture failed: timeout (no new frame)
+2025/12/05 00:00:01.877212 📊 Streaming: 210 frames sent | Latest: 541 KB | Errors: 60 | Dropped: 0
+2025/12/05 00:00:04.451093 📊 Streaming: 240 frames sent | Latest: 546 KB | Errors: 61 | Dropped: 0
+2025/12/05 00:00:08.422498 📊 Streaming: 270 frames sent | Latest: 552 KB | Errors: 72 | Dropped: 0
+2025/12/05 00:00:12.525209 📊 Streaming: 300 frames sent | Latest: 562 KB | Errors: 85 | Dropped: 0
+2025/12/05 00:00:15.534607 📊 Streaming: 330 frames sent | Latest: 560 KB | Errors: 90 | Dropped: 0
+2025/12/05 00:00:18.310044 📊 Streaming: 360 frames sent | Latest: 568 KB | Errors: 93 | Dropped: 0
+2025/12/05 00:00:20.900874 📊 Streaming: 390 frames sent | Latest: 569 KB | Errors: 94 | Dropped: 0
+2025/12/05 00:00:23.257333 ⚠️ Screen capture failing (total: 101 errors) - Error: DXGI capture failed: timeout (no new frame)
+2025/12/05 00:00:26.877900 📊 Streaming: 420 frames sent | Latest: 572 KB | Errors: 122 | Dropped: 0
+2025/12/05 00:00:28.092478 ❌ DATA CHANNEL CLOSED
+2025/12/05 00:00:28.092478 📋 Clipboard monitor stopped
+2025/12/05 00:00:28.102534 Failed to send frame: io: read/write on closed pipe
+2025/12/05 00:00:33.156190 🔄 Connection state changed: disconnected
+2025/12/05 00:00:33.156741 ⚠️  WebRTC DISCONNECTED
+2025/12/05 00:00:33.156824 🖱️ Local cursor restored
+2025/12/05 00:00:33.157021 🧹 Cleaning up connection (reason: Disconnected)
+2025/12/05 00:00:33.165619 ✅ Session 04d08cc5-8697-4dd9-87e2-6366843862ae marked as ended
+2025/12/05 00:00:33.166957 ✅ Connection cleaned up - ready for new connections
+2025/12/05 00:00:33.166957 🔄 Connection state changed: closed
+2025/12/05 00:00:33.168199 🔒 WebRTC CONNECTION CLOSED
+2025/12/05 00:00:33.168799 🧹 Cleaning up connection (reason: Closed)
+2025/12/05 00:00:33.168799 ✅ Connection cleaned up - ready for new connections
+2025/12/05 00:00:33.187636 🛑 Screen streaming stopped (sent 430 frames, 123 errors, 0 dropped)

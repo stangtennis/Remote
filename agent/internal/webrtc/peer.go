@@ -34,6 +34,8 @@ type Manager struct {
 	isStreaming         bool
 	isSession0          bool // Running in Session 0 (before user login)
 	currentDesktop      desktop.DesktopType
+	pendingCandidates   []*webrtc.ICECandidate // Buffer ICE candidates until answer is sent
+	answerSent          bool                   // Flag to track if answer has been sent
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
@@ -169,15 +171,31 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 		case webrtc.PeerConnectionStateConnected:
 			log.Println("✅ WebRTC CONNECTED! Starting screen streaming...")
 			m.isStreaming = true
+			// Hide local cursor during remote session
+			if m.mouseController != nil {
+				m.mouseController.HideCursor()
+			}
 			go m.startScreenStreaming()
 		case webrtc.PeerConnectionStateDisconnected:
 			log.Println("⚠️  WebRTC DISCONNECTED")
+			// Restore local cursor
+			if m.mouseController != nil {
+				m.mouseController.ShowCursor()
+			}
 			m.cleanupConnection("Disconnected")
 		case webrtc.PeerConnectionStateFailed:
 			log.Println("❌ WebRTC CONNECTION FAILED")
+			// Restore local cursor
+			if m.mouseController != nil {
+				m.mouseController.ShowCursor()
+			}
 			m.cleanupConnection("Failed")
 		case webrtc.PeerConnectionStateClosed:
 			log.Println("🔒 WebRTC CONNECTION CLOSED")
+			// Restore local cursor
+			if m.mouseController != nil {
+				m.mouseController.ShowCursor()
+			}
 			m.cleanupConnection("Closed")
 		}
 	})
@@ -186,7 +204,13 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		if candidate != nil {
 			log.Printf("📤 Generated ICE candidate: %s", candidate.Typ.String())
-			m.sendICECandidate(candidate)
+			// Buffer candidates until answer is sent (for web dashboard compatibility)
+			if !m.answerSent {
+				m.pendingCandidates = append(m.pendingCandidates, candidate)
+				log.Printf("   Buffered (waiting for answer to be sent first)")
+			} else {
+				m.sendICECandidate(candidate)
+			}
 		}
 	})
 
@@ -300,8 +324,17 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 	case "mouse_move":
 		x, _ := event["x"].(float64)
 		y, _ := event["y"].(float64)
-		if err := m.mouseController.Move(x, y); err != nil {
-			log.Printf("❌ Mouse move error: %v", err)
+		isRelative, _ := event["rel"].(bool)
+
+		// Use rel flag to determine coordinate type
+		if isRelative {
+			if err := m.mouseController.MoveRelative(x, y); err != nil {
+				log.Printf("❌ Mouse move error: %v", err)
+			}
+		} else {
+			if err := m.mouseController.Move(x, y); err != nil {
+				log.Printf("❌ Mouse move error: %v", err)
+			}
 		}
 
 	case "mouse_click":
@@ -309,15 +342,17 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 		down, _ := event["down"].(bool)
 		x, hasX := event["x"].(float64)
 		y, hasY := event["y"].(float64)
+		isRelative, _ := event["rel"].(bool)
 
 		// Move mouse to click position if coordinates are provided
 		if hasX && hasY {
-			if err := m.mouseController.Move(x, y); err != nil {
-				log.Printf("❌ Mouse move to click position error: %v", err)
+			if isRelative {
+				m.mouseController.MoveRelative(x, y)
+			} else {
+				m.mouseController.Move(x, y)
 			}
 		}
 
-		log.Printf("🖱️  Mouse %s %s at (%.0f, %.0f)", button, map[bool]string{true: "down", false: "up"}[down], x, y)
 		if err := m.mouseController.Click(button, down); err != nil {
 			log.Printf("❌ Mouse click error: %v", err)
 		}
