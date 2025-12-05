@@ -2896,3 +2896,51 @@ body::before {
     text-align: center;
   }
 }
+
+/* Super Admin Badge */
+.super-admin-badge {
+  background: linear-gradient(135deg, #f59e0b 0%, #eab308 100%);
+  color: #000;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  display: inline-block;
+  margin-bottom: 1rem;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+}
+
+/* Invite Form */
+.invite-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.invite-form {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.invite-form .form-group {
+  flex: 1;
+  min-width: 200px;
+}
+
+.transfer-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: grid;
+  gap: 1rem;
+  max-width: 500px;
+}
+
+.transfer-form .form-group {
+  margin-bottom: 0;
+}
