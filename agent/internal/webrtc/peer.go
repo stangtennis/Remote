@@ -471,11 +471,12 @@ func (m *Manager) startClipboardMonitoring() {
 
 func (m *Manager) startScreenStreaming() {
 	// Stream JPEG frames over data channel
-	// 60 FPS (16ms) = ultra-smooth, instant response
-	ticker := time.NewTicker(16 * time.Millisecond)
+	// 30 FPS (33ms) = smooth, good balance of quality and bandwidth
+	// Can be increased to 60 FPS (16ms) for ultra-smooth if network allows
+	ticker := time.NewTicker(33 * time.Millisecond)
 	defer ticker.Stop()
 
-	log.Println("🎥 Starting screen streaming at 60 FPS (low-latency mode)...")
+	log.Println("🎥 Starting screen streaming at 30 FPS...")
 
 	// If screen capturer not initialized, try to initialize now
 	if m.screenCapturer == nil {
@@ -526,8 +527,9 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
-		// Capture with high quality (85 = excellent quality, smaller size = lower latency)
-		jpeg, err := m.screenCapturer.CaptureJPEG(85)
+		// Capture with good quality (70 = good quality, smaller frames = higher FPS)
+		// Lower quality = smaller frames = less congestion = more consistent FPS
+		jpeg, err := m.screenCapturer.CaptureJPEG(70)
 		if err != nil {
 			// On any error, resend last frame to keep stream alive
 			if lastFrame != nil {
@@ -551,8 +553,8 @@ func (m *Manager) startScreenStreaming() {
 			log.Printf("Failed to send frame: %v", err)
 		} else {
 			frameCount++
-			// Log every 60 frames (once per second at 60 FPS)
-			if frameCount%60 == 0 {
+			// Log every 30 frames (once per second at 30 FPS)
+			if frameCount%30 == 0 {
 				log.Printf("📊 Streaming: %d frames sent | Latest: %d KB | Errors: %d | Dropped: %d",
 					frameCount, len(jpeg)/1024, errorCount, droppedFrames)
 			}
