@@ -152,6 +152,12 @@ func (m *Manager) monitorDesktopChanges() {
 }
 
 func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
+	// Close any existing connection first
+	if m.peerConnection != nil {
+		log.Println("🔄 Closing existing peer connection for new connection...")
+		m.cleanupConnection("New connection requested")
+	}
+
 	config := webrtc.Configuration{
 		ICEServers: iceServers,
 	}
@@ -161,6 +167,9 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 		return fmt.Errorf("failed to create peer connection: %w", err)
 	}
 
+	// Reset state for new connection
+	m.answerSent = false
+	m.pendingCandidates = nil
 	m.peerConnection = pc
 
 	// Set up connection state handler
