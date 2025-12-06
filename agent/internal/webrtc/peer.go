@@ -517,6 +517,11 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
+		// Switch to input desktop before capture (important for Session 0/login screen)
+		if m.isSession0 {
+			desktop.SwitchToInputDesktop()
+		}
+
 		// Check if data channel is backed up (buffered amount > 16MB = larger buffer)
 		if m.dataChannel.BufferedAmount() > 16*1024*1024 {
 			droppedFrames++
