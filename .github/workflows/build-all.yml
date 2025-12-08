@@ -37,18 +37,31 @@ jobs:
           go mod tidy
           go mod download
 
-      - name: Build Agent
+      - name: Build Agent (GUI mode)
         working-directory: ./agent
         env:
           CGO_ENABLED: 1
         run: |
           go build -mod=mod -ldflags "-s -w -H windowsgui" -o remote-agent-${{ github.event.inputs.version }}.exe ./cmd/remote-agent
 
-      - name: Upload Agent artifact
+      - name: Build Agent (Console mode for debugging)
+        working-directory: ./agent
+        env:
+          CGO_ENABLED: 1
+        run: |
+          go build -mod=mod -ldflags "-s -w" -o remote-agent-console-${{ github.event.inputs.version }}.exe ./cmd/remote-agent
+
+      - name: Upload Agent artifact (GUI)
         uses: actions/upload-artifact@v4
         with:
           name: remote-agent-windows
           path: ./agent/remote-agent-${{ github.event.inputs.version }}.exe
+
+      - name: Upload Agent artifact (Console)
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-agent-console-windows
+          path: ./agent/remote-agent-console-${{ github.event.inputs.version }}.exe
 
   # Windows Controller
   build-controller-windows:
@@ -164,10 +177,16 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Download Windows Agent
+      - name: Download Windows Agent (GUI)
         uses: actions/download-artifact@v4
         with:
           name: remote-agent-windows
+          path: ./artifacts
+
+      - name: Download Windows Agent (Console)
+        uses: actions/download-artifact@v4
+        with:
+          name: remote-agent-console-windows
           path: ./artifacts
 
       - name: Download Windows Controller
@@ -199,15 +218,22 @@ jobs:
           body: |
             ## Downloads
             
-            ### Windows
-            - **remote-agent-${{ github.event.inputs.version }}.exe** - Windows Agent (install on remote PC)
+            ### Windows Agent
+            - **remote-agent-${{ github.event.inputs.version }}.exe** - Windows Agent (GUI mode, runs in system tray)
+            - **remote-agent-console-${{ github.event.inputs.version }}.exe** - Windows Agent (Console mode for debugging)
+            
+            ### Windows Controller
             - **controller-${{ github.event.inputs.version }}.exe** - Windows Controller (client app)
             
-            ### macOS
+            ### macOS Controller
             - **controller-mac-intel-${{ github.event.inputs.version }}** - macOS Controller (Intel Macs)
             - **controller-mac-arm64-${{ github.event.inputs.version }}** - macOS Controller (Apple Silicon M1/M2/M3)
             
             ## Installation
+            
+            ### Windows Agent
+            - Use **remote-agent-${{ github.event.inputs.version }}.exe** for normal use (system tray)
+            - Use **remote-agent-console-${{ github.event.inputs.version }}.exe** for debugging (shows console output)
             
             ### macOS
             1. Download the appropriate version for your Mac
