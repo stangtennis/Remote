@@ -233,10 +233,16 @@ func (m *Manager) handleWebSession(session Session) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Use default STUN servers
+	// Use STUN and TURN servers for NAT traversal
 	iceServers := []webrtc.ICEServer{
 		{URLs: []string{"stun:stun.l.google.com:19302"}},
 		{URLs: []string{"stun:stun1.l.google.com:19302"}},
+		// TURN server for relay when direct connection fails
+		{
+			URLs:       []string{"turn:188.228.14.94:3478", "turn:188.228.14.94:3478?transport=tcp"},
+			Username:   "remotedesktop",
+			Credential: "Hawkeye2025Turn!",
+		},
 	}
 
 	if err := m.CreatePeerConnection(iceServers); err != nil {
@@ -408,10 +414,16 @@ func (m *Manager) handleSession(session Session) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Use default STUN servers (TURN can be added later)
+	// Use STUN and TURN servers for NAT traversal
 	iceServers := []webrtc.ICEServer{
 		{URLs: []string{"stun:stun.l.google.com:19302"}},
 		{URLs: []string{"stun:stun1.l.google.com:19302"}},
+		// TURN server for relay when direct connection fails
+		{
+			URLs:       []string{"turn:188.228.14.94:3478", "turn:188.228.14.94:3478?transport=tcp"},
+			Username:   "remotedesktop",
+			Credential: "Hawkeye2025Turn!",
+		},
 	}
 
 	if err := m.CreatePeerConnection(iceServers); err != nil {
@@ -808,18 +820,16 @@ func (m *Manager) sendICECandidate(candidate *webrtc.ICECandidate) {
 		sdpMLineIndex = *candidateInit.SDPMLineIndex
 	}
 
-	candidateObj := map[string]interface{}{
-		"candidate":     candidateInit.Candidate,
-		"sdpMid":        sdpMid,
-		"sdpMLineIndex": sdpMLineIndex,
-	}
-
+	// Send ICE candidate directly in payload (same format as dashboard sends)
+	// Dashboard expects: payload = { candidate: "...", sdpMid: "0", sdpMLineIndex: 0 }
 	payload := map[string]interface{}{
 		"session_id": m.sessionID,
 		"from_side":  "agent",
 		"msg_type":   "ice",
 		"payload": map[string]interface{}{
-			"candidate": candidateObj,
+			"candidate":     candidateInit.Candidate,
+			"sdpMid":        sdpMid,
+			"sdpMLineIndex": sdpMLineIndex,
 		},
 	}
 
