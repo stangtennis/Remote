@@ -23,6 +23,11 @@ portainer.hawkeye123.dk {
     reverse_proxy 192.168.1.92:9000
 }
 
+# Remote Desktop Dashboard - redirect til GitHub Pages
+remote.hawkeye123.dk {
+    redir https://stangtennis.github.io/Remote{uri} permanent
+}
+
 # Archon MCP endpoint (hvis nødvendigt)
 # mcp.hawkeye123.dk {
 #     reverse_proxy 192.168.1.92:8051
