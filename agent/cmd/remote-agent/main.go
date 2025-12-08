@@ -88,13 +88,17 @@ func setupLogging() error {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
 
+	// Write directly to file first to verify it works
+	logFile.WriteString("=== LOG FILE OPENED ===\n")
+	logFile.Sync()
+
 	// Write to both file and console (if interactive)
 	isService, _ := svc.IsWindowsService()
 	if isService {
 		// Service: only write to file
 		log.SetOutput(logFile)
 	} else {
-		// Interactive: write to both
+		// Interactive: write to both file and console
 		multiWriter := io.MultiWriter(os.Stdout, logFile)
 		log.SetOutput(multiWriter)
 	}
@@ -310,7 +314,8 @@ func main() {
 	}
 
 	// Interactive mode - show GUI unless -silent flag
-	if !*silentFlag {
+	if !*silentFlag && !*consoleFlag {
+		// Note: GUI mode sets up its own logging in NewAgentGUI()
 		showGUI()
 		return
 	}

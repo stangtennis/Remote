@@ -100,8 +100,11 @@ func NewAgentGUI() *AgentGUI {
 	// Setup logging early so we can debug GUI issues
 	if err := setupLogging(); err != nil {
 		fmt.Printf("Warning: Failed to setup logging: %v\n", err)
+	} else {
+		fmt.Println("✅ Logging setup successful")
 	}
 	log.Println("🖥️ Starting GUI mode...")
+	flushLog() // Force flush immediately
 
 	a := app.New()
 	a.Settings().SetTheme(&darkTheme{})
