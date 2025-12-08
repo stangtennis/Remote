@@ -47,8 +47,9 @@ jobs:
         env:
           CGO_ENABLED: 1
         run: |
-          fyne package -os windows -name "Remote Agent" -appID com.stangtennis.remoteagent -src ./cmd/remote-agent
-          move "Remote Agent.exe" "remote-agent-${{ github.event.inputs.version }}.exe"
+          fyne package -os windows -name "RemoteAgent" -appID com.stangtennis.remoteagent -src ./cmd/remote-agent
+          dir
+          move RemoteAgent.exe remote-agent-${{ github.event.inputs.version }}.exe
 
       - name: Upload Agent artifact
         uses: actions/upload-artifact@v4
@@ -91,8 +92,9 @@ jobs:
         env:
           CGO_ENABLED: 1
         run: |
-          fyne package -os windows -name "Remote Controller" -appID com.stangtennis.remotecontroller
-          move "Remote Controller.exe" "controller-${{ github.event.inputs.version }}.exe"
+          fyne package -os windows -name "RemoteController" -appID com.stangtennis.remotecontroller
+          dir
+          move RemoteController.exe controller-${{ github.event.inputs.version }}.exe
 
       - name: Upload Controller artifact
         uses: actions/upload-artifact@v4
