@@ -167,6 +167,7 @@ func (g *AgentGUI) buildUI() {
 	// Status card
 	g.userLabel = widget.NewLabel("")
 	g.serviceLabel = widget.NewLabel("")
+	g.statusLabel = widget.NewLabel("")
 	g.updateStatusLabels()
 
 	statusCard := container.NewVBox(
@@ -178,6 +179,10 @@ func (g *AgentGUI) buildUI() {
 		container.NewHBox(
 			widget.NewIcon(theme.ComputerIcon()),
 			g.serviceLabel,
+		),
+		container.NewHBox(
+			widget.NewIcon(theme.InfoIcon()),
+			g.statusLabel,
 		),
 		widget.NewSeparator(),
 	)
