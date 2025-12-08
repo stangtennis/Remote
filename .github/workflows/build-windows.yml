@@ -6,7 +6,7 @@ on:
       version:
         description: 'Version tag (e.g., v2.12.0)'
         required: true
-        default: 'v2.12.0'
+        default: 'v2.13.0'
 
 permissions:
   contents: write
@@ -28,10 +28,7 @@ jobs:
       - name: Install MinGW (GCC for Windows)
         run: |
           choco install mingw -y
-          echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Verify GCC
-        run: gcc --version
+          refreshenv
 
       - name: Tidy Go modules
         working-directory: ./agent
@@ -39,21 +36,12 @@ jobs:
           go mod tidy
           go mod download
 
-      - name: Install Fyne CLI
-        run: go install fyne.io/tools/cmd/fyne@latest
-
-      - name: Bundle Resources
-        working-directory: ./agent
-        run: |
-          fyne bundle -o cmd/remote-agent/bundled.go cmd/remote-agent/Icon.png
-        continue-on-error: true
-
       - name: Build Agent
         working-directory: ./agent
         env:
           CGO_ENABLED: 1
         run: |
-          go build -ldflags "-s -w -H windowsgui" -o remote-agent-${{ github.event.inputs.version }}.exe ./cmd/remote-agent
+          go build -mod=mod -ldflags "-s -w -H windowsgui" -o remote-agent-${{ github.event.inputs.version }}.exe ./cmd/remote-agent
 
       - name: Upload Agent artifact
         uses: actions/upload-artifact@v4
@@ -77,10 +65,7 @@ jobs:
       - name: Install MinGW (GCC for Windows)
         run: |
           choco install mingw -y
-          echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Verify GCC
-        run: gcc --version
+          refreshenv
 
       - name: Tidy Go modules
         working-directory: ./controller
@@ -88,21 +73,12 @@ jobs:
           go mod tidy
           go mod download
 
-      - name: Install Fyne CLI
-        run: go install fyne.io/tools/cmd/fyne@latest
-
-      - name: Bundle Resources
-        working-directory: ./controller
-        run: |
-          fyne bundle -o bundled.go Icon.png
-        continue-on-error: true
-
       - name: Build Controller
         working-directory: ./controller
         env:
           CGO_ENABLED: 1
         run: |
-          go build -ldflags "-s -w -H windowsgui" -o controller-${{ github.event.inputs.version }}.exe .
+          go build -mod=mod -ldflags "-s -w -H windowsgui" -o controller-${{ github.event.inputs.version }}.exe .
 
       - name: Upload Controller artifact
         uses: actions/upload-artifact@v4
