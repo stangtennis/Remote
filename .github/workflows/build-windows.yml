@@ -44,13 +44,13 @@ jobs:
         env:
           CGO_ENABLED: 1
         run: |
-          go build -ldflags "-s -w -H windowsgui" -o remote-agent.exe ./cmd/remote-agent
+          go build -ldflags "-s -w -H windowsgui" -o remote-agent-${{ github.event.inputs.version }}.exe ./cmd/remote-agent
 
       - name: Upload Agent artifact
         uses: actions/upload-artifact@v4
         with:
           name: remote-agent
-          path: ./agent/remote-agent.exe
+          path: ./agent/remote-agent-${{ github.event.inputs.version }}.exe
 
   build-controller:
     runs-on: windows-latest
@@ -84,13 +84,13 @@ jobs:
         env:
           CGO_ENABLED: 1
         run: |
-          go build -ldflags "-s -w -H windowsgui" -o controller.exe .
+          go build -ldflags "-s -w -H windowsgui" -o controller-${{ github.event.inputs.version }}.exe .
 
       - name: Upload Controller artifact
         uses: actions/upload-artifact@v4
         with:
           name: controller
-          path: ./controller/controller.exe
+          path: ./controller/controller-${{ github.event.inputs.version }}.exe
 
   create-release:
     needs: [build-agent, build-controller]
@@ -117,7 +117,6 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.version }}
           files: |
-            ./artifacts/remote-agent.exe
-            ./artifacts/controller.exe
+            ./artifacts/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
