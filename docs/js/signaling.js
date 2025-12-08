@@ -158,12 +158,17 @@ async function handleSignal(signal) {
 
       case 'ice':
         // Agent sent ICE candidate
-        // The payload has { candidate: { candidate, sdpMid, sdpMLineIndex } }
-        const candidateData = signal.payload.candidate || signal.payload;
+        // Agent sends: payload = { candidate: "candidate:...", sdpMid: "0", sdpMLineIndex: 0 }
+        // Note: 'candidate' is the SDP string, not a nested object
+        const candidateData = signal.payload;
         if (candidateData && candidateData.candidate) {
-          console.log('📥 Received ICE candidate from agent');
+          console.log('📥 Received ICE candidate from agent:', candidateData.candidate.substring(0, 50) + '...');
           await peerConnection.addIceCandidate(
-            new RTCIceCandidate(candidateData)
+            new RTCIceCandidate({
+              candidate: candidateData.candidate,
+              sdpMid: candidateData.sdpMid,
+              sdpMLineIndex: candidateData.sdpMLineIndex
+            })
           );
           console.log('✅ ICE candidate added successfully');
         }
