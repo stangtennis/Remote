@@ -350,6 +350,7 @@ func (g *AgentGUI) showLoginDialog() {
 
 			// Success!
 			log.Printf("✅ Login successful: %s", result.Email)
+			flushLog() // Ensure login success is written to log file
 			fyne.Do(func() {
 				dialog.ShowInformation("Login Successful", 
 					"✅ Welcome, "+result.Email+"!\n\n"+
@@ -360,6 +361,8 @@ func (g *AgentGUI) showLoginDialog() {
 					"• Work even on the login screen", g.window)
 
 				g.refreshStatus()
+				log.Printf("📊 After refresh - isLoggedIn: %v, email: %s", g.isLoggedIn, g.userEmail)
+				flushLog()
 				g.updateStatusLabels()
 				g.updateActionButtons()
 			})

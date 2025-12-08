@@ -101,7 +101,28 @@ func setupLogging() error {
 	log.Printf("📝 Log file: %s", logPath)
 	log.Printf("========================================")
 
+	// Sync log file immediately
+	logFile.Sync()
+
+	// Start background goroutine to periodically sync log file
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			if logFile != nil {
+				logFile.Sync()
+			}
+		}
+	}()
+
 	return nil
+}
+
+// flushLog ensures all log data is written to disk
+func flushLog() {
+	if logFile != nil {
+		logFile.Sync()
+	}
 }
 
 const serviceName = "RemoteDesktopAgent"
