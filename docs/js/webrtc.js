@@ -60,21 +60,16 @@ async function initWebRTC(session) {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        // Free TURN server from OpenRelay
+        // Egen TURN server på hawkeye123.dk
         {
-          urls: 'turn:openrelay.metered.ca:80',
-          username: 'openrelayproject',
-          credential: 'openrelayproject'
+          urls: 'turn:188.228.14.94:3478',
+          username: 'remotedesktop',
+          credential: 'Hawkeye2025Turn!'
         },
         {
-          urls: 'turn:openrelay.metered.ca:443',
-          username: 'openrelayproject',
-          credential: 'openrelayproject'
-        },
-        {
-          urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-          username: 'openrelayproject',
-          credential: 'openrelayproject'
+          urls: 'turn:188.228.14.94:3478?transport=tcp',
+          username: 'remotedesktop',
+          credential: 'Hawkeye2025Turn!'
         }
       ]
     };
