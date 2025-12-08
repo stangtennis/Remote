@@ -22,14 +22,25 @@ type Session struct {
 }
 
 type SignalMessage struct {
-	ID        int    `json:"id"`
-	SessionID string `json:"session_id"`
-	FromSide  string `json:"from_side"`
-	MsgType   string `json:"msg_type"`
-	Payload   struct {
-		SDP       string                   `json:"sdp"`
-		Candidate *webrtc.ICECandidateInit `json:"candidate"`
-	} `json:"payload"`
+	ID        int             `json:"id"`
+	SessionID string          `json:"session_id"`
+	FromSide  string          `json:"from_side"`
+	MsgType   string          `json:"msg_type"`
+	Payload   json.RawMessage `json:"payload"`
+}
+
+// OfferPayload for offer/answer messages
+type OfferPayload struct {
+	Type string `json:"type"`
+	SDP  string `json:"sdp"`
+}
+
+// ICEPayload for ICE candidate messages - dashboard sends candidate directly in payload
+type ICEPayload struct {
+	Candidate        string `json:"candidate"`
+	SDPMid           string `json:"sdpMid"`
+	SDPMLineIndex    *int   `json:"sdpMLineIndex"`
+	UsernameFragment string `json:"usernameFragment"`
 }
 
 func (m *Manager) ListenForSessions() {
@@ -144,9 +155,16 @@ func (m *Manager) fetchWebDashboardSessions() ([]Session, error) {
 			continue
 		}
 
+		// Parse offer payload
+		var offerPayload OfferPayload
+		if err := json.Unmarshal(sig.Payload, &offerPayload); err != nil {
+			log.Printf("⚠️  Failed to parse offer payload: %v", err)
+			continue
+		}
+
 		session := Session{
 			ID:    sig.SessionID,
-			Offer: sig.Payload.SDP,
+			Offer: offerPayload.SDP,
 			PIN:   pin,
 		}
 		result = append(result, session)
@@ -451,8 +469,21 @@ func (m *Manager) waitForOffer(sessionID string) {
 					m.handleOffer(sessionID, sig)
 					// Continue listening for ICE candidates
 					// (don't return - keep processing signals)
-				} else if sig.MsgType == "ice" && sig.Payload.Candidate != nil {
-					m.handleICECandidate(sig.Payload.Candidate)
+				} else if sig.MsgType == "ice" {
+					// Parse ICE payload - dashboard sends candidate directly in payload
+					var icePayload ICEPayload
+					if err := json.Unmarshal(sig.Payload, &icePayload); err != nil {
+						log.Printf("⚠️  Failed to parse ICE payload: %v", err)
+						continue
+					}
+					if icePayload.Candidate != "" {
+						candidate := &webrtc.ICECandidateInit{
+							Candidate:     icePayload.Candidate,
+							SDPMid:        &icePayload.SDPMid,
+							SDPMLineIndex: func() *uint16 { if icePayload.SDPMLineIndex != nil { v := uint16(*icePayload.SDPMLineIndex); return &v }; return nil }(),
+						}
+						m.handleICECandidate(candidate)
+					}
 				}
 			}
 		}
@@ -462,10 +493,17 @@ func (m *Manager) waitForOffer(sessionID string) {
 }
 
 func (m *Manager) handleOffer(sessionID string, sig SignalMessage) {
+	// Parse offer payload
+	var offerPayload OfferPayload
+	if err := json.Unmarshal(sig.Payload, &offerPayload); err != nil {
+		log.Printf("Failed to parse offer payload: %v", err)
+		return
+	}
+
 	// Set remote description
 	offer := webrtc.SessionDescription{
 		Type: webrtc.SDPTypeOffer,
-		SDP:  sig.Payload.SDP,
+		SDP:  offerPayload.SDP,
 	}
 
 	if err := m.peerConnection.SetRemoteDescription(offer); err != nil {
@@ -540,8 +578,21 @@ func (m *Manager) listenForICE(sessionID string) {
 			}
 			processedIDs[sig.ID] = true
 
-			if sig.MsgType == "ice" && sig.Payload.Candidate != nil {
-				m.handleICECandidate(sig.Payload.Candidate)
+			if sig.MsgType == "ice" {
+				// Parse ICE payload
+				var icePayload ICEPayload
+				if err := json.Unmarshal(sig.Payload, &icePayload); err != nil {
+					log.Printf("⚠️  Failed to parse ICE payload: %v", err)
+					continue
+				}
+				if icePayload.Candidate != "" {
+					candidate := &webrtc.ICECandidateInit{
+						Candidate:     icePayload.Candidate,
+						SDPMid:        &icePayload.SDPMid,
+						SDPMLineIndex: func() *uint16 { if icePayload.SDPMLineIndex != nil { v := uint16(*icePayload.SDPMLineIndex); return &v }; return nil }(),
+					}
+					m.handleICECandidate(candidate)
+				}
 			}
 		}
 	}
