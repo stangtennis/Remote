@@ -215,6 +215,7 @@ func GetCredentialsPath() string {
 func SaveCredentials(creds *Credentials) error {
 	data, err := json.Marshal(creds)
 	if err != nil {
+		log.Printf("❌ Failed to marshal credentials: %v", err)
 		return err
 	}
 
@@ -223,29 +224,37 @@ func SaveCredentials(creds *Credentials) error {
 
 	// Save to AppData (user accessible)
 	appData := os.Getenv("APPDATA")
+	log.Printf("📁 APPDATA=%s", appData)
 	if appData != "" {
 		credDir := filepath.Join(appData, "RemoteDesktopAgent")
+		log.Printf("📁 Creating dir: %s", credDir)
 		if err := os.MkdirAll(credDir, 0755); err == nil {
 			credPath := filepath.Join(credDir, ".credentials")
+			log.Printf("📁 Writing to: %s", credPath)
 			if err := os.WriteFile(credPath, data, 0600); err == nil {
-				fmt.Printf("   ✅ Saved to AppData: %s\n", credPath)
+				log.Printf("✅ Saved to AppData: %s", credPath)
 				saved = true
 			} else {
+				log.Printf("❌ Failed to write to AppData: %v", err)
 				lastErr = err
 			}
+		} else {
+			log.Printf("❌ Failed to create AppData dir: %v", err)
 		}
 	}
 
 	// Also try to save to ProgramData (service accessible)
 	programData := os.Getenv("ProgramData")
+	log.Printf("📁 ProgramData=%s", programData)
 	if programData != "" {
 		credDir := filepath.Join(programData, "RemoteDesktopAgent")
 		if err := os.MkdirAll(credDir, 0755); err == nil {
 			credPath := filepath.Join(credDir, ".credentials")
 			if err := os.WriteFile(credPath, data, 0600); err == nil {
-				fmt.Printf("   ✅ Saved to ProgramData: %s\n", credPath)
+				log.Printf("✅ Saved to ProgramData: %s", credPath)
 				saved = true
 			} else {
+				log.Printf("⚠️ Failed to write to ProgramData: %v", err)
 				// Only set error if we haven't saved anywhere yet
 				if !saved {
 					lastErr = err
@@ -255,8 +264,10 @@ func SaveCredentials(creds *Credentials) error {
 	}
 
 	if saved {
+		log.Printf("✅ Credentials saved successfully")
 		return nil
 	}
+	log.Printf("❌ Failed to save credentials anywhere: %v", lastErr)
 	return lastErr
 }
 
