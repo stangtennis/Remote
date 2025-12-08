@@ -158,16 +158,28 @@ async function handleSignal(signal) {
 
       case 'ice':
         // Agent sent ICE candidate
-        // Agent sends: payload = { candidate: "candidate:...", sdpMid: "0", sdpMLineIndex: 0 }
-        // Note: 'candidate' is the SDP string, not a nested object
-        const candidateData = signal.payload;
-        if (candidateData && candidateData.candidate) {
-          console.log('📥 Received ICE candidate from agent:', candidateData.candidate.substring(0, 50) + '...');
+        // Handle both formats:
+        // Old: payload = { candidate: { candidate: "...", sdpMid, sdpMLineIndex } }
+        // New: payload = { candidate: "...", sdpMid: "0", sdpMLineIndex: 0 }
+        let iceCandidate;
+        if (signal.payload.candidate && typeof signal.payload.candidate === 'object') {
+          // Old nested format
+          iceCandidate = signal.payload.candidate;
+        } else {
+          // New flat format
+          iceCandidate = signal.payload;
+        }
+        
+        if (iceCandidate && iceCandidate.candidate) {
+          const candidateStr = typeof iceCandidate.candidate === 'string' 
+            ? iceCandidate.candidate.substring(0, 50) + '...'
+            : JSON.stringify(iceCandidate.candidate).substring(0, 50);
+          console.log('📥 Received ICE candidate from agent:', candidateStr);
           await peerConnection.addIceCandidate(
             new RTCIceCandidate({
-              candidate: candidateData.candidate,
-              sdpMid: candidateData.sdpMid,
-              sdpMLineIndex: candidateData.sdpMLineIndex
+              candidate: iceCandidate.candidate,
+              sdpMid: iceCandidate.sdpMid,
+              sdpMLineIndex: iceCandidate.sdpMLineIndex
             })
           );
           console.log('✅ ICE candidate added successfully');
