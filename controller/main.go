@@ -186,6 +186,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 				logger.Error("Login failed for %s: %v", email, err)
 				fyne.Do(func() {
 					statusLabel.SetText("❌ Login failed: " + err.Error())
+					dialog.ShowError(fmt.Errorf("Login failed: %v", err), window)
 					loginButton.Enable()
 				})
 				return
@@ -201,6 +202,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 				logger.Error("Failed to check approval for user %s: %v", currentUser.ID, err)
 				fyne.Do(func() {
 					statusLabel.SetText("❌ Failed to check approval")
+					dialog.ShowError(fmt.Errorf("Failed to check approval: %v", err), window)
 					loginButton.Enable()
 				})
 				return
