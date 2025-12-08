@@ -55,8 +55,8 @@ async function initWebRTC(session) {
       throw new Error('Invalid session object - missing session_id');
     }
     
-    // Create peer connection with TURN servers from session
-    const configuration = session.turn_config || {
+    // Always use our own TURN server configuration
+    const configuration = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
