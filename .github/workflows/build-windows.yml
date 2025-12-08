@@ -1,0 +1,123 @@
+name: Build Windows (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v2.12.0)'
+        required: true
+        default: 'v2.12.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-agent:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: agent/go.sum
+
+      - name: Install MinGW (GCC for Windows)
+        run: |
+          choco install mingw -y
+          echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify GCC
+        run: gcc --version
+
+      - name: Tidy Go modules
+        working-directory: ./agent
+        run: |
+          go mod tidy
+          go mod download
+
+      - name: Build Agent
+        working-directory: ./agent
+        env:
+          CGO_ENABLED: 1
+        run: |
+          go build -ldflags "-s -w -H windowsgui" -o remote-agent.exe ./cmd/remote-agent
+
+      - name: Upload Agent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-agent
+          path: ./agent/remote-agent.exe
+
+  build-controller:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: controller/go.sum
+
+      - name: Install MinGW (GCC for Windows)
+        run: |
+          choco install mingw -y
+          echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify GCC
+        run: gcc --version
+
+      - name: Tidy Go modules
+        working-directory: ./controller
+        run: |
+          go mod tidy
+          go mod download
+
+      - name: Build Controller
+        working-directory: ./controller
+        env:
+          CGO_ENABLED: 1
+        run: |
+          go build -ldflags "-s -w -H windowsgui" -o controller.exe .
+
+      - name: Upload Controller artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: controller
+          path: ./controller/controller.exe
+
+  create-release:
+    needs: [build-agent, build-controller]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download Agent artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: remote-agent
+          path: ./artifacts
+
+      - name: Download Controller artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: controller
+          path: ./artifacts
+
+      - name: List artifacts
+        run: ls -la ./artifacts
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          files: |
+            ./artifacts/remote-agent.exe
+            ./artifacts/controller.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
