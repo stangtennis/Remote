@@ -39,12 +39,17 @@ jobs:
           go mod tidy
           go mod download
 
-      - name: Build Agent
+      - name: Install Fyne CLI
+        run: go install fyne.io/tools/cmd/fyne@latest
+
+      - name: Build Agent with Fyne Package
         working-directory: ./agent
         env:
           CGO_ENABLED: 1
         run: |
-          go build -ldflags "-s -w -H windowsgui" -o remote-agent-${{ github.event.inputs.version }}.exe ./cmd/remote-agent
+          fyne package -os windows -name RemoteAgent -appID com.stangtennis.remoteagent -src ./cmd/remote-agent
+          dir
+          ren RemoteAgent.exe remote-agent-${{ github.event.inputs.version }}.exe
 
       - name: Upload Agent artifact
         uses: actions/upload-artifact@v4
@@ -79,12 +84,17 @@ jobs:
           go mod tidy
           go mod download
 
-      - name: Build Controller
+      - name: Install Fyne CLI
+        run: go install fyne.io/tools/cmd/fyne@latest
+
+      - name: Build Controller with Fyne Package
         working-directory: ./controller
         env:
           CGO_ENABLED: 1
         run: |
-          go build -ldflags "-s -w -H windowsgui" -o controller-${{ github.event.inputs.version }}.exe .
+          fyne package -os windows -name RemoteController -appID com.stangtennis.remotecontroller
+          dir
+          ren RemoteController.exe controller-${{ github.event.inputs.version }}.exe
 
       - name: Upload Controller artifact
         uses: actions/upload-artifact@v4
