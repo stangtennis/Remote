@@ -666,6 +666,30 @@ function displayVideoFrame(data) {
 
   const ctx = canvas.getContext('2d');
   
+  // Debug: log data info
+  let dataSize = 0;
+  if (data instanceof Blob) {
+    dataSize = data.size;
+  } else if (data instanceof ArrayBuffer) {
+    dataSize = data.byteLength;
+  } else if (data && data.byteLength) {
+    dataSize = data.byteLength;
+  }
+  
+  // Check if data looks like JPEG (starts with 0xFF 0xD8)
+  let isJpeg = false;
+  if (data instanceof ArrayBuffer && data.byteLength > 2) {
+    const header = new Uint8Array(data, 0, 2);
+    isJpeg = header[0] === 0xFF && header[1] === 0xD8;
+  }
+  
+  console.log(`📷 Frame received: ${dataSize} bytes, isJPEG: ${isJpeg}`);
+  
+  if (dataSize < 100) {
+    console.error('❌ Frame too small, likely corrupt:', dataSize);
+    return;
+  }
+  
   // Convert data to blob if it's an ArrayBuffer
   const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
   
