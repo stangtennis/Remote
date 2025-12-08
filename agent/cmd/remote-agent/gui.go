@@ -360,19 +360,16 @@ func (g *AgentGUI) showLoginDialog() {
 			log.Printf("✅ Login successful: %s", result.Email)
 			flushLog() // Ensure login success is written to log file
 			fyne.Do(func() {
-				dialog.ShowInformation("Login Successful", 
-					"✅ Welcome, "+result.Email+"!\n\n"+
-					"You can now install the Remote Desktop Agent as a Windows service.\n\n"+
-					"The service will:\n"+
-					"• Start automatically with Windows\n"+
-					"• Allow remote access to this computer\n"+
-					"• Work even on the login screen", g.window)
-
 				g.refreshStatus()
 				log.Printf("📊 After refresh - isLoggedIn: %v, email: %s", g.isLoggedIn, g.userEmail)
 				flushLog()
 				g.updateStatusLabels()
 				g.updateActionButtons()
+				
+				// Show success message after updating UI
+				dialog.ShowInformation("Login Successful", 
+					"✅ Welcome, "+result.Email+"!\n\n"+
+					"You can now use Run Once or install as a Windows service.", g.window)
 			})
 		}()
 	}, g.window)
