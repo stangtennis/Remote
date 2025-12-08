@@ -1,0 +1,29 @@
+# Caddy reverse proxy for hawkeye123.dk
+# Automatisk HTTPS via Let's Encrypt - ingen manuel konfiguration!
+
+# Supabase - Kong API Gateway
+supabase.hawkeye123.dk {
+    reverse_proxy 192.168.1.92:8888
+    
+    # CORS headers for Supabase API
+    header Access-Control-Allow-Origin *
+    header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+    header Access-Control-Allow-Headers "Authorization, Content-Type, apikey, x-client-info"
+    
+    # WebSocket support er automatisk i Caddy
+}
+
+# Archon UI
+archon.hawkeye123.dk {
+    reverse_proxy 192.168.1.92:3737
+}
+
+# Portainer
+portainer.hawkeye123.dk {
+    reverse_proxy 192.168.1.92:9000
+}
+
+# Archon MCP endpoint (hvis nødvendigt)
+# mcp.hawkeye123.dk {
+#     reverse_proxy 192.168.1.92:8051
+# }
