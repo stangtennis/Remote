@@ -604,6 +604,16 @@ func (v *Viewer) HandleFileTransferData(data []byte) error {
 
 // OpenFileBrowser opens the Total Commander-style file browser
 func (v *Viewer) OpenFileBrowser() {
+	// Recover from any panics to prevent app crash
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("❌ OpenFileBrowser panic recovered: %v", r)
+			fyne.Do(func() {
+				dialog.ShowError(fmt.Errorf("File browser error: %v", r), v.window)
+			})
+		}
+	}()
+
 	if !v.connected {
 		dialog.ShowInformation("Not Connected", "Please connect to a device first", v.window)
 		return
@@ -613,6 +623,11 @@ func (v *Viewer) OpenFileBrowser() {
 
 	// Create file browser if not exists
 	fb := filebrowser.NewFileBrowser(v.window)
+	if fb == nil {
+		log.Println("❌ Failed to create file browser")
+		dialog.ShowError(fmt.Errorf("Failed to create file browser"), v.window)
+		return
+	}
 	v.fileBrowser = fb
 
 	// Set up callbacks

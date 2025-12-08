@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"log"
 	"net/url"
 	"time"
 
@@ -90,6 +91,12 @@ type AgentGUI struct {
 }
 
 func NewAgentGUI() *AgentGUI {
+	// Setup logging early so we can debug GUI issues
+	if err := setupLogging(); err != nil {
+		fmt.Printf("Warning: Failed to setup logging: %v\n", err)
+	}
+	log.Println("🖥️ Starting GUI mode...")
+
 	a := app.New()
 	a.Settings().SetTheme(&darkTheme{})
 
@@ -97,6 +104,7 @@ func NewAgentGUI() *AgentGUI {
 		app: a,
 	}
 
+	log.Println("📱 Creating main window...")
 	gui.window = a.NewWindow("Remote Desktop Agent")
 	gui.window.Resize(fyne.NewSize(450, 500))
 	gui.window.SetFixedSize(true)
@@ -295,37 +303,60 @@ func (g *AgentGUI) showLoginDialog() {
 		progress.Show()
 
 		go func() {
+			log.Printf("🔐 Login attempt for: %s", email)
+			
 			cfg, err := config.Load()
 			if err != nil {
-				progress.Hide()
-				dialog.ShowError(fmt.Errorf("Failed to load config: %v", err), g.window)
+				log.Printf("❌ Failed to load config: %v", err)
+				fyne.Do(func() {
+					progress.Hide()
+					dialog.ShowError(fmt.Errorf("Failed to load config: %v", err), g.window)
+				})
 				return
 			}
 
+			log.Printf("📡 Connecting to: %s", cfg.SupabaseURL)
 			authConfig := auth.AuthConfig{
 				SupabaseURL: cfg.SupabaseURL,
 				AnonKey:     cfg.SupabaseAnonKey,
 			}
 
 			result, err := auth.Login(authConfig, email, password)
-			progress.Hide()
+			fyne.Do(func() {
+				progress.Hide()
+			})
 
 			if err != nil {
-				dialog.ShowError(fmt.Errorf("Login failed: %v", err), g.window)
+				log.Printf("❌ Login error: %v", err)
+				fyne.Do(func() {
+					dialog.ShowError(fmt.Errorf("Login failed: %v", err), g.window)
+				})
 				return
 			}
 
 			if !result.Success {
-				dialog.ShowError(fmt.Errorf(result.Message), g.window)
+				log.Printf("❌ Login failed: %s", result.Message)
+				fyne.Do(func() {
+					dialog.ShowError(fmt.Errorf(result.Message), g.window)
+				})
 				return
 			}
 
 			// Success!
-			dialog.ShowInformation("Success", "✅ Welcome, "+result.Email+"!\n\nYou can now install the service.", g.window)
+			log.Printf("✅ Login successful: %s", result.Email)
+			fyne.Do(func() {
+				dialog.ShowInformation("Login Successful", 
+					"✅ Welcome, "+result.Email+"!\n\n"+
+					"You can now install the Remote Desktop Agent as a Windows service.\n\n"+
+					"The service will:\n"+
+					"• Start automatically with Windows\n"+
+					"• Allow remote access to this computer\n"+
+					"• Work even on the login screen", g.window)
 
-			g.refreshStatus()
-			g.updateStatusLabels()
-			g.updateActionButtons()
+				g.refreshStatus()
+				g.updateStatusLabels()
+				g.updateActionButtons()
+			})
 		}()
 	}, g.window)
 
@@ -352,27 +383,32 @@ func (g *AgentGUI) doInstall() {
 	go func() {
 		err := installService()
 		if err != nil {
-			progress.Hide()
-			dialog.ShowError(fmt.Errorf("Failed to install: %v", err), g.window)
+			fyne.Do(func() {
+				progress.Hide()
+				dialog.ShowError(fmt.Errorf("Failed to install: %v", err), g.window)
+			})
 			return
 		}
 
 		err = startService()
-		progress.Hide()
+		fyne.Do(func() {
+			progress.Hide()
 
-		if err != nil {
-			dialog.ShowError(fmt.Errorf("Installed but failed to start: %v", err), g.window)
-		} else {
-			dialog.ShowInformation("Success",
-				"✅ Service installed and started!\n\n"+
-					"• Starts automatically with Windows\n"+
-					"• Works on login screen\n"+
-					"• Run this app to manage", g.window)
-		}
+			if err != nil {
+				dialog.ShowError(fmt.Errorf("Installed but failed to start: %v", err), g.window)
+			} else {
+				dialog.ShowInformation("Installation Complete",
+					"✅ Service installed and started!\n\n"+
+						"The Remote Desktop Agent is now running.\n\n"+
+						"• Starts automatically with Windows\n"+
+						"• Works on login screen\n"+
+						"• Run this app to manage the service", g.window)
+			}
 
-		g.refreshStatus()
-		g.updateStatusLabels()
-		g.updateActionButtons()
+			g.refreshStatus()
+			g.updateStatusLabels()
+			g.updateActionButtons()
+		})
 	}()
 }
 
@@ -404,17 +440,21 @@ func (g *AgentGUI) doUninstall() {
 			}
 
 			err := uninstallService()
-			progress.Hide()
+			fyne.Do(func() {
+				progress.Hide()
 
-			if err != nil {
-				dialog.ShowError(fmt.Errorf("Failed to uninstall: %v", err), g.window)
-			} else {
-				dialog.ShowInformation("Success", "✅ Service uninstalled.", g.window)
-			}
+				if err != nil {
+					dialog.ShowError(fmt.Errorf("Failed to uninstall: %v", err), g.window)
+				} else {
+					dialog.ShowInformation("Uninstall Complete", 
+						"✅ Service uninstalled successfully.\n\n"+
+						"The Remote Desktop Agent is no longer running as a service.", g.window)
+				}
 
-			g.refreshStatus()
-			g.updateStatusLabels()
-			g.updateActionButtons()
+				g.refreshStatus()
+				g.updateStatusLabels()
+				g.updateActionButtons()
+			})
 		}()
 	}, g.window)
 }
@@ -425,17 +465,21 @@ func (g *AgentGUI) doStart() {
 
 	go func() {
 		err := startService()
-		progress.Hide()
+		fyne.Do(func() {
+			progress.Hide()
 
-		if err != nil {
-			dialog.ShowError(fmt.Errorf("Failed to start: %v", err), g.window)
-		} else {
-			dialog.ShowInformation("Success", "✅ Service started!", g.window)
-		}
+			if err != nil {
+				dialog.ShowError(fmt.Errorf("Failed to start: %v", err), g.window)
+			} else {
+				dialog.ShowInformation("Service Started", 
+					"✅ Service started successfully!\n\n"+
+					"The Remote Desktop Agent is now running and ready for connections.", g.window)
+			}
 
-		g.refreshStatus()
-		g.updateStatusLabels()
-		g.updateActionButtons()
+			g.refreshStatus()
+			g.updateStatusLabels()
+			g.updateActionButtons()
+		})
 	}()
 }
 
@@ -445,36 +489,79 @@ func (g *AgentGUI) doStop() {
 
 	go func() {
 		err := stopService()
-		progress.Hide()
+		fyne.Do(func() {
+			progress.Hide()
 
-		if err != nil {
-			dialog.ShowError(fmt.Errorf("Failed to stop: %v", err), g.window)
-		} else {
-			dialog.ShowInformation("Success", "✅ Service stopped!", g.window)
-		}
+			if err != nil {
+				dialog.ShowError(fmt.Errorf("Failed to stop: %v", err), g.window)
+			} else {
+				dialog.ShowInformation("Service Stopped", 
+					"✅ Service stopped successfully.\n\n"+
+					"Remote connections are no longer possible until the service is started again.", g.window)
+			}
 
-		g.refreshStatus()
-		g.updateStatusLabels()
-		g.updateActionButtons()
+			g.refreshStatus()
+			g.updateStatusLabels()
+			g.updateActionButtons()
+		})
 	}()
 }
 
 func (g *AgentGUI) doRunOnce() {
-	dialog.ShowInformation("Run Once",
-		"The agent will now run in interactive mode.\n\n"+
-			"A system tray icon will appear.\n"+
-			"The agent will stop when you log out.", g.window)
-
-	g.window.Hide()
-
-	// Setup logging and run
-	if err := setupLogging(); err != nil {
-		dialog.ShowError(fmt.Errorf("Failed to setup: %v", err), g.window)
-		g.window.Show()
+	// Check if logged in first
+	if !auth.IsLoggedIn() {
+		dialog.ShowError(fmt.Errorf("Please login first before running the agent"), g.window)
 		return
 	}
 
-	runInteractive()
+	log.Println("🚀 Starting Run Once mode...")
+
+	// Setup firewall rules
+	setupFirewallRules()
+
+	// Load current user credentials
+	currentUser, _ = auth.GetCurrentUser()
+	log.Printf("✅ Running as: %s", currentUser.Email)
+
+	// Start agent
+	if err := startAgent(); err != nil {
+		log.Printf("❌ Failed to start agent: %v", err)
+		dialog.ShowError(fmt.Errorf("Failed to start agent: %v", err), g.window)
+		return
+	}
+
+	log.Println("✅ Agent started successfully")
+
+	// Update GUI to show running status
+	g.statusLabel.SetText("🟢 Agent Running")
+	g.serviceLabel.SetText("Mode: Interactive (Run Once)")
+	
+	// Disable Run Once button, enable a Stop button
+	g.actionButtons.RemoveAll()
+	
+	stopBtn := widget.NewButton("⏹️  Stop Agent", func() {
+		log.Println("🛑 Stopping agent...")
+		stopAgent()
+		g.statusLabel.SetText("🔴 Agent Stopped")
+		g.serviceLabel.SetText("Mode: Stopped")
+		g.updateActionButtons()
+		dialog.ShowInformation("Agent Stopped", "The agent has been stopped.", g.window)
+	})
+	stopBtn.Importance = widget.DangerImportance
+	g.actionButtons.Add(stopBtn)
+	
+	exitBtn := widget.NewButton("❌  Exit", func() {
+		stopAgent()
+		g.app.Quit()
+	})
+	g.actionButtons.Add(exitBtn)
+	
+	g.actionButtons.Refresh()
+
+	dialog.ShowInformation("Agent Started", 
+		"✅ Agent is now running!\n\n"+
+		"You can minimize this window.\n"+
+		"Click 'Stop Agent' to stop.", g.window)
 }
 
 func (g *AgentGUI) doCheckUpdates() {

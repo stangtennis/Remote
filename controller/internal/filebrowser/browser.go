@@ -75,6 +75,13 @@ func NewFileBrowser(parent fyne.Window) *FileBrowser {
 
 // Show displays the file browser window
 func (fb *FileBrowser) Show() {
+	// Recover from any panics to prevent app crash
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("❌ FileBrowser panic recovered: %v", r)
+		}
+	}()
+
 	// Create new window
 	fb.window = fyne.CurrentApp().NewWindow("📁 File Browser")
 	fb.window.Resize(fyne.NewSize(1000, 600))
@@ -84,8 +91,16 @@ func (fb *FileBrowser) Show() {
 	content := fb.buildUI()
 	fb.window.SetContent(content)
 
-	// Load initial directories
-	fb.loadLocalDir(fb.localPath)
+	// Load initial directories with error handling
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("❌ FileBrowser loadLocalDir panic: %v", r)
+			}
+		}()
+		fb.loadLocalDir(fb.localPath)
+	}()
+	
 	fb.requestRemoteDir(fb.remotePath)
 
 	fb.window.Show()
@@ -304,16 +319,24 @@ func (fb *FileBrowser) buildUI() fyne.CanvasObject {
 
 // loadLocalDir loads the local directory listing
 func (fb *FileBrowser) loadLocalDir(path string) {
+	// Recover from panics
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("❌ loadLocalDir panic: %v", r)
+		}
+	}()
+
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		log.Printf("Failed to read local dir: %v", err)
-		fb.setStatus("Error: " + err.Error())
+		fyne.Do(func() {
+			fb.setStatus("Error: " + err.Error())
+		})
 		return
 	}
 
 	fb.localPath = path
-	fb.localPathLabel.SetText(path)
-	fb.localFiles = make([]FileInfo, 0, len(entries))
+	files := make([]FileInfo, 0, len(entries))
 
 	for _, entry := range entries {
 		info, err := entry.Info()
@@ -321,7 +344,7 @@ func (fb *FileBrowser) loadLocalDir(path string) {
 			continue
 		}
 
-		fb.localFiles = append(fb.localFiles, FileInfo{
+		files = append(files, FileInfo{
 			Name:    entry.Name(),
 			Path:    filepath.Join(path, entry.Name()),
 			Size:    info.Size(),
@@ -331,16 +354,26 @@ func (fb *FileBrowser) loadLocalDir(path string) {
 	}
 
 	// Sort: directories first, then by name
-	sort.Slice(fb.localFiles, func(i, j int) bool {
-		if fb.localFiles[i].IsDir != fb.localFiles[j].IsDir {
-			return fb.localFiles[i].IsDir
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].IsDir != files[j].IsDir {
+			return files[i].IsDir
 		}
-		return strings.ToLower(fb.localFiles[i].Name) < strings.ToLower(fb.localFiles[j].Name)
+		return strings.ToLower(files[i].Name) < strings.ToLower(files[j].Name)
 	})
 
-	fb.localList.Refresh()
+	fb.localFiles = files
 	fb.localSelected = -1
-	fb.setStatus(fmt.Sprintf("Local: %d items", len(fb.localFiles)))
+
+	// Update UI on main thread
+	fyne.Do(func() {
+		if fb.localPathLabel != nil {
+			fb.localPathLabel.SetText(path)
+		}
+		if fb.localList != nil {
+			fb.localList.Refresh()
+		}
+		fb.setStatus(fmt.Sprintf("Local: %d items", len(fb.localFiles)))
+	})
 }
 
 // requestRemoteDir requests directory listing from remote
@@ -356,28 +389,37 @@ func (fb *FileBrowser) requestRemoteDir(path string) {
 
 // SetRemoteFiles updates the remote file list (called when data received)
 func (fb *FileBrowser) SetRemoteFiles(files []FileInfo) {
-	fb.remoteFiles = files
-
 	// Sort: directories first, then by name
-	sort.Slice(fb.remoteFiles, func(i, j int) bool {
-		if fb.remoteFiles[i].IsDir != fb.remoteFiles[j].IsDir {
-			return fb.remoteFiles[i].IsDir
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].IsDir != files[j].IsDir {
+			return files[i].IsDir
 		}
-		return strings.ToLower(fb.remoteFiles[i].Name) < strings.ToLower(fb.remoteFiles[j].Name)
+		return strings.ToLower(files[i].Name) < strings.ToLower(files[j].Name)
 	})
 
-	fb.remoteList.Refresh()
+	fb.remoteFiles = files
 	fb.remoteSelected = -1
-	fb.setStatus(fmt.Sprintf("Remote: %d items", len(fb.remoteFiles)))
+
+	// Update UI on main thread
+	fyne.Do(func() {
+		if fb.remoteList != nil {
+			fb.remoteList.Refresh()
+		}
+		fb.setStatus(fmt.Sprintf("Remote: %d items", len(fb.remoteFiles)))
+	})
 }
 
 // SetRemoteDrives updates the remote drive list
 func (fb *FileBrowser) SetRemoteDrives(drives []string) {
-	fb.remoteDriveSelect.Options = drives
-	if len(drives) > 0 {
-		fb.remoteDriveSelect.SetSelected(drives[0])
-	}
-	fb.remoteDriveSelect.Refresh()
+	fyne.Do(func() {
+		if fb.remoteDriveSelect != nil {
+			fb.remoteDriveSelect.Options = drives
+			if len(drives) > 0 {
+				fb.remoteDriveSelect.SetSelected(drives[0])
+			}
+			fb.remoteDriveSelect.Refresh()
+		}
+	})
 }
 
 // sendSelectedFile sends the selected local file to remote
@@ -516,12 +558,24 @@ func getLocalDrives() []string {
 	}
 
 	drives := []string{}
-	for letter := 'A'; letter <= 'Z'; letter++ {
+	
+	// Use a safer method to detect drives on Windows
+	// Only check common drive letters to avoid hanging on CD-ROM/network drives
+	commonDrives := []rune{'C', 'D', 'E', 'F', 'G', 'H'}
+	
+	for _, letter := range commonDrives {
 		drive := string(letter) + ":\\"
-		if _, err := os.Stat(drive); err == nil {
+		// Use a quick check - just see if the path exists
+		if info, err := os.Stat(drive); err == nil && info.IsDir() {
 			drives = append(drives, drive)
 		}
 	}
+	
+	// Fallback to C:\ if nothing found
+	if len(drives) == 0 {
+		drives = []string{"C:\\"}
+	}
+	
 	return drives
 }
 
