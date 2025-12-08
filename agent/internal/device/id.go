@@ -3,6 +3,7 @@ package device
 import (
 	"crypto/sha256"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -10,73 +11,120 @@ import (
 )
 
 const (
-	registryPath = `SOFTWARE\RemoteDesktop`
-	registryKey  = "DeviceID"
-	configDir    = "RemoteDesktop"
-	configFile   = "device.id"
+	// Use LOCAL_MACHINE for machine-wide ID (same for all users and services)
+	registryPathLM = `SOFTWARE\RemoteDesktop`
+	// Fallback to CURRENT_USER if no admin rights
+	registryPathCU = `SOFTWARE\RemoteDesktop`
+	registryKey    = "DeviceID"
+	configDir      = "RemoteDesktop"
+	configFile     = "device.id"
 )
 
 // GetOrCreateDeviceID returns a persistent device ID
-// First tries Windows Registry, then falls back to file storage
+// Uses Windows MachineGUID as base for consistent ID across all users/services
 func GetOrCreateDeviceID() (string, error) {
-	// Try to load from registry first (Windows)
-	id, err := loadFromRegistry()
+	// Try to load existing ID from LOCAL_MACHINE registry (machine-wide)
+	id, err := loadFromRegistryLM()
 	if err == nil && id != "" {
+		log.Printf("📋 Loaded device ID from LOCAL_MACHINE registry: %s", id[:20]+"...")
 		return id, nil
 	}
 
-	// Try to load from file
-	id, err = loadFromFile()
+	// Try CURRENT_USER registry (fallback for non-admin)
+	id, err = loadFromRegistryCU()
 	if err == nil && id != "" {
+		log.Printf("📋 Loaded device ID from CURRENT_USER registry: %s", id[:20]+"...")
 		return id, nil
 	}
 
-	// Generate new ID
+	// Try to load from ProgramData file (machine-wide)
+	id, err = loadFromProgramData()
+	if err == nil && id != "" {
+		log.Printf("📋 Loaded device ID from ProgramData: %s", id[:20]+"...")
+		return id, nil
+	}
+
+	// Try to load from AppData file (user-specific fallback)
+	id, err = loadFromAppData()
+	if err == nil && id != "" {
+		log.Printf("📋 Loaded device ID from AppData: %s", id[:20]+"...")
+		return id, nil
+	}
+
+	// Generate new ID based on Windows MachineGUID (hardware-based, never changes)
 	id, err = generateDeviceID()
 	if err != nil {
 		return "", fmt.Errorf("failed to generate device ID: %w", err)
 	}
 
-	// Save to both registry and file
-	saveToRegistry(id)
-	saveToFile(id)
+	log.Printf("🆕 Generated new device ID: %s", id[:20]+"...")
+
+	// Save to all locations for persistence
+	if err := saveToRegistryLM(id); err != nil {
+		log.Printf("⚠️  Could not save to LOCAL_MACHINE registry (need admin): %v", err)
+		// Try CURRENT_USER as fallback
+		if err := saveToRegistryCU(id); err != nil {
+			log.Printf("⚠️  Could not save to CURRENT_USER registry: %v", err)
+		}
+	}
+
+	// Also save to file as backup
+	if err := saveToProgramData(id); err != nil {
+		log.Printf("⚠️  Could not save to ProgramData: %v", err)
+		// Try AppData as fallback
+		saveToAppData(id)
+	}
 
 	return id, nil
 }
 
-// generateDeviceID creates a unique device ID based on hardware info
+// generateDeviceID creates a unique device ID based on Windows MachineGUID
+// MachineGUID is set during Windows installation and never changes
 func generateDeviceID() (string, error) {
-	// Get hostname
-	hostname, err := os.Hostname()
-	if err != nil {
-		hostname = "unknown"
+	// Try to get Windows MachineGUID (most reliable, never changes)
+	machineGUID, err := getWindowsMachineGUID()
+	if err == nil && machineGUID != "" {
+		hash := sha256.Sum256([]byte(machineGUID))
+		return fmt.Sprintf("device_%x", hash[:16]), nil
 	}
 
-	// Get username
-	username := os.Getenv("USERNAME")
-	if username == "" {
-		username = "unknown"
-	}
+	log.Printf("⚠️  Could not get MachineGUID: %v, using fallback", err)
 
-	// Get computer name
+	// Fallback: use computer name + hostname (less reliable but still works)
+	hostname, _ := os.Hostname()
 	computerName := os.Getenv("COMPUTERNAME")
 	if computerName == "" {
 		computerName = hostname
 	}
 
-	// Combine info and hash
-	data := fmt.Sprintf("%s-%s-%s", computerName, username, hostname)
+	// DO NOT include USERNAME - it changes between user and SYSTEM service
+	data := fmt.Sprintf("machine-%s-%s", computerName, hostname)
 	hash := sha256.Sum256([]byte(data))
 
-	// Create device ID
-	deviceID := fmt.Sprintf("device_%x", hash[:16])
-
-	return deviceID, nil
+	return fmt.Sprintf("device_%x", hash[:16]), nil
 }
 
-// loadFromRegistry loads device ID from Windows Registry
-func loadFromRegistry() (string, error) {
-	key, err := registry.OpenKey(registry.CURRENT_USER, registryPath, registry.QUERY_VALUE)
+// getWindowsMachineGUID gets the Windows MachineGUID from registry
+// This GUID is created during Windows installation and never changes
+func getWindowsMachineGUID() (string, error) {
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, 
+		`SOFTWARE\Microsoft\Cryptography`, registry.QUERY_VALUE)
+	if err != nil {
+		return "", err
+	}
+	defer key.Close()
+
+	guid, _, err := key.GetStringValue("MachineGuid")
+	if err != nil {
+		return "", err
+	}
+
+	return guid, nil
+}
+
+// loadFromRegistryLM loads device ID from LOCAL_MACHINE registry (machine-wide)
+func loadFromRegistryLM() (string, error) {
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, registryPathLM, registry.QUERY_VALUE)
 	if err != nil {
 		return "", err
 	}
@@ -90,9 +138,25 @@ func loadFromRegistry() (string, error) {
 	return id, nil
 }
 
-// saveToRegistry saves device ID to Windows Registry
-func saveToRegistry(id string) error {
-	key, _, err := registry.CreateKey(registry.CURRENT_USER, registryPath, registry.SET_VALUE)
+// loadFromRegistryCU loads device ID from CURRENT_USER registry (user-specific fallback)
+func loadFromRegistryCU() (string, error) {
+	key, err := registry.OpenKey(registry.CURRENT_USER, registryPathCU, registry.QUERY_VALUE)
+	if err != nil {
+		return "", err
+	}
+	defer key.Close()
+
+	id, _, err := key.GetStringValue(registryKey)
+	if err != nil {
+		return "", err
+	}
+
+	return id, nil
+}
+
+// saveToRegistryLM saves device ID to LOCAL_MACHINE registry (requires admin)
+func saveToRegistryLM(id string) error {
+	key, _, err := registry.CreateKey(registry.LOCAL_MACHINE, registryPathLM, registry.SET_VALUE)
 	if err != nil {
 		return err
 	}
@@ -101,12 +165,24 @@ func saveToRegistry(id string) error {
 	return key.SetStringValue(registryKey, id)
 }
 
-// loadFromFile loads device ID from file
-func loadFromFile() (string, error) {
-	path, err := getConfigPath()
+// saveToRegistryCU saves device ID to CURRENT_USER registry (fallback)
+func saveToRegistryCU(id string) error {
+	key, _, err := registry.CreateKey(registry.CURRENT_USER, registryPathCU, registry.SET_VALUE)
 	if err != nil {
-		return "", err
+		return err
 	}
+	defer key.Close()
+
+	return key.SetStringValue(registryKey, id)
+}
+
+// loadFromProgramData loads device ID from ProgramData (machine-wide file)
+func loadFromProgramData() (string, error) {
+	programData := os.Getenv("ProgramData")
+	if programData == "" {
+		programData = `C:\ProgramData`
+	}
+	path := filepath.Join(programData, configDir, configFile)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -116,12 +192,13 @@ func loadFromFile() (string, error) {
 	return string(data), nil
 }
 
-// saveToFile saves device ID to file
-func saveToFile(id string) error {
-	path, err := getConfigPath()
-	if err != nil {
-		return err
+// saveToProgramData saves device ID to ProgramData (machine-wide file)
+func saveToProgramData(id string) error {
+	programData := os.Getenv("ProgramData")
+	if programData == "" {
+		programData = `C:\ProgramData`
 	}
+	path := filepath.Join(programData, configDir, configFile)
 
 	// Create directory if not exists
 	dir := filepath.Dir(path)
@@ -132,14 +209,37 @@ func saveToFile(id string) error {
 	return os.WriteFile(path, []byte(id), 0644)
 }
 
-// getConfigPath returns the path to the config file
-func getConfigPath() (string, error) {
+// loadFromAppData loads device ID from AppData (user-specific fallback)
+func loadFromAppData() (string, error) {
 	appData := os.Getenv("APPDATA")
 	if appData == "" {
 		return "", fmt.Errorf("APPDATA environment variable not set")
 	}
+	path := filepath.Join(appData, configDir, configFile)
 
-	return filepath.Join(appData, configDir, configFile), nil
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+
+	return string(data), nil
+}
+
+// saveToAppData saves device ID to AppData (user-specific fallback)
+func saveToAppData(id string) error {
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		return fmt.Errorf("APPDATA environment variable not set")
+	}
+	path := filepath.Join(appData, configDir, configFile)
+
+	// Create directory if not exists
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, []byte(id), 0644)
 }
 
 // GetDeviceName returns a friendly device name

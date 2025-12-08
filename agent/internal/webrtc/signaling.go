@@ -42,6 +42,8 @@ func (m *Manager) ListenForSessions() {
 
 	log.Println("🔄 Session polling started (checking every 2 seconds)")
 	log.Println("   Listening on: webrtc_sessions (controller) + session_signaling (dashboard)")
+	log.Printf("   Device ID: %s", m.device.ID)
+	log.Printf("   Supabase URL: %s", m.cfg.SupabaseURL)
 
 	for range ticker.C {
 		// Skip if currently connected

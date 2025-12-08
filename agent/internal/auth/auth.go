@@ -119,7 +119,18 @@ func Login(config AuthConfig, email, password string) (*AuthResult, error) {
 		UserID:       authResp.User.ID,
 		ExpiresAt:    time.Now().Add(time.Duration(authResp.ExpiresIn) * time.Second).Unix(),
 	}
-	SaveCredentials(creds)
+	
+	credPath := GetCredentialsPath()
+	fmt.Printf("📁 Saving credentials to: %s\n", credPath)
+	
+	if err := SaveCredentials(creds); err != nil {
+		fmt.Printf("❌ Failed to save credentials: %v\n", err)
+		return &AuthResult{
+			Success: false,
+			Message: fmt.Sprintf("Login succeeded but failed to save credentials: %v", err),
+		}, nil
+	}
+	fmt.Printf("✅ Credentials saved successfully\n")
 
 	return &AuthResult{
 		Success:     true,
@@ -168,15 +179,28 @@ func CheckUserApproval(config AuthConfig, accessToken, userID string) (bool, err
 }
 
 // GetCredentialsPath returns the path to the credentials file
-// Uses ProgramData for service compatibility (accessible by SYSTEM account)
+// Uses AppData for normal user, ProgramData for service/admin
 func GetCredentialsPath() string {
-	// Try ProgramData first (works for services)
+	// First try user's AppData (works without admin)
+	appData := os.Getenv("APPDATA")
+	if appData != "" {
+		credDir := filepath.Join(appData, "RemoteDesktopAgent")
+		if err := os.MkdirAll(credDir, 0755); err == nil {
+			credPath := filepath.Join(credDir, ".credentials")
+			// If we can write here, use it
+			if _, err := os.Stat(credDir); err == nil {
+				return credPath
+			}
+		}
+	}
+
+	// Try ProgramData (for services running as SYSTEM)
 	programData := os.Getenv("ProgramData")
 	if programData != "" {
 		credDir := filepath.Join(programData, "RemoteDesktopAgent")
-		// Create directory if it doesn't exist
-		os.MkdirAll(credDir, 0755)
-		return filepath.Join(credDir, ".credentials")
+		if err := os.MkdirAll(credDir, 0755); err == nil {
+			return filepath.Join(credDir, ".credentials")
+		}
 	}
 
 	// Fallback to exe directory
@@ -186,27 +210,102 @@ func GetCredentialsPath() string {
 }
 
 // SaveCredentials saves credentials to file
+// Saves to BOTH AppData (for user) and ProgramData (for service)
 func SaveCredentials(creds *Credentials) error {
 	data, err := json.Marshal(creds)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(GetCredentialsPath(), data, 0600)
+
+	var lastErr error
+	saved := false
+
+	// Save to AppData (user accessible)
+	appData := os.Getenv("APPDATA")
+	if appData != "" {
+		credDir := filepath.Join(appData, "RemoteDesktopAgent")
+		if err := os.MkdirAll(credDir, 0755); err == nil {
+			credPath := filepath.Join(credDir, ".credentials")
+			if err := os.WriteFile(credPath, data, 0600); err == nil {
+				fmt.Printf("   ✅ Saved to AppData: %s\n", credPath)
+				saved = true
+			} else {
+				lastErr = err
+			}
+		}
+	}
+
+	// Also try to save to ProgramData (service accessible)
+	programData := os.Getenv("ProgramData")
+	if programData != "" {
+		credDir := filepath.Join(programData, "RemoteDesktopAgent")
+		if err := os.MkdirAll(credDir, 0755); err == nil {
+			credPath := filepath.Join(credDir, ".credentials")
+			if err := os.WriteFile(credPath, data, 0600); err == nil {
+				fmt.Printf("   ✅ Saved to ProgramData: %s\n", credPath)
+				saved = true
+			} else {
+				// Only set error if we haven't saved anywhere yet
+				if !saved {
+					lastErr = err
+				}
+			}
+		}
+	}
+
+	if saved {
+		return nil
+	}
+	return lastErr
 }
 
 // LoadCredentials loads credentials from file
+// Checks multiple locations: ProgramData (service), AppData (user), exe dir
 func LoadCredentials() (*Credentials, error) {
-	data, err := os.ReadFile(GetCredentialsPath())
-	if err != nil {
-		return nil, err
+	// Build list of paths to check
+	var paths []string
+	
+	// 1. ProgramData (for services running as SYSTEM)
+	programData := os.Getenv("ProgramData")
+	if programData != "" {
+		paths = append(paths, filepath.Join(programData, "RemoteDesktopAgent", ".credentials"))
 	}
-
-	var creds Credentials
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return nil, err
+	
+	// 2. User's AppData
+	appData := os.Getenv("APPDATA")
+	if appData != "" {
+		paths = append(paths, filepath.Join(appData, "RemoteDesktopAgent", ".credentials"))
 	}
-
-	return &creds, nil
+	
+	// 3. Exe directory
+	exePath, _ := os.Executable()
+	if exePath != "" {
+		paths = append(paths, filepath.Join(filepath.Dir(exePath), ".credentials"))
+	}
+	
+	// Try each path
+	var lastErr error
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		
+		var creds Credentials
+		if err := json.Unmarshal(data, &creds); err != nil {
+			lastErr = err
+			continue
+		}
+		
+		log.Printf("📁 Loaded credentials from: %s", path)
+		return &creds, nil
+	}
+	
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("no credentials found in any location")
 }
 
 // ClearCredentials removes saved credentials

@@ -208,6 +208,7 @@ func main() {
 	logoutFlag := flag.Bool("logout", false, "Log out and clear saved credentials")
 	helpFlag := flag.Bool("help", false, "Show help")
 	silentFlag := flag.Bool("silent", false, "Run without GUI prompts")
+	consoleFlag := flag.Bool("console", false, "Run in console mode without system tray (full logging)")
 	flag.Parse()
 
 	// Handle command-line flags (for advanced users / scripting)
@@ -296,6 +297,14 @@ func main() {
 			logFile.Close()
 		}
 	}()
+	
+	// Console mode - run without system tray, keep CMD open
+	if *consoleFlag {
+		log.Println("🔧 Running in CONSOLE mode (no system tray)")
+		runConsoleMode()
+		return
+	}
+	
 	log.Println("🔧 Running in interactive mode")
 	runInteractive()
 }
@@ -997,6 +1006,57 @@ func showServiceStatus() {
 	fmt.Printf("PID:     %d\n", status.ProcessId)
 }
 
+func runConsoleMode() {
+	// Console mode - runs without system tray, keeps CMD window open with full logging
+	log.Println("========================================")
+	log.Println("🖥️  CONSOLE MODE - Full Logging Enabled")
+	log.Println("========================================")
+	log.Println("Press Ctrl+C to stop the agent")
+	log.Println("")
+
+	// Setup firewall rules
+	setupFirewallRules()
+
+	// Check if already logged in
+	if !auth.IsLoggedIn() {
+		log.Println("❌ Not logged in! Run without --console first to login via GUI")
+		log.Println("   Or run: remote-agent.exe --silent to login via native dialog")
+		return
+	}
+
+	// Load existing credentials
+	creds, err := auth.GetCurrentUser()
+	if err != nil {
+		log.Printf("❌ Could not load saved credentials: %v", err)
+		return
+	}
+	log.Printf("✅ Logged in as: %s", creds.Email)
+	currentUser = creds
+
+	// Check current desktop
+	desktopName, err := desktop.GetInputDesktop()
+	if err != nil {
+		log.Printf("⚠️  Cannot detect desktop: %v", err)
+	} else {
+		log.Printf("🖥️  Current desktop: %s", desktopName)
+	}
+
+	// Start agent
+	if err := startAgent(); err != nil {
+		log.Fatalf("❌ Failed to start agent: %v", err)
+	}
+
+	log.Println("")
+	log.Println("========================================")
+	log.Println("✅ Agent is running! Waiting for connections...")
+	log.Println("   Check dashboard to connect")
+	log.Println("   Press Ctrl+C to stop")
+	log.Println("========================================")
+
+	// Block forever (until Ctrl+C)
+	select {}
+}
+
 func runInteractive() {
 	// Setup firewall rules (requires admin, will skip if not admin)
 	setupFirewallRules()
@@ -1141,6 +1201,11 @@ func startAgent() error {
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
+
+	// Log important paths for debugging
+	log.Printf("📁 Credentials path: %s", auth.GetCredentialsPath())
+	deviceID, _ := device.GetOrCreateDeviceID()
+	log.Printf("🔑 Device ID: %s", deviceID)
 
 	// Check and refresh credentials if needed (important for service mode)
 	if !auth.IsLoggedIn() {

@@ -328,24 +328,29 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			connectBtn := box.Objects[1].(*widget.Button)
 			removeBtn := box.Objects[2].(*widget.Button)
 
-			// Format device name with status indicator and time info
+			// Calculate REAL status based on last_seen (not trusting is_online flag)
+			// Device is considered online if last_seen is within 2 minutes
 			var statusIcon string
 			var statusText string
+			var isReallyOnline bool
 
-			if device.Status == "online" {
-				statusIcon = "🟢"
-				statusText = "Online"
-			} else if device.Status == "away" {
-				statusIcon = "🟡"
-				statusText = "Away"
-			} else {
-				statusIcon = "🔴"
-				// Calculate time since last seen
-				if !device.LastSeen.IsZero() {
-					timeSince := time.Since(device.LastSeen)
-					if timeSince < time.Minute {
-						statusText = "Offline (just now)"
-					} else if timeSince < time.Hour {
+			if !device.LastSeen.IsZero() {
+				timeSince := time.Since(device.LastSeen)
+				if timeSince < 2*time.Minute {
+					// Recently seen = online
+					statusIcon = "🟢"
+					statusText = "Online"
+					isReallyOnline = true
+				} else if timeSince < 5*time.Minute {
+					// Seen within 5 min = away
+					statusIcon = "🟡"
+					statusText = fmt.Sprintf("Away (%dm ago)", int(timeSince.Minutes()))
+					isReallyOnline = false
+				} else {
+					// Not seen for 5+ min = offline
+					statusIcon = "🔴"
+					isReallyOnline = false
+					if timeSince < time.Hour {
 						mins := int(timeSince.Minutes())
 						statusText = fmt.Sprintf("Offline (%dm ago)", mins)
 					} else if timeSince < 24*time.Hour {
@@ -355,16 +360,18 @@ func createModernUI(window fyne.Window) *fyne.Container {
 						days := int(timeSince.Hours() / 24)
 						statusText = fmt.Sprintf("Offline (%dd ago)", days)
 					}
-				} else {
-					statusText = "Offline"
 				}
+			} else {
+				statusIcon = "🔴"
+				statusText = "Offline (never seen)"
+				isReallyOnline = false
 			}
 
 			displayName := fmt.Sprintf("%s %s (%s) - %s", statusIcon, device.DeviceName, device.Platform, statusText)
 			label.SetText(displayName)
 
-			// Configure connect button
-			if device.Status != "online" {
+			// Configure connect button based on REAL online status
+			if !isReallyOnline {
 				connectBtn.Disable()
 				connectBtn.SetText("Offline")
 			} else {
