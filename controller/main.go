@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	Version     = "v2.16.0"
+	Version     = "v2.17.0"
 	BuildDate   = "2025-12-08"
 	VersionInfo = Version + " (" + BuildDate + ")"
 )
