@@ -18,18 +18,18 @@ var (
 
 // Init initializes the logger with both file and console output
 func Init() error {
-	// Create logs directory if it doesn't exist
-	logsDir := "logs"
-	if err := os.MkdirAll(logsDir, 0755); err != nil {
-		return fmt.Errorf("failed to create logs directory: %w", err)
+	// Get executable directory for log file
+	exePath, err := os.Executable()
+	if err != nil {
+		// Fallback to current directory
+		exePath = "."
 	}
-
-	// Create log file with timestamp
-	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	logFilePath := filepath.Join(logsDir, fmt.Sprintf("controller_%s.log", timestamp))
+	exeDir := filepath.Dir(exePath)
 	
-	var err error
-	logFile, err = os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	// Create log file in same directory as executable (simpler, always works)
+	logFilePath := filepath.Join(exeDir, "controller.log")
+	
+	logFile, err = os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
