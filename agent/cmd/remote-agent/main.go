@@ -65,17 +65,24 @@ var (
 )
 
 func setupLogging() error {
-	// Get executable directory
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get executable path: %w", err)
+	// Try multiple locations for log file
+	var logPath string
+	
+	// 1. Try AppData first (always writable)
+	appData := os.Getenv("APPDATA")
+	if appData != "" {
+		logDir := filepath.Join(appData, "RemoteDesktopAgent")
+		os.MkdirAll(logDir, 0755)
+		logPath = filepath.Join(logDir, "agent.log")
+	} else {
+		// 2. Fallback to exe directory
+		exePath, _ := os.Executable()
+		exeDir := filepath.Dir(exePath)
+		logPath = filepath.Join(exeDir, "agent.log")
 	}
-	exeDir := filepath.Dir(exePath)
-
-	// Create log file in same directory as executable
-	logPath := filepath.Join(exeDir, "agent.log")
 
 	// Open log file (truncate mode - clears previous logs)
+	var err error
 	logFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
