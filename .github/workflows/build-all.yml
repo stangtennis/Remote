@@ -1,0 +1,220 @@
+name: Build All Platforms (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v2.19.0)'
+        required: true
+        default: 'v2.20.0'
+
+permissions:
+  contents: write
+
+jobs:
+  # Windows Agent
+  build-agent-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: agent/go.sum
+
+      - name: Install MinGW (GCC for Windows)
+        run: |
+          choco install mingw -y
+          refreshenv
+
+      - name: Tidy Go modules
+        working-directory: ./agent
+        run: |
+          go mod tidy
+          go mod download
+
+      - name: Build Agent
+        working-directory: ./agent
+        env:
+          CGO_ENABLED: 1
+        run: |
+          go build -mod=mod -ldflags "-s -w -H windowsgui" -o remote-agent-${{ github.event.inputs.version }}.exe ./cmd/remote-agent
+
+      - name: Upload Agent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-agent-windows
+          path: ./agent/remote-agent-${{ github.event.inputs.version }}.exe
+
+  # Windows Controller
+  build-controller-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: controller/go.sum
+
+      - name: Install MinGW (GCC for Windows)
+        run: |
+          choco install mingw -y
+          refreshenv
+
+      - name: Tidy Go modules
+        working-directory: ./controller
+        run: |
+          go mod tidy
+          go mod download
+
+      - name: Build Controller
+        working-directory: ./controller
+        env:
+          CGO_ENABLED: 1
+        run: |
+          go build -mod=mod -ldflags "-s -w -H windowsgui" -o controller-${{ github.event.inputs.version }}.exe .
+
+      - name: Upload Controller artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: controller-windows
+          path: ./controller/controller-${{ github.event.inputs.version }}.exe
+
+  # macOS Controller (Intel)
+  build-controller-macos-intel:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: controller/go.sum
+
+      - name: Tidy Go modules
+        working-directory: ./controller
+        run: |
+          go mod tidy
+          go mod download
+
+      - name: Build Controller for Intel Mac
+        working-directory: ./controller
+        env:
+          CGO_ENABLED: 1
+          GOOS: darwin
+          GOARCH: amd64
+        run: |
+          go build -mod=mod -ldflags "-s -w" -o controller-mac-intel-${{ github.event.inputs.version }} .
+
+      - name: Upload Controller artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: controller-macos-intel
+          path: ./controller/controller-mac-intel-${{ github.event.inputs.version }}
+
+  # macOS Controller (Apple Silicon)
+  build-controller-macos-arm:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: controller/go.sum
+
+      - name: Tidy Go modules
+        working-directory: ./controller
+        run: |
+          go mod tidy
+          go mod download
+
+      - name: Build Controller for Apple Silicon
+        working-directory: ./controller
+        env:
+          CGO_ENABLED: 1
+          GOOS: darwin
+          GOARCH: arm64
+        run: |
+          go build -mod=mod -ldflags "-s -w" -o controller-mac-arm64-${{ github.event.inputs.version }} .
+
+      - name: Upload Controller artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: controller-macos-arm
+          path: ./controller/controller-mac-arm64-${{ github.event.inputs.version }}
+
+  # Create Release with all artifacts
+  create-release:
+    needs: [build-agent-windows, build-controller-windows, build-controller-macos-intel, build-controller-macos-arm]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download Windows Agent
+        uses: actions/download-artifact@v4
+        with:
+          name: remote-agent-windows
+          path: ./artifacts
+
+      - name: Download Windows Controller
+        uses: actions/download-artifact@v4
+        with:
+          name: controller-windows
+          path: ./artifacts
+
+      - name: Download macOS Intel Controller
+        uses: actions/download-artifact@v4
+        with:
+          name: controller-macos-intel
+          path: ./artifacts
+
+      - name: Download macOS ARM Controller
+        uses: actions/download-artifact@v4
+        with:
+          name: controller-macos-arm
+          path: ./artifacts
+
+      - name: List artifacts
+        run: ls -la ./artifacts
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: Release ${{ github.event.inputs.version }}
+          body: |
+            ## Downloads
+            
+            ### Windows
+            - **remote-agent-${{ github.event.inputs.version }}.exe** - Windows Agent (install on remote PC)
+            - **controller-${{ github.event.inputs.version }}.exe** - Windows Controller (client app)
+            
+            ### macOS
+            - **controller-mac-intel-${{ github.event.inputs.version }}** - macOS Controller (Intel Macs)
+            - **controller-mac-arm64-${{ github.event.inputs.version }}** - macOS Controller (Apple Silicon M1/M2/M3)
+            
+            ## Installation
+            
+            ### macOS
+            1. Download the appropriate version for your Mac
+            2. Open Terminal and run: `chmod +x controller-mac-*`
+            3. Right-click the file and select "Open" (to bypass Gatekeeper)
+            
+          files: |
+            ./artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
