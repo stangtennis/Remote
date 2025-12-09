@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -160,17 +161,54 @@ func askYesNo(question string) bool {
 	return result == IDYES
 }
 
+// isFirewallRuleExists checks if the firewall rule already exists
+func isFirewallRuleExists() bool {
+	cmd := exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name=Remote Desktop Agent")
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	// If output contains "Rule Name", the rule exists
+	return len(output) > 50 && !strings.Contains(string(output), "No rules match")
+}
+
 // setupFirewallRules adds Windows Firewall rules to allow the agent
 func setupFirewallRules() {
+	// Check if rule already exists
+	if isFirewallRuleExists() {
+		log.Println("✅ Firewall rule already exists")
+		return
+	}
+
 	exePath, err := os.Executable()
 	if err != nil {
 		log.Printf("⚠️ Could not get executable path for firewall: %v", err)
 		return
 	}
 
-	// Only try if we have admin rights
+	// If not admin, we need to request elevation
 	if !isAdmin() {
-		log.Println("⚠️ Not running as admin - skipping firewall setup")
+		log.Println("🔥 Firewall rule needed - requesting admin privileges...")
+		
+		// Run netsh as admin using PowerShell
+		// This will show a UAC prompt
+		psScript := fmt.Sprintf(`
+			$exePath = '%s'
+			netsh advfirewall firewall delete rule name="Remote Desktop Agent" 2>$null
+			netsh advfirewall firewall add rule name="Remote Desktop Agent" dir=in action=allow program="$exePath" enable=yes profile=any
+			netsh advfirewall firewall add rule name="Remote Desktop Agent" dir=out action=allow program="$exePath" enable=yes profile=any
+		`, exePath)
+		
+		cmd := exec.Command("powershell", "-Command", 
+			"Start-Process", "powershell", 
+			"-ArgumentList", fmt.Sprintf(`'-Command', '%s'`, strings.ReplaceAll(psScript, "'", "''")),
+			"-Verb", "RunAs", "-Wait")
+		
+		if err := cmd.Run(); err != nil {
+			log.Printf("⚠️ Failed to setup firewall (UAC denied?): %v", err)
+		} else {
+			log.Println("✅ Firewall rules added via UAC")
+		}
 		return
 	}
 
