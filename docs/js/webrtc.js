@@ -55,6 +55,9 @@ async function initWebRTC(session) {
       throw new Error('Invalid session object - missing session_id');
     }
     
+    // Check if we should force relay mode (for testing TURN)
+    const forceRelay = new URLSearchParams(window.location.search).get('relay') === 'true';
+    
     // Always use our own TURN server configuration
     const configuration = {
       iceServers: [
@@ -71,8 +74,14 @@ async function initWebRTC(session) {
           username: 'remotedesktop',
           credential: 'Hawkeye2025Turn!'
         }
-      ]
+      ],
+      // Force relay mode if ?relay=true in URL (for testing)
+      ...(forceRelay && { iceTransportPolicy: 'relay' })
     };
+    
+    if (forceRelay) {
+      console.log('⚠️ RELAY-ONLY MODE ENABLED (for testing)');
+    }
 
     console.log('🔐 Dashboard TURN config:', JSON.stringify(configuration, null, 2));
 
