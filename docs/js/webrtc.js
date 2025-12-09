@@ -713,12 +713,14 @@ function displayVideoFrame(data) {
   
   // Check if data looks like JPEG (starts with 0xFF 0xD8)
   let isJpeg = false;
-  if (data instanceof ArrayBuffer && data.byteLength > 2) {
-    const header = new Uint8Array(data, 0, 2);
+  let headerHex = '';
+  if (data instanceof ArrayBuffer && data.byteLength > 10) {
+    const header = new Uint8Array(data, 0, 10);
     isJpeg = header[0] === 0xFF && header[1] === 0xD8;
+    headerHex = Array.from(header).map(b => b.toString(16).padStart(2, '0')).join(' ');
   }
   
-  console.log(`📷 Frame received: ${dataSize} bytes, isJPEG: ${isJpeg}`);
+  console.log(`📷 Frame received: ${dataSize} bytes, isJPEG: ${isJpeg}, header: ${headerHex}`);
   
   if (dataSize < 100) {
     console.error('❌ Frame too small, likely corrupt:', dataSize);
