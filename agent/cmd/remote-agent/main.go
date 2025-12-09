@@ -155,6 +155,37 @@ func isAdmin() bool {
 	return err == nil
 }
 
+// relaunchAsAdmin restarts the current process with admin privileges via UAC
+func relaunchAsAdmin() {
+	exe, err := os.Executable()
+	if err != nil {
+		log.Printf("❌ Failed to get executable path: %v", err)
+		return
+	}
+
+	// Get command line arguments (skip the exe name)
+	args := strings.Join(os.Args[1:], " ")
+
+	// Use ShellExecute with "runas" verb to trigger UAC
+	verbPtr, _ := syscall.UTF16PtrFromString("runas")
+	exePtr, _ := syscall.UTF16PtrFromString(exe)
+	argsPtr, _ := syscall.UTF16PtrFromString(args)
+	dirPtr, _ := syscall.UTF16PtrFromString("")
+
+	ret, _, _ := shellExecuteW.Call(
+		0,
+		uintptr(unsafe.Pointer(verbPtr)),
+		uintptr(unsafe.Pointer(exePtr)),
+		uintptr(unsafe.Pointer(argsPtr)),
+		uintptr(unsafe.Pointer(dirPtr)),
+		1, // SW_SHOWNORMAL
+	)
+
+	if ret <= 32 {
+		log.Printf("❌ Failed to relaunch as admin (error code: %d)", ret)
+	}
+}
+
 // askYesNo prompts the user for a yes/no answer
 func askYesNo(question string) bool {
 	result := messageBox("Remote Desktop Agent", question, MB_YESNO|MB_ICONQUESTION)
@@ -269,6 +300,14 @@ func runAsAdmin() error {
 }
 
 func main() {
+	// Check if running as admin - if not, relaunch with UAC prompt
+	isService, _ := svc.IsWindowsService()
+	if !isService && !isAdmin() {
+		fmt.Println("🔒 Administrator privileges required. Requesting elevation...")
+		relaunchAsAdmin()
+		return // Exit this instance, the elevated one will take over
+	}
+
 	// Parse command-line flags (keep for advanced users)
 	installFlag := flag.Bool("install", false, "Install as Windows Service")
 	uninstallFlag := flag.Bool("uninstall", false, "Uninstall Windows Service")
