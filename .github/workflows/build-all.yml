@@ -90,8 +90,14 @@ jobs:
 
       - name: Embed admin manifest
         working-directory: ./controller
+        shell: cmd
         run: |
-          windres -o controller.syso controller.rc
+          echo Searching for windres...
+          where /r "C:\ProgramData\chocolatey\lib\mingw\tools" windres.exe
+          for /f "delims=" %%i in ('where /r "C:\ProgramData\chocolatey\lib\mingw\tools" windres.exe') do set WINDRES=%%i
+          echo Using: %WINDRES%
+          "%WINDRES%" -o controller.syso controller.rc
+          if exist controller.syso (echo SUCCESS: controller.syso created) else (echo FAILED: controller.syso not created && exit /b 1)
 
       - name: Build Controller
         working-directory: ./controller
