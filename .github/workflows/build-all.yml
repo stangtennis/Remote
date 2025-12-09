@@ -44,11 +44,14 @@ jobs:
         working-directory: ./agent/cmd/remote-agent
         shell: pwsh
         run: |
-          rsrc -manifest agent.manifest -o rsrc.syso
-          if (Test-Path "rsrc.syso") {
-            Write-Host "SUCCESS: Agent rsrc.syso created"
+          # Remove any conflicting syso files first
+          Remove-Item -Force *.syso -ErrorAction SilentlyContinue
+          rsrc -manifest remote-agent.manifest -o resource.syso
+          if (Test-Path "resource.syso") {
+            Write-Host "SUCCESS: Agent resource.syso created"
+            Get-Item resource.syso
           } else {
-            Write-Host "FAILED: rsrc.syso not created"
+            Write-Host "FAILED: resource.syso not created"
             exit 1
           }
 
