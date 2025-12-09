@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TURN Server Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a2e; color: #eee; }
+        .result { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #2d5a27; }
+        .error { background: #5a2727; }
+        .info { background: #27455a; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; margin: 5px; }
+        pre { background: #0a0a1a; padding: 10px; overflow-x: auto; }
+        h1 { color: #4da6ff; }
+    </style>
+</head>
+<body>
+    <h1>🔧 TURN Server Test</h1>
+    <p>This page tests if the TURN server is working correctly.</p>
+    
+    <button onclick="testTURN()">Test TURN Server</button>
+    <button onclick="testRelayOnly()">Test Relay-Only Mode</button>
+    
+    <div id="results"></div>
+    
+    <script>
+        const TURN_CONFIG = {
+            urls: 'turn:188.228.14.94:3478',
+            username: 'remotedesktop',
+            credential: 'Hawkeye2025Turn!'
+        };
+        
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = message;
+            results.appendChild(div);
+            console.log(message);
+        }
+        
+        async function testTURN() {
+            document.getElementById('results').innerHTML = '';
+            log('🔄 Starting TURN server test...', 'info');
+            
+            const config = {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    TURN_CONFIG,
+                    { urls: 'turn:188.228.14.94:3478?transport=tcp', username: 'remotedesktop', credential: 'Hawkeye2025Turn!' }
+                ]
+            };
+            
+            log(`📋 Config: <pre>${JSON.stringify(config, null, 2)}</pre>`, 'info');
+            
+            try {
+                const pc = new RTCPeerConnection(config);
+                
+                const candidates = [];
+                let hasRelay = false;
+                let hasSrflx = false;
+                let hasHost = false;
+                
+                pc.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        const c = event.candidate;
+                        candidates.push(c);
+                        
+                        if (c.type === 'relay') {
+                            hasRelay = true;
+                            log(`✅ RELAY candidate: ${c.candidate}`, 'success');
+                        } else if (c.type === 'srflx') {
+                            hasSrflx = true;
+                            log(`📡 SRFLX candidate: ${c.candidate}`, 'info');
+                        } else if (c.type === 'host') {
+                            hasHost = true;
+                            log(`🏠 HOST candidate: ${c.candidate}`, 'info');
+                        }
+                    }
+                };
+                
+                pc.onicegatheringstatechange = () => {
+                    log(`ICE gathering state: ${pc.iceGatheringState}`, 'info');
+                    
+                    if (pc.iceGatheringState === 'complete') {
+                        log('<hr><b>Summary:</b>', 'info');
+                        log(`Total candidates: ${candidates.length}`, 'info');
+                        log(`Host candidates: ${hasHost ? '✅ Yes' : '❌ No'}`, hasHost ? 'success' : 'error');
+                        log(`SRFLX candidates (STUN): ${hasSrflx ? '✅ Yes' : '❌ No'}`, hasSrflx ? 'success' : 'error');
+                        log(`RELAY candidates (TURN): ${hasRelay ? '✅ Yes' : '❌ No'}`, hasRelay ? 'success' : 'error');
+                        
+                        if (hasRelay) {
+                            log('<b>🎉 TURN SERVER IS WORKING!</b>', 'success');
+                        } else {
+                            log('<b>❌ TURN SERVER NOT WORKING - No relay candidates generated</b>', 'error');
+                            log('Check: 1) TURN server running, 2) Credentials correct, 3) Firewall open', 'error');
+                        }
+                        
+                        pc.close();
+                    }
+                };
+                
+                // Create a data channel to trigger ICE gathering
+                pc.createDataChannel('test');
+                
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                
+                log('⏳ Gathering ICE candidates (wait 10 seconds)...', 'info');
+                
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testRelayOnly() {
+            document.getElementById('results').innerHTML = '';
+            log('🔄 Testing RELAY-ONLY mode (forces TURN)...', 'info');
+            
+            const config = {
+                iceServers: [TURN_CONFIG],
+                iceTransportPolicy: 'relay'  // Force relay only
+            };
+            
+            log(`📋 Config: <pre>${JSON.stringify(config, null, 2)}</pre>`, 'info');
+            
+            try {
+                const pc = new RTCPeerConnection(config);
+                
+                let hasRelay = false;
+                
+                pc.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        hasRelay = true;
+                        log(`✅ RELAY candidate: ${event.candidate.candidate}`, 'success');
+                    }
+                };
+                
+                pc.onicegatheringstatechange = () => {
+                    log(`ICE gathering state: ${pc.iceGatheringState}`, 'info');
+                    
+                    if (pc.iceGatheringState === 'complete') {
+                        if (hasRelay) {
+                            log('<b>🎉 TURN SERVER WORKS IN RELAY-ONLY MODE!</b>', 'success');
+                        } else {
+                            log('<b>❌ TURN FAILED - Cannot get relay candidates</b>', 'error');
+                            log('This means TURN authentication or connectivity is broken.', 'error');
+                        }
+                        pc.close();
+                    }
+                };
+                
+                pc.createDataChannel('test');
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                
+                log('⏳ Gathering relay candidates (wait 10 seconds)...', 'info');
+                
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>
