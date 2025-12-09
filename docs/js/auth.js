@@ -183,9 +183,21 @@ if (document.getElementById('logoutBtn')) {
   });
 
   // Handle logout
-  logoutBtn.addEventListener('click', async () => {
-    const { error } = await supabase.auth.signOut();
-    if (!error) {
+  logoutBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    console.log('🚪 Logout button clicked');
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Logout error:', error);
+        alert('Logout failed: ' + error.message);
+      } else {
+        console.log('✅ Logged out successfully');
+        window.location.href = 'index.html';
+      }
+    } catch (err) {
+      console.error('Logout exception:', err);
+      // Force redirect anyway
       window.location.href = 'index.html';
     }
   });
