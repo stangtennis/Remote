@@ -37,6 +37,21 @@ jobs:
           go mod tidy
           go mod download
 
+      - name: Install rsrc for manifest embedding
+        run: go install github.com/akavel/rsrc@latest
+
+      - name: Generate admin manifest for Agent
+        working-directory: ./agent/cmd/remote-agent
+        shell: pwsh
+        run: |
+          rsrc -manifest agent.manifest -o rsrc.syso
+          if (Test-Path "rsrc.syso") {
+            Write-Host "SUCCESS: Agent rsrc.syso created"
+          } else {
+            Write-Host "FAILED: rsrc.syso not created"
+            exit 1
+          }
+
       - name: Build Agent (GUI mode)
         working-directory: ./agent
         env:
