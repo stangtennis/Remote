@@ -2,22 +2,24 @@
 
 A **professional remote desktop solution** built with **Supabase**, **WebRTC**, and **Go** - like TeamViewer, but self-hosted!
 
-## ✅ Status: **FULLY FUNCTIONAL** (Updated 2025-11-11)
+## ✅ Status: **FULLY FUNCTIONAL** (Updated 2025-12-10)
 
-### 🎮 Controller Application v2.2.0 (2025-11-11) ✨ **WORKING!**
+### 🎮 Controller Application v2.38.0 ✨ **WORKING!**
 - ✅ **Standalone Windows EXE** - Native controller app (like TeamViewer)
+- ✅ **Auto Admin Elevation** - UAC prompt on startup
 - ✅ **Real Supabase Auth** - Login with email/password
+- ✅ **Credential Storage** - Remember me functionality
 - ✅ **Device Management** - Approve/remove devices directly in controller
 - ✅ **WebRTC Video Streaming** - Live remote desktop view! 🎉
 - ✅ **Full Input Control** - Mouse, keyboard, and scroll working!
-- ✅ **Frame Chunk Reassembly** - Handles large frames correctly
-- ✅ **Proper Disconnect** - Clean connection termination
-- ✅ **30 FPS Streaming** - Optimized for low latency
+- ✅ **Fullscreen Toggle** - Immersive viewing mode
+- ✅ **TURN Server Support** - Works across NAT/firewalls
 - 📦 **Auto-builds on GitHub** - Download from Releases
 - 🏷️ **GitHub Releases** - Automated via GitHub Actions
 
 ### 🖥️ Agent Options
-- ✅ **Windows Native Agent** (v2.2.0) - **FULLY WORKING!**
+- ✅ **Windows Native Agent** (v2.38.0) - **FULLY WORKING!**
+  - Auto admin elevation (UAC prompt if needed)
   - 30 FPS streaming (optimized for latency)
   - JPEG Quality 95 (near-lossless)
   - DXGI screen capture (works over RDP!)
@@ -25,378 +27,83 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
   - Accurate coordinate mapping
   - Auto-registers, no login required
   - Windows Service support (login screen capture)
-- ✅ **Web Agent** - Browser-based, no installation required
+  - Self-hosted TURN server for NAT traversal
+- ✅ **Web Dashboard** - Browser-based control interface
 - ✅ **Browser Extension** - Remote control for web agent
 - 🚧 **Electron Agent** - Cross-platform desktop (prototype)
 
 ### 🔧 Device Management
 - ✅ **Anonymous Registration** - Agents auto-register without login
-- ✅ **Controller Approval** - Approve devices directly in controller app (NEW!)
+- ✅ **Controller Approval** - Approve devices directly in controller app
 - ✅ **Admin Assignment** - Assign devices to users via admin panel
 - ✅ **User-Based Access** - Users see only assigned devices
 - ✅ **Device Approval** - Admin approves devices for use
 - ✅ **Reassignment** - Easy device reassignment between users
 
+### 🌐 Connectivity
+- ✅ **Self-hosted TURN Server** - Coturn on dedicated server
+- ✅ **NAT Traversal** - Works behind firewalls
+- ✅ **P2P when possible** - Direct connection for best latency
+- ✅ **Automatic Fallback** - TURN relay when P2P fails
+
 ### 🌐 Web Dashboard & Admin Panel
 - ✅ **GitHub Pages** - Live at https://stangtennis.github.io/Remote/
 - ✅ **User Approval System** - Admin controls access
 - ✅ **Device Management** - Assign/revoke device access
-- ✅ **Tabbed Interface** - Users & Devices management
-- ✅ **Real-time Updates** - Supabase Realtime integration
-- ✅ **Visual Indicators** - Color-coded status and assignments
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│  CONTROLLER.EXE (Admin - NEW!)                      │
-│  - Native Windows application                       │
-│  - Login & device management                        │
-│  - WebRTC viewer (coming soon)                      │
-└────────────────┬────────────────────────────────────┘
-                 │ WebRTC P2P
-                 ↓
-┌─────────────────────────────────────────────────────┐
-│  AGENTS (Multiple Options)                          │
-│  ├─ Windows Agent (Go EXE) - Production             │
-│  ├─ Web Agent (Browser) - No install                │
-│  ├─ Extension + Native Host - Full control          │
-│  └─ Electron Agent - Cross-platform (prototype)     │
-└────────────────┬────────────────────────────────────┘
-                 │
-                 ↓
-┌─────────────────────────────────────────────────────┐
-│  BACKEND (Supabase)                                 │
-│  ├─ PostgreSQL - Devices, sessions, users           │
-│  ├─ Realtime - WebRTC signaling                     │
-│  ├─ Auth - User authentication                      │
-│  └─ Edge Functions - Session cleanup                │
-└─────────────────────────────────────────────────────┘
-```
-
-### Technology Stack
-- **Controller**: Go + Fyne (Native Windows UI)
-- **Backend**: Supabase (PostgreSQL, Realtime, Auth, Edge Functions)
-- **Dashboard**: HTML/CSS/JS hosted on GitHub Pages
-- **Agents**: Go (Windows), JavaScript (Web/Extension), Electron
-- **WebRTC**: Pion (Go), Browser WebRTC API
-- **Connectivity**: P2P with TURN fallback
-
-## ✨ Key Features
-
-### Security & Access Control
-- **🔒 WebRTC Encryption** - P2P encryption with DTLS-SRTP
-- **👥 User Approval** - Admin must approve all new users
-- **📱 Device Assignment** - Admin assigns devices to users
-- **🛡️ Admin Panel** - Centralized user & device management at `/admin.html`
-- **🔐 RLS Policies** - Database-level security enforcement
-- **🎯 Access Control** - Users see only assigned devices
+- ✅ **Admin Panel** - Centralized user & device management at `/admin.html`
+- ✅ **RLS Policies** - Database-level security enforcement
+- ✅ **Access Control** - Users see only assigned devices
 
 ### Performance & Reliability
-- **🚀 Fast P2P** - Direct connection when possible, TURN fallback
-- **⚡ MAXIMUM QUALITY** - 60 FPS @ JPEG 95, 4K support (v2.0.0)
-- **💎 Near-Lossless** - Exceptional visual fidelity for high bandwidth
-- **🔄 Auto-Reconnect** - Handles network interruptions gracefully
-- **🌐 Cross-Network** - Works behind NAT/firewalls via TURN
-- **📊 Smart Buffering** - 10MB buffer prevents frame drops
+- ✅ **Fast P2P** - Direct connection when possible, TURN fallback
+- ✅ **High Quality** - 30 FPS @ JPEG 95, optimized for latency
+- ✅ **Near-Lossless** - Exceptional visual fidelity for high bandwidth
+- ✅ **Auto-Reconnect** - Handles network interruptions gracefully
+- ✅ **Cross-Network** - Works behind NAT/firewalls via self-hosted TURN
+- ✅ **Smart Buffering** - 10MB buffer prevents frame drops
+- ✅ **Auto Admin** - Self-elevation with UAC prompt
 
 ### User Experience
-- **📦 Portable** - Single EXE file, no installation required
-- **🔔 Enhanced Tray** - Console window, log viewer, version display
-- **🪟 Console Mode** - View live logs in real-time
-- **🎮 Fixed Input** - No more double-clicks or arrow key issues
-- **📊 Live Monitoring** - PowerShell window with tailed logs
-
-## 📥 Quick Start
-
-### For Admins: Controller Application v2.0.0
-
-**Best for:** Controlling multiple remote computers (like TeamViewer)
-
-1. **Download Controller** (from GitHub Releases)
-   ```
-   https://github.com/stangtennis/Remote/releases/latest
-   → Download controller.exe
-   ```
-
-2. **Run Controller**
-   ```bash
-   controller.exe
-   ```
-
-3. **Login** - Use your approved credentials
-
-4. **Approve Devices** - Go to "Approve Devices" tab and approve pending devices
-
-5. **See Devices** - View all assigned devices in "My Devices" tab
-
-6. **Connect** - Click Connect to start remote session (WebRTC viewer coming in v2.1.0)
-
-**See:** [controller/README.md](./controller/README.md) for details
-
----
-
-### For Users: Choose Your Agent
-
-#### 1. Sign Up & Get Approved
-
-1. **Visit Dashboard**: `https://stangtennis.github.io/Remote/`
-2. **Create Account** - Sign up with your email
-3. **Verify Email** - Click the verification link
-4. **Wait for Approval** - Admin must approve your account
-5. **Login** - Once approved, you can access the dashboard
-
-#### 2. Choose Your Agent
-
-#### Option A: Windows Native Agent (Recommended)
-**Best for:** Full control, always-on monitoring, Windows systems
-
-1. **Download** the latest release:
-   ```
-   https://github.com/stangtennis/Remote/releases/latest
-   ```
-
-2. **Run Agent** - Double-click `remote-agent.exe`
-
-3. **Enter Email** - On first run, enter your registered email
-
-4. **Approve Device** - Go to dashboard and approve your device
-
-5. **Connect!** - Click "Connect" in dashboard, enter PIN on agent
-
-**System Tray Features:**
-Right-click the tray icon to:
-- **Show Console Window** - View live logs in PowerShell
-- **View Log File** - Open full log in Notepad
-- **Exit** - Stop the agent
-
-#### Option B: Web Agent (No Installation!)
-**Best for:** Locked-down computers, quick access, cross-platform
-
-1. **Open Web Agent**: `https://stangtennis.github.io/Remote/agent.html`
-
-2. **Login** - Use your approved email/password
-
-3. **Start Screen Share** - Click button and select screen
-
-4. **Connect!** - Device appears in dashboard, enter PIN when prompted
-
-**Note:** View-only mode. For remote control, install the browser extension.
-
-#### Option C: Web Agent + Extension (Full Control)
-**Best for:** Remote control on locked-down systems
-
-1. **Install Extension** - [Chrome Web Store link] (Coming soon)
-
-2. **Install Native Helper** - Run installer from extension
-
-3. **Open Web Agent** - Follow Option B steps above
-
-4. **Full Control** - Mouse & keyboard control now enabled!
-
-### Access Dashboard
-
-Visit: `https://stangtennis.github.io/Remote/`
-
-**Admin Panel**: `https://stangtennis.github.io/Remote/admin.html`
-
-## 📁 Project Structure
-
-```
-Remote/
-├── .github/
-│   └── workflows/         # GitHub Actions
-│       ├── release.yml    # Windows agent releases
-│       └── build-controller.yml  # 🆕 Controller builds
-├── controller/            # 🆕 Controller application (v0.2.0)
-│   ├── main.go           # Main application
-│   ├── internal/
-│   │   ├── supabase/     # Supabase client
-│   │   └── config/       # Configuration
-│   ├── build.bat         # Build script
-│   ├── run.bat           # Run script
-│   ├── README.md         # Controller docs
-│   ├── QUICKSTART.md     # Quick start guide
-│   ├── CHANGELOG.md      # Version history
-│   └── TESTING.md        # Testing guide
-├── agent/                 # Windows native agent (Go)
-│   ├── cmd/remote-agent/  # Main entry point
-│   ├── internal/          # Core packages
-│   │   ├── webrtc/       # WebRTC peer connection
-│   │   ├── screen/       # Screen capture
-│   │   ├── input/        # Mouse/keyboard control
-│   │   ├── tray/         # System tray integration
-│   │   └── device/       # Device registration
-│   ├── build.bat         # Local build script
-│   └── setup-startup.bat # Installation script
-├── docs/                  # GitHub Pages dashboard + web agent
-│   ├── index.html        # Dashboard
-│   ├── agent.html        # Web agent (browser-based)
-│   ├── admin.html        # Admin panel
-│   ├── css/
-│   └── js/
-│       ├── app.js
-│       ├── webrtc.js
-│       └── web-agent.js  # Web agent logic
-├── extension/             # Browser extension
-│   ├── manifest.json
-│   ├── background.js
-│   ├── content.js
-│   └── icons/
-├── native-host/           # Native messaging helper
-│   ├── main.go           # Input control helper
-│   ├── build.bat
-│   └── install-*.sh/bat  # Platform installers
-├── electron-agent/        # Electron agent (prototype)
-│   └── ...
-└── supabase/              # Supabase backend
-    ├── migrations/        # Database schema
-    └── functions/         # Edge Functions
-```
-
-## 🌿 Development Branches
-
-This project uses feature branches for organized development:
-
-- **`main`** - Stable, production-ready code
-- **`agent`** - Windows agent development
-- **`dashboard`** - Web dashboard & backend
-- **`controller`** - Controller application (auto-builds on push) 🆕
-
-See [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md) for details.
-
----
-
-## 🛠️ Development Setup
-
-### Prerequisites
-
-- [Supabase CLI](https://supabase.com/docs/guides/cli) - Backend deployment
-- [Go 1.24+](https://golang.org/dl/) - Agent compilation
-- [MinGW-w64](https://www.mingw-w64.org/) - CGO support (for input control)
-- [Git](https://git-scm.com/) - Version control
-- Supabase account
-
-### 1. Clone & Configure
-
-```bash
-git clone https://github.com/stangtennis/Remote.git
-cd Remote
-
-# Copy environment template
-cp .env.example .env
-# Edit .env with your Supabase credentials
-```
-
-### 2. Deploy Supabase Backend
-
-```bash
-# Login to Supabase
-supabase login
-
-# Link to your project
-supabase link --project-ref your-project-ref
-
-# Run migrations
-cd supabase
-supabase db push
-
-# Deploy Edge Functions
-supabase functions deploy session-token
-supabase functions deploy device-register
-```
-
-### 3. Build Agent Locally
-
-```bash
-cd agent
-
-# Install dependencies
-go mod download
-
-# Build (Windows)
-.\build.bat
-
-# Or manual build
-$env:CGO_ENABLED=1
-go build -ldflags "-s -w -H windowsgui" -o remote-agent.exe ./cmd/remote-agent
-```
-
-### 4. Deploy Dashboard
-
-The dashboard is hosted on GitHub Pages:
-
-1. Push to GitHub
-2. Settings → Pages
-3. Source: `main` branch, `/docs` folder
-4. Save
-
-Access at: `https://your-username.github.io/Remote/`
-
-## 🔄 Branching Strategy
-
-- **`main`** - Stable, production-ready code
-- **`agent`** - Agent development
-- **`dashboard`** - Dashboard development
-
-See [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md) for details.
-
-## 📦 Releases
-
-Releases are **automated via GitHub Actions**:
-
-```bash
-# Create new version
-git tag v1.2.0
-git push origin v1.2.0
-
-# GitHub Actions will:
-# 1. Build agent with CGO
-# 2. Create GitHub Release
-# 3. Upload remote-agent.exe
-# 4. Upload remote-agent-windows.zip (with scripts)
-```
-
-See [RELEASE.md](./RELEASE.md) for details.
+- ✅ **Portable** - Single EXE file, no installation required
+- ✅ **Enhanced Tray** - Console window, log viewer, version display
+- ✅ **Console Mode** - View live logs in real-time
 
 ## 📋 Implementation Status
 
-### ✅ Completed Features (v2.2.0 - 2025-11-11)
+### ✅ Completed Features (v2.38.0 - 2025-12-10)
 
 #### Core Functionality
 - [x] **Infrastructure** - Supabase backend, database, Edge Functions
 - [x] **Authentication** - Supabase Auth with RLS policies
 - [x] **Dashboard** - Web interface hosted on GitHub Pages
 - [x] **Agent Core** - Screen capture, WebRTC streaming
-- [x] **Input Control** - Mouse & keyboard remote control (fixed!)
-- [x] **TURN Relay** - Cross-network connectivity via Twilio
+- [x] **Input Control** - Mouse & keyboard remote control
+- [x] **Self-hosted TURN** - Coturn server for NAT traversal
 - [x] **Reconnection** - Automatic cleanup and recovery
 - [x] **Automated Releases** - GitHub Actions CI/CD
 - [x] **Session Cleanup** - Automatic via pg_cron
 
-#### New in v2.2.0 (2025-11-11) - **MAJOR MILESTONE!** 🎉
-- [x] **WebRTC Video Streaming** - Live remote desktop view working!
-- [x] **Frame Chunk Reassembly** - Fixed black screen issue
-- [x] **Full Input Control** - Mouse, keyboard, and scroll fully functional
-- [x] **Interactive Canvas** - Captures all mouse and keyboard events
-- [x] **Coordinate Scaling** - Accurate mouse positioning
-- [x] **Click with Position** - Mouse moves to click location
-- [x] **Proper Disconnect** - Closes connection and stops streaming
-- [x] **30 FPS Streaming** - Reduced from 60 FPS for better latency
+#### New in v2.38.0 (2025-12-10) 🎉
+- [x] **Self-Elevation** - Auto UAC prompt if not running as admin
+- [x] **Admin Manifest** - Embedded in both agent and controller
+- [x] **Credential Storage** - Remember me with secure storage
+- [x] **Fullscreen Toggle** - In controller viewer
+- [x] **Dashboard Scrolling** - Fixed UI scaling issues
+- [x] **Logout Button** - Working dashboard logout
+- [x] **Self-hosted TURN** - Coturn on dedicated server (188.228.14.94)
+- [x] **Connection Cleanup** - Disconnect old sessions on new connect
+- [x] **macOS Controller** - Builds for Intel and Apple Silicon
+
+#### Previous Features
+- [x] **WebRTC Video Streaming** - Live remote desktop view
+- [x] **Frame Chunk Reassembly** - Handles large frames correctly
+- [x] **Full Input Control** - Mouse, keyboard, and scroll
+- [x] **30 FPS Streaming** - Optimized for latency
 - [x] **DXGI Screen Capture** - Works over RDP sessions
 - [x] **Windows Service Support** - Can run at login screen
-- [x] **Enhanced Logging** - Better visibility of agent activity
-- [x] **Service Installer** - Easy Windows Service installation
-
-#### Previous Features (v2.0.0 - 2025-11-06)
 - [x] **Device Approval in Controller** - Approve devices from controller app
-- [x] **Improved Login UX** - Login form hides when logged in
-- [x] **Version Info** - Build dates in agent and controller
-- [x] **GitHub Actions** - Automated releases on tag push
-- [x] **User Approval System** - Admin controls who can register
 - [x] **Admin Panel** - Web UI for approving users
 - [x] **Enhanced Tray Menu** - Console window + log viewer
-- [x] **Console Mode** - Live log viewing (PowerShell tail)
 
 ### 🚧 Planned Enhancements (v2.3.0+)
 
@@ -457,9 +164,9 @@ See [RELEASE.md](./RELEASE.md) for details.
 |---------|------|-------|
 | Supabase Free Tier | $0/mo | Good for testing/personal use |
 | Supabase Pro | $25/mo | Production (500GB bandwidth) |
-| TURN (Twilio) | ~$112/mo | 280GB @ $0.40/GB |
+| TURN (Self-hosted) | ~$5/mo | Coturn on VPS |
 | GitHub Pages | Free | Static hosting |
-| **Total** | **~$140/mo** | Production setup |
+| **Total** | **~$30/mo** | Production setup |
 
 **Free Alternative**: Use Supabase free tier + free TURN services for personal use.
 
@@ -496,9 +203,7 @@ See [RELEASE.md](./RELEASE.md) for details.
 
 ### Release History
 - **[CHANGELOG.md](./CHANGELOG.md)** - Version history
-- **[RELEASE_NOTES_v2.2.0.md](./RELEASE_NOTES_v2.2.0.md)** - Latest release notes (2025-11-11) 🎉
-- **[RELEASE_NOTES_v2.0.0.md](./RELEASE_NOTES_v2.0.0.md)** - Previous release notes (2025-11-06)
-- **[RELEASE_NOTES_v1.1.7.md](./RELEASE_NOTES_v1.1.7.md)** - Earlier release notes
+- **[GitHub Releases](https://github.com/stangtennis/Remote/releases)** - All release notes and downloads
 
 ## 🔨 Build & Release (Linux Host)
 
