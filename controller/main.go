@@ -153,16 +153,21 @@ func createModernUI(window fyne.Window) *fyne.Container {
 
 	// Login button
 	loginButton = widget.NewButton("Login", func() {
+		logger.Info("Login button clicked")
 		email := emailEntry.Text
 		password := passwordEntry.Text
 
+		logger.Info("Email: %s, Password length: %d", email, len(password))
+
 		if email == "" || password == "" {
 			statusLabel.SetText("❌ Please enter email and password")
+			logger.Info("Empty email or password")
 			return
 		}
 
 		statusLabel.SetText("🔄 Connecting to Supabase...")
 		loginButton.Disable()
+		logger.Info("Starting login process...")
 
 		// Save credentials if remember me is checked
 		if rememberCheck.Checked {

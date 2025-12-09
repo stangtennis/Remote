@@ -359,14 +359,21 @@ func (g *AgentGUI) showLoginDialog() {
 			// Success!
 			log.Printf("✅ Login successful: %s", result.Email)
 			flushLog() // Ensure login success is written to log file
+			
+			// Update UI first
 			fyne.Do(func() {
 				g.refreshStatus()
 				log.Printf("📊 After refresh - isLoggedIn: %v, email: %s", g.isLoggedIn, g.userEmail)
 				flushLog()
 				g.updateStatusLabels()
 				g.updateActionButtons()
-				
-				// Show success message after updating UI
+			})
+			
+			// Small delay to let UI update, then show success message
+			time.Sleep(100 * time.Millisecond)
+			
+			fyne.Do(func() {
+				// Show success message - simple approach
 				dialog.ShowInformation("Login Successful", 
 					"✅ Welcome, "+result.Email+"!\n\n"+
 					"You can now use Run Once or install as a Windows service.", g.window)
