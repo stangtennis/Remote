@@ -88,59 +88,23 @@ jobs:
           go mod tidy
           go mod download
 
-      - name: Add MinGW to PATH
+      - name: Install rsrc for manifest embedding
         shell: pwsh
         run: |
-          $mingwPath = "C:\ProgramData\mingw64\mingw64\bin"
-          if (Test-Path $mingwPath) {
-            echo "$mingwPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            Write-Host "Added $mingwPath to PATH"
-          }
-          # Also try chocolatey mingw location
-          $chocoMingw = "C:\tools\mingw64\bin"
-          if (Test-Path $chocoMingw) {
-            echo "$chocoMingw" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            Write-Host "Added $chocoMingw to PATH"
-          }
+          go install github.com/akavel/rsrc@latest
+          Write-Host "rsrc installed"
 
-      - name: Embed admin manifest
+      - name: Embed admin manifest with rsrc
         working-directory: ./controller
         shell: pwsh
         run: |
-          Write-Host "Looking for windres in PATH..."
-          $windresPath = Get-Command windres -ErrorAction SilentlyContinue
-          if ($windresPath) {
-            Write-Host "Found windres at: $($windresPath.Source)"
-            windres -o controller.syso controller.rc
+          Write-Host "Embedding manifest with rsrc..."
+          rsrc -manifest controller.manifest -o rsrc.syso
+          if (Test-Path "rsrc.syso") {
+            Write-Host "SUCCESS: rsrc.syso created"
+            Get-Item rsrc.syso
           } else {
-            Write-Host "windres not in PATH, searching common locations..."
-            $locations = @(
-              "C:\ProgramData\mingw64\mingw64\bin\windres.exe",
-              "C:\tools\mingw64\bin\windres.exe",
-              "C:\mingw64\bin\windres.exe",
-              "C:\msys64\mingw64\bin\windres.exe"
-            )
-            $found = $false
-            foreach ($loc in $locations) {
-              if (Test-Path $loc) {
-                Write-Host "Found windres at: $loc"
-                & $loc -o controller.syso controller.rc
-                $found = $true
-                break
-              }
-            }
-            if (-not $found) {
-              Write-Host "ERROR: windres not found anywhere!"
-              Write-Host "Listing C:\ProgramData contents:"
-              Get-ChildItem "C:\ProgramData" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.Name }
-              exit 1
-            }
-          }
-          if (Test-Path "controller.syso") {
-            Write-Host "SUCCESS: controller.syso created"
-            Get-Item controller.syso
-          } else {
-            Write-Host "FAILED: controller.syso not created"
+            Write-Host "FAILED: rsrc.syso not created"
             exit 1
           }
 
