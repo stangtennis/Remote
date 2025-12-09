@@ -88,6 +88,11 @@ jobs:
           go mod tidy
           go mod download
 
+      - name: Embed admin manifest
+        working-directory: ./controller
+        run: |
+          windres -o controller.syso controller.rc
+
       - name: Build Controller
         working-directory: ./controller
         env:
