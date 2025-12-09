@@ -228,16 +228,19 @@ func (m *Manager) checkSessionDevice(sessionID string) (bool, string) {
 func (m *Manager) handleWebSession(session Session) {
 	log.Println("🔧 Setting up WebRTC connection (web dashboard)...")
 
+	// Always cleanup previous connection first - new connection takes priority
+	if m.peerConnection != nil || m.isStreaming {
+		log.Println("🔄 New connection requested - disconnecting previous session...")
+		m.isStreaming = false
+		m.cleanupConnection("New connection from dashboard")
+		time.Sleep(200 * time.Millisecond) // Give time for cleanup
+		log.Println("✅ Previous session disconnected, ready for new connection")
+	}
+
 	// Reset ICE candidate buffer for new session
 	m.pendingCandidates = nil
 	m.answerSent = false
-
-	// Ensure previous connection is fully cleaned up
-	if m.peerConnection != nil {
-		log.Println("⚠️  Previous connection still exists, cleaning up first...")
-		m.cleanupConnection("Preparing for new session")
-		time.Sleep(100 * time.Millisecond)
-	}
+	m.sessionID = session.ID
 
 	// Use STUN and TURN servers for NAT traversal
 	iceServers := []webrtc.ICEServer{
