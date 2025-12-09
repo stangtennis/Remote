@@ -758,10 +758,15 @@ function displayVideoFrame(data) {
     if (window.SessionManager && deviceId) {
       // Convert to base64 for storage (only every 10th frame to save memory)
       if (Math.random() < 0.1) {
-        blob.arrayBuffer().then(buffer => {
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-          window.SessionManager.storeFrame(deviceId, base64);
-        });
+        // Use FileReader to avoid stack overflow with large frames
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = reader.result.split(',')[1]; // Remove data:image/jpeg;base64, prefix
+          if (base64) {
+            window.SessionManager.storeFrame(deviceId, base64);
+          }
+        };
+        reader.readAsDataURL(blob);
       }
     }
     
