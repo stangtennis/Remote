@@ -250,8 +250,13 @@ func (v *Viewer) createStatusBar() *fyne.Container {
 	// Keyboard/Mouse status
 	inputLabel := widget.NewLabel("🖱️ Mouse & ⌨️ Keyboard Active")
 
+	// Fullscreen toggle button for status bar
+	fullscreenToggleBtn := widget.NewButton("⛶ Fullscreen", func() {
+		v.toggleFullscreen()
+	})
+
 	// Keyboard shortcuts hint
-	shortcutsLabel := widget.NewLabel("💡 F11: Fullscreen | ESC: Exit Fullscreen | Home: Toggle Toolbar")
+	shortcutsLabel := widget.NewLabel("💡 F11 | ESC")
 	shortcutsLabel.TextStyle = fyne.TextStyle{Italic: true}
 
 	return container.NewHBox(
@@ -263,6 +268,8 @@ func (v *Viewer) createStatusBar() *fyne.Container {
 		widget.NewSeparator(),
 		inputLabel,
 		layout.NewSpacer(),
+		fullscreenToggleBtn,
+		widget.NewSeparator(),
 		shortcutsLabel,
 		layout.NewSpacer(),
 		widget.NewLabel(fmt.Sprintf("Device: %s", v.deviceName)),
