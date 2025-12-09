@@ -172,6 +172,14 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	m.pendingCandidates = nil
 	m.peerConnection = pc
 
+	// Set up ICE connection state handler (more granular than connection state)
+	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
+		log.Printf("🧊 ICE connection state: %s", state.String())
+		if state == webrtc.ICEConnectionStateConnected {
+			log.Println("🧊 ICE layer connected!")
+		}
+	})
+
 	// Set up connection state handler
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("🔄 Connection state changed: %s", state.String())
