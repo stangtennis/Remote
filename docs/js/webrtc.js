@@ -278,6 +278,19 @@ function setupDataChannelHandlers() {
     if (event.data instanceof ArrayBuffer) {
       const data = new Uint8Array(event.data);
       
+      // Check if this is JSON (starts with '{' = 0x7B)
+      if (data.length > 0 && data[0] === 0x7B) {
+        // This is a JSON message, not a frame
+        try {
+          const text = new TextDecoder().decode(data);
+          const msg = JSON.parse(text);
+          handleAgentMessage(msg);
+        } catch (e) {
+          console.warn('Failed to parse JSON message from ArrayBuffer:', e);
+        }
+        return;
+      }
+      
       // Check if this is a chunked frame (magic byte 0xFF + 3-byte header)
       const chunkMagic = 0xFF;
       if (data.length > 3 && data[0] === chunkMagic) {
