@@ -746,12 +746,15 @@ function displayVideoFrame(data) {
   // Create image from blob
   const img = new Image();
   img.onload = () => {
+    console.log(`🖼️ Image loaded: ${img.width}x${img.height}`);
+    
     // Resize canvas to match image
     canvas.width = img.width;
     canvas.height = img.height;
     
     // Draw image on canvas
     ctx.drawImage(img, 0, 0);
+    console.log('✅ Frame drawn to canvas');
     
     // Store frame in SessionManager for tab switching
     const deviceId = window.currentSession?.device_id;
