@@ -133,7 +133,20 @@ function setupPeerConnectionHandlers() {
   // ICE candidate handler
   peerConnection.onicecandidate = async (event) => {
     if (event.candidate) {
-      console.log('📤 Sending ICE candidate:', event.candidate.type, event.candidate.candidate);
+      // Determine candidate type for logging
+      const candidateStr = event.candidate.candidate;
+      let candidateType = 'unknown';
+      if (candidateStr.includes('typ relay')) {
+        candidateType = 'RELAY (TURN)';
+      } else if (candidateStr.includes('typ srflx')) {
+        candidateType = 'SRFLX (STUN)';
+      } else if (candidateStr.includes('typ host')) {
+        candidateType = 'HOST (local)';
+      } else if (candidateStr.includes('typ prflx')) {
+        candidateType = 'PRFLX (peer)';
+      }
+      
+      console.log(`📤 Sending ICE candidate [${candidateType}]:`, candidateStr.substring(0, 80) + '...');
       
       if (!window.currentSession) {
         console.error('⚠️ Cannot send ICE candidate: currentSession is null');
@@ -146,6 +159,8 @@ function setupPeerConnectionHandlers() {
         type: 'ice',
         candidate: event.candidate
       });
+    } else {
+      console.log('📤 ICE gathering complete (null candidate)');
     }
   };
 
