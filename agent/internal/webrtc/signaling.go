@@ -7,10 +7,16 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/pion/webrtc/v3"
 )
+
+// contains is a helper function for string contains check
+func contains(s, substr string) bool {
+	return strings.Contains(s, substr)
+}
 
 type Session struct {
 	ID         string                 `json:"session_id"`
@@ -616,6 +622,25 @@ func (m *Manager) handleICECandidate(candidate *webrtc.ICECandidateInit) {
 		log.Println("⚠️  Cannot add ICE candidate - no peer connection")
 		return
 	}
+
+	// Log the candidate type for debugging
+	candidateStr := candidate.Candidate
+	candidateType := "unknown"
+	if len(candidateStr) > 10 {
+		// Parse candidate type from the candidate string
+		if idx := len(candidateStr); idx > 0 {
+			if contains(candidateStr, "typ relay") {
+				candidateType = "relay (TURN)"
+			} else if contains(candidateStr, "typ srflx") {
+				candidateType = "srflx (STUN)"
+			} else if contains(candidateStr, "typ host") {
+				candidateType = "host (local)"
+			} else if contains(candidateStr, "typ prflx") {
+				candidateType = "prflx (peer reflexive)"
+			}
+		}
+	}
+	log.Printf("📥 Received ICE candidate from dashboard: %s", candidateType)
 
 	state := m.peerConnection.ConnectionState()
 
