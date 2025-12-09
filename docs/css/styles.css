@@ -105,6 +105,12 @@ body {
   padding: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Dashboard page needs special overflow handling */
+body.dashboard-page {
   overflow: hidden;
 }
 
@@ -431,7 +437,8 @@ body::before {
   margin: 0;
   padding: 0.5rem 1rem;
   height: calc(100vh - 57px);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;

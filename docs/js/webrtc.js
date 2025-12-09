@@ -748,6 +748,12 @@ function displayVideoFrame(data) {
   img.onload = () => {
     console.log(`🖼️ Image loaded: ${img.width}x${img.height}`);
     
+    // Hide idle/connecting overlays when we receive first frame
+    const previewIdle = document.getElementById('previewIdle');
+    const previewConnecting = document.getElementById('previewConnecting');
+    if (previewIdle) previewIdle.style.display = 'none';
+    if (previewConnecting) previewConnecting.style.display = 'none';
+    
     // Resize canvas to match image
     canvas.width = img.width;
     canvas.height = img.height;
