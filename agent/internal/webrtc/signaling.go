@@ -226,9 +226,15 @@ func (m *Manager) checkSessionDevice(sessionID string) (bool, string) {
 
 // handleWebSession handles a session from the web dashboard
 func (m *Manager) handleWebSession(session Session) {
+	// Skip if we're already handling this exact session
+	if m.sessionID == session.ID && m.peerConnection != nil {
+		log.Printf("⏭️  Already handling session %s, skipping duplicate", session.ID)
+		return
+	}
+
 	log.Println("🔧 Setting up WebRTC connection (web dashboard)...")
 
-	// Always cleanup previous connection first - new connection takes priority
+	// Cleanup previous connection if it's a different session
 	if m.peerConnection != nil || m.isStreaming {
 		log.Println("🔄 New connection requested - disconnecting previous session...")
 		m.isStreaming = false
