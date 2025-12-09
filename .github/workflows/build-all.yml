@@ -148,6 +148,7 @@ jobs:
           GOOS: darwin
           GOARCH: amd64
         run: |
+          rm -f *.syso  # Remove Windows resource files
           go build -mod=mod -ldflags "-s -w" -o controller-mac-intel-${{ github.event.inputs.version }} .
 
       - name: Upload Controller artifact
@@ -183,6 +184,7 @@ jobs:
           GOOS: darwin
           GOARCH: arm64
         run: |
+          rm -f *.syso  # Remove Windows resource files
           go build -mod=mod -ldflags "-s -w" -o controller-mac-arm64-${{ github.event.inputs.version }} .
 
       - name: Upload Controller artifact
