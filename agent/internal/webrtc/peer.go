@@ -593,8 +593,8 @@ func (m *Manager) startScreenStreaming() {
 		width, height := m.screenCapturer.GetResolution()
 		changePercent := m.dirtyDetector.GetChangePercentage(dirtyRegions, width, height)
 
-		// If more than 50% changed, send full frame (more efficient)
-		if changePercent > 50 {
+		// If more than 25% changed OR more than 8 regions, send full frame (more efficient)
+		if changePercent > 25 || len(dirtyRegions) > 8 {
 			jpeg, err := m.screenCapturer.CaptureJPEG(70)
 			if err != nil {
 				continue
