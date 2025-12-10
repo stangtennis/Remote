@@ -282,25 +282,41 @@ func (v *Viewer) SendMouseMove(x, y float32) {
 	}
 
 	bounds := img.Bounds()
-	imgWidth := float32(bounds.Dx())
-	imgHeight := float32(bounds.Dy())
+	imgWidth := float64(bounds.Dx())
+	imgHeight := float64(bounds.Dy())
 
 	// Get canvas display size
 	canvasSize := v.interactiveCanvas.Size()
+	displayWidth := float64(canvasSize.Width)
+	displayHeight := float64(canvasSize.Height)
 
 	// Avoid division by zero
-	if canvasSize.Width <= 0 || canvasSize.Height <= 0 {
+	if displayWidth <= 0 || displayHeight <= 0 || imgWidth <= 0 || imgHeight <= 0 {
 		return
 	}
 
-	// ImageFillStretch: image fills entire canvas (no offset, simple scaling)
-	// Convert canvas coordinates directly to remote coordinates using float64 for precision
-	remoteX := float64(x) / float64(canvasSize.Width) * float64(imgWidth)
-	remoteY := float64(y) / float64(canvasSize.Height) * float64(imgHeight)
+	// ImageFillContain: image is scaled to fit while maintaining aspect ratio
+	// Calculate scale factor (use smaller of the two to fit entirely)
+	scaleX := displayWidth / imgWidth
+	scaleY := displayHeight / imgHeight
+	scale := math.Min(scaleX, scaleY)
 
-	// Round to nearest pixel for accuracy (agent will also round)
-	remoteX = math.Round(remoteX)
-	remoteY = math.Round(remoteY)
+	// Calculate rendered image size
+	renderWidth := imgWidth * scale
+	renderHeight := imgHeight * scale
+
+	// Calculate offset (image is centered)
+	offsetX := (displayWidth - renderWidth) / 2
+	offsetY := (displayHeight - renderHeight) / 2
+
+	// Convert canvas coordinates to image coordinates
+	// First subtract offset, then divide by scale
+	imageX := (float64(x) - offsetX) / scale
+	imageY := (float64(y) - offsetY) / scale
+
+	// Round to nearest pixel
+	remoteX := math.Round(imageX)
+	remoteY := math.Round(imageY)
 
 	// Clamp to remote screen bounds
 	if remoteX < 0 {
@@ -309,11 +325,11 @@ func (v *Viewer) SendMouseMove(x, y float32) {
 	if remoteY < 0 {
 		remoteY = 0
 	}
-	if remoteX >= float64(imgWidth) {
-		remoteX = float64(imgWidth) - 1
+	if remoteX >= imgWidth {
+		remoteX = imgWidth - 1
 	}
-	if remoteY >= float64(imgHeight) {
-		remoteY = float64(imgHeight) - 1
+	if remoteY >= imgHeight {
+		remoteY = imgHeight - 1
 	}
 
 	event := map[string]interface{}{
@@ -343,16 +359,40 @@ func (v *Viewer) SendMouseButton(button int, pressed bool, x, y float32) {
 	}
 
 	bounds := img.Bounds()
-	imgWidth := float32(bounds.Dx())
-	imgHeight := float32(bounds.Dy())
+	imgWidth := float64(bounds.Dx())
+	imgHeight := float64(bounds.Dy())
 
 	// Get canvas display size
 	canvasSize := v.interactiveCanvas.Size()
+	displayWidth := float64(canvasSize.Width)
+	displayHeight := float64(canvasSize.Height)
 
-	// ImageFillStretch: image fills entire canvas (no offset, simple scaling)
-	// Convert canvas coordinates directly to remote coordinates
-	remoteX := (x / canvasSize.Width) * imgWidth
-	remoteY := (y / canvasSize.Height) * imgHeight
+	// Avoid division by zero
+	if displayWidth <= 0 || displayHeight <= 0 || imgWidth <= 0 || imgHeight <= 0 {
+		return
+	}
+
+	// ImageFillContain: image is scaled to fit while maintaining aspect ratio
+	// Calculate scale factor (use smaller of the two to fit entirely)
+	scaleX := displayWidth / imgWidth
+	scaleY := displayHeight / imgHeight
+	scale := math.Min(scaleX, scaleY)
+
+	// Calculate rendered image size
+	renderWidth := imgWidth * scale
+	renderHeight := imgHeight * scale
+
+	// Calculate offset (image is centered)
+	offsetX := (displayWidth - renderWidth) / 2
+	offsetY := (displayHeight - renderHeight) / 2
+
+	// Convert canvas coordinates to image coordinates
+	imageX := (float64(x) - offsetX) / scale
+	imageY := (float64(y) - offsetY) / scale
+
+	// Round to nearest pixel
+	remoteX := math.Round(imageX)
+	remoteY := math.Round(imageY)
 
 	// Clamp to remote screen bounds
 	if remoteX < 0 {
@@ -368,19 +408,7 @@ func (v *Viewer) SendMouseButton(button int, pressed bool, x, y float32) {
 		remoteY = imgHeight - 1
 	}
 
-	// Calculate percentages for easier debugging
-	canvasXPercent := (x / canvasSize.Width) * 100
-	canvasYPercent := (y / canvasSize.Height) * 100
-	remoteXPercent := (remoteX / imgWidth) * 100
-	remoteYPercent := (remoteY / imgHeight) * 100
-
-	// Debug logging
-	log.Printf("🖱️  Click: canvas=(%.0f,%.0f [%.0f%%,%.0f%%]) → remote=(%.0f,%.0f [%.0f%%,%.0f%%]) | canvasSize=(%.0fx%.0f) imgSize=(%.0fx%.0f)",
-		x, y, canvasXPercent, canvasYPercent, remoteX, remoteY, remoteXPercent, remoteYPercent,
-		canvasSize.Width, canvasSize.Height, imgWidth, imgHeight)
-
 	// Map Fyne button to string
-	// Fyne uses: MouseButtonPrimary=1 (left), MouseButtonSecondary=2 (right), MouseButtonTertiary=3 (middle)
 	buttonStr := "left"
 	if button == 1 {
 		buttonStr = "left"
