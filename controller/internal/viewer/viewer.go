@@ -85,9 +85,11 @@ func NewViewer(app fyne.App, deviceID, deviceName string) *Viewer {
 // buildUI constructs the viewer interface
 func (v *Viewer) buildUI() {
 	// Create video canvas (black background initially)
-	v.videoCanvas = canvas.NewImageFromImage(createBlackImage(1920, 1080))
-	v.videoCanvas.FillMode = canvas.ImageFillStretch // Stretch to fill - no black bars
+	// Use smaller initial size - will be updated when frames arrive
+	v.videoCanvas = canvas.NewImageFromImage(createBlackImage(1280, 720))
+	v.videoCanvas.FillMode = canvas.ImageFillContain // Maintain aspect ratio
 	v.videoCanvas.ScaleMode = canvas.ImageScaleSmooth
+	v.videoCanvas.SetMinSize(fyne.NewSize(320, 240)) // Allow shrinking
 
 	// Wrap in interactive canvas for input capture
 	v.interactiveCanvas = NewInteractiveCanvas(v.videoCanvas)
@@ -98,11 +100,11 @@ func (v *Viewer) buildUI() {
 	// Build status bar
 	v.statusBar = v.createStatusBar()
 
-	// Video container with border
+	// Video container - no padding to maximize space
 	videoBorder := canvas.NewRectangle(color.RGBA{R: 40, G: 40, B: 40, A: 255})
 	v.videoContainer = container.NewStack(
 		videoBorder,
-		container.NewPadded(v.interactiveCanvas),
+		v.interactiveCanvas, // No padding - use full space
 	)
 
 	// Main layout
