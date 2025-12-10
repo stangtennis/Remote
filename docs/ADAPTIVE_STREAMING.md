@@ -1,4 +1,4 @@
-# Adaptive Streaming (v2.46.0)
+# Adaptive Streaming (v2.47.0)
 
 Implementeret adaptiv streaming der justerer kvalitet baseret på netværksforhold.
 
@@ -12,19 +12,19 @@ Implementeret adaptiv streaming der justerer kvalitet baseret på netværksforho
 
 ## Målinger
 
-### Nuværende (v2.46.0)
+### Implementeret (v2.47.0)
 - `bufBytes` - DataChannel buffered amount
+- `RTT` - Round-trip time (via ping/pong)
+- `motionPct` - Procent af skærm ændret (fra DirtyRegionDetector)
 
-### Planlagt (v2.47+)
-- `RTT` - Round-trip time (via RTCP eller ping/pong)
+### Planlagt (v2.48+)
 - `lossPct` - Packet loss percentage
 - `sendBps` - Aktuel send bitrate
-- `motionPct` - Procent af skærm ændret (fra DirtyRegionDetector)
 - `cpuPct` - CPU forbrug (guard mod overload)
 
 ## Adaptation Logic
 
-### Nuværende regler (v2.46.0)
+### Nuværende regler (v2.47.0)
 
 **Reducer kvalitet når:**
 - `bufBytes > 8 MB` (netværk congested)
@@ -37,7 +37,14 @@ Implementeret adaptiv streaming der justerer kvalitet baseret på netværksforho
 **Drop frames når:**
 - `bufBytes > 16 MB` (kritisk congestion)
 
-### Planlagte regler (v2.47+)
+**Idle-mode (implementeret v2.47.0):**
+```
+motionPct < 1% i 1 sekund OG ingen input i 500ms
+→ FPS = 2, Scale = 0.75, Quality = 50
+Exit idle ved motion > 1% eller input-event
+```
+
+### Planlagte regler (v2.48+)
 
 **Reducer kvalitet når:**
 ```
@@ -49,13 +56,6 @@ bufBytes > 16MB ELLER lossPct > 5% ELLER RTT > 250ms ELLER cpuPct > 85%
 ```
 bufBytes < 4MB OG lossPct < 1% OG RTT < 120ms
 → FPS += 5, Scale += 0.1, Quality += 5
-```
-
-**Idle-mode (lav aktivitet):**
-```
-motionPct < 1% i 1 sekund
-→ FPS = 2, Scale = 0.75, Quality = 50
-Exit idle ved motion > 1% eller input-event
 ```
 
 **CPU-guard:**
@@ -107,18 +107,23 @@ Opdateret `startScreenStreaming()`:
 
 Agent logger nu:
 ```
-📊 FPS:20 Q:65 Scale:100% | 45.2KB/f ~7.2Mbit/s | Buf:0.5MB | Err:0 Drop:0
+📊 FPS:20 Q:65 Scale:100% Motion:5.2% | 45.2KB/f ~7.2Mbit/s | Buf:0.5MB | Err:0 Drop:0
+```
+
+Ved idle:
+```
+📊 FPS:2 Q:50 Scale:75% Motion:0.3% 💤IDLE | 8.1KB/f ~0.1Mbit/s | Buf:0.1MB | Err:0 Drop:0
 ```
 
 Ved congestion:
 ```
-📊 FPS:12 Q:50 Scale:50% | 12.1KB/f ~1.2Mbit/s | Buf:6.2MB | Err:0 Drop:3
+📊 FPS:12 Q:50 Scale:50% Motion:15.0% | 12.1KB/f ~1.2Mbit/s | Buf:6.2MB | Err:0 Drop:3
 ```
 
 ## Roadmap
 
-1. **v2.46.0** ✅ - Buffer-baseret adaptation (nuværende)
-2. **v2.47.0** - RTT/loss målinger + idle-mode + motion detection
+1. **v2.46.0** ✅ - Buffer-baseret adaptation
+2. **v2.47.0** ✅ - RTT measurement + idle-mode + motion detection
 3. **v2.48.0** - Input-prioritet (separat data channel)
 4. **v2.49.0** - Full-frame refresh cadence
 5. **v2.50.0** - H.264 hybrid mode (se H264_IMPLEMENTATION_PLAN.md)
