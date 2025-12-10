@@ -264,6 +264,60 @@ func (c *Capturer) IsGDIMode() bool {
 	return c.useGDI
 }
 
+// CaptureJPEGScaled captures and scales the screen to target width
+// scale should be 0.5-1.0 (e.g., 0.75 = 75% of original size)
+func (c *Capturer) CaptureJPEGScaled(quality int, scale float64) ([]byte, int, int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Clamp scale to valid range
+	if scale < 0.25 {
+		scale = 0.25
+	}
+	if scale > 1.0 {
+		scale = 1.0
+	}
+
+	var img *image.RGBA
+	var err error
+
+	// Capture based on mode
+	if c.useGDI && c.gdiCapturer != nil {
+		img, err = c.gdiCapturer.CaptureRGBA()
+	} else if c.dxgiCapturer != nil {
+		img, err = c.dxgiCapturer.CaptureRGBA()
+	} else {
+		img, err = screenshot.CaptureRect(c.bounds)
+	}
+
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("failed to capture screen: %w", err)
+	}
+
+	// Calculate target dimensions
+	origWidth := img.Bounds().Dx()
+	origHeight := img.Bounds().Dy()
+	targetWidth := uint(float64(origWidth) * scale)
+	targetHeight := uint(float64(origHeight) * scale)
+
+	// Scale if needed
+	var finalImg image.Image = img
+	if scale < 1.0 {
+		// Use Bilinear for speed (Lanczos3 is too slow for real-time)
+		finalImg = resize.Resize(targetWidth, targetHeight, img, resize.Bilinear)
+	}
+
+	// Encode as JPEG
+	var buf bytes.Buffer
+	opts := &jpeg.Options{Quality: quality}
+	if err := jpeg.Encode(&buf, finalImg, opts); err != nil {
+		return nil, 0, 0, fmt.Errorf("failed to encode JPEG: %w", err)
+	}
+
+	// Return the SCALED dimensions (what the client will see)
+	return buf.Bytes(), int(targetWidth), int(targetHeight), nil
+}
+
 // CaptureRGBA captures the screen as RGBA image (for dirty region detection)
 func (c *Capturer) CaptureRGBA() (*image.RGBA, error) {
 	c.mu.Lock()

@@ -479,12 +479,7 @@ func (m *Manager) startClipboardMonitoring() {
 }
 
 func (m *Manager) startScreenStreaming() {
-	// Stream JPEG frames over data channel
-	// 20 FPS (50ms) = good balance of smoothness and bandwidth on mobile
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-
-	log.Println("🎥 Starting screen streaming at 20 FPS...")
+	log.Println("🎥 Starting adaptive screen streaming...")
 
 	// If screen capturer not initialized, try to initialize now
 	if m.screenCapturer == nil {
@@ -514,11 +509,35 @@ func (m *Manager) startScreenStreaming() {
 		log.Printf("✅ Updated screen resolution: %dx%d", width, height)
 	}
 
+	// Adaptive streaming parameters
+	fps := 20              // Current FPS (12-30)
+	quality := 65          // JPEG quality (50-80)
+	scale := 1.0           // Scale factor (0.5-1.0)
+	frameInterval := time.Duration(1000/fps) * time.Millisecond
+
+	// Thresholds for adaptation
+	const (
+		bufferHigh    = 8 * 1024 * 1024  // 8MB - reduce quality
+		bufferMedium  = 4 * 1024 * 1024  // 4MB - stable
+		bufferLow     = 1 * 1024 * 1024  // 1MB - can increase quality
+		minFPS        = 12
+		maxFPS        = 30
+		minQuality    = 50
+		maxQuality    = 80
+		minScale      = 0.5
+		maxScale      = 1.0
+	)
+
 	frameCount := 0
 	errorCount := 0
 	droppedFrames := 0
 	bytesSent := int64(0)
 	var lastFrame []byte
+	lastAdaptTime := time.Now()
+	lastLogTime := time.Now()
+
+	ticker := time.NewTicker(frameInterval)
+	defer ticker.Stop()
 
 	for m.isStreaming {
 		<-ticker.C
@@ -532,18 +551,76 @@ func (m *Manager) startScreenStreaming() {
 			desktop.SwitchToInputDesktop()
 		}
 
-		// Check if data channel is backed up (buffered amount > 8MB = drop frames)
-		if m.dataChannel.BufferedAmount() > 8*1024*1024 {
-			droppedFrames++
-			if droppedFrames%10 == 1 {
-				log.Printf("⚠️ Network congestion - dropped %d frames (buffer: %.1f MB)",
-					droppedFrames, float64(m.dataChannel.BufferedAmount())/1024/1024)
+		bufferedAmount := m.dataChannel.BufferedAmount()
+
+		// Adaptive quality adjustment (every 500ms)
+		if time.Since(lastAdaptTime) > 500*time.Millisecond {
+			lastAdaptTime = time.Now()
+			changed := false
+
+			if bufferedAmount > bufferHigh {
+				// Network congested - reduce quality aggressively
+				if fps > minFPS {
+					fps -= 4
+					if fps < minFPS {
+						fps = minFPS
+					}
+					changed = true
+				}
+				if scale > minScale {
+					scale -= 0.1
+					if scale < minScale {
+						scale = minScale
+					}
+					changed = true
+				}
+				if quality > minQuality {
+					quality -= 5
+					if quality < minQuality {
+						quality = minQuality
+					}
+					changed = true
+				}
+			} else if bufferedAmount < bufferLow && droppedFrames == 0 {
+				// Network clear - can increase quality
+				if quality < maxQuality {
+					quality += 2
+					if quality > maxQuality {
+						quality = maxQuality
+					}
+					changed = true
+				}
+				if scale < maxScale {
+					scale += 0.05
+					if scale > maxScale {
+						scale = maxScale
+					}
+					changed = true
+				}
+				if fps < maxFPS {
+					fps += 2
+					if fps > maxFPS {
+						fps = maxFPS
+					}
+					changed = true
+				}
 			}
+
+			if changed {
+				// Update ticker with new FPS
+				frameInterval = time.Duration(1000/fps) * time.Millisecond
+				ticker.Reset(frameInterval)
+			}
+		}
+
+		// Drop frames if buffer is critically high
+		if bufferedAmount > bufferHigh*2 {
+			droppedFrames++
 			continue
 		}
 
-		// Capture with quality 60 (lower = less bandwidth)
-		jpeg, err := m.screenCapturer.CaptureJPEG(60)
+		// Capture with current adaptive settings
+		jpeg, scaledW, scaledH, err := m.screenCapturer.CaptureJPEGScaled(quality, scale)
 		if err != nil {
 			errorCount++
 			if errorCount%100 == 1 {
@@ -556,6 +633,10 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
+		// Log resolution change
+		_ = scaledW
+		_ = scaledH
+
 		lastFrame = jpeg
 
 		// Send frame
@@ -566,17 +647,20 @@ func (m *Manager) startScreenStreaming() {
 			bytesSent += int64(len(jpeg))
 		}
 
-		// Log every 20 frames (once per second at 20 FPS)
-		if frameCount > 0 && frameCount%20 == 0 {
+		// Log every second
+		if time.Since(lastLogTime) >= time.Second {
+			lastLogTime = time.Now()
 			avgKBPerFrame := float64(bytesSent) / float64(frameCount) / 1024
-			mbps := float64(bytesSent) * 8 / float64(frameCount) * 20 / 1000000
-			log.Printf("📊 Streaming: %d frames | Avg: %.1f KB/frame | ~%.1f Mbit/s | Errors: %d | Dropped: %d",
-				frameCount, avgKBPerFrame, mbps, errorCount, droppedFrames)
+			mbps := float64(len(jpeg)) * 8 * float64(fps) / 1000000
+			log.Printf("📊 FPS:%d Q:%d Scale:%.0f%% | %.1fKB/f ~%.1fMbit/s | Buf:%.1fMB | Err:%d Drop:%d",
+				fps, quality, scale*100, avgKBPerFrame, mbps,
+				float64(bufferedAmount)/1024/1024, errorCount, droppedFrames)
+			droppedFrames = 0 // Reset per-second counter
 		}
 	}
 
-	log.Printf("🛑 Screen streaming stopped (sent %d frames, %.1f MB total, %d errors, %d dropped)",
-		frameCount, float64(bytesSent)/1024/1024, errorCount, droppedFrames)
+	log.Printf("🛑 Screen streaming stopped (sent %d frames, %.1f MB total, %d errors)",
+		frameCount, float64(bytesSent)/1024/1024, errorCount)
 }
 
 // Frame type markers for dirty region protocol
