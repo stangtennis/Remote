@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	Version     = "v2.19.0"
-	BuildDate   = "2025-12-08"
+	Version     = "v2.41.1"
+	BuildDate   = "2025-12-10"
 	VersionInfo = Version + " (" + BuildDate + ")"
 )
 
@@ -804,9 +804,76 @@ func createSettingsTab() *fyne.Container {
 		),
 
 		widget.NewSeparator(),
+		widget.NewLabel("Debugging:"),
+		widget.NewButton("📋 View Log", func() {
+			showLogViewer(myWindow)
+		}),
+
+		widget.NewSeparator(),
 		currentSettings,
 		resetButton,
 	)
+}
+
+// showLogViewer shows a dialog with the log contents
+func showLogViewer(parent fyne.Window) {
+	logContent, err := logger.ReadLog(200) // Last 200 lines
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("Failed to read log: %v", err), parent)
+		return
+	}
+
+	// Create scrollable text area
+	logText := widget.NewMultiLineEntry()
+	logText.SetText(logContent)
+	logText.Wrapping = fyne.TextWrapOff
+	logText.Disable() // Read-only
+
+	// Create scroll container
+	scroll := container.NewScroll(logText)
+	scroll.SetMinSize(fyne.NewSize(800, 500))
+
+	// Scroll to bottom
+	logText.CursorRow = len(logContent)
+
+	// Refresh button
+	refreshBtn := widget.NewButton("🔄 Refresh", func() {
+		newContent, err := logger.ReadLog(200)
+		if err == nil {
+			logText.SetText(newContent)
+		}
+	})
+
+	// Copy button
+	copyBtn := widget.NewButton("📋 Copy All", func() {
+		parent.Clipboard().SetContent(logText.Text)
+		dialog.ShowInformation("Copied", "Log copied to clipboard", parent)
+	})
+
+	// Open file button
+	openBtn := widget.NewButton("📂 Open Log File", func() {
+		logPath := logger.GetLogPath()
+		var cmd *exec.Cmd
+		if os.PathSeparator == '\\' { // Windows
+			cmd = exec.Command("notepad", logPath)
+		} else {
+			cmd = exec.Command("xdg-open", logPath)
+		}
+		cmd.Start()
+	})
+
+	buttons := container.NewHBox(refreshBtn, copyBtn, openBtn)
+
+	content := container.NewBorder(
+		widget.NewLabel("📋 Controller Log (last 200 lines)"),
+		buttons,
+		nil, nil,
+		scroll,
+	)
+
+	logDialog := dialog.NewCustom("Controller Log", "Close", content, parent)
+	logDialog.Resize(fyne.NewSize(850, 600))
+	logDialog.Show()
 }
 
 // connectToDevice initiates a connection to a remote device with high-quality settings
