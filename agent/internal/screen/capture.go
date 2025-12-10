@@ -263,3 +263,40 @@ func (c *Capturer) IsGDIMode() bool {
 	defer c.mu.Unlock()
 	return c.useGDI
 }
+
+// CaptureRGBA captures the screen as RGBA image (for dirty region detection)
+func (c *Capturer) CaptureRGBA() (*image.RGBA, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Use GDI if in GDI mode
+	if c.useGDI && c.gdiCapturer != nil {
+		return c.gdiCapturer.CaptureRGBA()
+	}
+
+	// Use DXGI if available
+	if c.dxgiCapturer != nil {
+		return c.dxgiCapturer.CaptureRGBA()
+	}
+
+	// Fallback to screenshot library
+	img, err := screenshot.CaptureRect(c.bounds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to capture screen: %w", err)
+	}
+
+	// Convert to RGBA if needed
+	if rgba, ok := img.(*image.RGBA); ok {
+		return rgba, nil
+	}
+
+	// Convert NRGBA to RGBA
+	bounds := img.Bounds()
+	rgba := image.NewRGBA(bounds)
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			rgba.Set(x, y, img.At(x, y))
+		}
+	}
+	return rgba, nil
+}
