@@ -82,3 +82,50 @@ func Fatal(format string, v ...interface{}) {
 	Close()
 	os.Exit(1)
 }
+
+// GetLogPath returns the path to the log file
+func GetLogPath() string {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "controller.log"
+	}
+	return filepath.Join(filepath.Dir(exePath), "controller.log")
+}
+
+// ReadLog reads the last N lines from the log file
+func ReadLog(maxLines int) (string, error) {
+	logPath := GetLogPath()
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read log: %w", err)
+	}
+	
+	content := string(data)
+	lines := splitLines(content)
+	
+	// Return last N lines
+	if len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+	
+	result := ""
+	for _, line := range lines {
+		result += line + "\n"
+	}
+	return result, nil
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}

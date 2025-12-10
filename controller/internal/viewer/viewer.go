@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 )
@@ -403,7 +404,56 @@ func (v *Viewer) handleQualityChange(value float64) {
 
 func (v *Viewer) showSettings() {
 	log.Println("Opening settings...")
-	// TODO: Show settings dialog
+
+	// FPS display
+	fpsLabel := widget.NewLabel("Target FPS: 30")
+	fpsSlider := widget.NewSlider(10, 60)
+	fpsSlider.Value = 30
+	fpsSlider.Step = 5
+	fpsSlider.OnChanged = func(value float64) {
+		fpsLabel.SetText(fmt.Sprintf("Target FPS: %.0f", value))
+		// TODO: Send FPS change to agent
+	}
+
+	// Quality display
+	qualityLabel := widget.NewLabel("JPEG Quality: 70%")
+	qualitySlider := widget.NewSlider(30, 95)
+	qualitySlider.Value = 70
+	qualitySlider.Step = 5
+	qualitySlider.OnChanged = func(value float64) {
+		qualityLabel.SetText(fmt.Sprintf("JPEG Quality: %.0f%%", value))
+		// TODO: Send quality change to agent
+	}
+
+	// Connection info
+	connInfo := widget.NewLabel("Connection: WebRTC DataChannel")
+	if v.webrtcClient != nil {
+		connInfo.SetText("Connection: WebRTC DataChannel (Active)")
+	}
+
+	// Keyboard shortcuts info
+	shortcutsInfo := widget.NewLabel(
+		"Keyboard Shortcuts:\n" +
+			"  F11 - Toggle Fullscreen\n" +
+			"  Home - Toggle Toolbar\n" +
+			"  Escape - Exit Fullscreen",
+	)
+
+	content := container.NewVBox(
+		widget.NewLabelWithStyle("⚙️ Session Settings", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewSeparator(),
+		fpsLabel,
+		fpsSlider,
+		widget.NewSeparator(),
+		qualityLabel,
+		qualitySlider,
+		widget.NewSeparator(),
+		connInfo,
+		widget.NewSeparator(),
+		shortcutsInfo,
+	)
+
+	dialog.ShowCustom("Settings", "Close", content, v.window)
 }
 
 // SetOnDisconnect sets the disconnect callback
