@@ -257,6 +257,11 @@ let frameTimeout = null;
 let framesReceived = 0;
 let framesDropped = 0;
 
+// Bandwidth tracking
+let bytesReceived = 0;
+let lastBandwidthCheck = Date.now();
+let currentBandwidthMbps = 0;
+
 function setupDataChannelHandlers() {
   dataChannel.onopen = () => {
     console.log('Data channel opened');
@@ -274,6 +279,17 @@ function setupDataChannelHandlers() {
   };
 
   dataChannel.onmessage = async (event) => {
+    // Track bandwidth
+    let dataSize = 0;
+    if (event.data instanceof ArrayBuffer) {
+      dataSize = event.data.byteLength;
+    } else if (event.data instanceof Blob) {
+      dataSize = event.data.size;
+    } else if (typeof event.data === 'string') {
+      dataSize = event.data.length;
+    }
+    bytesReceived += dataSize;
+    
     // Receive JPEG frame from agent (possibly chunked or dirty regions)
     if (event.data instanceof ArrayBuffer) {
       const data = new Uint8Array(event.data);
@@ -411,14 +427,51 @@ function setupDataChannelHandlers() {
     }
   }
   
-  // Log stats every 5 seconds
+  // Calculate and display bandwidth every second
   setInterval(() => {
-    if (framesReceived > 0 || framesDropped > 0) {
-      console.log(`📊 Frames: ${framesReceived} received, ${framesDropped} dropped`);
-      framesReceived = 0;
-      framesDropped = 0;
+    const now = Date.now();
+    const elapsed = (now - lastBandwidthCheck) / 1000; // seconds
+    
+    if (elapsed > 0 && bytesReceived > 0) {
+      const bitsPerSecond = (bytesReceived * 8) / elapsed;
+      currentBandwidthMbps = bitsPerSecond / 1000000;
+      
+      // Update UI
+      updateBandwidthDisplay(currentBandwidthMbps, framesReceived / elapsed);
+      
+      // Log to console
+      console.log(`📊 Bandwidth: ${currentBandwidthMbps.toFixed(2)} Mbit/s | FPS: ${(framesReceived / elapsed).toFixed(1)} | Dropped: ${framesDropped}`);
     }
-  }, 5000);
+    
+    // Reset counters
+    bytesReceived = 0;
+    framesReceived = 0;
+    framesDropped = 0;
+    lastBandwidthCheck = now;
+  }, 1000);
+}
+
+// Update bandwidth display in UI
+function updateBandwidthDisplay(mbps, fps) {
+  // Update stats display if it exists
+  const statsEl = document.getElementById('bandwidthStats');
+  if (statsEl) {
+    statsEl.textContent = `${mbps.toFixed(1)} Mbit/s | ${fps.toFixed(0)} FPS`;
+  }
+  
+  // Also update connection info if available
+  const connectionInfo = document.getElementById('connectionInfo');
+  if (connectionInfo) {
+    const bwSpan = connectionInfo.querySelector('.bandwidth');
+    if (bwSpan) {
+      bwSpan.textContent = `${mbps.toFixed(1)} Mbit/s`;
+    }
+  }
+}
+
+// Get current bandwidth (for external use)
+function getCurrentBandwidth() {
+  return currentBandwidthMbps;
 }
 
 // Helper function to calculate actual image area within canvas (accounting for object-fit: contain)

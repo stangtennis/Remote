@@ -34,10 +34,16 @@ type Viewer struct {
 	mainContent    *fyne.Container
 
 	// Status indicators
-	statusLabel   *widget.Label
-	fpsLabel      *widget.Label
-	latencyLabel  *widget.Label
-	qualitySlider *widget.Slider
+	statusLabel    *widget.Label
+	fpsLabel       *widget.Label
+	latencyLabel   *widget.Label
+	bandwidthLabel *widget.Label
+	qualitySlider  *widget.Slider
+
+	// Bandwidth tracking
+	bytesReceived     int64
+	lastBandwidthTime time.Time
+	currentBandwidth  float64 // Mbit/s
 
 	// Buttons
 	fullscreenBtn *widget.Button
@@ -248,6 +254,9 @@ func (v *Viewer) createStatusBar() *fyne.Container {
 	// Latency indicator
 	v.latencyLabel = widget.NewLabel("Latency: 0ms")
 
+	// Bandwidth indicator
+	v.bandwidthLabel = widget.NewLabel("0.0 Mbit/s")
+
 	// Resolution label
 	resolutionLabel := widget.NewLabel("Resolution: 1920x1080")
 
@@ -263,8 +272,13 @@ func (v *Viewer) createStatusBar() *fyne.Container {
 	shortcutsLabel := widget.NewLabel("💡 F11 | ESC")
 	shortcutsLabel.TextStyle = fyne.TextStyle{Italic: true}
 
+	// Initialize bandwidth tracking
+	v.lastBandwidthTime = time.Now()
+
 	return container.NewHBox(
 		v.fpsLabel,
+		widget.NewSeparator(),
+		v.bandwidthLabel,
 		widget.NewSeparator(),
 		v.latencyLabel,
 		widget.NewSeparator(),
@@ -308,6 +322,32 @@ func (v *Viewer) UpdateStatus(connected bool) {
 func (v *Viewer) UpdateStats(fps int, latency int) {
 	v.fpsLabel.SetText(fmt.Sprintf("FPS: %d", fps))
 	v.latencyLabel.SetText(fmt.Sprintf("Latency: %dms", latency))
+}
+
+// TrackBytesReceived adds bytes to the bandwidth counter
+func (v *Viewer) TrackBytesReceived(bytes int) {
+	v.bytesReceived += int64(bytes)
+}
+
+// UpdateBandwidth calculates and updates bandwidth display (call every second)
+func (v *Viewer) UpdateBandwidth() {
+	now := time.Now()
+	elapsed := now.Sub(v.lastBandwidthTime).Seconds()
+
+	if elapsed > 0 && v.bytesReceived > 0 {
+		bitsPerSecond := float64(v.bytesReceived*8) / elapsed
+		v.currentBandwidth = bitsPerSecond / 1000000 // Convert to Mbit/s
+		v.bandwidthLabel.SetText(fmt.Sprintf("%.1f Mbit/s", v.currentBandwidth))
+	}
+
+	// Reset counters
+	v.bytesReceived = 0
+	v.lastBandwidthTime = now
+}
+
+// GetCurrentBandwidth returns current bandwidth in Mbit/s
+func (v *Viewer) GetCurrentBandwidth() float64 {
+	return v.currentBandwidth
 }
 
 // Event handlers

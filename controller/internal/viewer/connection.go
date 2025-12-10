@@ -50,6 +50,8 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 
 	// Set up callbacks
 	client.SetOnFrame(func(frameData []byte) {
+		// Track bandwidth
+		v.TrackBytesReceived(len(frameData))
 		v.handleVideoFrame(frameData)
 	})
 
@@ -66,6 +68,9 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 
 		// Initialize clipboard receiver
 		v.InitializeClipboard()
+
+		// Start bandwidth update ticker
+		go v.startBandwidthUpdater()
 	})
 
 	client.SetOnDisconnected(func() {
@@ -943,5 +948,18 @@ func (v *Viewer) setupReconnection() {
 func (v *Viewer) CancelReconnection() {
 	if reconnMgr, ok := v.reconnectionMgr.(*reconnection.Manager); ok {
 		reconnMgr.Cancel()
+	}
+}
+
+// startBandwidthUpdater updates bandwidth display every second
+func (v *Viewer) startBandwidthUpdater() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if !v.connected {
+			return // Stop when disconnected
+		}
+		v.UpdateBandwidth()
 	}
 }
