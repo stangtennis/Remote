@@ -290,7 +290,7 @@ function setupDataChannelHandlers() {
     }
     bytesReceived += dataSize;
     
-    // Receive JPEG frame from agent (possibly chunked or dirty regions)
+    // Receive JPEG frame from agent (possibly chunked)
     if (event.data instanceof ArrayBuffer) {
       const data = new Uint8Array(event.data);
       
@@ -307,30 +307,11 @@ function setupDataChannelHandlers() {
         return;
       }
       
-      // Frame type markers
-      const FRAME_TYPE_FULL = 0x01;   // Full frame JPEG
-      const FRAME_TYPE_REGION = 0x02; // Dirty region update
-      const FRAME_TYPE_CHUNK = 0xFF;  // Chunked frame
-      
-      const frameType = data[0];
-      
-      // Handle different frame types
-      if (frameType === FRAME_TYPE_FULL && data.length > 4) {
-        // Full frame: [type(1), reserved(3), ...jpeg_data]
-        const jpegData = data.slice(4);
-        displayVideoFrame(jpegData.buffer);
-        framesReceived++;
-      } else if (frameType === FRAME_TYPE_REGION && data.length > 9) {
-        // Dirty region: [type(1), x(2), y(2), w(2), h(2), ...jpeg_data]
-        const x = data[1] | (data[2] << 8);
-        const y = data[3] | (data[4] << 8);
-        const w = data[5] | (data[6] << 8);
-        const h = data[7] | (data[8] << 8);
-        const jpegData = data.slice(9);
-        displayDirtyRegion(jpegData.buffer, x, y, w, h);
-        framesReceived++;
-      } else if (frameType === FRAME_TYPE_CHUNK && data.length > 3) {
-        // Chunked frame (legacy or large frames)
+      // Check if this is a chunked frame (magic byte 0xFF followed by chunk info)
+      // BUT: JPEG also starts with 0xFF 0xD8, so check second byte too
+      const chunkMagic = 0xFF;
+      if (data.length > 3 && data[0] === chunkMagic && data[1] !== 0xD8) {
+        // This is a chunked frame (0xFF followed by chunk index, not 0xD8)
         const chunkIndex = data[1];
         const totalChunks = data[2];
         const chunkData = data.slice(3);
@@ -378,20 +359,16 @@ function setupDataChannelHandlers() {
               offset += chunk.length;
             }
             
-            // Process reassembled data (may be full frame or region)
-            processReassembledFrame(completeFrame);
+            // Display the complete reassembled frame
+            displayVideoFrame(completeFrame.buffer);
             framesReceived++;
             
             frameChunks = [];
             expectedChunks = 0;
           }
         }
-      } else if (data[0] === 0xFF && data[1] === 0xD8) {
-        // Raw JPEG (starts with JPEG magic bytes FFD8) - legacy support
-        displayVideoFrame(event.data);
-        framesReceived++;
       } else {
-        // Unknown format - try as raw JPEG
+        // Single-packet frame (raw JPEG, no chunking needed)
         displayVideoFrame(event.data);
         framesReceived++;
       }
@@ -407,25 +384,6 @@ function setupDataChannelHandlers() {
       }
     }
   };
-  
-  // Process reassembled chunked frame
-  function processReassembledFrame(data) {
-    const FRAME_TYPE_FULL = 0x01;
-    const FRAME_TYPE_REGION = 0x02;
-    
-    if (data[0] === FRAME_TYPE_FULL && data.length > 4) {
-      displayVideoFrame(data.slice(4).buffer);
-    } else if (data[0] === FRAME_TYPE_REGION && data.length > 9) {
-      const x = data[1] | (data[2] << 8);
-      const y = data[3] | (data[4] << 8);
-      const w = data[5] | (data[6] << 8);
-      const h = data[7] | (data[8] << 8);
-      displayDirtyRegion(data.slice(9).buffer, x, y, w, h);
-    } else {
-      // Assume raw JPEG
-      displayVideoFrame(data.buffer);
-    }
-  }
   
   // Calculate and display bandwidth every second
   setInterval(() => {
