@@ -44,7 +44,7 @@ BEGIN
           AND status IN ('pending', 'offer_sent', 'answered', 'connected')
           AND kicked_at IS NULL
     LOOP
-        -- Mark old session as kicked
+        -- Mark old session as kicked (agent polls kicked_at to detect takeover)
         UPDATE public.webrtc_sessions 
         SET 
             kicked_at = now(),
@@ -53,19 +53,9 @@ BEGIN
             updated_at = now()
         WHERE session_id = v_old_sessions.session_id;
         
-        -- Insert kick signal for the old controller to receive
-        INSERT INTO public.session_signaling (session_id, from_side, msg_type, payload)
-        VALUES (
-            v_old_sessions.session_id::uuid,
-            'system',
-            'kick',
-            jsonb_build_object(
-                'reason', 'takeover',
-                'new_controller_id', p_controller_id,
-                'new_controller_type', p_controller_type,
-                'kicked_at', now()
-            )
-        );
+        -- Note: We don't insert kick signals to session_signaling because
+        -- it has a FK constraint to remote_sessions, not webrtc_sessions.
+        -- Instead, agent/controller poll check_session_kicked() or kicked_at column.
         
         v_kicked_count := v_kicked_count + 1;
     END LOOP;
