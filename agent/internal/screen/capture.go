@@ -285,18 +285,6 @@ func (c *Capturer) CaptureRGBA() (*image.RGBA, error) {
 		return nil, fmt.Errorf("failed to capture screen: %w", err)
 	}
 
-	// Convert to RGBA if needed
-	if rgba, ok := img.(*image.RGBA); ok {
-		return rgba, nil
-	}
-
-	// Convert NRGBA to RGBA
-	bounds := img.Bounds()
-	rgba := image.NewRGBA(bounds)
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			rgba.Set(x, y, img.At(x, y))
-		}
-	}
-	return rgba, nil
+	// screenshot.CaptureRect returns *image.RGBA directly
+	return img, nil
 }
