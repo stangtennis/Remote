@@ -71,10 +71,11 @@ func NewViewer(app fyne.App, deviceID, deviceName string) *Viewer {
 		toolbarVisible: true,
 	}
 
-	// Create window optimized for Full HD
+	// Create window - start at reasonable size, user can resize
 	v.window = app.NewWindow(fmt.Sprintf("Remote Desktop - %s", deviceName))
-	v.window.Resize(fyne.NewSize(1920, 1080))
+	v.window.Resize(fyne.NewSize(1280, 720)) // Start smaller, resizable
 	v.window.CenterOnScreen()
+	v.window.SetFixedSize(false) // Ensure window is resizable
 
 	v.buildUI()
 
