@@ -447,11 +447,11 @@ function getCurrentBandwidth() {
 function getImageCoordinates(element, clientX, clientY) {
   const rect = element.getBoundingClientRect();
   
-  // Get displayed size
+  // Get displayed size (CSS size on screen)
   const displayWidth = rect.width;
   const displayHeight = rect.height;
   
-  // Get actual canvas/image size
+  // Get actual canvas/image size (internal pixel buffer)
   let actualWidth, actualHeight;
   if (element.tagName === 'CANVAS') {
     actualWidth = element.width;
@@ -464,32 +464,31 @@ function getImageCoordinates(element, clientX, clientY) {
     actualHeight = displayHeight;
   }
   
-  // Calculate aspect ratios
-  const displayAspect = displayWidth / displayHeight;
-  const imageAspect = actualWidth / actualHeight;
-  
-  // Calculate actual rendered image dimensions within the element
-  let renderWidth, renderHeight, offsetX, offsetY;
-  
-  if (imageAspect > displayAspect) {
-    // Image is wider - letterboxing on top/bottom
-    renderWidth = displayWidth;
-    renderHeight = displayWidth / imageAspect;
-    offsetX = 0;
-    offsetY = (displayHeight - renderHeight) / 2;
-  } else {
-    // Image is taller - letterboxing on left/right
-    renderHeight = displayHeight;
-    renderWidth = displayHeight * imageAspect;
-    offsetX = (displayWidth - renderWidth) / 2;
-    offsetY = 0;
+  // If canvas has no content yet, use display size
+  if (actualWidth === 0 || actualHeight === 0) {
+    actualWidth = displayWidth;
+    actualHeight = displayHeight;
   }
   
-  // Calculate coordinates relative to element
+  // Calculate coordinates relative to element's top-left
   const relX = clientX - rect.left;
   const relY = clientY - rect.top;
   
-  // Map to actual image area (0-1 range)
+  // For canvas with object-fit: contain, the image is scaled to fit
+  // Calculate the scale factor and offset
+  const scaleX = displayWidth / actualWidth;
+  const scaleY = displayHeight / actualHeight;
+  const scale = Math.min(scaleX, scaleY); // object-fit: contain uses the smaller scale
+  
+  // Calculate rendered size
+  const renderWidth = actualWidth * scale;
+  const renderHeight = actualHeight * scale;
+  
+  // Calculate offset (centering)
+  const offsetX = (displayWidth - renderWidth) / 2;
+  const offsetY = (displayHeight - renderHeight) / 2;
+  
+  // Map click position to normalized coordinates (0-1)
   const x = Math.max(0, Math.min(1, (relX - offsetX) / renderWidth));
   const y = Math.max(0, Math.min(1, (relY - offsetY) / renderHeight));
   
