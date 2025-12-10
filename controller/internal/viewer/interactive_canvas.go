@@ -172,7 +172,7 @@ func (r *interactiveCanvasRenderer) Layout(size fyne.Size) {
 }
 
 func (r *interactiveCanvasRenderer) MinSize() fyne.Size {
-	return fyne.NewSize(640, 480)
+	return fyne.NewSize(320, 240) // Allow smaller window sizes
 }
 
 func (r *interactiveCanvasRenderer) Refresh() {
