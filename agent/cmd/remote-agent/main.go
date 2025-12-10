@@ -192,34 +192,51 @@ func askYesNo(question string) bool {
 	return result == IDYES
 }
 
-// isFirewallRuleExists checks if the firewall rule already exists
+// isFirewallRuleExists checks if the firewall rule already exists for THIS executable
 func isFirewallRuleExists() bool {
-	cmd := exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name=Remote Desktop Agent")
+	exePath, err := os.Executable()
+	if err != nil {
+		return false
+	}
+
+	cmd := exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name=Remote Desktop Agent", "verbose")
 	output, err := cmd.Output()
 	if err != nil {
 		return false
 	}
-	// If output contains "Rule Name", the rule exists
-	return len(output) > 50 && !strings.Contains(string(output), "No rules match")
+
+	outputStr := string(output)
+	// Check if rule exists AND matches current executable path
+	if strings.Contains(outputStr, "No rules match") {
+		return false
+	}
+
+	// Check if the program path in the rule matches our current exe
+	// This ensures we update the rule if the exe moved/was updated
+	return strings.Contains(strings.ToLower(outputStr), strings.ToLower(exePath))
 }
 
 // setupFirewallRules adds Windows Firewall rules to allow the agent
 func setupFirewallRules() {
-	// Check if rule already exists
-	if isFirewallRuleExists() {
-		log.Println("✅ Firewall rule already exists")
-		return
-	}
-
 	exePath, err := os.Executable()
 	if err != nil {
 		log.Printf("⚠️ Could not get executable path for firewall: %v", err)
 		return
 	}
 
-	// If not admin, we need to request elevation
+	log.Printf("🔥 Checking firewall rules for: %s", exePath)
+
+	// Check if rule already exists for THIS exe
+	if isFirewallRuleExists() {
+		log.Println("✅ Firewall rule already exists for this executable")
+		return
+	}
+
+	log.Println("🔥 Firewall rule missing or outdated - adding new rules...")
+
+	// If not admin, we can't add rules (but we should be admin due to self-elevation)
 	if !isAdmin() {
-		log.Println("🔥 Firewall rule needed - requesting admin privileges...")
+		log.Println("⚠️ Not running as admin - cannot add firewall rules")
 		
 		// Run netsh as admin using PowerShell
 		// This will show a UAC prompt
