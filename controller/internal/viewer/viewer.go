@@ -321,7 +321,14 @@ func (v *Viewer) UpdateStatus(connected bool) {
 // UpdateStats updates performance statistics
 func (v *Viewer) UpdateStats(fps int, latency int) {
 	v.fpsLabel.SetText(fmt.Sprintf("FPS: %d", fps))
-	v.latencyLabel.SetText(fmt.Sprintf("Latency: %dms", latency))
+	v.latencyLabel.SetText(fmt.Sprintf("RTT: %dms", latency))
+}
+
+// UpdateRTT updates the RTT display from ping/pong measurement
+func (v *Viewer) UpdateRTT(rtt time.Duration) {
+	fyne.Do(func() {
+		v.latencyLabel.SetText(fmt.Sprintf("RTT: %dms", rtt.Milliseconds()))
+	})
 }
 
 // TrackBytesReceived adds bytes to the bandwidth counter

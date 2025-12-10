@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
 	"log"
 	"os"
 	"path/filepath"
@@ -37,6 +38,10 @@ type Manager struct {
 	currentDesktop      desktop.DesktopType
 	pendingCandidates   []*webrtc.ICECandidate // Buffer ICE candidates until answer is sent
 	answerSent          bool                   // Flag to track if answer has been sent
+
+	// RTT measurement
+	lastRTT       time.Duration // Last measured round-trip time
+	lastInputTime time.Time     // Last input event time (for idle detection)
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
@@ -355,6 +360,25 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 		return
 	}
 
+	// Handle ping/pong for RTT measurement
+	if eventType == "ping" {
+		// Respond with pong immediately
+		ts, _ := event["ts"].(float64)
+		pong := map[string]interface{}{
+			"t":  "pong",
+			"ts": ts, // Echo back the timestamp
+		}
+		if data, err := json.Marshal(pong); err == nil {
+			if m.dataChannel != nil && m.dataChannel.ReadyState() == webrtc.DataChannelStateOpen {
+				m.dataChannel.Send(data)
+			}
+		}
+		return
+	}
+
+	// Track last input time for idle detection
+	m.lastInputTime = time.Now()
+
 	// Switch to input desktop before handling input (required for Session 0 / login screen)
 	if m.isSession0 {
 		if err := desktop.SwitchToInputDesktop(); err != nil {
@@ -509,6 +533,11 @@ func (m *Manager) startScreenStreaming() {
 		log.Printf("✅ Updated screen resolution: %dx%d", width, height)
 	}
 
+	// Initialize dirty region detector for motion detection
+	if m.dirtyDetector == nil {
+		m.dirtyDetector = screen.NewDirtyRegionDetector(128, 128)
+	}
+
 	// Adaptive streaming parameters
 	fps := 20              // Current FPS (12-30)
 	quality := 65          // JPEG quality (50-80)
@@ -518,7 +547,6 @@ func (m *Manager) startScreenStreaming() {
 	// Thresholds for adaptation
 	const (
 		bufferHigh    = 8 * 1024 * 1024  // 8MB - reduce quality
-		bufferMedium  = 4 * 1024 * 1024  // 4MB - stable
 		bufferLow     = 1 * 1024 * 1024  // 1MB - can increase quality
 		minFPS        = 12
 		maxFPS        = 30
@@ -526,6 +554,10 @@ func (m *Manager) startScreenStreaming() {
 		maxQuality    = 80
 		minScale      = 0.5
 		maxScale      = 1.0
+		idleFPS       = 2   // FPS when idle
+		idleQuality   = 50  // Quality when idle
+		idleScale     = 0.75 // Scale when idle
+		idleThreshold = 1.0 // Motion % threshold for idle
 	)
 
 	frameCount := 0
@@ -533,8 +565,12 @@ func (m *Manager) startScreenStreaming() {
 	droppedFrames := 0
 	bytesSent := int64(0)
 	var lastFrame []byte
+	var lastRGBA *image.RGBA
 	lastAdaptTime := time.Now()
 	lastLogTime := time.Now()
+	lowMotionStart := time.Time{} // When low motion started
+	isIdle := false
+	motionPct := 0.0
 
 	ticker := time.NewTicker(frameInterval)
 	defer ticker.Stop()
@@ -553,8 +589,55 @@ func (m *Manager) startScreenStreaming() {
 
 		bufferedAmount := m.dataChannel.BufferedAmount()
 
-		// Adaptive quality adjustment (every 500ms)
-		if time.Since(lastAdaptTime) > 500*time.Millisecond {
+		// Capture RGBA for motion detection
+		rgbaFrame, err := m.screenCapturer.CaptureRGBA()
+		if err != nil {
+			errorCount++
+			if errorCount%100 == 1 {
+				log.Printf("⚠️ Screen capture error: %v", err)
+			}
+			continue
+		}
+
+		// Detect motion using dirty regions
+		width, height := m.screenCapturer.GetResolution()
+		if lastRGBA != nil {
+			regions, _ := m.dirtyDetector.DetectDirtyRegions(rgbaFrame, quality)
+			motionPct = m.dirtyDetector.GetChangePercentage(regions, width, height)
+		}
+		lastRGBA = rgbaFrame
+
+		// Idle mode detection
+		timeSinceInput := time.Since(m.lastInputTime)
+		if motionPct < idleThreshold && timeSinceInput > 500*time.Millisecond {
+			if lowMotionStart.IsZero() {
+				lowMotionStart = time.Now()
+			} else if time.Since(lowMotionStart) > 1*time.Second && !isIdle {
+				// Enter idle mode
+				isIdle = true
+				fps = idleFPS
+				quality = idleQuality
+				scale = idleScale
+				frameInterval = time.Duration(1000/fps) * time.Millisecond
+				ticker.Reset(frameInterval)
+				log.Println("💤 Entering idle mode (low motion)")
+			}
+		} else {
+			// Exit idle mode
+			lowMotionStart = time.Time{}
+			if isIdle {
+				isIdle = false
+				fps = 20
+				quality = 65
+				scale = 1.0
+				frameInterval = time.Duration(1000/fps) * time.Millisecond
+				ticker.Reset(frameInterval)
+				log.Println("⚡ Exiting idle mode (activity detected)")
+			}
+		}
+
+		// Adaptive quality adjustment (every 500ms, skip if idle)
+		if !isIdle && time.Since(lastAdaptTime) > 500*time.Millisecond {
 			lastAdaptTime = time.Now()
 			changed := false
 
@@ -619,21 +702,19 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
-		// Capture with current adaptive settings
+		// Encode RGBA to JPEG with scaling
 		jpeg, scaledW, scaledH, err := m.screenCapturer.CaptureJPEGScaled(quality, scale)
 		if err != nil {
 			errorCount++
 			if errorCount%100 == 1 {
-				log.Printf("⚠️ Screen capture error: %v", err)
+				log.Printf("⚠️ JPEG encode error: %v", err)
 			}
-			// Resend last frame as fallback
 			if lastFrame != nil {
 				m.sendFrameChunked(lastFrame)
 			}
 			continue
 		}
 
-		// Log resolution change
 		_ = scaledW
 		_ = scaledH
 
@@ -652,8 +733,12 @@ func (m *Manager) startScreenStreaming() {
 			lastLogTime = time.Now()
 			avgKBPerFrame := float64(bytesSent) / float64(frameCount) / 1024
 			mbps := float64(len(jpeg)) * 8 * float64(fps) / 1000000
-			log.Printf("📊 FPS:%d Q:%d Scale:%.0f%% | %.1fKB/f ~%.1fMbit/s | Buf:%.1fMB | Err:%d Drop:%d",
-				fps, quality, scale*100, avgKBPerFrame, mbps,
+			idleStr := ""
+			if isIdle {
+				idleStr = " 💤IDLE"
+			}
+			log.Printf("📊 FPS:%d Q:%d Scale:%.0f%% Motion:%.1f%%%s | %.1fKB/f ~%.1fMbit/s | Buf:%.1fMB | Err:%d Drop:%d",
+				fps, quality, scale*100, motionPct, idleStr, avgKBPerFrame, mbps,
 				float64(bufferedAmount)/1024/1024, errorCount, droppedFrames)
 			droppedFrames = 0 // Reset per-second counter
 		}

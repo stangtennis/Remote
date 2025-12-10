@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/pion/webrtc/v3"
 )
@@ -24,6 +25,11 @@ type Client struct {
 	// Frame reassembly
 	frameChunks   map[int][][]byte // chunk index -> chunk data
 	frameChunksMu sync.Mutex
+
+	// RTT measurement
+	lastPingTime time.Time
+	lastRTT      time.Duration
+	onRTTUpdate  func(time.Duration)
 }
 
 // NewClient creates a new WebRTC client
@@ -278,6 +284,17 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 	// Not a chunked frame - try to parse as JSON first (for clipboard and other messages)
 	var jsonMsg map[string]interface{}
 	if err := json.Unmarshal(data, &jsonMsg); err == nil {
+		// Check for pong response (RTT measurement)
+		if msgType, ok := jsonMsg["t"].(string); ok && msgType == "pong" {
+			if !c.lastPingTime.IsZero() {
+				c.lastRTT = time.Since(c.lastPingTime)
+				if c.onRTTUpdate != nil {
+					c.onRTTUpdate(c.lastRTT)
+				}
+			}
+			return
+		}
+
 		// It's a JSON message (clipboard, file transfer, etc.)
 		if c.onDataChannelMessage != nil {
 			c.onDataChannelMessage(data)
@@ -288,4 +305,51 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 			c.onFrame(data)
 		}
 	}
+}
+
+// StartPingLoop starts sending ping messages for RTT measurement
+func (c *Client) StartPingLoop() {
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			c.mu.Lock()
+			connected := c.connected
+			c.mu.Unlock()
+
+			if !connected {
+				return
+			}
+
+			c.SendPing()
+		}
+	}()
+}
+
+// SendPing sends a ping message to measure RTT
+func (c *Client) SendPing() {
+	if c.dataChannel == nil || c.dataChannel.ReadyState() != webrtc.DataChannelStateOpen {
+		return
+	}
+
+	c.lastPingTime = time.Now()
+	ping := map[string]interface{}{
+		"t":  "ping",
+		"ts": float64(c.lastPingTime.UnixNano()) / 1e6, // ms timestamp
+	}
+
+	if data, err := json.Marshal(ping); err == nil {
+		c.dataChannel.Send(data)
+	}
+}
+
+// SetOnRTTUpdate sets the callback for RTT updates
+func (c *Client) SetOnRTTUpdate(callback func(time.Duration)) {
+	c.onRTTUpdate = callback
+}
+
+// GetLastRTT returns the last measured RTT
+func (c *Client) GetLastRTT() time.Duration {
+	return c.lastRTT
 }
