@@ -484,7 +484,7 @@ func (m *Manager) startScreenStreaming() {
 	ticker := time.NewTicker(33 * time.Millisecond)
 	defer ticker.Stop()
 
-	log.Println("🎥 Starting screen streaming at 30 FPS...")
+	log.Println("🎥 Starting screen streaming at 30 FPS with dirty region detection...")
 
 	// If screen capturer not initialized, try to initialize now
 	if m.screenCapturer == nil {
@@ -514,10 +514,18 @@ func (m *Manager) startScreenStreaming() {
 		log.Printf("✅ Updated screen resolution: %dx%d", width, height)
 	}
 
+	// Initialize dirty region detector
+	if m.dirtyDetector == nil {
+		m.dirtyDetector = screen.NewDirtyRegionDetector(128, 128)
+		log.Println("✅ Dirty region detector initialized (128x128 tiles)")
+	}
+
 	frameCount := 0
 	errorCount := 0
 	droppedFrames := 0
-	var lastFrame []byte // Cache last frame for resend when capture fails
+	bytesSent := int64(0)
+	isFirstFrame := true
+	var lastFullFrame []byte
 
 	for m.isStreaming {
 		<-ticker.C
@@ -531,7 +539,7 @@ func (m *Manager) startScreenStreaming() {
 			desktop.SwitchToInputDesktop()
 		}
 
-		// Check if data channel is backed up (buffered amount > 16MB = larger buffer)
+		// Check if data channel is backed up (buffered amount > 16MB)
 		if m.dataChannel.BufferedAmount() > 16*1024*1024 {
 			droppedFrames++
 			if droppedFrames%10 == 1 {
@@ -540,41 +548,88 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
-		// Capture with good quality (70 = good balance of quality/bandwidth)
-		jpeg, err := m.screenCapturer.CaptureJPEG(70)
+		// Capture as RGBA for dirty region detection
+		rgbaFrame, err := m.screenCapturer.CaptureRGBA()
 		if err != nil {
-			// On any error, resend last frame to keep stream alive
-			if lastFrame != nil {
-				if err := m.sendFrameChunked(lastFrame); err == nil {
-					frameCount++
-				}
-			} else {
-				errorCount++
-				if errorCount%100 == 1 {
-					log.Printf("⚠️ Screen capture error (no cached frame): %v", err)
-				}
+			errorCount++
+			if errorCount%100 == 1 {
+				log.Printf("⚠️ Screen capture error: %v", err)
+			}
+			// Send last full frame as fallback
+			if lastFullFrame != nil {
+				m.sendFrameChunked(lastFullFrame)
 			}
 			continue
 		}
 
-		// Cache this frame
-		lastFrame = jpeg
+		// Detect dirty regions
+		dirtyRegions, firstFrame := m.dirtyDetector.DetectDirtyRegions(rgbaFrame, 70)
 
-		// Send frame over data channel (with chunking if needed)
-		if err := m.sendFrameChunked(jpeg); err != nil {
-			log.Printf("Failed to send frame: %v", err)
-		} else {
-			frameCount++
-			// Log every 30 frames (once per second at 30 FPS)
-			if frameCount%30 == 0 {
-				log.Printf("📊 Streaming: %d frames sent | Latest: %d KB | Errors: %d | Dropped: %d",
-					frameCount, len(jpeg)/1024, errorCount, droppedFrames)
+		// Force full frame on first frame or if detector says so
+		if isFirstFrame || firstFrame {
+			isFirstFrame = false
+			jpeg, err := m.screenCapturer.CaptureJPEG(70)
+			if err != nil {
+				continue
 			}
+			lastFullFrame = jpeg
+
+			// Send full frame (raw JPEG, no special header needed)
+			if err := m.sendFrameChunked(jpeg); err != nil {
+				log.Printf("Failed to send full frame: %v", err)
+			} else {
+				frameCount++
+				bytesSent += int64(len(jpeg))
+			}
+			continue
+		}
+
+		// No changes - skip sending (huge bandwidth savings!)
+		if len(dirtyRegions) == 0 {
+			continue
+		}
+
+		// Calculate change percentage
+		width, height := m.screenCapturer.GetResolution()
+		changePercent := m.dirtyDetector.GetChangePercentage(dirtyRegions, width, height)
+
+		// If more than 50% changed, send full frame (more efficient)
+		if changePercent > 50 {
+			jpeg, err := m.screenCapturer.CaptureJPEG(70)
+			if err != nil {
+				continue
+			}
+			lastFullFrame = jpeg
+			if err := m.sendFrameChunked(jpeg); err != nil {
+				log.Printf("Failed to send full frame: %v", err)
+			} else {
+				frameCount++
+				bytesSent += int64(len(jpeg))
+			}
+		} else {
+			// Send only dirty regions
+			regionBytes := 0
+			for _, region := range dirtyRegions {
+				if err := m.sendDirtyRegion(region); err != nil {
+					log.Printf("Failed to send dirty region: %v", err)
+					break
+				}
+				regionBytes += len(region.Data) + 9 // data + header
+			}
+			frameCount++
+			bytesSent += int64(regionBytes)
+		}
+
+		// Log every 30 frames (once per second at 30 FPS)
+		if frameCount > 0 && frameCount%30 == 0 {
+			avgKBPerFrame := float64(bytesSent) / float64(frameCount) / 1024
+			log.Printf("📊 Streaming: %d frames | Avg: %.1f KB/frame | Regions: %d (%.1f%% changed) | Errors: %d | Dropped: %d",
+				frameCount, avgKBPerFrame, len(dirtyRegions), changePercent, errorCount, droppedFrames)
 		}
 	}
 
-	log.Printf("🛑 Screen streaming stopped (sent %d frames, %d errors, %d dropped)",
-		frameCount, errorCount, droppedFrames)
+	log.Printf("🛑 Screen streaming stopped (sent %d frames, %.1f MB total, %d errors, %d dropped)",
+		frameCount, float64(bytesSent)/1024/1024, errorCount, droppedFrames)
 }
 
 // Frame type markers for dirty region protocol

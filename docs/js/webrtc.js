@@ -262,6 +262,10 @@ let bytesReceived = 0;
 let lastBandwidthCheck = Date.now();
 let currentBandwidthMbps = 0;
 
+// Screen size tracking for dirty regions (set by first full frame)
+let screenWidth = 0;
+let screenHeight = 0;
+
 function setupDataChannelHandlers() {
   dataChannel.onopen = () => {
     console.log('Data channel opened');
@@ -307,28 +311,36 @@ function setupDataChannelHandlers() {
         return;
       }
       
-      // Check if this is a chunked frame (magic byte 0xFF followed by chunk info)
-      // BUT: JPEG also starts with 0xFF 0xD8, so check second byte too
-      const chunkMagic = 0xFF;
-      if (data.length > 3 && data[0] === chunkMagic && data[1] !== 0xD8) {
-        // This is a chunked frame (0xFF followed by chunk index, not 0xD8)
+      // Frame type detection
+      const FRAME_TYPE_REGION = 0x02;  // Dirty region update
+      const CHUNK_MAGIC = 0xFF;        // Chunked frame marker
+      
+      // Check for dirty region (type 0x02)
+      if (data.length > 9 && data[0] === FRAME_TYPE_REGION) {
+        // Dirty region: [type(1), x(2), y(2), w(2), h(2), ...jpeg_data]
+        const x = data[1] | (data[2] << 8);
+        const y = data[3] | (data[4] << 8);
+        const w = data[5] | (data[6] << 8);
+        const h = data[7] | (data[8] << 8);
+        const jpegData = data.slice(9);
+        displayDirtyRegion(jpegData.buffer, x, y, w, h);
+        framesReceived++;
+      }
+      // Check for chunked frame (0xFF followed by chunk index, not 0xD8)
+      else if (data.length > 3 && data[0] === CHUNK_MAGIC && data[1] !== 0xD8) {
         const chunkIndex = data[1];
         const totalChunks = data[2];
         const chunkData = data.slice(3);
         
         // Initialize chunk array if first chunk
         if (chunkIndex === 0) {
-          // Clear any previous incomplete frame
           if (frameChunks.length > 0 && expectedChunks > 0) {
             framesDropped++;
           }
           frameChunks = new Array(totalChunks);
           expectedChunks = totalChunks;
           
-          // Clear old timeout
           if (frameTimeout) clearTimeout(frameTimeout);
-          
-          // Set timeout to discard incomplete frames (500ms)
           frameTimeout = setTimeout(() => {
             if (expectedChunks > 0) {
               framesDropped++;
@@ -342,7 +354,6 @@ function setupDataChannelHandlers() {
         if (expectedChunks > 0 && chunkIndex < expectedChunks) {
           frameChunks[chunkIndex] = chunkData;
           
-          // Check if we have all chunks
           const receivedCount = frameChunks.filter(c => c).length;
           if (receivedCount === expectedChunks) {
             if (frameTimeout) {
@@ -359,7 +370,7 @@ function setupDataChannelHandlers() {
               offset += chunk.length;
             }
             
-            // Display the complete reassembled frame
+            // Display the complete reassembled frame (full JPEG)
             displayVideoFrame(completeFrame.buffer);
             framesReceived++;
             
@@ -368,7 +379,7 @@ function setupDataChannelHandlers() {
           }
         }
       } else {
-        // Single-packet frame (raw JPEG, no chunking needed)
+        // Single-packet frame (raw JPEG starting with FF D8)
         displayVideoFrame(event.data);
         framesReceived++;
       }
@@ -796,21 +807,22 @@ function displayVideoFrame(data) {
   // Create image from blob
   const img = new Image();
   img.onload = () => {
-    console.log(`🖼️ Image loaded: ${img.width}x${img.height}`);
-    
     // Hide idle/connecting overlays when we receive first frame
     const previewIdle = document.getElementById('previewIdle');
     const previewConnecting = document.getElementById('previewConnecting');
     if (previewIdle) previewIdle.style.display = 'none';
     if (previewConnecting) previewConnecting.style.display = 'none';
     
-    // Resize canvas to match image
+    // Store screen size for dirty region calculations
+    screenWidth = img.width;
+    screenHeight = img.height;
+    
+    // Resize canvas to match image (only for full frames)
     canvas.width = img.width;
     canvas.height = img.height;
     
     // Draw image on canvas
     ctx.drawImage(img, 0, 0);
-    console.log('✅ Frame drawn to canvas');
     
     // Store frame in SessionManager for tab switching
     const deviceId = window.currentSession?.device_id;
@@ -849,6 +861,12 @@ function displayDirtyRegion(data, x, y, w, h) {
     return;
   }
 
+  // Don't draw if canvas hasn't been initialized with a full frame yet
+  if (canvas.width === 0 || canvas.height === 0) {
+    console.warn('Canvas not initialized, skipping dirty region');
+    return;
+  }
+
   const ctx = canvas.getContext('2d');
   
   // Convert data to blob
@@ -857,8 +875,9 @@ function displayDirtyRegion(data, x, y, w, h) {
   // Create image from blob
   const img = new Image();
   img.onload = () => {
-    // Draw the region at the specified position
-    ctx.drawImage(img, x, y, w, h);
+    // Draw the region at the specified position (don't resize canvas!)
+    // The image should be drawn at its natural size at position (x, y)
+    ctx.drawImage(img, x, y);
     
     // Clean up
     URL.revokeObjectURL(img.src);
