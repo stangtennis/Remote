@@ -274,7 +274,7 @@ function setupDataChannelHandlers() {
   };
 
   dataChannel.onmessage = async (event) => {
-    // Receive JPEG frame from agent (possibly chunked)
+    // Receive JPEG frame from agent (possibly chunked or dirty regions)
     if (event.data instanceof ArrayBuffer) {
       const data = new Uint8Array(event.data);
       
@@ -291,9 +291,30 @@ function setupDataChannelHandlers() {
         return;
       }
       
-      // Check if this is a chunked frame (magic byte 0xFF + 3-byte header)
-      const chunkMagic = 0xFF;
-      if (data.length > 3 && data[0] === chunkMagic) {
+      // Frame type markers
+      const FRAME_TYPE_FULL = 0x01;   // Full frame JPEG
+      const FRAME_TYPE_REGION = 0x02; // Dirty region update
+      const FRAME_TYPE_CHUNK = 0xFF;  // Chunked frame
+      
+      const frameType = data[0];
+      
+      // Handle different frame types
+      if (frameType === FRAME_TYPE_FULL && data.length > 4) {
+        // Full frame: [type(1), reserved(3), ...jpeg_data]
+        const jpegData = data.slice(4);
+        displayVideoFrame(jpegData.buffer);
+        framesReceived++;
+      } else if (frameType === FRAME_TYPE_REGION && data.length > 9) {
+        // Dirty region: [type(1), x(2), y(2), w(2), h(2), ...jpeg_data]
+        const x = data[1] | (data[2] << 8);
+        const y = data[3] | (data[4] << 8);
+        const w = data[5] | (data[6] << 8);
+        const h = data[7] | (data[8] << 8);
+        const jpegData = data.slice(9);
+        displayDirtyRegion(jpegData.buffer, x, y, w, h);
+        framesReceived++;
+      } else if (frameType === FRAME_TYPE_CHUNK && data.length > 3) {
+        // Chunked frame (legacy or large frames)
         const chunkIndex = data[1];
         const totalChunks = data[2];
         const chunkData = data.slice(3);
@@ -303,7 +324,6 @@ function setupDataChannelHandlers() {
           // Clear any previous incomplete frame
           if (frameChunks.length > 0 && expectedChunks > 0) {
             framesDropped++;
-            console.warn('Dropped incomplete frame');
           }
           frameChunks = new Array(totalChunks);
           expectedChunks = totalChunks;
@@ -315,21 +335,19 @@ function setupDataChannelHandlers() {
           frameTimeout = setTimeout(() => {
             if (expectedChunks > 0) {
               framesDropped++;
-              console.warn('Frame timeout - discarding incomplete frame');
               frameChunks = [];
               expectedChunks = 0;
             }
           }, 500);
         }
         
-        // Store this chunk (if we have a valid array initialized)
+        // Store this chunk
         if (expectedChunks > 0 && chunkIndex < expectedChunks) {
           frameChunks[chunkIndex] = chunkData;
           
           // Check if we have all chunks
           const receivedCount = frameChunks.filter(c => c).length;
           if (receivedCount === expectedChunks) {
-            // Clear timeout
             if (frameTimeout) {
               clearTimeout(frameTimeout);
               frameTimeout = null;
@@ -344,17 +362,20 @@ function setupDataChannelHandlers() {
               offset += chunk.length;
             }
             
-            // Display the complete frame
-            displayVideoFrame(completeFrame.buffer);
+            // Process reassembled data (may be full frame or region)
+            processReassembledFrame(completeFrame);
             framesReceived++;
             
-            // Reset for next frame
             frameChunks = [];
             expectedChunks = 0;
           }
         }
+      } else if (data[0] === 0xFF && data[1] === 0xD8) {
+        // Raw JPEG (starts with JPEG magic bytes FFD8) - legacy support
+        displayVideoFrame(event.data);
+        framesReceived++;
       } else {
-        // Single-packet frame (no chunking)
+        // Unknown format - try as raw JPEG
         displayVideoFrame(event.data);
         framesReceived++;
       }
@@ -362,7 +383,6 @@ function setupDataChannelHandlers() {
       displayVideoFrame(event.data);
       framesReceived++;
     } else if (typeof event.data === 'string') {
-      // Handle JSON messages (clipboard, etc.)
       try {
         const msg = JSON.parse(event.data);
         handleAgentMessage(msg);
@@ -371,6 +391,25 @@ function setupDataChannelHandlers() {
       }
     }
   };
+  
+  // Process reassembled chunked frame
+  function processReassembledFrame(data) {
+    const FRAME_TYPE_FULL = 0x01;
+    const FRAME_TYPE_REGION = 0x02;
+    
+    if (data[0] === FRAME_TYPE_FULL && data.length > 4) {
+      displayVideoFrame(data.slice(4).buffer);
+    } else if (data[0] === FRAME_TYPE_REGION && data.length > 9) {
+      const x = data[1] | (data[2] << 8);
+      const y = data[3] | (data[4] << 8);
+      const w = data[5] | (data[6] << 8);
+      const h = data[7] | (data[8] << 8);
+      displayDirtyRegion(data.slice(9).buffer, x, y, w, h);
+    } else {
+      // Assume raw JPEG
+      displayVideoFrame(data.buffer);
+    }
+  }
   
   // Log stats every 5 seconds
   setInterval(() => {
@@ -785,6 +824,37 @@ function displayVideoFrame(data) {
   
   img.onerror = (e) => {
     console.error('Failed to load image:', e);
+    URL.revokeObjectURL(img.src);
+  };
+  
+  img.src = URL.createObjectURL(blob);
+}
+
+// Display a dirty region (partial screen update) on canvas
+function displayDirtyRegion(data, x, y, w, h) {
+  const canvas = document.getElementById('previewCanvas') || document.getElementById('remoteCanvas');
+  if (!canvas) {
+    console.error('Canvas not found!');
+    return;
+  }
+
+  const ctx = canvas.getContext('2d');
+  
+  // Convert data to blob
+  const blob = new Blob([data], { type: 'image/jpeg' });
+  
+  // Create image from blob
+  const img = new Image();
+  img.onload = () => {
+    // Draw the region at the specified position
+    ctx.drawImage(img, x, y, w, h);
+    
+    // Clean up
+    URL.revokeObjectURL(img.src);
+  };
+  
+  img.onerror = (e) => {
+    console.error('Failed to load dirty region:', e);
     URL.revokeObjectURL(img.src);
   };
   

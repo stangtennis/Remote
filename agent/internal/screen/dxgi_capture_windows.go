@@ -99,6 +99,30 @@ func (c *DXGICapturer) CaptureJPEG(quality int) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// CaptureRGBA captures the screen as RGBA image (for dirty region detection)
+func (c *DXGICapturer) CaptureRGBA() (*image.RGBA, error) {
+	// Calculate buffer size for BGRA (4 bytes per pixel)
+	bufferSize := c.width * c.height * 4
+	buffer := make([]byte, bufferSize)
+
+	// Capture frame from DXGI
+	result := C.CaptureDXGI(c.handle, (*C.uchar)(unsafe.Pointer(&buffer[0])), C.int(bufferSize))
+	if result != 0 {
+		return nil, fmt.Errorf("DXGI capture failed: error %d", result)
+	}
+
+	// Convert BGRA to RGBA and create image
+	img := image.NewRGBA(image.Rect(0, 0, c.width, c.height))
+	for i := 0; i < len(buffer); i += 4 {
+		img.Pix[i] = buffer[i+2]   // R
+		img.Pix[i+1] = buffer[i+1] // G
+		img.Pix[i+2] = buffer[i]   // B
+		img.Pix[i+3] = buffer[i+3] // A
+	}
+
+	return img, nil
+}
+
 func (c *DXGICapturer) GetBounds() image.Rectangle {
 	return image.Rect(0, 0, c.width, c.height)
 }
