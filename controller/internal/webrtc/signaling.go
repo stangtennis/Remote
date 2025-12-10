@@ -40,9 +40,73 @@ func NewSignalingClient(supabaseURL, anonKey, authToken string) *SignalingClient
 	}
 }
 
+// ClaimDeviceConnection atomically claims a device and kicks any existing sessions
+func (s *SignalingClient) ClaimDeviceConnection(deviceID, controllerID string) (string, int, error) {
+	url := fmt.Sprintf("%s/rest/v1/rpc/claim_device_connection", s.supabaseURL)
+
+	payload := map[string]string{
+		"p_device_id":      deviceID,
+		"p_controller_id":  controllerID,
+		"p_controller_type": "controller",
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("apikey", s.anonKey)
+	req.Header.Set("Authorization", "Bearer "+s.authToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		// Function might not exist yet, fall back to old method
+		log.Printf("⚠️ claim_device_connection not available (status %d), using fallback", resp.StatusCode)
+		return "", 0, fmt.Errorf("claim_device_connection not available: %s", string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", 0, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	sessionID, _ := result["session_id"].(string)
+	kickedCount := 0
+	if kc, ok := result["kicked_sessions"].(float64); ok {
+		kickedCount = int(kc)
+	}
+
+	if kickedCount > 0 {
+		log.Printf("🔴 Kicked %d existing session(s)", kickedCount)
+	}
+
+	return sessionID, kickedCount, nil
+}
+
 // CreateSession creates a new WebRTC session
 func (s *SignalingClient) CreateSession(deviceID, userID string) (*Session, error) {
-	sessionID := uuid.New().String()
+	// First try to claim the device (kicks existing sessions)
+	controllerID := fmt.Sprintf("controller-%s-%d", userID, time.Now().UnixNano())
+	sessionID, _, err := s.ClaimDeviceConnection(deviceID, controllerID)
+	
+	if err != nil {
+		// Fallback to old method if claim_device_connection doesn't exist
+		log.Printf("⚠️ Using fallback session creation: %v", err)
+		sessionID = uuid.New().String()
+	}
 	
 	session := &Session{
 		SessionID: sessionID,
@@ -51,31 +115,34 @@ func (s *SignalingClient) CreateSession(deviceID, userID string) (*Session, erro
 		Status:    "pending",
 	}
 
-	url := fmt.Sprintf("%s/rest/v1/webrtc_sessions", s.supabaseURL)
-	jsonData, err := json.Marshal(session)
+	// If we got a session from claim, we don't need to insert again
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal session: %w", err)
-	}
+		url := fmt.Sprintf("%s/rest/v1/webrtc_sessions", s.supabaseURL)
+		jsonData, err := json.Marshal(session)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal session: %w", err)
+		}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
 
-	req.Header.Set("apikey", s.anonKey)
-	req.Header.Set("Authorization", "Bearer "+s.authToken)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Prefer", "return=representation")
+		req.Header.Set("apikey", s.anonKey)
+		req.Header.Set("Authorization", "Bearer "+s.authToken)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Prefer", "return=representation")
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send request: %w", err)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to create session: %s (status: %d)", string(body), resp.StatusCode)
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("failed to create session: %s (status: %d)", string(body), resp.StatusCode)
+		}
 	}
 
 	return session, nil

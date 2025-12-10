@@ -105,19 +105,37 @@ async function startSession(device) {
   }
   
   try {
-    // Clean up any old pending sessions for this device first
-    console.log('🧹 Cleaning old pending sessions for device:', device.device_id);
-    await supabase
-      .from('remote_sessions')
-      .update({ status: 'expired' })
-      .eq('device_id', device.device_id)
-      .in('status', ['pending', 'active']);
-    
     // Get current session token for authorization
     const { data: { session } } = await supabase.auth.getSession();
     
     if (!session) {
       throw new Error('Not authenticated. Please log in again.');
+    }
+
+    // Generate a unique controller ID for this dashboard instance
+    const controllerId = `dashboard-${session.user.id}-${Date.now()}`;
+    
+    // Use claim_device_connection to atomically take over any existing sessions
+    console.log('🔒 Claiming device connection (will kick any existing controllers)...');
+    const { data: claimResult, error: claimError } = await supabase.rpc('claim_device_connection', {
+      p_device_id: device.device_id,
+      p_controller_id: controllerId,
+      p_controller_type: 'dashboard'
+    });
+
+    if (claimError) {
+      console.warn('⚠️ claim_device_connection not available, falling back to old method:', claimError);
+      // Fallback: Clean up any old pending sessions for this device
+      await supabase
+        .from('remote_sessions')
+        .update({ status: 'expired' })
+        .eq('device_id', device.device_id)
+        .in('status', ['pending', 'active']);
+    } else {
+      console.log('✅ Device claimed:', claimResult);
+      if (claimResult.kicked_sessions > 0) {
+        console.log(`🔴 Kicked ${claimResult.kicked_sessions} existing session(s)`);
+      }
     }
     
     // Call session-token Edge Function with explicit authorization

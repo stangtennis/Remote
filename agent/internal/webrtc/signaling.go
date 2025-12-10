@@ -62,8 +62,21 @@ func (m *Manager) ListenForSessions() {
 	log.Printf("   Device ID: %s", m.device.ID)
 	log.Printf("   Supabase URL: %s", m.cfg.SupabaseURL)
 
+	// Start kick signal listener in background
+	go m.listenForKickSignals()
+
 	for range ticker.C {
-		// Skip if currently connected
+		// Check for kick signals on current session
+		if m.sessionID != "" && m.peerConnection != nil {
+			if kicked := m.checkIfKicked(); kicked {
+				log.Println("🔴 Session was kicked - cleaning up for new connection")
+				m.cleanupConnection("Kicked by new controller")
+				continue
+			}
+		}
+
+		// Skip polling for NEW sessions if currently connected
+		// But still check for kicks above
 		if m.peerConnection != nil && m.peerConnection.ConnectionState() == webrtc.PeerConnectionStateConnected {
 			continue
 		}
@@ -890,4 +903,106 @@ func (m *Manager) sendICECandidate(candidate *webrtc.ICECandidate) {
 
 	// Read and discard body
 	io.Copy(io.Discard, resp.Body)
+}
+
+// listenForKickSignals listens for kick signals in the background
+func (m *Manager) listenForKickSignals() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	log.Println("👂 Started kick signal listener")
+
+	for range ticker.C {
+		if m.sessionID == "" {
+			continue
+		}
+
+		// Check for kick signals on current session
+		signals, err := m.fetchKickSignals(m.sessionID)
+		if err != nil {
+			continue
+		}
+
+		for _, sig := range signals {
+			if sig.MsgType == "kick" {
+				log.Println("🔴 KICK SIGNAL RECEIVED - another controller took over")
+				log.Printf("   Kick payload: %s", string(sig.Payload))
+				m.cleanupConnection("Kicked by new controller")
+				return // Stop listening after kick
+			}
+		}
+	}
+}
+
+// fetchKickSignals fetches kick signals for a session
+func (m *Manager) fetchKickSignals(sessionID string) ([]SignalMessage, error) {
+	url := m.cfg.SupabaseURL + "/rest/v1/session_signaling"
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
+	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+
+	q := req.URL.Query()
+	q.Add("session_id", "eq."+sessionID)
+	q.Add("msg_type", "eq.kick")
+	q.Add("select", "*")
+	q.Add("limit", "1")
+	req.URL.RawQuery = q.Encode()
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var signals []SignalMessage
+	if err := json.NewDecoder(resp.Body).Decode(&signals); err != nil {
+		return nil, err
+	}
+
+	return signals, nil
+}
+
+// checkIfKicked checks if the current session has been kicked
+func (m *Manager) checkIfKicked() bool {
+	if m.sessionID == "" {
+		return false
+	}
+
+	// Check via RPC function
+	url := m.cfg.SupabaseURL + "/rest/v1/rpc/check_session_kicked"
+
+	payload := map[string]string{
+		"p_session_id": m.sessionID,
+	}
+
+	jsonData, _ := json.Marshal(payload)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return false
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
+	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false
+	}
+
+	kicked, _ := result["kicked"].(bool)
+	return kicked
 }

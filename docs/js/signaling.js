@@ -91,7 +91,7 @@ async function startPollingForSignals(sessionId) {
         .from('session_signaling')
         .select('*')
         .eq('session_id', sessionId)
-        .eq('from_side', 'agent')
+        .in('from_side', ['agent', 'system']) // Include system for kick signals
         .order('created_at', { ascending: true });
 
       if (error) {
@@ -128,6 +128,42 @@ function stopPolling() {
 async function handleSignal(signal) {
   // Ignore our own signals
   if (signal.from_side === 'dashboard') return;
+
+  // Handle kick signals - another controller took over
+  if (signal.msg_type === 'kick') {
+    console.log('🔴 KICKED - another controller took over this device');
+    console.log('   Kick reason:', signal.payload?.reason);
+    console.log('   New controller:', signal.payload?.new_controller_type);
+    
+    // Clean up WebRTC connection
+    if (typeof cleanupWebRTC === 'function') {
+      cleanupWebRTC();
+    }
+    
+    // Stop polling
+    stopPolling();
+    
+    // Show user message
+    const statusEl = document.getElementById('sessionStatus');
+    if (statusEl) {
+      statusEl.textContent = 'Disconnected - another controller connected';
+      statusEl.className = 'status-badge disconnected';
+    }
+    
+    // Update preview UI
+    const previewConnecting = document.getElementById('previewConnecting');
+    const previewIdle = document.getElementById('previewIdle');
+    if (previewConnecting) previewConnecting.style.display = 'none';
+    if (previewIdle) previewIdle.style.display = 'flex';
+    
+    // Notify SessionManager if available
+    if (window.SessionManager && window.currentSession) {
+      window.SessionManager.closeSession(window.currentSession.device_id);
+    }
+    
+    alert('Du blev afkoblet - en anden controller har overtaget forbindelsen.');
+    return;
+  }
 
   // Skip already processed signals (prevents duplicates from realtime + polling)
   if (processedSignalIds.has(signal.id)) {
