@@ -4,24 +4,88 @@ Implementeret adaptiv streaming der justerer kvalitet baseret på netværksforho
 
 ## Parametre
 
-| Parameter | Min | Max | Default | Beskrivelse |
-|-----------|-----|-----|---------|-------------|
-| FPS | 12 | 30 | 20 | Frames per second |
-| Quality | 50 | 80 | 65 | JPEG kvalitet |
-| Scale | 50% | 100% | 100% | Skalering af opløsning |
+| Parameter | Min | Max | Default | Kode-værdi | Beskrivelse |
+|-----------|-----|-----|---------|------------|-------------|
+| FPS | 12 | 30 | 20 | `12-30` | Frames per second |
+| Quality | 50 | 80 | 65 | `50-80` | JPEG kvalitet |
+| Scale | 50% | 100% | 100% | `0.5-1.0` | Skalering af opløsning |
+
+## Målinger
+
+### Nuværende (v2.46.0)
+- `bufBytes` - DataChannel buffered amount
+
+### Planlagt (v2.47+)
+- `RTT` - Round-trip time (via RTCP eller ping/pong)
+- `lossPct` - Packet loss percentage
+- `sendBps` - Aktuel send bitrate
+- `motionPct` - Procent af skærm ændret (fra DirtyRegionDetector)
+- `cpuPct` - CPU forbrug (guard mod overload)
 
 ## Adaptation Logic
 
-### Reducer kvalitet når:
-- Buffer > 8 MB (netværk congested)
-- Ændringer: FPS -4, Scale -10%, Quality -5
+### Nuværende regler (v2.46.0)
 
-### Øg kvalitet når:
-- Buffer < 1 MB OG ingen dropped frames
-- Ændringer: Quality +2, Scale +5%, FPS +2
+**Reducer kvalitet når:**
+- `bufBytes > 8 MB` (netværk congested)
+- Ændringer: FPS -4, Scale -0.1, Quality -5
 
-### Drop frames når:
-- Buffer > 16 MB (kritisk congestion)
+**Øg kvalitet når:**
+- `bufBytes < 1 MB` OG ingen dropped frames
+- Ændringer: Quality +2, Scale +0.05, FPS +2
+
+**Drop frames når:**
+- `bufBytes > 16 MB` (kritisk congestion)
+
+### Planlagte regler (v2.47+)
+
+**Reducer kvalitet når:**
+```
+bufBytes > 16MB ELLER lossPct > 5% ELLER RTT > 250ms ELLER cpuPct > 85%
+→ FPS -= 5, Scale -= 0.1, Quality -= 5
+```
+
+**Øg kvalitet når:**
+```
+bufBytes < 4MB OG lossPct < 1% OG RTT < 120ms
+→ FPS += 5, Scale += 0.1, Quality += 5
+```
+
+**Idle-mode (lav aktivitet):**
+```
+motionPct < 1% i 1 sekund
+→ FPS = 2, Scale = 0.75, Quality = 50
+Exit idle ved motion > 1% eller input-event
+```
+
+**CPU-guard:**
+```
+cpuPct > 85% over 3 målinger
+→ Sænk FPS og Scale et trin
+```
+
+## Input-prioritet (planlagt)
+
+Separat data channel for input:
+- `ordered = false`
+- `maxRetransmits = 0`
+- Pausér frame-send hvis backlog > 8-16 MB
+
+## Full-frame refresh (planlagt)
+
+- Send full frame hver 3-5 sekunder
+- Eller når `motionPct > 30%`
+- Sikrer resync ved dirty tiles/foveated mode
+
+## Modes (planlagt)
+
+| Mode | Beskrivelse |
+|------|-------------|
+| `tiles-only` | Kun JPEG frames over data channel (nuværende) |
+| `hybrid` | H.264 video track + tiles/foveated over data channel |
+| `h264-only` | Kun H.264 video track |
+
+Se `H264_IMPLEMENTATION_PLAN.md` for detaljer.
 
 ## Kodeændringer
 
@@ -51,6 +115,10 @@ Ved congestion:
 📊 FPS:12 Q:50 Scale:50% | 12.1KB/f ~1.2Mbit/s | Buf:6.2MB | Err:0 Drop:3
 ```
 
-## Næste skridt
+## Roadmap
 
-Se `H264_IMPLEMENTATION_PLAN.md` for H.264 video track implementation.
+1. **v2.46.0** ✅ - Buffer-baseret adaptation (nuværende)
+2. **v2.47.0** - RTT/loss målinger + idle-mode + motion detection
+3. **v2.48.0** - Input-prioritet (separat data channel)
+4. **v2.49.0** - Full-frame refresh cadence
+5. **v2.50.0** - H.264 hybrid mode (se H264_IMPLEMENTATION_PLAN.md)
