@@ -71,6 +71,12 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 
 		// Start bandwidth update ticker
 		go v.startBandwidthUpdater()
+
+		// Start RTT measurement
+		client.SetOnRTTUpdate(func(rtt time.Duration) {
+			v.UpdateRTT(rtt)
+		})
+		client.StartPingLoop()
 	})
 
 	client.SetOnDisconnected(func() {
