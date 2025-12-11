@@ -98,6 +98,9 @@ async function login() {
     // Update header status
     updateHeaderStatus('online', 'Connected');
 
+    // Check if input helper is running
+    checkHelperStatus();
+
   } catch (error) {
     console.error('Login error:', error);
     showMessage('Login failed: ' + error.message, 'error');
@@ -699,6 +702,55 @@ let helperReconnectTimer = null;
 let inputSeq = 0;
 
 const HELPER_URL = 'ws://127.0.0.1:9877/input';
+const HELPER_STATUS_URL = 'http://127.0.0.1:9877/status';
+
+// Check if helper is running (HTTP status check)
+async function checkHelperStatus() {
+  try {
+    const response = await fetch(HELPER_STATUS_URL, { 
+      method: 'GET',
+      mode: 'cors'
+    });
+    if (response.ok) {
+      const data = await response.json();
+      updateHelperUI(true, data.version || 'v1.0.0');
+      return true;
+    }
+  } catch (e) {
+    // Helper not running
+  }
+  updateHelperUI(false);
+  return false;
+}
+
+// Update helper UI elements
+function updateHelperUI(connected, version = null) {
+  const statusText = document.getElementById('helperStatusText');
+  const downloadBtn = document.getElementById('downloadHelperBtn');
+  const connectedBadge = document.getElementById('helperConnectedBadge');
+  const helperHint = document.getElementById('helperHint');
+  const helperIcon = document.querySelector('.helper-icon');
+
+  if (connected) {
+    if (statusText) statusText.textContent = `Connected (${version})`;
+    if (downloadBtn) downloadBtn.style.display = 'none';
+    if (connectedBadge) connectedBadge.style.display = 'inline-flex';
+    if (helperHint) helperHint.style.display = 'none';
+    if (helperIcon) {
+      helperIcon.classList.remove('disconnected');
+      helperIcon.classList.add('connected');
+    }
+  } else {
+    if (statusText) statusText.textContent = 'Not Running';
+    if (downloadBtn) downloadBtn.style.display = 'inline-flex';
+    if (connectedBadge) connectedBadge.style.display = 'none';
+    if (helperHint) helperHint.style.display = 'block';
+    if (helperIcon) {
+      helperIcon.classList.remove('connected');
+      helperIcon.classList.add('disconnected');
+    }
+  }
+}
 
 async function connectToHelper() {
   if (helperWs && helperWs.readyState === WebSocket.OPEN) {
@@ -712,6 +764,7 @@ async function connectToHelper() {
       helperWs.onopen = () => {
         console.log('✅ Connected to Input Helper');
         helperConnected = true;
+        updateHelperUI(true);
 
         // Authenticate with helper
         const authMsg = {
@@ -729,6 +782,7 @@ async function connectToHelper() {
         console.log('🔌 Input Helper disconnected');
         helperConnected = false;
         helperWs = null;
+        updateHelperUI(false);
 
         // Retry connection after 5 seconds
         if (helperReconnectTimer) clearTimeout(helperReconnectTimer);
@@ -742,6 +796,7 @@ async function connectToHelper() {
       helperWs.onerror = (err) => {
         console.warn('⚠️ Input Helper not available (run input-helper.exe locally)');
         helperConnected = false;
+        updateHelperUI(false);
         resolve(false);
       };
 
@@ -910,11 +965,15 @@ supabase.auth.getSession().then(({ data: { session } }) => {
       const userEmailEl = document.getElementById('userEmail');
       if (userEmailEl) userEmailEl.textContent = currentUser.email;
       updateHeaderStatus('online', 'Connected');
+      // Check if input helper is running
+      checkHelperStatus();
     }).catch(err => {
       console.error('Device registration error:', err);
       // Still show device section even if registration fails
       document.getElementById('loginSection').style.display = 'none';
       document.getElementById('deviceSection').style.display = 'block';
+      // Check if input helper is running
+      checkHelperStatus();
       const userEmailEl = document.getElementById('userEmail');
       if (userEmailEl) userEmailEl.textContent = currentUser.email;
       updateHeaderStatus('online', 'Connected');

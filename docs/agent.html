@@ -144,6 +144,32 @@
         </div>
       </div>
 
+      <!-- Input Helper Status -->
+      <div class="helper-section" id="helperSection">
+        <div class="helper-status" id="helperStatus">
+          <div class="helper-icon">
+            <i class="fas fa-gamepad"></i>
+          </div>
+          <div class="helper-info">
+            <span class="helper-label">Remote Control</span>
+            <span class="helper-value" id="helperStatusText">Checking...</span>
+          </div>
+          <div class="helper-actions">
+            <a href="https://github.com/stangtennis/Remote/releases/download/v1.0.0-input-helper/input-helper-v1.0.0.exe" 
+               class="btn btn-sm btn-primary" id="downloadHelperBtn" style="display: none;">
+              <i class="fas fa-download"></i> Download
+            </a>
+            <button class="btn btn-sm btn-success" id="helperConnectedBadge" style="display: none;">
+              <i class="fas fa-check"></i> Connected
+            </button>
+          </div>
+        </div>
+        <p class="helper-hint" id="helperHint" style="display: none;">
+          <i class="fas fa-info-circle"></i> 
+          Run <code>input-helper.exe</code> to enable remote mouse/keyboard control
+        </p>
+      </div>
+
       <!-- Action Buttons -->
       <div class="action-buttons">
         <button id="startBtn" class="btn btn-success btn-glow btn-lg" onclick="startSharing()">
