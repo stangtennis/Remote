@@ -239,11 +239,14 @@ func (m *Manager) checkSessionDevice(sessionID string) (bool, string) {
 
 // handleWebSession handles a session from the web dashboard
 func (m *Manager) handleWebSession(session Session) {
-	// Skip if we're already handling this exact session
-	if m.sessionID == session.ID && m.peerConnection != nil {
+	// Skip if we're already handling this exact session (check sessionID first, peerConnection may not be set yet)
+	if m.sessionID == session.ID {
 		log.Printf("⏭️  Already handling session %s, skipping duplicate", session.ID)
 		return
 	}
+
+	// Mark this session as being handled immediately to prevent race conditions
+	m.sessionID = session.ID
 
 	log.Println("🔧 Setting up WebRTC connection (web dashboard)...")
 
@@ -259,7 +262,6 @@ func (m *Manager) handleWebSession(session Session) {
 	// Reset ICE candidate buffer for new session
 	m.pendingCandidates = nil
 	m.answerSent = false
-	m.sessionID = session.ID
 
 	// Use STUN and TURN servers for NAT traversal
 	iceServers := []webrtc.ICEServer{
