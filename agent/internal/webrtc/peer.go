@@ -1066,15 +1066,49 @@ func (m *Manager) startScreenStreaming() {
 			if m.cpuMonitor != nil {
 				cpuPct = m.cpuMonitor.GetCPUPercent()
 			}
+
+			// Determine current mode
+			mode := "jpeg"
+			if m.useH264 {
+				mode = "h264"
+			}
+
 			log.Printf("📊 FPS:%d Q:%d Scale:%.0f%% Motion:%.1f%% RTT:%dms Loss:%.1f%% CPU:%.0f%%%s | %.1fKB/f %.1fMbit/s | Buf:%.1fMB | Err:%d Drop:%d",
 				fps, quality, scale*100, motionPct, rttMs, m.lossPct, cpuPct, idleStr, avgKBPerFrame, sendMbps,
 				float64(bufferedAmount)/1024/1024, errorCount, droppedFrames)
 			droppedFrames = 0 // Reset per-second counter
+
+			// Send stats to controller
+			m.sendStats(fps, quality, scale, mode, rttMs, cpuPct)
 		}
 	}
 
 	log.Printf("🛑 Screen streaming stopped (sent %d frames, %.1f MB total, %d errors)",
 		frameCount, float64(bytesSent)/1024/1024, errorCount)
+}
+
+// sendStats sends streaming stats to controller
+func (m *Manager) sendStats(fps, quality int, scale float64, mode string, rttMs int64, cpuPct float64) {
+	if m.dataChannel == nil || m.dataChannel.ReadyState() != webrtc.DataChannelStateOpen {
+		return
+	}
+
+	stats := map[string]interface{}{
+		"type":    "stats",
+		"fps":     fps,
+		"quality": quality,
+		"scale":   scale,
+		"mode":    mode,
+		"rtt":     rttMs,
+		"cpu":     cpuPct,
+	}
+
+	data, err := json.Marshal(stats)
+	if err != nil {
+		return
+	}
+
+	m.dataChannel.Send(data)
 }
 
 // Frame type markers for dirty region protocol
