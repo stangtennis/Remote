@@ -200,11 +200,14 @@ async function startSession(device) {
       }
     }
 
-    // Initialize WebRTC
-    await initWebRTC(currentSession);
-    
-    // Subscribe to signaling for this session
+    // Subscribe to signaling FIRST (before sending offer)
     subscribeToSessionSignaling(currentSession.session_id);
+    
+    // Small delay to ensure subscription is active
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    // Initialize WebRTC (sends offer)
+    await initWebRTC(currentSession);
 
   } catch (error) {
     console.error('Failed to start session:', error);
