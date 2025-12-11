@@ -1,4 +1,4 @@
-# Adaptive Streaming (v2.47.0)
+# Adaptive Streaming (v2.49.0)
 
 Implementeret adaptiv streaming der justerer kvalitet baseret på netværksforhold.
 
@@ -12,51 +12,49 @@ Implementeret adaptiv streaming der justerer kvalitet baseret på netværksforho
 
 ## Målinger
 
-### Implementeret (v2.47.0)
+### Implementeret (v2.49.0)
 - `bufBytes` - DataChannel buffered amount
 - `RTT` - Round-trip time (via ping/pong)
 - `motionPct` - Procent af skærm ændret (fra DirtyRegionDetector)
+- `lossPct` - Packet loss percentage (estimeret fra buffer)
 
-### Planlagt (v2.48+)
-- `lossPct` - Packet loss percentage
+### Planlagt (v2.50+)
 - `sendBps` - Aktuel send bitrate
 - `cpuPct` - CPU forbrug (guard mod overload)
 
 ## Adaptation Logic
 
-### Nuværende regler (v2.47.0)
+### Nuværende regler (v2.49.0)
 
 **Reducer kvalitet når:**
-- `bufBytes > 8 MB` (netværk congested)
-- Ændringer: FPS -4, Scale -0.1, Quality -5
+```
+bufBytes > 8MB ELLER lossPct > 5% ELLER RTT > 250ms
+→ FPS -= 4, Scale -= 0.1, Quality -= 5
+```
 
 **Øg kvalitet når:**
-- `bufBytes < 1 MB` OG ingen dropped frames
-- Ændringer: Quality +2, Scale +0.05, FPS +2
+```
+bufBytes < 1MB OG lossPct < 1% OG RTT < 120ms OG ingen dropped frames
+→ Quality += 2, Scale += 0.05, FPS += 2
+```
 
 **Drop frames når:**
 - `bufBytes > 16 MB` (kritisk congestion)
 
-**Idle-mode (implementeret v2.47.0):**
+**Idle-mode:**
 ```
 motionPct < 1% i 1 sekund OG ingen input i 500ms
 → FPS = 2, Scale = 0.75, Quality = 50
 Exit idle ved motion > 1% eller input-event
 ```
 
-### Planlagte regler (v2.48+)
-
-**Reducer kvalitet når:**
+**Full-frame refresh (v2.49.0):**
 ```
-bufBytes > 16MB ELLER lossPct > 5% ELLER RTT > 250ms ELLER cpuPct > 85%
-→ FPS -= 5, Scale -= 0.1, Quality -= 5
+Hvert 5. sekund ELLER motionPct > 30%
+→ Send komplet frame (ikke delta)
 ```
 
-**Øg kvalitet når:**
-```
-bufBytes < 4MB OG lossPct < 1% OG RTT < 120ms
-→ FPS += 5, Scale += 0.1, Quality += 5
-```
+### Planlagte regler (v2.50+)
 
 **CPU-guard:**
 ```
@@ -64,18 +62,18 @@ cpuPct > 85% over 3 målinger
 → Sænk FPS og Scale et trin
 ```
 
-## Input-prioritet (planlagt)
+## Input-prioritet (v2.48.0)
 
 Separat data channel for input:
 - `ordered = false`
 - `maxRetransmits = 0`
 - Pausér frame-send hvis backlog > 8-16 MB
 
-## Full-frame refresh (planlagt)
+## Full-frame refresh (v2.49.0)
 
-- Send full frame hver 3-5 sekunder
+- Send full frame hver 5 sekunder
 - Eller når `motionPct > 30%`
-- Sikrer resync ved dirty tiles/foveated mode
+- Sikrer resync for dirty tiles/foveated mode
 
 ## Modes (planlagt)
 
@@ -124,6 +122,7 @@ Ved congestion:
 
 1. **v2.46.0** ✅ - Buffer-baseret adaptation
 2. **v2.47.0** ✅ - RTT measurement + idle-mode + motion detection
-3. **v2.48.0** - Input-prioritet (separat data channel)
-4. **v2.49.0** - Full-frame refresh cadence
-5. **v2.50.0** - H.264 hybrid mode (se H264_IMPLEMENTATION_PLAN.md)
+3. **v2.48.0** ✅ - Input-prioritet (separat data channel)
+4. **v2.48.1** ✅ - Loss/RTT-baseret adaptive streaming
+5. **v2.49.0** ✅ - Full-frame refresh cadence
+6. **v2.50.0** - H.264 hybrid mode (se H264_IMPLEMENTATION_PLAN.md)
