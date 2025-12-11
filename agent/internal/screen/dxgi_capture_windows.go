@@ -32,9 +32,10 @@ import (
 )
 
 type DXGICapturer struct {
-	handle *C.DXGICapture
-	width  int
-	height int
+	handle    *C.DXGICapture
+	width     int
+	height    int
+	lastFrame *image.RGBA // Cache last frame for timeout cases
 }
 
 func NewDXGICapturer() (*DXGICapturer, error) {
@@ -58,11 +59,21 @@ func (c *DXGICapturer) CaptureJPEG(quality int) ([]byte, error) {
 	// Capture frame from DXGI
 	result := C.CaptureDXGI(c.handle, (*C.uchar)(unsafe.Pointer(&buffer[0])), C.int(bufferSize))
 	if result != 0 {
-		// Detailed error codes
+		// Timeout (code 1) means no new frame - use cached frame if available
+		if result == 1 && c.lastFrame != nil {
+			var buf bytes.Buffer
+			opts := &jpeg.Options{Quality: quality}
+			if err := jpeg.Encode(&buf, c.lastFrame, opts); err != nil {
+				return nil, fmt.Errorf("failed to encode cached JPEG: %w", err)
+			}
+			return buf.Bytes(), nil
+		}
+
+		// Detailed error codes for real errors
 		var errMsg string
 		switch result {
 		case 1:
-			errMsg = "timeout (no new frame)"
+			errMsg = "timeout (no new frame, no cache)"
 		case -1:
 			errMsg = "invalid parameters"
 		case -2:
@@ -89,6 +100,9 @@ func (c *DXGICapturer) CaptureJPEG(quality int) ([]byte, error) {
 		img.Pix[i+3] = buffer[i+3] // A
 	}
 
+	// Cache frame for timeout cases
+	c.lastFrame = img
+
 	// Encode as JPEG
 	var buf bytes.Buffer
 	opts := &jpeg.Options{Quality: quality}
@@ -108,6 +122,10 @@ func (c *DXGICapturer) CaptureRGBA() (*image.RGBA, error) {
 	// Capture frame from DXGI
 	result := C.CaptureDXGI(c.handle, (*C.uchar)(unsafe.Pointer(&buffer[0])), C.int(bufferSize))
 	if result != 0 {
+		// Timeout (code 1) means no new frame - return cached frame if available
+		if result == 1 && c.lastFrame != nil {
+			return c.lastFrame, nil
+		}
 		return nil, fmt.Errorf("DXGI capture failed: error %d", result)
 	}
 
@@ -119,6 +137,9 @@ func (c *DXGICapturer) CaptureRGBA() (*image.RGBA, error) {
 		img.Pix[i+2] = buffer[i]   // B
 		img.Pix[i+3] = buffer[i+3] // A
 	}
+
+	// Cache frame for timeout cases
+	c.lastFrame = img
 
 	return img, nil
 }
