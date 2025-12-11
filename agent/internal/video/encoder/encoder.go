@@ -54,8 +54,14 @@ func (m *Manager) Init(cfg Config) error {
 
 	m.config = cfg
 
-	// Try hardware encoders first (future)
-	// For now, use software encoder
+	// Try OpenH264 first (real H.264 encoding)
+	openh264Enc := NewOpenH264Encoder()
+	if err := openh264Enc.Init(cfg); err == nil {
+		m.encoder = openh264Enc
+		return nil
+	}
+
+	// Fallback to software encoder (JPEG placeholder)
 	encoder := NewSoftwareEncoder()
 	if err := encoder.Init(cfg); err != nil {
 		return fmt.Errorf("failed to init encoder: %w", err)
