@@ -548,6 +548,9 @@ async function endSession() {
     supabase.removeChannel(signalingChannel);
     signalingChannel = null;
   }
+  
+  // Stop signaling polling
+  stopSignalingPolling();
 
   // Disconnect helper
   if (helperWs) {
@@ -678,8 +681,11 @@ async function startWebRTC() {
   }
 }
 
+let signalingPollingInterval = null;
+let processedSignalIds = new Set();
+
 function listenForSignaling() {
-  // Subscribe to signaling messages
+  // Subscribe to signaling messages via Realtime
   signalingChannel = supabase
     .channel(`session_${currentSession.id}`)
     .on('postgres_changes', {
@@ -689,29 +695,80 @@ function listenForSignaling() {
       filter: `session_id=eq.${currentSession.id}`
     }, async (payload) => {
       const msg = payload.new;
-
-      // Skip our own messages (from agent)
-      if (msg.from_side === 'agent') return;
-
-      console.log('📥 Received signaling:', msg.msg_type);
-
-      const data = msg.payload;
-
-      try {
-        if (msg.msg_type === 'answer') {
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(data));
-          console.log('✅ Answer received and set');
-        } else if (msg.msg_type === 'ice') {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(data));
-          console.log('✅ ICE candidate added');
-        }
-      } catch (error) {
-        console.error('Signaling error:', error);
-      }
+      await handleSignalingMessage(msg);
     })
     .subscribe();
 
-  console.log('✅ Listening for signaling messages');
+  console.log('✅ Listening for signaling messages (realtime)');
+  
+  // Start polling fallback
+  startSignalingPolling();
+}
+
+function startSignalingPolling() {
+  console.log('🔄 Starting signaling polling fallback...');
+  
+  signalingPollingInterval = setInterval(async () => {
+    if (!currentSession) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('session_signaling')
+        .select('*')
+        .eq('session_id', currentSession.id)
+        .in('from_side', ['dashboard', 'controller'])
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('❌ Signaling polling error:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        for (const msg of data) {
+          if (processedSignalIds.has(msg.id)) continue;
+          processedSignalIds.add(msg.id);
+          console.log('📥 Polled signaling:', msg.msg_type);
+          await handleSignalingMessage(msg);
+        }
+      }
+    } catch (err) {
+      console.error('❌ Signaling polling exception:', err);
+    }
+  }, 500);
+}
+
+function stopSignalingPolling() {
+  if (signalingPollingInterval) {
+    clearInterval(signalingPollingInterval);
+    signalingPollingInterval = null;
+  }
+  processedSignalIds.clear();
+}
+
+async function handleSignalingMessage(msg) {
+  // Skip our own messages (from agent)
+  if (msg.from_side === 'agent') return;
+  
+  // Skip already processed
+  if (processedSignalIds.has(msg.id)) return;
+  processedSignalIds.add(msg.id);
+
+  console.log('📥 Processing signaling:', msg.msg_type);
+
+  const data = msg.payload;
+
+  try {
+    if (msg.msg_type === 'answer') {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(data));
+      console.log('✅ Answer received and set');
+    } else if (msg.msg_type === 'ice') {
+      await peerConnection.addIceCandidate(new RTCIceCandidate(data));
+      console.log('✅ ICE candidate added');
+    }
+  } catch (error) {
+    console.error('Signaling error:', error);
+  }
 }
 
 // ============================================================================
