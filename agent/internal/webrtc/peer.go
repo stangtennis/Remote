@@ -45,8 +45,7 @@ type Manager struct {
 	lastInputTime time.Time     // Last input event time (for idle detection)
 
 	// Stats tracking
-	lastPacketsSent uint64  // For loss calculation
-	lastPacketsLost uint64  // For loss calculation
+	lastPacketsSent uint32  // For loss calculation
 	lossPct         float64 // Current packet loss percentage
 }
 
