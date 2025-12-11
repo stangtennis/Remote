@@ -201,8 +201,16 @@ func (m *Manager) monitorDesktopChanges() {
 func (m *Manager) SetH264Mode(enabled bool) {
 	m.useH264 = enabled
 	if enabled {
+		// Start video track if available
+		if m.videoTrack != nil {
+			m.videoTrack.Start()
+		}
 		log.Println("🎬 H.264 mode enabled")
 	} else {
+		// Stop video track
+		if m.videoTrack != nil {
+			m.videoTrack.Stop()
+		}
 		log.Println("🎬 H.264 mode disabled (using JPEG tiles)")
 	}
 }
@@ -949,7 +957,35 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
-		// Encode RGBA to JPEG with scaling
+		// H.264 mode: encode and send via video track
+		if m.useH264 && m.videoTrack != nil && m.videoEncoder != nil {
+			// Encode RGBA to H.264
+			nalUnits, err := m.videoEncoder.Encode(rgbaFrame)
+			if err != nil {
+				errorCount++
+				if errorCount%100 == 1 {
+					log.Printf("⚠️ H.264 encode error: %v", err)
+				}
+				continue
+			}
+
+			if nalUnits != nil && len(nalUnits) > 0 {
+				// Write H.264 NAL units to video track
+				frameDuration := time.Second / time.Duration(fps)
+				if err := m.videoTrack.WriteFrame(nalUnits, frameDuration); err != nil {
+					errorCount++
+					if errorCount%100 == 1 {
+						log.Printf("⚠️ Video track write error: %v", err)
+					}
+				} else {
+					frameCount++
+					bytesSent += int64(len(nalUnits))
+				}
+			}
+			continue
+		}
+
+		// Tiles mode: encode RGBA to JPEG with scaling
 		jpeg, scaledW, scaledH, err := m.screenCapturer.CaptureJPEGScaled(quality, scale)
 		if err != nil {
 			errorCount++
