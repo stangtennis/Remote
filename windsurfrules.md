@@ -8,6 +8,49 @@ BEFORE doing ANYTHING else, when you see ANY task management scenario:
 
 ---
 
+# CRITICAL: BUILD & LONG-RUNNING COMMAND RULE
+
+**For ANY long-running command (builds, large git operations):**
+
+1. **Start command as BACKGROUND** with `Blocking: false` and `WaitMsBeforeAsync: 1000`
+2. **Get the Background command ID** from the response
+3. **Check status** with `command_status` using `WaitDurationSeconds: 60`
+4. **If still running**, check again with another 60 second wait
+5. **Repeat until done** or error
+
+### Build Commands (ALWAYS use this pattern):
+```
+run_command:
+  Blocking: false
+  WaitMsBeforeAsync: 1000
+  
+Then immediately:
+command_status:
+  CommandId: <from response>
+  WaitDurationSeconds: 60
+  OutputCharacterCount: 1000
+```
+
+### Short Commands (OK to use Blocking: true):
+- `git add`, `git commit`, `git push`
+- `gh release create`, `gh release upload`
+- `ls`, `find`, `grep`, `cat`
+
+### Version Files to Update BEFORE Building:
+- `agent/internal/tray/tray.go` - Version and BuildDate
+- `controller/main.go` - Version and BuildDate
+
+### Full Release Checklist:
+1. Update version in both files
+2. Build agent GUI (background + status check)
+3. Build agent console (background + status check)  
+4. Build controller (background + status check)
+5. git commit (blocking OK)
+6. git push (blocking OK)
+7. gh release create (blocking OK)
+
+---
+
 # Archon Integration & Workflow
 
 **CRITICAL: This project uses Archon MCP server for knowledge management, task tracking, and project organization. ALWAYS start with Archon MCP server task management.**
