@@ -555,7 +555,11 @@ func (v *Viewer) showSettings() {
 		shortcutsInfo,
 	)
 
-	dialog.ShowCustom("Settings", "Close", content, v.window)
+	// Wrap in scroll container for smaller screens
+	scrollContent := container.NewScroll(content)
+	scrollContent.SetMinSize(fyne.NewSize(350, 400))
+
+	dialog.ShowCustom("Settings", "Close", scrollContent, v.window)
 }
 
 // SetOnDisconnect sets the disconnect callback
