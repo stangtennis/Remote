@@ -46,6 +46,9 @@ type Viewer struct {
 	lastBandwidthTime time.Time
 	currentBandwidth  float64 // Mbit/s
 
+	// Streaming mode tracking
+	currentStreamingMode string // "jpeg" or "h264"
+
 	// Buttons
 	fullscreenBtn *widget.Button
 
@@ -367,6 +370,9 @@ func (v *Viewer) UpdateBandwidth() {
 
 // UpdateStreamingMode updates the streaming mode indicator
 func (v *Viewer) UpdateStreamingMode(mode string) {
+	// Update internal state
+	v.currentStreamingMode = mode
+
 	fyne.Do(func() {
 		switch mode {
 		case "h264":
@@ -391,15 +397,14 @@ func (v *Viewer) toggleH264Mode() {
 		return
 	}
 
-	// Check current mode from label
-	currentMode := v.modeLabel.Text
+	// Toggle based on internal state
 	var newMode string
-	if currentMode == "📺 JPEG" {
-		newMode = "h264"
-		log.Println("🎬 Switching to H.264 mode...")
-	} else {
+	if v.currentStreamingMode == "h264" {
 		newMode = "jpeg"
 		log.Println("📺 Switching to JPEG mode...")
+	} else {
+		newMode = "h264"
+		log.Println("🎬 Switching to H.264 mode...")
 	}
 
 	// Send mode change to agent
@@ -408,6 +413,9 @@ func (v *Viewer) toggleH264Mode() {
 	}); ok {
 		if err := client.SetStreamingMode(newMode, 0); err != nil {
 			log.Printf("❌ Failed to set streaming mode: %v", err)
+		} else {
+			// Update internal state immediately for responsive UI
+			v.currentStreamingMode = newMode
 		}
 	}
 }
