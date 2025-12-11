@@ -223,6 +223,26 @@ func (c *Client) SendData(data []byte) error {
 	return c.dataChannel.Send(data)
 }
 
+// SetStreamingMode sets the streaming mode on the agent
+// mode: "tiles" | "h264" | "hybrid"
+// bitrate: target bitrate in kbps (0 = use default)
+func (c *Client) SetStreamingMode(mode string, bitrate int) error {
+	msg := map[string]interface{}{
+		"type": "set_mode",
+		"mode": mode,
+	}
+	if bitrate > 0 {
+		msg["bitrate"] = float64(bitrate)
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal mode message: %w", err)
+	}
+
+	return c.SendData(data)
+}
+
 // SetOnFrame sets the callback for received video frames
 func (c *Client) SetOnFrame(callback func([]byte)) {
 	c.onFrame = callback

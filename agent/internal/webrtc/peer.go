@@ -460,6 +460,27 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 }
 
 func (m *Manager) handleControlEvent(event map[string]interface{}) {
+	// Handle streaming mode changes
+	if msgType, ok := event["type"].(string); ok && msgType == "set_mode" {
+		if mode, ok := event["mode"].(string); ok {
+			switch mode {
+			case "h264":
+				m.SetH264Mode(true)
+				log.Println("🎬 Switched to H.264 mode")
+			case "tiles":
+				m.SetH264Mode(false)
+				log.Println("🎬 Switched to tiles-only mode")
+			case "hybrid":
+				m.SetH264Mode(true)
+				log.Println("🎬 Switched to hybrid mode (H.264 + tiles)")
+			}
+		}
+		if bitrate, ok := event["bitrate"].(float64); ok && bitrate > 0 {
+			m.SetVideoBitrate(int(bitrate))
+		}
+		return
+	}
+
 	// Clipboard messages (controller -> agent)
 	if msgType, ok := event["type"].(string); ok {
 		switch msgType {
