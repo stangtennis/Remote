@@ -17,6 +17,7 @@ import (
 	"github.com/stangtennis/remote-agent/internal/device"
 	"github.com/stangtennis/remote-agent/internal/filetransfer"
 	"github.com/stangtennis/remote-agent/internal/input"
+	"github.com/stangtennis/remote-agent/internal/monitor"
 	"github.com/stangtennis/remote-agent/internal/screen"
 	"github.com/stangtennis/remote-agent/internal/video"
 	"github.com/stangtennis/remote-agent/internal/video/encoder"
@@ -49,11 +50,17 @@ type Manager struct {
 	// Stats tracking
 	lastPacketsSent uint32  // For loss calculation
 	lossPct         float64 // Current packet loss percentage
+	sendBps         float64 // Current send bitrate (bits per second)
+	lastBytesSent   int64   // For sendBps calculation
+	lastSendTime    time.Time
 
 	// Video encoding (H.264)
 	videoTrack   *video.Track
 	videoEncoder *encoder.Manager
 	useH264      bool // Whether to use H.264 video track
+
+	// System monitoring
+	cpuMonitor *monitor.CPUMonitor
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
@@ -121,6 +128,10 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 		log.Printf("⚠️ Video encoder init failed: %v (H.264 disabled)", err)
 	}
 
+	// Initialize CPU monitor
+	cpuMon := monitor.NewCPUMonitor()
+	cpuMon.Start()
+
 	mgr := &Manager{
 		cfg:                 cfg,
 		device:              dev,
@@ -132,6 +143,7 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 		currentDesktop:      currentDesktopType,
 		videoEncoder:        videoEncoder,
 		useH264:             false, // Disabled by default, enable via signaling
+		cpuMonitor:          cpuMon,
 	}
 
 	log.Printf("🎬 Video encoder: %s", videoEncoder.GetEncoderName())
@@ -845,8 +857,36 @@ func (m *Manager) startScreenStreaming() {
 			lastAdaptTime = time.Now()
 			changed := false
 
-			// Check for congestion: high buffer OR high loss OR high RTT
-			congested := bufferedAmount > bufferHigh || m.lossPct > 5 || m.lastRTT > 250*time.Millisecond
+			// Get CPU status
+			cpuHigh := false
+			cpuPct := float64(0)
+			if m.cpuMonitor != nil {
+				cpuHigh = m.cpuMonitor.IsHighCPU()
+				cpuPct = m.cpuMonitor.GetCPUPercent()
+			}
+
+			// Check for congestion: high buffer OR high loss OR high RTT OR high CPU
+			congested := bufferedAmount > bufferHigh || m.lossPct > 5 || m.lastRTT > 250*time.Millisecond || cpuHigh
+
+			// CPU-guard: reduce quality if CPU is high
+			if cpuHigh && !congested {
+				log.Printf("🔥 CPU-guard triggered (%.1f%%) - reducing quality", cpuPct)
+				congested = true
+			}
+
+			// Auto-switch to tiles-only if conditions are bad
+			if m.useH264 {
+				criticalCPU := m.cpuMonitor != nil && m.cpuMonitor.IsCriticalCPU()
+				highRTT := m.lastRTT > 300*time.Millisecond
+				if criticalCPU || highRTT {
+					m.useH264 = false
+					if criticalCPU {
+						log.Println("⚠️ Auto-switch to tiles-only (CPU > 90%)")
+					} else {
+						log.Println("⚠️ Auto-switch to tiles-only (RTT > 300ms)")
+					}
+				}
+			}
 
 			if congested {
 				// Network congested - reduce quality aggressively
@@ -945,18 +985,31 @@ func (m *Manager) startScreenStreaming() {
 			}
 		}
 
-		// Log every second
+		// Log every second and calculate sendBps
 		if time.Since(lastLogTime) >= time.Second {
+			// Calculate actual send bitrate
+			elapsed := time.Since(m.lastSendTime).Seconds()
+			if elapsed > 0 && m.lastBytesSent > 0 {
+				bytesDelta := bytesSent - m.lastBytesSent
+				m.sendBps = float64(bytesDelta*8) / elapsed
+			}
+			m.lastBytesSent = bytesSent
+			m.lastSendTime = time.Now()
+
 			lastLogTime = time.Now()
 			avgKBPerFrame := float64(bytesSent) / float64(frameCount) / 1024
-			mbps := float64(len(jpeg)) * 8 * float64(fps) / 1000000
+			sendMbps := m.sendBps / 1000000
 			idleStr := ""
 			if isIdle {
 				idleStr = " 💤IDLE"
 			}
 			rttMs := m.lastRTT.Milliseconds()
-			log.Printf("📊 FPS:%d Q:%d Scale:%.0f%% Motion:%.1f%% RTT:%dms Loss:%.1f%%%s | %.1fKB/f ~%.1fMbit/s | Buf:%.1fMB | Err:%d Drop:%d",
-				fps, quality, scale*100, motionPct, rttMs, m.lossPct, idleStr, avgKBPerFrame, mbps,
+			cpuPct := float64(0)
+			if m.cpuMonitor != nil {
+				cpuPct = m.cpuMonitor.GetCPUPercent()
+			}
+			log.Printf("📊 FPS:%d Q:%d Scale:%.0f%% Motion:%.1f%% RTT:%dms Loss:%.1f%% CPU:%.0f%%%s | %.1fKB/f %.1fMbit/s | Buf:%.1fMB | Err:%d Drop:%d",
+				fps, quality, scale*100, motionPct, rttMs, m.lossPct, cpuPct, idleStr, avgKBPerFrame, sendMbps,
 				float64(bufferedAmount)/1024/1024, errorCount, droppedFrames)
 			droppedFrames = 0 // Reset per-second counter
 		}
