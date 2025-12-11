@@ -132,7 +132,7 @@ Ved congestion:
 6. **v2.50.0** ✅ - H.264 encoder infrastructure
 7. **v2.51.0** ✅ - Video track integration
 8. **v2.51.1** ✅ - Hybrid mode signaling
+9. **v2.52.0** ✅ - CPU-guard + sendBps + auto-switch
 
-### Skipped (ikke prioritet)
-- NVENC hardware encoder (kræver NVIDIA GPU + CUDA)
-- Audio streaming
+### Komplet! 🎉
+Alle planlagte adaptive streaming features er implementeret.
