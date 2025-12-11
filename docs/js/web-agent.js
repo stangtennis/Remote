@@ -531,6 +531,12 @@ function rejectSession() {
 async function endSession() {
   console.log('🛑 Ending session...');
 
+  // Close data channel
+  if (dataChannel) {
+    try { dataChannel.close(); } catch (e) {}
+    dataChannel = null;
+  }
+
   // Close WebRTC
   if (peerConnection) {
     peerConnection.close();
@@ -541,6 +547,13 @@ async function endSession() {
   if (signalingChannel) {
     supabase.removeChannel(signalingChannel);
     signalingChannel = null;
+  }
+
+  // Disconnect helper
+  if (helperWs) {
+    try { helperWs.close(); } catch (e) {}
+    helperWs = null;
+    helperConnected = false;
   }
 
   // Update session status
@@ -556,7 +569,12 @@ async function endSession() {
     currentSession = null;
   }
 
+  // Clear PIN input
+  const pinInput = document.getElementById('pinInput');
+  if (pinInput) pinInput.value = '';
+
   // Update UI
+  document.getElementById('sessionSection').style.display = 'none';
   document.getElementById('connectedSection').style.display = 'none';
   document.getElementById('deviceSection').style.display = 'block';
   updateHeaderStatus('online', 'Connected');
@@ -586,10 +604,14 @@ async function startWebRTC() {
       console.log('Added track:', track.kind);
     });
 
-    // Create data channel for receiving input (Phase 2)
-    dataChannel = peerConnection.createDataChannel('input');
-    dataChannel.onopen = () => console.log('✅ Data channel opened');
-    dataChannel.onmessage = handleRemoteInput;
+    // Handle incoming data channels from dashboard (for receiving input)
+    peerConnection.ondatachannel = (event) => {
+      console.log('📥 Received data channel:', event.channel.label);
+      dataChannel = event.channel;
+      dataChannel.onopen = () => console.log('✅ Data channel opened');
+      dataChannel.onclose = () => console.log('🔌 Data channel closed');
+      dataChannel.onmessage = handleRemoteInput;
+    };
 
     // Handle ICE candidates
     peerConnection.onicecandidate = async (event) => {
