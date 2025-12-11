@@ -18,6 +18,8 @@ import (
 	"github.com/stangtennis/remote-agent/internal/filetransfer"
 	"github.com/stangtennis/remote-agent/internal/input"
 	"github.com/stangtennis/remote-agent/internal/screen"
+	"github.com/stangtennis/remote-agent/internal/video"
+	"github.com/stangtennis/remote-agent/internal/video/encoder"
 )
 
 type Manager struct {
@@ -47,6 +49,11 @@ type Manager struct {
 	// Stats tracking
 	lastPacketsSent uint32  // For loss calculation
 	lossPct         float64 // Current packet loss percentage
+
+	// Video encoding (H.264)
+	videoTrack   *video.Track
+	videoEncoder *encoder.Manager
+	useH264      bool // Whether to use H.264 video track
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
@@ -102,6 +109,18 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 	fileTransferHandler := filetransfer.NewHandler(downloadDir)
 	log.Printf("✅ File transfer handler initialized: %s", downloadDir)
 
+	// Initialize video encoder
+	videoEncoder := encoder.NewManager()
+	if err := videoEncoder.Init(encoder.Config{
+		Width:            width,
+		Height:           height,
+		Bitrate:          2000, // 2 Mbps default
+		Framerate:        30,
+		KeyframeInterval: 90, // Keyframe every 3 seconds at 30fps
+	}); err != nil {
+		log.Printf("⚠️ Video encoder init failed: %v (H.264 disabled)", err)
+	}
+
 	mgr := &Manager{
 		cfg:                 cfg,
 		device:              dev,
@@ -111,7 +130,11 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 		fileTransferHandler: fileTransferHandler,
 		isSession0:          isSession0,
 		currentDesktop:      currentDesktopType,
+		videoEncoder:        videoEncoder,
+		useH264:             false, // Disabled by default, enable via signaling
 	}
+
+	log.Printf("🎬 Video encoder: %s", videoEncoder.GetEncoderName())
 
 	// Start desktop monitoring to handle login/logout transitions
 	go mgr.monitorDesktopChanges()
