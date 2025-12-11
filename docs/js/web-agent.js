@@ -23,8 +23,17 @@ const iceConfig = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' }
-    // Add TURN servers here if needed
+    // TURN server for NAT traversal
+    {
+      urls: 'turn:188.228.14.94:3478',
+      username: 'remotedesktop',
+      credential: 'Hawkeye2025Turn!'
+    },
+    {
+      urls: 'turn:188.228.14.94:3478?transport=tcp',
+      username: 'remotedesktop',
+      credential: 'Hawkeye2025Turn!'
+    }
   ]
 };
 
