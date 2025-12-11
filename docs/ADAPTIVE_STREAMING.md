@@ -1,30 +1,30 @@
-# Adaptive Streaming (v2.49.0)
+# Adaptive Streaming (v2.51.1)
 
 Implementeret adaptiv streaming der justerer kvalitet baseret på netværksforhold.
 
 ## Parametre
 
-| Parameter | Min | Max | Default | Kode-værdi | Beskrivelse |
-|-----------|-----|-----|---------|------------|-------------|
-| FPS | 12 | 30 | 20 | `12-30` | Frames per second |
-| Quality | 50 | 80 | 65 | `50-80` | JPEG kvalitet |
-| Scale | 50% | 100% | 100% | `0.5-1.0` | Skalering af opløsning |
+| Parameter | Range | Default | Beskrivelse |
+|-----------|-------|---------|-------------|
+| FPS | 12-30 | 20 | Frames per second |
+| Quality | 50-80 | 65 | JPEG kvalitet |
+| Scale | 50-100% (0.5-1.0) | 100% (1.0) | Skalering af opløsning |
 
 ## Målinger
 
-### Implementeret (v2.49.0)
-- `bufBytes` - DataChannel buffered amount
-- `RTT` - Round-trip time (via ping/pong)
+### Implementeret (v2.51.1)
+- `bufBytes` - DataChannel buffered amount (bytes)
+- `RTT` - Round-trip time via ping/pong (ms)
 - `motionPct` - Procent af skærm ændret (fra DirtyRegionDetector)
-- `lossPct` - Packet loss percentage (estimeret fra buffer)
+- `lossPct` - Packet loss percentage (estimeret fra buffer congestion, 0-10%)
 
-### Planlagt (v2.50+)
-- `sendBps` - Aktuel send bitrate
-- `cpuPct` - CPU forbrug (guard mod overload)
+### Planlagt
+- `sendBps` - Aktuel send bitrate (bytes sendt / tid siden sidste måling)
+- `cpuPct` - Process CPU forbrug; threshold 85% over 3 målinger → sænk FPS/Scale
 
 ## Adaptation Logic
 
-### Nuværende regler (v2.49.0)
+### Nuværende regler (v2.51.1)
 
 **Reducer kvalitet når:**
 ```
@@ -75,13 +75,20 @@ Separat data channel for input:
 - Eller når `motionPct > 30%`
 - Sikrer resync for dirty tiles/foveated mode
 
-## Modes (planlagt)
+## Modes (v2.51.1)
 
 | Mode | Beskrivelse |
 |------|-------------|
-| `tiles-only` | Kun JPEG frames over data channel (nuværende) |
+| `tiles-only` | Kun JPEG frames over data channel (default, altid tilgængelig) |
 | `hybrid` | H.264 video track + tiles/foveated over data channel |
 | `h264-only` | Kun H.264 video track |
+
+**CPU-only hosts:** `tiles-only` er default fallback. `hybrid` bruger software H.264 med 720p/15-24 fps som startværdier.
+
+**Auto-switch til tiles-only:**
+- TURN TCP med RTT > 300ms
+- Encoder init fejl
+- CPU > 90% sustained
 
 Se `H264_IMPLEMENTATION_PLAN.md` for detaljer.
 
