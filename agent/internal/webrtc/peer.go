@@ -185,6 +185,27 @@ func (m *Manager) monitorDesktopChanges() {
 	})
 }
 
+// SetH264Mode enables or disables H.264 video track mode
+func (m *Manager) SetH264Mode(enabled bool) {
+	m.useH264 = enabled
+	if enabled {
+		log.Println("🎬 H.264 mode enabled")
+	} else {
+		log.Println("🎬 H.264 mode disabled (using JPEG tiles)")
+	}
+}
+
+// SetVideoBitrate adjusts the video encoder bitrate
+func (m *Manager) SetVideoBitrate(kbps int) {
+	if m.videoEncoder != nil {
+		if err := m.videoEncoder.SetBitrate(kbps); err != nil {
+			log.Printf("⚠️ Failed to set bitrate: %v", err)
+		} else {
+			log.Printf("🎬 Video bitrate set to %d kbps", kbps)
+		}
+	}
+}
+
 func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	// Close any existing connection first
 	if m.peerConnection != nil {
@@ -205,6 +226,21 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	m.answerSent = false
 	m.pendingCandidates = nil
 	m.peerConnection = pc
+
+	// Add video track if H.264 mode is enabled
+	if m.useH264 {
+		videoTrack, err := video.NewTrack()
+		if err != nil {
+			log.Printf("⚠️ Failed to create video track: %v", err)
+		} else {
+			m.videoTrack = videoTrack
+			if _, err := pc.AddTrack(videoTrack.GetTrack()); err != nil {
+				log.Printf("⚠️ Failed to add video track: %v", err)
+			} else {
+				log.Println("🎬 Video track added to peer connection")
+			}
+		}
+	}
 
 	// Set up ICE connection state handler (more granular than connection state)
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
