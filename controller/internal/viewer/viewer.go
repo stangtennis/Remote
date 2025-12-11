@@ -205,6 +205,11 @@ func (v *Viewer) createToolbar() *fyne.Container {
 		v.handleClipboardSync()
 	})
 
+	// H.264 mode toggle button
+	h264Btn := widget.NewButton("🎬 H.264", func() {
+		v.toggleH264Mode()
+	})
+
 	// Quality control
 	qualityLabel := widget.NewLabel("Quality:")
 	v.qualitySlider = widget.NewSlider(1, 100)
@@ -231,6 +236,7 @@ func (v *Viewer) createToolbar() *fyne.Container {
 		v.fullscreenBtn,
 		fileTransferBtn,
 		clipboardBtn,
+		h264Btn,
 	)
 
 	rightSection := container.NewHBox(
@@ -376,6 +382,34 @@ func (v *Viewer) UpdateStreamingMode(mode string) {
 // GetCurrentBandwidth returns current bandwidth in Mbit/s
 func (v *Viewer) GetCurrentBandwidth() float64 {
 	return v.currentBandwidth
+}
+
+// toggleH264Mode toggles between JPEG and H.264 streaming modes
+func (v *Viewer) toggleH264Mode() {
+	if !v.connected {
+		log.Println("⚠️ Not connected - cannot toggle H.264 mode")
+		return
+	}
+
+	// Check current mode from label
+	currentMode := v.modeLabel.Text
+	var newMode string
+	if currentMode == "📺 JPEG" {
+		newMode = "h264"
+		log.Println("🎬 Switching to H.264 mode...")
+	} else {
+		newMode = "jpeg"
+		log.Println("📺 Switching to JPEG mode...")
+	}
+
+	// Send mode change to agent
+	if client, ok := v.webrtcClient.(interface {
+		SetStreamingMode(mode string, bitrate int) error
+	}); ok {
+		if err := client.SetStreamingMode(newMode, 0); err != nil {
+			log.Printf("❌ Failed to set streaming mode: %v", err)
+		}
+	}
 }
 
 // Event handlers
