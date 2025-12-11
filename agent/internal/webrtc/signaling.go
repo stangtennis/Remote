@@ -120,7 +120,7 @@ func (m *Manager) ListenForSessions() {
 			log.Printf("📞 Incoming session (web dashboard): %s", session.ID)
 			log.Printf("   Device ID: %s", m.device.ID)
 			handledSessions[session.ID] = true
-			m.sessionID = session.ID
+			// Don't set m.sessionID here - let handleWebSession do it
 			go m.handleWebSession(session)
 		}
 	}
