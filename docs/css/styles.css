@@ -2951,3 +2951,86 @@ body::before {
 .transfer-form .form-group {
   margin-bottom: 0;
 }
+
+/* Input Helper Section */
+.helper-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.helper-status {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.helper-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  font-size: 1.1rem;
+}
+
+.helper-icon.connected {
+  background: var(--success-light);
+  color: var(--success);
+}
+
+.helper-icon.disconnected {
+  background: var(--warning-light);
+  color: var(--warning);
+}
+
+.helper-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.helper-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.helper-value {
+  font-size: 0.9rem;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.helper-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.helper-hint {
+  margin: 0.75rem 0 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.helper-hint code {
+  background: var(--surface-hover);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-family: monospace;
+  color: var(--primary);
+}
+
+.btn-sm {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+}
