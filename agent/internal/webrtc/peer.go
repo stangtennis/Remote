@@ -387,8 +387,11 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 	case "key":
 		code, _ := event["code"].(string)
 		down, _ := event["down"].(bool)
+		ctrl, _ := event["ctrl"].(bool)
+		shift, _ := event["shift"].(bool)
+		alt, _ := event["alt"].(bool)
 		if m.keyController != nil {
-			m.keyController.HandleKey(code, down)
+			m.keyController.SendKeyWithModifiers(code, down, ctrl, shift, alt)
 		}
 	}
 }
