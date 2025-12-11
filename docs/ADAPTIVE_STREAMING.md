@@ -1,4 +1,4 @@
-# Adaptive Streaming (v2.51.1)
+# Adaptive Streaming (v2.52.0)
 
 Implementeret adaptiv streaming der justerer kvalitet baseret på netværksforhold.
 
@@ -12,23 +12,21 @@ Implementeret adaptiv streaming der justerer kvalitet baseret på netværksforho
 
 ## Målinger
 
-### Implementeret (v2.51.1)
+### Implementeret (v2.52.0)
 - `bufBytes` - DataChannel buffered amount (bytes)
 - `RTT` - Round-trip time via ping/pong (ms)
 - `motionPct` - Procent af skærm ændret (fra DirtyRegionDetector)
 - `lossPct` - Packet loss percentage (estimeret fra buffer congestion, 0-10%)
-
-### Planlagt
 - `sendBps` - Aktuel send bitrate (bytes sendt / tid siden sidste måling)
 - `cpuPct` - Process CPU forbrug; threshold 85% over 3 målinger → sænk FPS/Scale
 
 ## Adaptation Logic
 
-### Nuværende regler (v2.51.1)
+### Nuværende regler (v2.52.0)
 
 **Reducer kvalitet når:**
 ```
-bufBytes > 8MB ELLER lossPct > 5% ELLER RTT > 250ms
+bufBytes > 8MB ELLER lossPct > 5% ELLER RTT > 250ms ELLER cpuPct > 85% (3x)
 → FPS -= 4, Scale -= 0.1, Quality -= 5
 ```
 
@@ -54,12 +52,11 @@ Hvert 5. sekund ELLER motionPct > 30%
 → Send komplet frame (ikke delta)
 ```
 
-### Planlagte regler (v2.50+)
+### CPU-guard (v2.52.0)
 
-**CPU-guard:**
 ```
-cpuPct > 85% over 3 målinger
-→ Sænk FPS og Scale et trin
+cpuPct > 85% over 3 målinger → Sænk FPS og Scale
+cpuPct > 90% sustained → Auto-switch til tiles-only
 ```
 
 ## Input-prioritet (v2.48.0)
