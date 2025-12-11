@@ -125,4 +125,7 @@ Ved congestion:
 3. **v2.48.0** ✅ - Input-prioritet (separat data channel)
 4. **v2.48.1** ✅ - Loss/RTT-baseret adaptive streaming
 5. **v2.49.0** ✅ - Full-frame refresh cadence
-6. **v2.50.0** ✅ - H.264 encoder infrastructure (se H264_IMPLEMENTATION_PLAN.md)
+6. **v2.50.0** ✅ - H.264 encoder infrastructure
+7. **v2.51.0** ✅ - Video track integration
+8. **v2.51.1** ✅ - Hybrid mode signaling
+9. **v2.52.0** - NVENC hardware encoder (se H264_IMPLEMENTATION_PLAN.md)
