@@ -14,6 +14,7 @@ import (
 type Client struct {
 	peerConnection       *webrtc.PeerConnection
 	dataChannel          *webrtc.DataChannel
+	controlChannel       *webrtc.DataChannel // Separate channel for input (low latency)
 	videoTrack           *webrtc.TrackRemote
 	onFrame              func([]byte)
 	onConnected          func()
@@ -125,6 +126,27 @@ func (c *Client) CreateOffer() (string, error) {
 
 	log.Println("📡 Data channel created")
 
+	// Create control channel for low-latency input (unordered, no retransmits)
+	ordered := false
+	maxRetransmits := uint16(0)
+	controlOpts := &webrtc.DataChannelInit{
+		Ordered:        &ordered,
+		MaxRetransmits: &maxRetransmits,
+	}
+	cc, err := c.peerConnection.CreateDataChannel("control", controlOpts)
+	if err != nil {
+		log.Printf("⚠️ Failed to create control channel: %v (falling back to data channel)", err)
+	} else {
+		c.controlChannel = cc
+		cc.OnOpen(func() {
+			log.Println("🎮 Control channel OPENED (low-latency input)")
+		})
+		cc.OnMessage(func(msg webrtc.DataChannelMessage) {
+			c.handleDataChannelMessage(msg.Data)
+		})
+		log.Println("🎮 Control channel created (ordered=false, maxRetransmits=0)")
+	}
+
 	offer, err := c.peerConnection.CreateOffer(nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create offer: %w", err)
@@ -177,10 +199,16 @@ func (c *Client) SetAnswer(answerJSON string) error {
 	return nil
 }
 
-// SendInput sends mouse/keyboard input to the agent
+// SendInput sends mouse/keyboard input to the agent via control channel (low latency)
 func (c *Client) SendInput(inputJSON string) error {
+	// Prefer control channel for low-latency input
+	if c.controlChannel != nil && c.controlChannel.ReadyState() == webrtc.DataChannelStateOpen {
+		return c.controlChannel.SendText(inputJSON)
+	}
+
+	// Fallback to data channel
 	if c.dataChannel == nil || c.dataChannel.ReadyState() != webrtc.DataChannelStateOpen {
-		return fmt.Errorf("data channel not ready")
+		return fmt.Errorf("no channel ready for input")
 	}
 
 	return c.dataChannel.SendText(inputJSON)
@@ -327,19 +355,27 @@ func (c *Client) StartPingLoop() {
 	}()
 }
 
-// SendPing sends a ping message to measure RTT
+// SendPing sends a ping message to measure RTT via control channel
 func (c *Client) SendPing() {
-	if c.dataChannel == nil || c.dataChannel.ReadyState() != webrtc.DataChannelStateOpen {
-		return
-	}
-
 	c.lastPingTime = time.Now()
 	ping := map[string]interface{}{
 		"t":  "ping",
 		"ts": float64(c.lastPingTime.UnixNano()) / 1e6, // ms timestamp
 	}
 
-	if data, err := json.Marshal(ping); err == nil {
+	data, err := json.Marshal(ping)
+	if err != nil {
+		return
+	}
+
+	// Prefer control channel for accurate RTT measurement
+	if c.controlChannel != nil && c.controlChannel.ReadyState() == webrtc.DataChannelStateOpen {
+		c.controlChannel.Send(data)
+		return
+	}
+
+	// Fallback to data channel
+	if c.dataChannel != nil && c.dataChannel.ReadyState() == webrtc.DataChannelStateOpen {
 		c.dataChannel.Send(data)
 	}
 }
