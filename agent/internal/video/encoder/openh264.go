@@ -32,29 +32,17 @@ func (e *OpenH264Encoder) Init(cfg Config) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	// Try to load OpenH264 DLL
-	// Look for it in current directory or system path
-	dllPaths := []string{
-		"openh264-2.4.1-win64.dll",
-		"openh264.dll",
-		"./openh264-2.4.1-win64.dll",
-		"./openh264.dll",
+	// Ensure OpenH264 DLL exists (download if needed)
+	dllPath, err := EnsureOpenH264DLL()
+	if err != nil {
+		return fmt.Errorf("failed to ensure OpenH264 DLL: %w", err)
 	}
 
-	var loadErr error
-	for _, path := range dllPaths {
-		if err := openh264.Open(path); err == nil {
-			log.Printf("🎬 OpenH264 loaded from: %s", path)
-			loadErr = nil
-			break
-		} else {
-			loadErr = err
-		}
+	// Load OpenH264 DLL
+	if err := openh264.Open(dllPath); err != nil {
+		return fmt.Errorf("failed to load OpenH264 DLL: %w", err)
 	}
-
-	if loadErr != nil {
-		return fmt.Errorf("failed to load OpenH264 DLL: %w (place openh264-2.4.1-win64.dll in agent directory)", loadErr)
-	}
+	log.Printf("🎬 OpenH264 loaded from: %s", dllPath)
 
 	e.config = cfg
 
