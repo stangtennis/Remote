@@ -38,6 +38,7 @@ type Viewer struct {
 	fpsLabel       *widget.Label
 	latencyLabel   *widget.Label
 	bandwidthLabel *widget.Label
+	modeLabel      *widget.Label // Streaming mode (JPEG/H.264)
 	qualitySlider  *widget.Slider
 
 	// Bandwidth tracking
@@ -257,6 +258,10 @@ func (v *Viewer) createStatusBar() *fyne.Container {
 	// Bandwidth indicator
 	v.bandwidthLabel = widget.NewLabel("0.0 Mbit/s")
 
+	// Streaming mode indicator
+	v.modeLabel = widget.NewLabel("📺 JPEG")
+	v.modeLabel.TextStyle = fyne.TextStyle{Bold: true}
+
 	// Resolution label
 	resolutionLabel := widget.NewLabel("Resolution: 1920x1080")
 
@@ -276,6 +281,8 @@ func (v *Viewer) createStatusBar() *fyne.Container {
 	v.lastBandwidthTime = time.Now()
 
 	return container.NewHBox(
+		v.modeLabel,
+		widget.NewSeparator(),
 		v.fpsLabel,
 		widget.NewSeparator(),
 		v.bandwidthLabel,
@@ -350,6 +357,20 @@ func (v *Viewer) UpdateBandwidth() {
 	// Reset counters
 	v.bytesReceived = 0
 	v.lastBandwidthTime = now
+}
+
+// UpdateStreamingMode updates the streaming mode indicator
+func (v *Viewer) UpdateStreamingMode(mode string) {
+	fyne.Do(func() {
+		switch mode {
+		case "h264":
+			v.modeLabel.SetText("🎬 H.264")
+		case "hybrid":
+			v.modeLabel.SetText("🔀 Hybrid")
+		default:
+			v.modeLabel.SetText("📺 JPEG")
+		}
+	})
 }
 
 // GetCurrentBandwidth returns current bandwidth in Mbit/s
