@@ -61,6 +61,9 @@ type Manager struct {
 
 	// System monitoring
 	cpuMonitor *monitor.CPUMonitor
+
+	// Input-triggered frame refresh
+	inputFrameTrigger chan struct{}
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
@@ -144,6 +147,7 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 		videoEncoder:        videoEncoder,
 		useH264:             false, // Disabled by default, enable via signaling
 		cpuMonitor:          cpuMon,
+		inputFrameTrigger:   make(chan struct{}, 1), // Buffered to avoid blocking
 	}
 
 	log.Printf("🎬 Video encoder: %s", videoEncoder.GetEncoderName())
@@ -410,6 +414,16 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 
 	// Track last input time for idle detection
 	m.lastInputTime = time.Now()
+
+	// Trigger immediate frame capture for click events (visual feedback)
+	if eventType == "mouse_click" || eventType == "key" {
+		select {
+		case m.inputFrameTrigger <- struct{}{}:
+			// Triggered
+		default:
+			// Already pending, skip
+		}
+	}
 
 	// Handle ping/pong for RTT measurement
 	if eventType == "ping" {
@@ -794,7 +808,15 @@ func (m *Manager) startScreenStreaming() {
 	go m.collectStats()
 
 	for m.isStreaming {
-		<-ticker.C
+		// Wait for either ticker or input-triggered frame request
+		select {
+		case <-ticker.C:
+			// Normal frame interval
+		case <-m.inputFrameTrigger:
+			// Input triggered - send frame immediately for visual feedback
+			// Small delay to let the input take effect
+			time.Sleep(10 * time.Millisecond)
+		}
 
 		if m.dataChannel == nil || m.dataChannel.ReadyState() != webrtc.DataChannelStateOpen {
 			continue
