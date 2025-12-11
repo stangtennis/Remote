@@ -681,9 +681,11 @@ func (m *Manager) startScreenStreaming() {
 	var lastRGBA *image.RGBA
 	lastAdaptTime := time.Now()
 	lastLogTime := time.Now()
-	lowMotionStart := time.Time{} // When low motion started
+	lastFullFrame := time.Now() // For full-frame refresh cadence
+	lowMotionStart := time.Time{}  // When low motion started
 	isIdle := false
 	motionPct := 0.0
+	forceFullFrame := false
 
 	ticker := time.NewTicker(frameInterval)
 	defer ticker.Stop()
@@ -722,6 +724,12 @@ func (m *Manager) startScreenStreaming() {
 			motionPct = m.dirtyDetector.GetChangePercentage(regions, width, height)
 		}
 		lastRGBA = rgbaFrame
+
+		// Full-frame refresh cadence: every 5s or when motion > 30%
+		if time.Since(lastFullFrame) > 5*time.Second || motionPct > 30 {
+			forceFullFrame = true
+			lastFullFrame = time.Now()
+		}
 
 		// Idle mode detection
 		timeSinceInput := time.Since(m.lastInputTime)
@@ -839,12 +847,22 @@ func (m *Manager) startScreenStreaming() {
 
 		lastFrame = jpeg
 
-		// Send frame
-		if err := m.sendFrameChunked(jpeg); err != nil {
-			log.Printf("Failed to send frame: %v", err)
+		// Send frame (use full frame marker if forced refresh)
+		if forceFullFrame {
+			if err := m.sendFullFrame(jpeg); err != nil {
+				log.Printf("Failed to send full frame: %v", err)
+			} else {
+				frameCount++
+				bytesSent += int64(len(jpeg))
+			}
+			forceFullFrame = false
 		} else {
-			frameCount++
-			bytesSent += int64(len(jpeg))
+			if err := m.sendFrameChunked(jpeg); err != nil {
+				log.Printf("Failed to send frame: %v", err)
+			} else {
+				frameCount++
+				bytesSent += int64(len(jpeg))
+			}
 		}
 
 		// Log every second
