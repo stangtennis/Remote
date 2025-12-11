@@ -334,6 +334,12 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 			log.Println("🎮 Control channel ready (low-latency input)")
 			m.controlChannel = dc
 			m.setupControlChannelHandlers(dc)
+			// Also use control channel for streaming if no separate data channel
+			// Dashboard only creates one "control" channel for both input and frames
+			if m.dataChannel == nil {
+				m.dataChannel = dc
+				log.Println("📺 Using control channel for frame streaming")
+			}
 		} else {
 			m.dataChannel = dc
 			m.setupDataChannelHandlers(dc)
