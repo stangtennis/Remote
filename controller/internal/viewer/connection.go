@@ -865,6 +865,17 @@ func (v *Viewer) handleDataChannelMessage(msg []byte) {
 	case "dir_list_response", "drives_list_response":
 		// Handle file browser responses
 		v.handleFileBrowserMessage(data)
+
+	case "stats":
+		// Handle streaming stats from agent
+		if mode, ok := data["mode"].(string); ok {
+			v.UpdateStreamingMode(mode)
+		}
+		if fps, ok := data["fps"].(float64); ok {
+			if rtt, ok := data["rtt"].(float64); ok {
+				v.UpdateStats(int(fps), int(rtt))
+			}
+		}
 	}
 }
 
