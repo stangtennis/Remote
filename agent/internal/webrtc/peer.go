@@ -25,6 +25,7 @@ type Manager struct {
 	device              *device.Device
 	peerConnection      *webrtc.PeerConnection
 	dataChannel         *webrtc.DataChannel
+	controlChannel      *webrtc.DataChannel // Separate channel for input (low latency)
 	screenCapturer      *screen.Capturer
 	dirtyDetector       *screen.DirtyRegionDetector // For bandwidth optimization
 	mouseController     *input.MouseController
@@ -240,8 +241,16 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	// Set up data channel handler
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 		log.Printf("📡 Data channel opened: %s", dc.Label())
-		m.dataChannel = dc
-		m.setupDataChannelHandlers(dc)
+
+		// Route to appropriate handler based on channel label
+		if dc.Label() == "control" {
+			log.Println("🎮 Control channel ready (low-latency input)")
+			m.controlChannel = dc
+			m.setupControlChannelHandlers(dc)
+		} else {
+			m.dataChannel = dc
+			m.setupDataChannelHandlers(dc)
+		}
 	})
 
 	return nil
@@ -285,6 +294,103 @@ func (m *Manager) setupDataChannelHandlers(dc *webrtc.DataChannel) {
 
 		m.handleControlEvent(event)
 	})
+}
+
+// setupControlChannelHandlers sets up the low-latency control channel for input
+func (m *Manager) setupControlChannelHandlers(dc *webrtc.DataChannel) {
+	dc.OnOpen(func() {
+		log.Println("🎮 CONTROL CHANNEL READY - Low-latency input enabled!")
+	})
+
+	dc.OnClose(func() {
+		log.Println("🎮 Control channel closed")
+	})
+
+	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+		// Handle input events with priority
+		var event map[string]interface{}
+		if err := json.Unmarshal(msg.Data, &event); err != nil {
+			return
+		}
+
+		// Only handle input events on control channel
+		m.handleInputEvent(event)
+	})
+}
+
+// handleInputEvent handles input events (mouse, keyboard) with priority
+func (m *Manager) handleInputEvent(event map[string]interface{}) {
+	eventType, ok := event["t"].(string)
+	if !ok {
+		return
+	}
+
+	// Track last input time for idle detection
+	m.lastInputTime = time.Now()
+
+	// Handle ping/pong for RTT measurement
+	if eventType == "ping" {
+		ts, _ := event["ts"].(float64)
+		pong := map[string]interface{}{
+			"t":  "pong",
+			"ts": ts,
+		}
+		if data, err := json.Marshal(pong); err == nil {
+			// Send pong on control channel for accurate RTT
+			if m.controlChannel != nil && m.controlChannel.ReadyState() == webrtc.DataChannelStateOpen {
+				m.controlChannel.Send(data)
+			} else if m.dataChannel != nil && m.dataChannel.ReadyState() == webrtc.DataChannelStateOpen {
+				m.dataChannel.Send(data)
+			}
+		}
+		return
+	}
+
+	// Switch to input desktop before handling input
+	if m.isSession0 {
+		if err := desktop.SwitchToInputDesktop(); err != nil {
+			log.Printf("⚠️  Failed to switch to input desktop: %v", err)
+		}
+	}
+
+	// Handle input events
+	switch eventType {
+	case "mouse_move":
+		x, _ := event["x"].(float64)
+		y, _ := event["y"].(float64)
+		isRelative, _ := event["rel"].(bool)
+		if isRelative {
+			m.mouseController.MoveRelative(x, y)
+		} else {
+			m.mouseController.Move(x, y)
+		}
+
+	case "mouse_click":
+		button, _ := event["button"].(string)
+		down, _ := event["down"].(bool)
+		x, hasX := event["x"].(float64)
+		y, hasY := event["y"].(float64)
+		isRelative, _ := event["rel"].(bool)
+		if hasX && hasY {
+			if isRelative {
+				m.mouseController.MoveRelative(x, y)
+			} else {
+				m.mouseController.Move(x, y)
+			}
+		}
+		m.mouseController.Click(button, down)
+
+	case "mouse_scroll":
+		delta, _ := event["delta"].(float64)
+		m.mouseController.Scroll(int(delta))
+
+	case "key":
+		code, _ := event["code"].(string)
+		down, _ := event["down"].(bool)
+		if m.keyController != nil {
+			m.keyController.HandleKey(code, down)
+		}
+	}
 }
 
 func (m *Manager) handleControlEvent(event map[string]interface{}) {
