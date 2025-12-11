@@ -43,6 +43,11 @@ type Manager struct {
 	// RTT measurement
 	lastRTT       time.Duration // Last measured round-trip time
 	lastInputTime time.Time     // Last input event time (for idle detection)
+
+	// Stats tracking
+	lastPacketsSent uint64  // For loss calculation
+	lastPacketsLost uint64  // For loss calculation
+	lossPct         float64 // Current packet loss percentage
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
@@ -684,6 +689,9 @@ func (m *Manager) startScreenStreaming() {
 	ticker := time.NewTicker(frameInterval)
 	defer ticker.Stop()
 
+	// Start stats collection goroutine
+	go m.collectStats()
+
 	for m.isStreaming {
 		<-ticker.C
 
@@ -750,7 +758,10 @@ func (m *Manager) startScreenStreaming() {
 			lastAdaptTime = time.Now()
 			changed := false
 
-			if bufferedAmount > bufferHigh {
+			// Check for congestion: high buffer OR high loss OR high RTT
+			congested := bufferedAmount > bufferHigh || m.lossPct > 5 || m.lastRTT > 250*time.Millisecond
+
+			if congested {
 				// Network congested - reduce quality aggressively
 				if fps > minFPS {
 					fps -= 4
@@ -773,7 +784,7 @@ func (m *Manager) startScreenStreaming() {
 					}
 					changed = true
 				}
-			} else if bufferedAmount < bufferLow && droppedFrames == 0 {
+			} else if bufferedAmount < bufferLow && droppedFrames == 0 && m.lossPct < 1 && m.lastRTT < 120*time.Millisecond {
 				// Network clear - can increase quality
 				if quality < maxQuality {
 					quality += 2
@@ -846,8 +857,9 @@ func (m *Manager) startScreenStreaming() {
 			if isIdle {
 				idleStr = " 💤IDLE"
 			}
-			log.Printf("📊 FPS:%d Q:%d Scale:%.0f%% Motion:%.1f%%%s | %.1fKB/f ~%.1fMbit/s | Buf:%.1fMB | Err:%d Drop:%d",
-				fps, quality, scale*100, motionPct, idleStr, avgKBPerFrame, mbps,
+			rttMs := m.lastRTT.Milliseconds()
+			log.Printf("📊 FPS:%d Q:%d Scale:%.0f%% Motion:%.1f%% RTT:%dms Loss:%.1f%%%s | %.1fKB/f ~%.1fMbit/s | Buf:%.1fMB | Err:%d Drop:%d",
+				fps, quality, scale*100, motionPct, rttMs, m.lossPct, idleStr, avgKBPerFrame, mbps,
 				float64(bufferedAmount)/1024/1024, errorCount, droppedFrames)
 			droppedFrames = 0 // Reset per-second counter
 		}
@@ -1084,5 +1096,48 @@ func (m *Manager) sendResponse(data map[string]interface{}) {
 
 	if err := m.dataChannel.Send(jsonData); err != nil {
 		log.Printf("❌ Failed to send response: %v", err)
+	}
+}
+
+// collectStats collects WebRTC stats for adaptive streaming
+func (m *Manager) collectStats() {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for m.isStreaming {
+		<-ticker.C
+
+		if m.peerConnection == nil {
+			continue
+		}
+
+		stats := m.peerConnection.GetStats()
+		for _, stat := range stats {
+			// Look for data channel stats
+			if dcStats, ok := stat.(webrtc.DataChannelStats); ok {
+				sent := dcStats.MessagesSent
+				// Calculate loss from retransmits (approximation)
+				if sent > m.lastPacketsSent && m.lastPacketsSent > 0 {
+					delta := sent - m.lastPacketsSent
+					if delta > 0 {
+						// Use buffered amount as proxy for congestion/loss
+						buffered := float64(0)
+						if m.dataChannel != nil {
+							buffered = float64(m.dataChannel.BufferedAmount())
+						}
+						// High buffer = potential loss/congestion
+						if buffered > 4*1024*1024 { // 4MB
+							m.lossPct = (buffered / (16 * 1024 * 1024)) * 10 // 0-10% based on buffer
+							if m.lossPct > 10 {
+								m.lossPct = 10
+							}
+						} else {
+							m.lossPct = 0
+						}
+					}
+				}
+				m.lastPacketsSent = sent
+			}
+		}
 	}
 }
