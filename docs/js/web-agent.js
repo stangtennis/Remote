@@ -492,6 +492,9 @@ async function acceptSession() {
     // Start WebRTC connection
     await startWebRTC();
 
+    // Connect to local input helper (for remote control)
+    connectToHelper();
+
     // Show connected section
     document.getElementById('connectedSection').style.display = 'block';
     updateHeaderStatus('online', 'Session Active');
@@ -686,17 +689,134 @@ function listenForSignaling() {
   console.log('✅ Listening for signaling messages');
 }
 
+// ============================================================================
+// Input Helper Connection (Local WebSocket)
+// ============================================================================
+
+let helperWs = null;
+let helperConnected = false;
+let helperReconnectTimer = null;
+let inputSeq = 0;
+
+const HELPER_URL = 'ws://127.0.0.1:9877/input';
+
+async function connectToHelper() {
+  if (helperWs && helperWs.readyState === WebSocket.OPEN) {
+    return true;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      helperWs = new WebSocket(HELPER_URL);
+
+      helperWs.onopen = () => {
+        console.log('✅ Connected to Input Helper');
+        helperConnected = true;
+
+        // Authenticate with helper
+        const authMsg = {
+          type: 'auth',
+          token: currentUser?.id || 'anonymous',
+          device_id: deviceId,
+          session_id: currentSession?.id || ''
+        };
+        helperWs.send(JSON.stringify(authMsg));
+
+        resolve(true);
+      };
+
+      helperWs.onclose = () => {
+        console.log('🔌 Input Helper disconnected');
+        helperConnected = false;
+        helperWs = null;
+
+        // Retry connection after 5 seconds
+        if (helperReconnectTimer) clearTimeout(helperReconnectTimer);
+        helperReconnectTimer = setTimeout(() => {
+          if (currentSession) {
+            connectToHelper();
+          }
+        }, 5000);
+      };
+
+      helperWs.onerror = (err) => {
+        console.warn('⚠️ Input Helper not available (run input-helper.exe locally)');
+        helperConnected = false;
+        resolve(false);
+      };
+
+      helperWs.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          handleHelperMessage(msg);
+        } catch (e) {
+          console.error('Invalid helper message:', e);
+        }
+      };
+
+    } catch (e) {
+      console.warn('Failed to connect to helper:', e);
+      resolve(false);
+    }
+  });
+}
+
+function handleHelperMessage(msg) {
+  switch (msg.type) {
+    case 'status':
+      console.log('📊 Helper status:', msg);
+      break;
+    case 'ack':
+      if (!msg.ok && msg.error) {
+        console.warn('Helper error:', msg.error);
+      }
+      break;
+    case 'clipboard_content':
+      // Send clipboard to remote viewer
+      if (dataChannel && dataChannel.readyState === 'open') {
+        dataChannel.send(JSON.stringify({
+          type: 'clipboard_text',
+          content: msg.content
+        }));
+      }
+      break;
+  }
+}
+
+function sendToHelper(event) {
+  if (!helperWs || helperWs.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+
+  event.seq = ++inputSeq;
+  event.ts = Date.now();
+
+  try {
+    helperWs.send(JSON.stringify(event));
+    return true;
+  } catch (e) {
+    console.error('Failed to send to helper:', e);
+    return false;
+  }
+}
+
 function handleRemoteInput(event) {
-  // Handle remote input commands (Phase 2 - requires extension + helper)
+  // Handle remote input commands - forward to local helper
   try {
     const input = JSON.parse(event.data);
     console.log('🎮 Remote input:', input.type);
 
-    // Forward to extension if available
-    window.postMessage({
-      type: 'input_command',
-      command: input
-    }, '*');
+    // Forward to local helper if connected
+    if (helperConnected) {
+      sendToHelper(input);
+    } else {
+      // Try to connect
+      connectToHelper().then(connected => {
+        if (connected) {
+          sendToHelper(input);
+        }
+      });
+    }
 
   } catch (error) {
     console.error('Input handling error:', error);
