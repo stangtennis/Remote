@@ -36,6 +36,30 @@ Working notes for contributors to the Remote Desktop project (Go + Supabase + We
 - Services/startup: `agent/install-service.bat`, `agent/setup-startup.bat`, and related scripts; see `SERVICE_GUIDE.md`.
 - Backend: run Supabase migrations/functions only when needed; coordinate before changing schema.
 
+## CRITICAL: Build Command Rule (AI Agents MUST follow)
+**For ANY long-running command (cross-compile builds take 60-120 seconds):**
+1. Start command with `Blocking: false` and `WaitMsBeforeAsync: 1000`
+2. Get the Background command ID from response
+3. IMMEDIATELY call `command_status` with `WaitDurationSeconds: 60`
+4. If still running, call `command_status` again with another 60s wait
+5. Repeat until done or error
+
+**Version files to update BEFORE building:**
+- `agent/internal/tray/tray.go` - Version and BuildDate
+- `controller/main.go` - Version and BuildDate
+
+**Cross-compile commands (from Ubuntu to Windows):**
+```bash
+# Agent GUI
+cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -ldflags '-s -w -H windowsgui' -o ../builds/remote-agent-vX.XX.X.exe ./cmd/remote-agent
+
+# Agent Console
+cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -ldflags '-s -w' -o ../builds/remote-agent-console-vX.XX.X.exe ./cmd/remote-agent
+
+# Controller
+cd controller && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -ldflags '-s -w -H windowsgui' -o ../builds/controller-vX.XX.X.exe .
+```
+
 ## Branches and releases
 - Branches: `main` (stable), `agent` (agent work), `dashboard` (web UI), `controller` (controller app).
 - Releases: GitHub Actions build artifacts on tag/branch (controller and agent). Tag and push per release notes; download binaries from Actions or Releases.
