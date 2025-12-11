@@ -99,7 +99,9 @@ async function startPollingForSignals(sessionId) {
         return;
       }
 
+      // Debug: log all fetched signals
       if (data && data.length > 0) {
+        console.log(`🔍 Polled ${data.length} signals from agent/system`);
         for (const signal of data) {
           // Skip already processed signals
           if (processedSignalIds.has(signal.id)) {
@@ -107,7 +109,7 @@ async function startPollingForSignals(sessionId) {
           }
           processedSignalIds.add(signal.id);
           
-          console.log('📥 Polled signal:', signal.msg_type);
+          console.log('📥 Polled NEW signal:', signal.msg_type, 'id:', signal.id);
           await handleSignal(signal);
         }
       }
