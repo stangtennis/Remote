@@ -72,7 +72,7 @@ Separat data channel for input:
 - Eller når `motionPct > 30%`
 - Sikrer resync for dirty tiles/foveated mode
 
-## Modes (v2.51.1)
+## Modes (v2.52.0)
 
 | Mode | Beskrivelse |
 |------|-------------|
@@ -80,12 +80,15 @@ Separat data channel for input:
 | `hybrid` | H.264 video track + tiles/foveated over data channel |
 | `h264-only` | Kun H.264 video track |
 
-**CPU-only hosts:** `tiles-only` er default fallback. `hybrid` bruger software H.264 med 720p/15-24 fps som startværdier.
+**CPU-only hosts:** 
+- `tiles-only` er default fallback (ingen GPU encoder)
+- `hybrid` bruger software H.264 med 720p/15-24 fps som startværdier
+- Bitrate: 2 Mbps default, justerbar via `SetVideoBitrate()`
 
-**Auto-switch til tiles-only:**
-- TURN TCP med RTT > 300ms
+**Auto-switch til tiles-only (v2.52.0):**
+- RTT > 300ms (typisk TURN TCP relay)
 - Encoder init fejl
-- CPU > 90% sustained
+- CPU > 90% sustained (3+ målinger)
 
 Se `H264_IMPLEMENTATION_PLAN.md` for detaljer.
 
