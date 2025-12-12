@@ -1021,21 +1021,29 @@ func (m *Manager) startScreenStreaming() {
 			
 			// Check if DXGI needs reinitialization (screensaver, lock screen, power save)
 			errStr := err.Error()
-			if strings.Contains(errStr, "AcquireNextFrame failed") || strings.Contains(errStr, "error -2") || strings.Contains(errStr, "DXGI capture failed") {
-				// Only try to reinitialize every 5 errors to avoid spam
-				if errorCount%5 == 1 {
-					log.Printf("🔄 DXGI lost access (screensaver/lock?), reinitializing capturer... (attempt %d)", errorCount)
-					time.Sleep(1 * time.Second) // Wait for desktop to stabilize before reinit
+			isDXGIError := strings.Contains(errStr, "AcquireNextFrame") || 
+				strings.Contains(errStr, "error -2") || 
+				strings.Contains(errStr, "DXGI") ||
+				strings.Contains(errStr, "capture failed")
+			
+			if isDXGIError {
+				log.Printf("⚠️ DXGI error detected: %s (error #%d)", errStr, errorCount)
+				
+				// Try to reinitialize immediately on first error, then every 3 errors
+				if errorCount == 1 || errorCount%3 == 0 {
+					log.Printf("🔄 Reinitializing screen capturer...")
+					time.Sleep(500 * time.Millisecond) // Brief wait
+					
 					if reinitErr := m.screenCapturer.Reinitialize(false); reinitErr != nil {
-						log.Printf("⚠️ Failed to reinitialize capturer: %v", reinitErr)
+						log.Printf("⚠️ Reinit failed: %v - will retry", reinitErr)
 					} else {
-						log.Printf("✅ Capturer reinitialized successfully")
-						errorCount = 0 // Reset error count after successful reinit
+						log.Printf("✅ Screen capturer reinitialized!")
+						errorCount = 0
 					}
 				}
-				time.Sleep(500 * time.Millisecond) // Slow down retry rate
-			} else if errorCount%100 == 1 {
-				log.Printf("⚠️ JPEG encode error: %v", err)
+				time.Sleep(200 * time.Millisecond) // Don't spam
+			} else if errorCount%50 == 1 {
+				log.Printf("⚠️ Capture error: %v", err)
 			}
 			
 			if lastFrame != nil {
