@@ -471,10 +471,11 @@ body::before {
 
 /* ===== Devices List ===== */
 .devices-section {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  min-height: 200px;
+  min-height: 300px;
+  max-height: 600px;
   overflow-y: auto;
 }
 
@@ -1184,7 +1185,7 @@ body::before {
   gap: 1rem;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 @media (min-width: 1101px) {
