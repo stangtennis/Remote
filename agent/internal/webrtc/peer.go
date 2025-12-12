@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pion/webrtc/v3"
@@ -1017,9 +1018,22 @@ func (m *Manager) startScreenStreaming() {
 		jpeg, scaledW, scaledH, err := m.screenCapturer.CaptureJPEGScaled(quality, scale)
 		if err != nil {
 			errorCount++
-			if errorCount%100 == 1 {
+			
+			// Check if DXGI needs reinitialization (screensaver, lock screen, power save)
+			errStr := err.Error()
+			if strings.Contains(errStr, "AcquireNextFrame failed") || strings.Contains(errStr, "error -2") {
+				log.Printf("🔄 DXGI lost access (screensaver/lock?), reinitializing capturer...")
+				if reinitErr := m.screenCapturer.Reinitialize(false); reinitErr != nil {
+					log.Printf("⚠️ Failed to reinitialize capturer: %v", reinitErr)
+				} else {
+					log.Printf("✅ Capturer reinitialized successfully")
+					errorCount = 0 // Reset error count after successful reinit
+				}
+				time.Sleep(500 * time.Millisecond) // Give time for desktop to stabilize
+			} else if errorCount%100 == 1 {
 				log.Printf("⚠️ JPEG encode error: %v", err)
 			}
+			
 			if lastFrame != nil {
 				m.sendFrameChunked(lastFrame)
 			}
