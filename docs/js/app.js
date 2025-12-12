@@ -85,15 +85,18 @@ function setupEventListeners() {
       currentMode = modes[(currentIndex + 1) % modes.length];
       
       // Send mode change to agent
-      if (typeof sendControlEvent === 'function') {
-        sendControlEvent({
+      if (typeof window.sendControlEvent === 'function') {
+        window.sendControlEvent({
           type: 'set_mode',
           mode: currentMode
         });
         console.log(`🎬 Switched to ${modeNames[currentMode]} mode`);
         
-        // Update button tooltip
+        // Update button tooltip and text
         qualityToggleBtn.title = `Mode: ${modeNames[currentMode]} (click to change)`;
+        qualityToggleBtn.textContent = currentMode === 'tiles' ? '🎚️' : (currentMode === 'h264' ? '🎬' : '🔄');
+      } else {
+        console.warn('sendControlEvent not available - not connected?');
       }
     });
   }
