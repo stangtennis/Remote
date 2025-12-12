@@ -813,22 +813,25 @@ function displayVideoFrame(data) {
   // Convert data to blob if it's an ArrayBuffer
   const blob = jpegData instanceof Blob ? jpegData : new Blob([jpegData], { type: 'image/jpeg' });
   
+  // Hide overlays immediately when we start receiving frames
+  const previewIdle = document.getElementById('previewIdle');
+  const previewConnecting = document.getElementById('previewConnecting');
+  if (previewIdle) previewIdle.style.display = 'none';
+  if (previewConnecting) previewConnecting.style.display = 'none';
+  
   // Create image from blob
   const img = new Image();
   img.onload = () => {
-    // Hide idle/connecting overlays when we receive first frame
-    const previewIdle = document.getElementById('previewIdle');
-    const previewConnecting = document.getElementById('previewConnecting');
-    if (previewIdle) previewIdle.style.display = 'none';
-    if (previewConnecting) previewConnecting.style.display = 'none';
-    
     // Store screen size for dirty region calculations
     screenWidth = img.width;
     screenHeight = img.height;
     
     // Resize canvas to match image (only for full frames)
-    canvas.width = img.width;
-    canvas.height = img.height;
+    if (canvas.width !== img.width || canvas.height !== img.height) {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      console.log(`📐 Canvas resized to ${img.width}x${img.height}`);
+    }
     
     // Draw image on canvas
     ctx.drawImage(img, 0, 0);
