@@ -72,6 +72,31 @@ function setupEventListeners() {
         statsContent.style.display === 'none' ? 'block' : 'none';
     });
   }
+  
+  // Quality toggle button (H264/JPEG mode)
+  const qualityToggleBtn = document.getElementById('qualityToggleBtn');
+  if (qualityToggleBtn) {
+    let currentMode = 'tiles'; // Default to JPEG tiles
+    qualityToggleBtn.addEventListener('click', () => {
+      // Cycle through modes: tiles -> h264 -> hybrid -> tiles
+      const modes = ['tiles', 'h264', 'hybrid'];
+      const modeNames = { tiles: 'JPEG Tiles', h264: 'H.264', hybrid: 'Hybrid' };
+      const currentIndex = modes.indexOf(currentMode);
+      currentMode = modes[(currentIndex + 1) % modes.length];
+      
+      // Send mode change to agent
+      if (typeof sendControlEvent === 'function') {
+        sendControlEvent({
+          type: 'set_mode',
+          mode: currentMode
+        });
+        console.log(`🎬 Switched to ${modeNames[currentMode]} mode`);
+        
+        // Update button tooltip
+        qualityToggleBtn.title = `Mode: ${modeNames[currentMode]} (click to change)`;
+      }
+    });
+  }
 }
 
 function subscribeToRealtime() {

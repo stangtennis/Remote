@@ -47,7 +47,7 @@
             <!-- Preview Screen -->
             <div class="preview-screen" id="previewScreen">
               <video id="previewVideo" autoplay playsinline></video>
-              <canvas id="previewCanvas"></canvas>
+              <canvas id="previewCanvas" tabindex="0"></canvas>
               
               <!-- Fullscreen Toggle Button -->
               <button class="fullscreen-toggle" id="fullscreenToggle" title="Toggle Fullscreen (F11)">⛶</button>
@@ -88,7 +88,7 @@
                 <button class="toolbar-btn" title="Clipboard Sync">📋</button>
                 <button class="toolbar-btn" title="File Transfer">📁</button>
                 <button class="toolbar-btn" title="Screenshot">📸</button>
-                <button class="toolbar-btn" title="Quality">🎚️</button>
+                <button class="toolbar-btn" id="qualityToggleBtn" title="Toggle H264/JPEG mode">🎚️</button>
               </div>
               <div class="toolbar-right">
                 <span class="connection-stats">
