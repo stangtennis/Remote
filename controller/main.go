@@ -22,17 +22,20 @@ import (
 )
 
 const (
-	Version     = "v2.56.2"
-	BuildDate   = "2025-12-11"
+	Version     = "v2.56.6"
+	BuildDate   = "2025-12-12"
 	VersionInfo = Version + " (" + BuildDate + ")"
 )
 
 var (
-	supabaseClient *supabase.Client
-	currentUser    *supabase.User
-	myApp          fyne.App
-	myWindow       fyne.Window
-	appSettings    *settings.Settings
+	supabaseClient        *supabase.Client
+	currentUser           *supabase.User
+	myApp                 fyne.App
+	myWindow              fyne.Window
+	appSettings           *settings.Settings
+	devicesData           []supabase.Device
+	deviceListWidget      *widget.List
+	refreshPendingDevices func()
 )
 
 func main() {
@@ -133,14 +136,11 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	statusLabel.Alignment = fyne.TextAlignCenter
 
 	// Device list (will be populated after login)
-	var deviceListWidget *widget.List
-	var devicesData []supabase.Device
 	var loginButton *widget.Button
 	var loginForm *fyne.Container
 	var loggedInContainer *fyne.Container
 	var pendingDevicesWidget *widget.List
 	var pendingDevicesData []supabase.Device
-	var refreshPendingDevices func()
 
 	// Try to load saved credentials
 	savedCreds, err := credentials.Load()
@@ -258,6 +258,8 @@ func createModernUI(window fyne.Window) *fyne.Container {
 					loggedInContainer.Show()
 					// Also refresh pending devices
 					refreshPendingDevices()
+					// Start periodic device refresh (every 10 seconds)
+					startDeviceRefreshTicker()
 				})
 			}
 		}()
@@ -266,6 +268,8 @@ func createModernUI(window fyne.Window) *fyne.Container {
 
 	// Logout button
 	logoutButton := widget.NewButton("Logout", func() {
+		// Stop device refresh ticker
+		stopDeviceRefreshTicker()
 		currentUser = nil
 		devicesData = nil
 		if deviceListWidget != nil {
@@ -957,4 +961,77 @@ func restartApplication() {
 		// Exit current instance
 		myApp.Quit()
 	}()
+}
+
+// Device refresh ticker for automatic status updates
+var deviceRefreshTicker *time.Ticker
+var deviceRefreshStop chan bool
+
+func startDeviceRefreshTicker() {
+	// Stop any existing ticker
+	stopDeviceRefreshTicker()
+	
+	deviceRefreshTicker = time.NewTicker(10 * time.Second)
+	deviceRefreshStop = make(chan bool)
+	
+	go func() {
+		logger.Info("📡 Started device refresh ticker (every 10 seconds)")
+		for {
+			select {
+			case <-deviceRefreshTicker.C:
+				if currentUser == nil {
+					continue
+				}
+				// Fetch updated device list
+				devices, err := supabaseClient.GetDevices(currentUser.ID)
+				if err != nil {
+					logger.Debug("Device refresh failed: %v", err)
+					continue
+				}
+				
+				// Check if any device status changed
+				statusChanged := false
+				if len(devices) != len(devicesData) {
+					statusChanged = true
+				} else {
+					for i, d := range devices {
+						if i < len(devicesData) && d.Status != devicesData[i].Status {
+							statusChanged = true
+							logger.Info("📡 Device %s status changed: %s -> %s", d.DeviceName, devicesData[i].Status, d.Status)
+							break
+						}
+					}
+				}
+				
+				devicesData = devices
+				if statusChanged && deviceListWidget != nil {
+					fyne.Do(func() {
+						deviceListWidget.Refresh()
+						logger.Debug("Device list refreshed: %d devices", len(devices))
+					})
+				}
+				
+				// Also refresh pending devices
+				refreshPendingDevices()
+				
+			case <-deviceRefreshStop:
+				logger.Info("📡 Device refresh ticker stopped")
+				return
+			}
+		}
+	}()
+}
+
+func stopDeviceRefreshTicker() {
+	if deviceRefreshTicker != nil {
+		deviceRefreshTicker.Stop()
+		deviceRefreshTicker = nil
+	}
+	if deviceRefreshStop != nil {
+		select {
+		case deviceRefreshStop <- true:
+		default:
+		}
+		deviceRefreshStop = nil
+	}
 }
