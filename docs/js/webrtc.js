@@ -787,10 +787,20 @@ function displayVideoFrame(data) {
   // Check if data looks like JPEG (starts with 0xFF 0xD8)
   let isJpeg = false;
   let headerHex = '';
+  let jpegData = data;
+  
   if (data instanceof ArrayBuffer && data.byteLength > 10) {
     const header = new Uint8Array(data, 0, 10);
     isJpeg = header[0] === 0xFF && header[1] === 0xD8;
     headerHex = Array.from(header).map(b => b.toString(16).padStart(2, '0')).join(' ');
+    
+    // Check for 4-byte prefix before JPEG (agent sends frame type prefix)
+    if (!isJpeg && header[4] === 0xFF && header[5] === 0xD8) {
+      // Skip 4-byte prefix
+      jpegData = data.slice(4);
+      isJpeg = true;
+      console.log('📷 Stripped 4-byte prefix from frame');
+    }
   }
   
   console.log(`📷 Frame received: ${dataSize} bytes, isJPEG: ${isJpeg}, header: ${headerHex}`);
@@ -801,7 +811,7 @@ function displayVideoFrame(data) {
   }
   
   // Convert data to blob if it's an ArrayBuffer
-  const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
+  const blob = jpegData instanceof Blob ? jpegData : new Blob([jpegData], { type: 'image/jpeg' });
   
   // Create image from blob
   const img = new Image();
