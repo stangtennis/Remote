@@ -501,7 +501,7 @@ let inputEventHandlers = {};
 
 function setupInputCapture() {
   const remoteVideo = document.getElementById('remoteVideo');
-  const remoteCanvas = document.getElementById('remoteCanvas');
+  const remoteCanvas = document.getElementById('remoteCanvas') || document.getElementById('previewCanvas');
   const target = remoteCanvas || remoteVideo;
 
   if (!target) return;
@@ -512,6 +512,10 @@ function setupInputCapture() {
     return;
   }
   inputListenersAttached = true;
+  
+  // Focus canvas for keyboard input
+  target.focus();
+  console.log('🎯 Canvas focused for keyboard input');
 
   // Prevent context menu
   const contextMenuHandler = (e) => {
@@ -685,6 +689,9 @@ function sendControlEvent(event) {
     dataChannel.send(JSON.stringify(event));
   }
 }
+
+// Export for use in other modules
+window.sendControlEvent = sendControlEvent;
 
 async function updateConnectionStats() {
   if (!peerConnection) return;
