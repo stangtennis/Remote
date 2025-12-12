@@ -159,3 +159,48 @@ func (c *DXGICapturer) Close() error {
 	}
 	return nil
 }
+
+// Reinitialize recreates the DXGI capture after desktop change (screensaver, lock, etc.)
+func (c *DXGICapturer) Reinitialize() error {
+	// Close existing handle
+	if c.handle != nil {
+		C.CloseDXGI(c.handle)
+		c.handle = nil
+	}
+
+	// Create new handle
+	handle := C.InitDXGI()
+	if handle == nil {
+		return fmt.Errorf("failed to reinitialize DXGI capture")
+	}
+
+	c.handle = handle
+	c.width = int(handle.width)
+	c.height = int(handle.height)
+	// Keep lastFrame cache for smooth transition
+
+	return nil
+}
+
+// NeedsReinit returns true if error code indicates DXGI needs reinitialization
+func NeedsReinit(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	// Error -2 is AcquireNextFrame failed (desktop changed)
+	return contains(errStr, "AcquireNextFrame failed") || contains(errStr, "error -2")
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
