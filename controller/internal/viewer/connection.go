@@ -99,10 +99,16 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 		}
 	})
 
-	// Create peer connection with STUN servers
+	// Create peer connection with STUN and TURN servers
 	iceServers := []webrtc.ICEServer{
 		{URLs: []string{"stun:stun.l.google.com:19302"}},
 		{URLs: []string{"stun:stun1.l.google.com:19302"}},
+		// TURN server for relay when direct connection fails (NAT traversal)
+		{
+			URLs:       []string{"turn:188.228.14.94:3478", "turn:188.228.14.94:3478?transport=tcp"},
+			Username:   "remotedesktop",
+			Credential: "Hawkeye2025Turn!",
+		},
 	}
 
 	if err := client.CreatePeerConnection(iceServers); err != nil {
