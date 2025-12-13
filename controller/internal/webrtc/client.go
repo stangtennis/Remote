@@ -125,26 +125,48 @@ func (c *Client) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 
 	// Handle incoming tracks (H.264 video)
 	pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		log.Printf("📺 Received track: %s (codec: %s)", track.Kind().String(), track.Codec().MimeType)
+		codecMime := track.Codec().MimeType
+		log.Printf("📺 Received track: %s (codec: %s)", track.Kind().String(), codecMime)
 		
 		if track.Kind() == webrtc.RTPCodecTypeVideo {
-			c.videoTrack = track
-			c.h264Receiving = true
-			log.Println("🎬 H.264 video track received - starting decoder")
-			
-			// Start H.264 RTP receiver goroutine
-			go c.receiveH264Track(track)
+			// Only start H.264 decoder for H.264 tracks
+			if codecMime == webrtc.MimeTypeH264 {
+				c.videoTrack = track
+				c.h264Receiving = true
+				log.Println("🎬 H.264 video track received - starting decoder")
+				
+				// Start H.264 RTP receiver goroutine
+				go c.receiveH264Track(track)
+			} else {
+				log.Printf("⚠️ Ignoring non-H.264 video track: %s", codecMime)
+			}
 		}
 	})
 
-	// Handle data channel from remote
+	// Handle data channel from remote - route by label like agent does
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 		log.Printf("📡 Data channel opened: %s", dc.Label())
-		c.dataChannel = dc
 
-		dc.OnMessage(func(msg webrtc.DataChannelMessage) {
-			c.handleDataChannelMessage(msg.Data)
-		})
+		// Route to appropriate handler based on channel label
+		switch dc.Label() {
+		case "control":
+			log.Println("🎮 Control channel ready (low-latency input)")
+			c.controlChannel = dc
+			dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+				c.handleDataChannelMessage(msg.Data)
+			})
+		case "video":
+			log.Println("🎬 Video channel ready (unreliable, low-latency)")
+			dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+				c.handleDataChannelMessage(msg.Data)
+			})
+		default:
+			// Default data channel for general messages
+			c.dataChannel = dc
+			dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+				c.handleDataChannelMessage(msg.Data)
+			})
+		}
 	})
 
 	return nil
@@ -236,16 +258,17 @@ func (c *Client) CreateOffer() (string, error) {
 		return "", fmt.Errorf("failed to set local description: %w", err)
 	}
 
-	// Trickle-ICE: Wait max 2 seconds for ICE gathering, then proceed
-	// This speeds up connection significantly vs waiting for full gathering
-	log.Println("⏳ ICE gathering (trickle-ICE, max 2s)...")
+	// Semi-trickle ICE: Wait max 5 seconds for ICE gathering, then proceed
+	// 5s gives TURN/relay candidates time to gather (important for NAT traversal)
+	// while still being faster than full gathering which can take 10-30s
+	log.Println("⏳ ICE gathering (semi-trickle, max 5s)...")
 	
 	gatherComplete := webrtc.GatheringCompletePromise(c.peerConnection)
 	select {
 	case <-gatherComplete:
 		log.Println("✅ ICE gathering complete!")
-	case <-time.After(2 * time.Second):
-		log.Println("⚡ Trickle-ICE: Proceeding with partial candidates (faster connect)")
+	case <-time.After(5 * time.Second):
+		log.Println("⚡ Semi-trickle ICE: Proceeding with gathered candidates (5s timeout)")
 	}
 
 	// Get the offer with gathered ICE candidates
@@ -451,6 +474,13 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 				completeFrame = append(completeFrame, c.frameChunks[totalChunks][i]...)
 			}
 			delete(c.frameChunks, totalChunks)
+
+			// GC: Clean up stale incomplete frames (older than 100 frame IDs)
+			for id := range c.frameChunks {
+				if totalChunks-id > 100 || id-totalChunks > 100 {
+					delete(c.frameChunks, id)
+				}
+			}
 			c.frameChunksMu.Unlock()
 
 			if c.onFrame != nil {

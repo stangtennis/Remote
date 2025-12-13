@@ -882,6 +882,10 @@ func (v *Viewer) handleDataChannelMessage(msg []byte) {
 				v.UpdateStats(int(fps), int(rtt))
 			}
 		}
+
+	case "file_transfer_start", "file_transfer_chunk", "file_transfer_complete", "file_transfer_error":
+		// Route file transfer messages to handler
+		v.HandleFileTransferData(msg)
 	}
 }
 

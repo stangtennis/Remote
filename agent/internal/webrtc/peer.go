@@ -417,7 +417,25 @@ func (m *Manager) setupControlChannelHandlers(dc *webrtc.DataChannel) {
 			return
 		}
 
-		// Only handle input events on control channel
+		// Check for clipboard messages from controller
+		if msgType, ok := event["type"].(string); ok {
+			switch msgType {
+			case "clipboard_text":
+				if content, ok := event["content"].(string); ok {
+					log.Printf("📋 Received clipboard text from controller (%d bytes)", len(content))
+					m.handleClipboardText(content)
+				}
+				return
+			case "clipboard_image":
+				if contentB64, ok := event["content"].(string); ok {
+					log.Printf("📋 Received clipboard image from controller")
+					m.handleClipboardImage(contentB64)
+				}
+				return
+			}
+		}
+
+		// Handle input events on control channel
 		m.handleInputEvent(event)
 	})
 }
@@ -683,6 +701,41 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 		// Send key with modifiers
 		if err := m.keyController.SendKeyWithModifiers(code, down, ctrl, shift, alt); err != nil {
 			log.Printf("Key event error: %v", err)
+		}
+	}
+}
+
+// handleClipboardText handles incoming clipboard text from controller
+func (m *Manager) handleClipboardText(content string) {
+	if m.clipboardReceiver == nil {
+		m.clipboardReceiver = clipboard.NewReceiver()
+	}
+	if err := m.clipboardReceiver.SetText(content); err != nil {
+		log.Printf("❌ Failed to set clipboard text on agent: %v", err)
+	} else {
+		log.Println("✅ Clipboard text set on agent")
+		if m.clipboardMonitor != nil {
+			m.clipboardMonitor.RememberText(content)
+		}
+	}
+}
+
+// handleClipboardImage handles incoming clipboard image from controller
+func (m *Manager) handleClipboardImage(contentB64 string) {
+	imageData, err := base64.StdEncoding.DecodeString(contentB64)
+	if err != nil {
+		log.Printf("❌ Failed to decode clipboard image: %v", err)
+		return
+	}
+	if m.clipboardReceiver == nil {
+		m.clipboardReceiver = clipboard.NewReceiver()
+	}
+	if err := m.clipboardReceiver.SetImage(imageData); err != nil {
+		log.Printf("❌ Failed to set clipboard image on agent: %v", err)
+	} else {
+		log.Println("✅ Clipboard image set on agent")
+		if m.clipboardMonitor != nil {
+			m.clipboardMonitor.RememberImage(imageData)
 		}
 	}
 }
