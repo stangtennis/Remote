@@ -5,12 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Remote Desktop - Login</title>
   <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body class="login-page">
+  <!-- Animated Background -->
+  <div class="animated-bg">
+    <div class="gradient-orb orb-1"></div>
+    <div class="gradient-orb orb-2"></div>
+    <div class="gradient-orb orb-3"></div>
+  </div>
+
   <div class="login-container">
-    <div class="login-card">
-      <h1>🖥️ Remote Desktop</h1>
-      <p class="subtitle">Secure remote access powered by Supabase & WebRTC</p>
+    <div class="login-card glass-card">
+      <div class="login-logo">
+        <div class="logo-glow"></div>
+        <span class="logo-icon">🖥️</span>
+      </div>
+      <h1>Remote Desktop</h1>
+      <p class="subtitle">Secure remote access powered by <span class="highlight">Supabase</span> & <span class="highlight">WebRTC</span></p>
 
       <!-- Login Form -->
       <form id="loginForm" class="auth-form">
@@ -59,7 +71,10 @@
 
       <!-- Footer -->
       <div class="login-footer">
-        <p>🔒 All connections are encrypted end-to-end</p>
+        <div class="security-badges">
+          <span class="badge"><i class="fas fa-lock"></i> End-to-End Encrypted</span>
+          <span class="badge"><i class="fas fa-bolt"></i> WebRTC Powered</span>
+        </div>
       </div>
     </div>
   </div>
