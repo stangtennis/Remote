@@ -7,7 +7,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/pkg/intervalpli"
+	"github.com/pion/rtp/codecs"
 	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v3/pkg/media/samplebuilder"
 )
 
 // Client represents a WebRTC client for the controller
@@ -17,6 +21,7 @@ type Client struct {
 	controlChannel       *webrtc.DataChannel // Separate channel for input (low latency)
 	videoTrack           *webrtc.TrackRemote
 	onFrame              func([]byte)
+	onH264Frame          func([]byte) // Callback for decoded H.264 frames
 	onConnected          func()
 	onDisconnected       func()
 	onDataChannelMessage func([]byte)
@@ -31,6 +36,11 @@ type Client struct {
 	lastPingTime time.Time
 	lastRTT      time.Duration
 	onRTTUpdate  func(time.Duration)
+
+	// H.264 decoding
+	h264Decoder   *H264Decoder
+	useH264       bool
+	h264Receiving bool
 }
 
 // NewClient creates a new WebRTC client
@@ -41,13 +51,48 @@ func NewClient() (*Client, error) {
 	}, nil
 }
 
-// CreatePeerConnection initializes the peer connection
+// CreatePeerConnection initializes the peer connection with H.264 video support
 func (c *Client) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
+	// Create MediaEngine with H.264 codec support
+	m := &webrtc.MediaEngine{}
+	
+	// Register H.264 codec (baseline profile for compatibility)
+	if err := m.RegisterCodec(webrtc.RTPCodecParameters{
+		RTPCodecCapability: webrtc.RTPCodecCapability{
+			MimeType:    webrtc.MimeTypeH264,
+			ClockRate:   90000,
+			SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
+		},
+		PayloadType: 96,
+	}, webrtc.RTPCodecTypeVideo); err != nil {
+		log.Printf("⚠️ Failed to register H.264 codec: %v", err)
+	}
+
+	// Create interceptor registry for PLI (Picture Loss Indication)
+	i := &interceptor.Registry{}
+	
+	// Add PLI interceptor to request keyframes
+	pliFactory, err := intervalpli.NewReceiverInterceptor()
+	if err != nil {
+		log.Printf("⚠️ Failed to create PLI interceptor: %v", err)
+	} else {
+		i.Add(pliFactory)
+	}
+
+	// Use default interceptors
+	if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
+		log.Printf("⚠️ Failed to register default interceptors: %v", err)
+	}
+
+	// Create API with custom MediaEngine
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(i))
+
 	config := webrtc.Configuration{
 		ICEServers: iceServers,
 	}
 
-	pc, err := webrtc.NewPeerConnection(config)
+	// Use custom API to create peer connection
+	pc, err := api.NewPeerConnection(config)
 	if err != nil {
 		return fmt.Errorf("failed to create peer connection: %w", err)
 	}
@@ -78,13 +123,18 @@ func (c *Client) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 		}
 	})
 
-	// Handle incoming tracks (video)
+	// Handle incoming tracks (H.264 video)
 	pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		log.Printf("📺 Received track: %s", track.Kind().String())
-		c.videoTrack = track
-
-		// This would be for RTP video, but we're using data channel for JPEG
-		// Keep for future H.264 implementation
+		log.Printf("📺 Received track: %s (codec: %s)", track.Kind().String(), track.Codec().MimeType)
+		
+		if track.Kind() == webrtc.RTPCodecTypeVideo {
+			c.videoTrack = track
+			c.h264Receiving = true
+			log.Println("🎬 H.264 video track received - starting decoder")
+			
+			// Start H.264 RTP receiver goroutine
+			go c.receiveH264Track(track)
+		}
 	})
 
 	// Handle data channel from remote
@@ -164,6 +214,17 @@ func (c *Client) CreateOffer() (string, error) {
 			c.handleDataChannelMessage(msg.Data)
 		})
 		log.Println("🎬 Video channel created (ordered=false, maxRetransmits=0)")
+	}
+
+	// Add video transceiver for H.264 (recvonly) - enables agent to send video track
+	// This is critical for H.264 support without renegotiation
+	_, err = c.peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo, webrtc.RTPTransceiverInit{
+		Direction: webrtc.RTPTransceiverDirectionRecvonly,
+	})
+	if err != nil {
+		log.Printf("⚠️ Failed to add video transceiver: %v", err)
+	} else {
+		log.Println("📺 Video transceiver added (recvonly) - H.264 ready")
 	}
 
 	offer, err := c.peerConnection.CreateOffer(nil)
@@ -480,4 +541,93 @@ func (c *Client) SetOnRTTUpdate(callback func(time.Duration)) {
 // GetLastRTT returns the last measured RTT
 func (c *Client) GetLastRTT() time.Duration {
 	return c.lastRTT
+}
+
+// receiveH264Track receives H.264 RTP packets and decodes them
+func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("❌ receiveH264Track panic: %v", r)
+		}
+		c.h264Receiving = false
+	}()
+
+	log.Printf("🎬 Starting H.264 receiver (codec: %s, SSRC: %d)", track.Codec().MimeType, track.SSRC())
+
+	// Create sample builder for H.264 depacketization
+	// Max late is 50 packets (about 1.5 seconds at 30fps)
+	sb := samplebuilder.New(50, &codecs.H264Packet{}, track.Codec().ClockRate)
+
+	// Start FFmpeg decoder if not already running
+	if c.h264Decoder == nil {
+		var err error
+		c.h264Decoder, err = NewH264Decoder(func(jpegData []byte) {
+			// Forward decoded JPEG frame to onFrame callback
+			if c.onFrame != nil {
+				c.onFrame(jpegData)
+			}
+		})
+		if err != nil {
+			log.Printf("❌ Failed to start H.264 decoder: %v", err)
+			log.Println("⚠️ Falling back to JPEG datachannel mode")
+			return
+		}
+	}
+
+	// Read RTP packets and decode
+	for {
+		// Read RTP packet
+		rtpPacket, _, err := track.ReadRTP()
+		if err != nil {
+			if err.Error() != "EOF" {
+				log.Printf("⚠️ RTP read error: %v", err)
+			}
+			break
+		}
+
+		// Push to sample builder
+		sb.Push(rtpPacket)
+
+		// Pop complete samples (access units)
+		for {
+			sample := sb.Pop()
+			if sample == nil {
+				break
+			}
+
+			// Ensure Annex-B format and send to decoder
+			annexB := EnsureAnnexB(sample.Data)
+			if err := c.h264Decoder.DecodeAnnexB(annexB); err != nil {
+				log.Printf("⚠️ Decode error: %v", err)
+			}
+		}
+	}
+
+	log.Println("🎬 H.264 receiver stopped")
+}
+
+// SetOnH264Frame sets the callback for decoded H.264 frames
+func (c *Client) SetOnH264Frame(callback func([]byte)) {
+	c.onH264Frame = callback
+}
+
+// EnableH264 enables or disables H.264 mode
+func (c *Client) EnableH264(enable bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.useH264 = enable
+	log.Printf("🎬 H.264 mode: %v", enable)
+}
+
+// IsH264Receiving returns whether H.264 video is being received
+func (c *Client) IsH264Receiving() bool {
+	return c.h264Receiving
+}
+
+// StopH264Decoder stops the H.264 decoder
+func (c *Client) StopH264Decoder() {
+	if c.h264Decoder != nil {
+		c.h264Decoder.Stop()
+		c.h264Decoder = nil
+	}
 }
