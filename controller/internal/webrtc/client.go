@@ -147,6 +147,25 @@ func (c *Client) CreateOffer() (string, error) {
 		log.Println("🎮 Control channel created (ordered=false, maxRetransmits=0)")
 	}
 
+	// Create video channel for low-latency video (unreliable, unordered)
+	// This avoids head-of-line blocking when packets are lost
+	videoOpts := &webrtc.DataChannelInit{
+		Ordered:        &ordered,
+		MaxRetransmits: &maxRetransmits,
+	}
+	vc, err := c.peerConnection.CreateDataChannel("video", videoOpts)
+	if err != nil {
+		log.Printf("⚠️ Failed to create video channel: %v (using data channel for video)", err)
+	} else {
+		vc.OnOpen(func() {
+			log.Println("🎬 Video channel OPENED (unreliable, low-latency)")
+		})
+		vc.OnMessage(func(msg webrtc.DataChannelMessage) {
+			c.handleDataChannelMessage(msg.Data)
+		})
+		log.Println("🎬 Video channel created (ordered=false, maxRetransmits=0)")
+	}
+
 	offer, err := c.peerConnection.CreateOffer(nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create offer: %w", err)
