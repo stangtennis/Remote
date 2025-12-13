@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="da">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Panel - Remote Desktop</title>
+  <title>Adminpanel - Fjernskrivebord</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
@@ -18,10 +18,10 @@
   <div class="admin-container">
     <!-- Header -->
     <div class="admin-header">
-      <h1>🔐 Admin Panel</h1>
+      <h1>🔐 Adminpanel</h1>
       <div class="header-actions">
-        <button onclick="window.location.href='dashboard.html'" class="btn btn-secondary btn-sm">← Dashboard</button>
-        <button onclick="logout()" class="btn btn-secondary btn-sm">Logout</button>
+        <button onclick="window.location.href='dashboard.html'" class="btn btn-secondary btn-sm">← Kontrolpanel</button>
+        <button onclick="logout()" class="btn btn-secondary btn-sm">Log ud</button>
       </div>
     </div>
 
@@ -32,10 +32,10 @@
 
     <!-- Tabs -->
     <div class="admin-tabs">
-      <button onclick="showTab('users')" id="tabUsers" class="admin-tab active">👥 User Approvals</button>
-      <button onclick="showTab('devices')" id="tabDevices" class="admin-tab">📱 Device Management</button>
-      <button onclick="showTab('invites')" id="tabInvites" class="admin-tab">✉️ Invitations</button>
-      <button onclick="showTab('transfers')" id="tabTransfers" class="admin-tab" style="display: none;">🔄 Device Transfers</button>
+      <button onclick="showTab('users')" id="tabUsers" class="admin-tab active">👥 Brugergodkendelser</button>
+      <button onclick="showTab('devices')" id="tabDevices" class="admin-tab">📱 Enhedsstyring</button>
+      <button onclick="showTab('invites')" id="tabInvites" class="admin-tab">✉️ Invitationer</button>
+      <button onclick="showTab('transfers')" id="tabTransfers" class="admin-tab" style="display: none;">🔄 Enhedsoverførsler</button>
     </div>
 
     <!-- Users Tab -->
@@ -44,23 +44,23 @@
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-number" id="totalUsers">0</div>
-          <div class="stat-label">Total Users</div>
+          <div class="stat-label">Brugere i alt</div>
         </div>
         <div class="stat-card warning">
           <div class="stat-number" id="pendingUsers">0</div>
-          <div class="stat-label">Pending Approval</div>
+          <div class="stat-label">Afventer godkendelse</div>
         </div>
         <div class="stat-card success">
           <div class="stat-number" id="approvedUsers">0</div>
-          <div class="stat-label">Approved Users</div>
+          <div class="stat-label">Godkendte brugere</div>
         </div>
       </div>
 
       <!-- Filters -->
       <div class="filter-tabs">
-        <button onclick="filterUsers('all')" class="filter-tab active" id="filterAll">All Users</button>
-        <button onclick="filterUsers('pending')" class="filter-tab" id="filterPending">Pending</button>
-        <button onclick="filterUsers('approved')" class="filter-tab" id="filterApproved">Approved</button>
+        <button onclick="filterUsers('all')" class="filter-tab active" id="filterAll">Alle brugere</button>
+        <button onclick="filterUsers('pending')" class="filter-tab" id="filterPending">Afventende</button>
+        <button onclick="filterUsers('approved')" class="filter-tab" id="filterApproved">Godkendte</button>
       </div>
 
       <!-- Users List -->
@@ -73,11 +73,11 @@
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-number" id="totalDevices">0</div>
-          <div class="stat-label">Total Devices</div>
+          <div class="stat-label">Enheder i alt</div>
         </div>
         <div class="stat-card warning">
           <div class="stat-number" id="unassignedDevices">0</div>
-          <div class="stat-label">Unassigned</div>
+          <div class="stat-label">Ikke tildelt</div>
         </div>
         <div class="stat-card success">
           <div class="stat-number" id="onlineDevices">0</div>
@@ -87,9 +87,9 @@
 
       <!-- Device Filters -->
       <div class="filter-tabs">
-        <button onclick="filterDevices('all')" class="filter-tab active" id="filterAllDevices">All Devices</button>
-        <button onclick="filterDevices('unassigned')" class="filter-tab" id="filterUnassigned">Unassigned</button>
-        <button onclick="filterDevices('assigned')" class="filter-tab" id="filterAssigned">Assigned</button>
+        <button onclick="filterDevices('all')" class="filter-tab active" id="filterAllDevices">Alle enheder</button>
+        <button onclick="filterDevices('unassigned')" class="filter-tab" id="filterUnassigned">Ikke tildelt</button>
+        <button onclick="filterDevices('assigned')" class="filter-tab" id="filterAssigned">Tildelt</button>
       </div>
 
       <!-- Devices List -->
@@ -99,51 +99,51 @@
     <!-- Invitations Tab -->
     <div id="invitesTab" class="tab-content" style="display: none;">
       <div class="invite-section">
-        <h3>📨 Send Invitation</h3>
+        <h3>📨 Send invitation</h3>
         <div class="invite-form">
           <div class="form-group">
-            <label for="inviteEmail">Email Address</label>
+            <label for="inviteEmail">E-mailadresse</label>
             <input type="email" id="inviteEmail" class="input" placeholder="user@example.com">
           </div>
           <div class="form-group">
-            <label for="inviteRole">Role</label>
+            <label for="inviteRole">Rolle</label>
             <select id="inviteRole" class="input">
-              <option value="user">User</option>
-              <option value="admin" id="adminRoleOption" style="display: none;">Admin</option>
+              <option value="user">Bruger</option>
+              <option value="admin" id="adminRoleOption" style="display: none;">Administrator</option>
             </select>
           </div>
-          <button onclick="sendInvitation()" class="btn btn-primary">Send Invitation</button>
+          <button onclick="sendInvitation()" class="btn btn-primary">Send invitation</button>
         </div>
       </div>
       
-      <h3 style="margin-top: 2rem;">📋 Sent Invitations</h3>
+      <h3 style="margin-top: 2rem;">📋 Sendte invitationer</h3>
       <div id="invitationsList"></div>
     </div>
 
     <!-- Device Transfers Tab (Super Admin Only) -->
     <div id="transfersTab" class="tab-content" style="display: none;">
-      <h3>🔄 Transfer Device to Another Admin</h3>
+      <h3>🔄 Overfør enhed til en anden administrator</h3>
       <div class="transfer-form">
         <div class="form-group">
-          <label for="transferDevice">Select Device</label>
+          <label for="transferDevice">Vælg enhed</label>
           <select id="transferDevice" class="input">
-            <option value="">Select a device...</option>
+            <option value="">Vælg en enhed...</option>
           </select>
         </div>
         <div class="form-group">
-          <label for="transferToUser">Transfer To</label>
+          <label for="transferToUser">Overfør til</label>
           <select id="transferToUser" class="input">
-            <option value="">Select a user...</option>
+            <option value="">Vælg en bruger...</option>
           </select>
         </div>
         <div class="form-group">
-          <label for="transferReason">Reason (optional)</label>
-          <input type="text" id="transferReason" class="input" placeholder="Why are you transferring this device?">
+          <label for="transferReason">Årsag (valgfri)</label>
+          <input type="text" id="transferReason" class="input" placeholder="Hvorfor overfører du denne enhed?">
         </div>
-        <button onclick="transferDevice()" class="btn btn-primary">Transfer Device</button>
+        <button onclick="transferDevice()" class="btn btn-primary">Overfør enhed</button>
       </div>
       
-      <h3 style="margin-top: 2rem;">📜 Transfer History</h3>
+      <h3 style="margin-top: 2rem;">📜 Overførselshistorik</h3>
       <div id="transferHistory"></div>
     </div>
   </div>
@@ -151,23 +151,23 @@
   <!-- Assignment Modal -->
   <div id="assignModal" class="modal" style="display: none;">
     <div class="modal-content">
-      <h3>Assign Device</h3>
+      <h3>Tildel enhed</h3>
       <div class="modal-body">
         <div id="modalDeviceName" style="margin-bottom: 1rem; font-weight: 600;"></div>
         <div class="form-group">
-          <label for="userSelect">Assign to User</label>
+          <label for="userSelect">Tildel til bruger</label>
           <select id="userSelect" class="form-group input" style="width: 100%; padding: 0.75rem; background: var(--background); border: 1px solid var(--border); border-radius: 8px; color: var(--text);">
             <option value="">Select a user...</option>
           </select>
         </div>
         <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
           <input type="checkbox" id="approveDevice" checked>
-          <span>Approve device for use</span>
+          <span>Godkend enhed til brug</span>
         </label>
       </div>
       <div class="modal-actions">
-        <button onclick="closeAssignModal()" class="btn btn-secondary">Cancel</button>
-        <button onclick="confirmAssignment()" class="btn btn-primary">Assign Device</button>
+        <button onclick="closeAssignModal()" class="btn btn-secondary">Annuller</button>
+        <button onclick="confirmAssignment()" class="btn btn-primary">Tildel enhed</button>
       </div>
     </div>
   </div>

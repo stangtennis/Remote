@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="da">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Remote Desktop - Dashboard</title>
+  <title>Fjernskrivebord - Kontrolpanel</title>
   <link rel="stylesheet" href="css/styles.css?v=20251213">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
@@ -17,11 +17,11 @@
   <!-- Header -->
   <header class="dashboard-header">
     <div class="header-content">
-      <h1>🖥️ Remote Desktop</h1>
+      <h1>🖥️ Fjernskrivebord</h1>
       <div class="header-actions">
-        <a href="admin.html" id="adminLink" class="btn btn-secondary" style="margin-right: 10px; display: none;">🔐 Admin Panel</a>
+        <a href="admin.html" id="adminLink" class="btn btn-secondary" style="margin-right: 10px; display: none;">🔐 Adminpanel</a>
         <span id="userEmail" class="user-info"></span>
-        <button id="logoutBtn" class="btn btn-secondary">Logout</button>
+        <button id="logoutBtn" class="btn btn-secondary">Log ud</button>
       </div>
     </div>
   </header>
@@ -35,10 +35,10 @@
         <!-- Remote Preview Window -->
         <section class="remote-preview-section">
           <div class="section-header">
-            <h2>Remote Sessions</h2>
+            <h2>Fjernsessioner</h2>
             <div class="preview-controls">
-              <button id="previewFullscreenBtn" class="btn btn-icon" title="Fullscreen">⛶</button>
-              <button id="previewSettingsBtn" class="btn btn-icon" title="Settings">⚙️</button>
+              <button id="previewFullscreenBtn" class="btn btn-icon" title="Fuldskærm">⛶</button>
+              <button id="previewSettingsBtn" class="btn btn-icon" title="Indstillinger">⚙️</button>
             </div>
           </div>
           
@@ -47,7 +47,7 @@
             <div class="tabs-container" id="tabsContainer">
               <!-- Tabs will be added dynamically -->
             </div>
-            <button class="tab-add-btn" id="tabAddBtn" title="Connect to another device" style="display: none;">+</button>
+            <button class="tab-add-btn" id="tabAddBtn" title="Opret forbindelse til en anden enhed" style="display: none;">+</button>
           </div>
           
           <div class="remote-preview-container" id="remotePreviewContainer">
@@ -57,18 +57,18 @@
               <canvas id="previewCanvas" tabindex="0"></canvas>
               
               <!-- Fullscreen Toggle Button -->
-              <button class="fullscreen-toggle" id="fullscreenToggle" title="Toggle Fullscreen (F11)">⛶</button>
+              <button class="fullscreen-toggle" id="fullscreenToggle" title="Skift fuldskærm (F11)">⛶</button>
               
               <!-- Idle State -->
               <div class="preview-idle" id="previewIdle">
                 <div class="preview-idle-content">
                   <div class="preview-icon">🖥️</div>
-                  <h3>No Active Connection</h3>
-                  <p>Select a device below to start a remote session</p>
+                  <h3>Ingen aktiv forbindelse</h3>
+                  <p>Vælg en enhed nedenfor for at starte en fjernsession</p>
                   <div class="preview-features">
-                    <span class="feature-tag">🔒 Encrypted</span>
-                    <span class="feature-tag">⚡ Low Latency</span>
-                    <span class="feature-tag">🎯 Full Control</span>
+                    <span class="feature-tag">🔒 Krypteret</span>
+                    <span class="feature-tag">⚡ Lav forsinkelse</span>
+                    <span class="feature-tag">🎯 Fuld kontrol</span>
                   </div>
                 </div>
               </div>
@@ -80,7 +80,7 @@
                   <div class="connecting-ring"></div>
                   <div class="connecting-ring"></div>
                 </div>
-                <p>Establishing secure connection...</p>
+                <p>Opretter sikker forbindelse...</p>
                 <span class="connecting-device" id="connectingDeviceName"></span>
               </div>
             </div>
@@ -89,20 +89,20 @@
             <div class="preview-toolbar" id="previewToolbar" style="display: none;">
               <div class="toolbar-left">
                 <span class="connection-indicator online"></span>
-                <span id="connectedDeviceName">Device Name</span>
+                <span id="connectedDeviceName">Enhedsnavn</span>
               </div>
               <div class="toolbar-center">
-                <button class="toolbar-btn" title="Clipboard Sync">📋</button>
-                <button class="toolbar-btn" title="File Transfer">📁</button>
-                <button class="toolbar-btn" title="Screenshot">📸</button>
-                <button class="toolbar-btn" id="qualityToggleBtn" title="Toggle H264/JPEG mode">🎚️</button>
+                <button class="toolbar-btn" title="Synkroniser udklipsholder">📋</button>
+                <button class="toolbar-btn" title="Filøverførsel">📁</button>
+                <button class="toolbar-btn" title="Skærmbillede">📸</button>
+                <button class="toolbar-btn" id="qualityToggleBtn" title="Skift H264/JPEG tilstand">🎚️</button>
               </div>
               <div class="toolbar-right">
                 <span class="connection-stats">
                   <span id="bandwidthStats">-- Mbit/s</span>
                   <span id="previewLatency">-- ms</span>
                 </span>
-                <button id="disconnectBtn" class="btn btn-danger btn-sm">Disconnect</button>
+                <button id="disconnectBtn" class="btn btn-danger btn-sm">Afbryd</button>
               </div>
             </div>
           </div>
@@ -113,7 +113,7 @@
           <div class="stats-grid-mini">
             <div class="stat-mini">
               <span class="stat-mini-value" id="statLatency">--</span>
-              <span class="stat-mini-label">Latency</span>
+              <span class="stat-mini-label">Forsinkelse</span>
             </div>
             <div class="stat-mini">
               <span class="stat-mini-value" id="statFPS">--</span>
@@ -121,11 +121,11 @@
             </div>
             <div class="stat-mini">
               <span class="stat-mini-value" id="statBandwidth">--</span>
-              <span class="stat-mini-label">Bandwidth</span>
+              <span class="stat-mini-label">Båndbredde</span>
             </div>
             <div class="stat-mini">
               <span class="stat-mini-value" id="statResolution">--</span>
-              <span class="stat-mini-label">Resolution</span>
+              <span class="stat-mini-label">Opløsning</span>
             </div>
           </div>
         </section>
@@ -136,7 +136,7 @@
         <!-- Support Queue Section -->
         <section class="queue-section" id="queueSection">
           <div class="section-header">
-            <h2>Support Queue</h2>
+            <h2>Supportkø</h2>
             <span class="queue-badge" id="queueCount">0</span>
           </div>
           
@@ -144,7 +144,7 @@
             <!-- Empty Queue State -->
             <div class="queue-empty" id="queueEmpty">
               <span class="queue-empty-icon">✨</span>
-              <p>No pending support requests</p>
+              <p>Ingen ventende supportanmodninger</p>
             </div>
             
             <!-- Queue Items -->
@@ -155,15 +155,15 @@
           
           <!-- Request Support Button (for users) -->
           <button class="btn btn-primary btn-block" id="requestSupportBtn" style="display: none;">
-            🎫 Request Support
+            🎫 Anmod om support
           </button>
         </section>
 
         <!-- Devices Section -->
         <section class="devices-section">
           <div class="section-header">
-            <h2>Your Devices</h2>
-            <button id="refreshDevicesBtn" class="btn btn-icon" title="Refresh">
+            <h2>Dine enheder</h2>
+            <button id="refreshDevicesBtn" class="btn btn-icon" title="Opdater">
               🔄
             </button>
           </div>
@@ -175,18 +175,18 @@
 
           <!-- Empty State -->
           <div id="emptyState" class="empty-state" style="display: none;">
-            <p>📱 No devices registered yet</p>
-            <p class="muted">Download and run the agent on a computer to get started</p>
+            <p>📱 Ingen enheder registreret endnu</p>
+            <p class="muted">Download og kør agenten på en computer for at komme i gang</p>
             <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <button class="btn btn-primary" id="downloadAgentBtn">📥 Download Agent</button>
-              <button class="btn btn-secondary" id="downloadControllerBtn">🖥️ Download Controller</button>
+              <button class="btn btn-primary" id="downloadAgentBtn">📥 Hent agent</button>
+              <button class="btn btn-secondary" id="downloadControllerBtn">🖥️ Hent controller</button>
             </div>
           </div>
 
           <!-- Loading State -->
           <div id="loadingDevices" class="loading" style="display: none;">
             <div class="spinner"></div>
-            <p>Loading devices...</p>
+            <p>Indlæser enheder...</p>
           </div>
         </section>
       </div>
@@ -195,19 +195,19 @@
     <!-- Active Session Section -->
     <section class="session-section" id="sessionSection" style="display: none;">
       <div class="section-header">
-        <h2>Active Session</h2>
-        <button id="endSessionBtn" class="btn btn-danger">End Session</button>
+        <h2>Aktiv session</h2>
+        <button id="endSessionBtn" class="btn btn-danger">Afslut session</button>
       </div>
 
       <!-- Session Info -->
       <div class="session-info">
         <div class="info-row">
-          <span class="label">Device:</span>
+          <span class="label">Enhed:</span>
           <span id="sessionDeviceName"></span>
         </div>
         <div class="info-row">
           <span class="label">Status:</span>
-          <span id="sessionStatus" class="status-badge">Connecting...</span>
+          <span id="sessionStatus" class="status-badge">Forbinder...</span>
         </div>
         <div class="info-row">
           <span class="label">PIN:</span>
@@ -220,9 +220,9 @@
         <video id="remoteVideo" autoplay playsinline></video>
         <canvas id="remoteCanvas"></canvas>
         <div id="viewerOverlay" class="viewer-overlay">
-          <p>Waiting for connection...</p>
+          <p>Venter på forbindelse...</p>
         </div>
-        <button id="fullscreenBtn" class="fullscreen-btn" title="Fullscreen (F11)">⛶</button>
+        <button id="fullscreenBtn" class="fullscreen-btn" title="Fuldskærm (F11)">⛶</button>
       </div>
 
       <!-- Connection Stats -->
@@ -230,7 +230,7 @@
         <button id="toggleStatsBtn" class="btn btn-icon">📊</button>
         <div id="statsContent" style="display: none;">
           <div class="stat-item">
-            <span class="stat-label">Connection:</span>
+            <span class="stat-label">Forbindelse:</span>
             <span id="statConnectionType">-</span>
           </div>
           <div class="stat-item">
@@ -242,7 +242,7 @@
             <span id="statRtt">-</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Packet Loss:</span>
+            <span class="stat-label">Pakketab:</span>
             <span id="statPacketLoss">-</span>
           </div>
         </div>
@@ -253,12 +253,12 @@
   <!-- PIN Modal -->
   <div id="pinModal" class="modal" style="display: none;">
     <div class="modal-content">
-      <h3>Enter PIN</h3>
-      <p>Enter the PIN displayed on the remote device:</p>
+      <h3>Indtast PIN</h3>
+      <p>Indtast PIN-koden vist på fjernenheden:</p>
       <input type="text" id="pinInput" class="pin-input" placeholder="000000" maxlength="6" pattern="[0-9]{6}">
       <div class="modal-actions">
-        <button id="submitPinBtn" class="btn btn-primary">Connect</button>
-        <button id="cancelPinBtn" class="btn btn-secondary">Cancel</button>
+        <button id="submitPinBtn" class="btn btn-primary">Opret forbindelse</button>
+        <button id="cancelPinBtn" class="btn btn-secondary">Annuller</button>
       </div>
       <div id="pinError" class="error-message" style="display: none;"></div>
     </div>
@@ -267,12 +267,12 @@
   <!-- Approve Device Modal -->
   <div id="approveModal" class="modal" style="display: none;">
     <div class="modal-content">
-      <h3>Approve New Device</h3>
-      <p>A new device is requesting access:</p>
+      <h3>Godkend ny enhed</h3>
+      <p>En ny enhed anmoder om adgang:</p>
       <div class="device-details" id="pendingDeviceDetails"></div>
       <div class="modal-actions">
-        <button id="approveDeviceBtn" class="btn btn-primary">Approve</button>
-        <button id="rejectDeviceBtn" class="btn btn-danger">Reject</button>
+        <button id="approveDeviceBtn" class="btn btn-primary">Godkend</button>
+        <button id="rejectDeviceBtn" class="btn btn-danger">Afvis</button>
       </div>
     </div>
   </div>
@@ -299,13 +299,13 @@
           container.classList.remove('fullscreen');
           document.body.style.overflow = '';
           toggleBtn.textContent = '⛶';
-          toggleBtn.title = 'Enter Fullscreen (F11)';
+          toggleBtn.title = 'Fuldskærm (F11)';
         } else {
           // Enter fullscreen
           container.classList.add('fullscreen');
           document.body.style.overflow = 'hidden';
           toggleBtn.textContent = '⛶';
-          toggleBtn.title = 'Exit Fullscreen (ESC)';
+          toggleBtn.title = 'Afslut fuldskærm (ESC)';
         }
       }
       
