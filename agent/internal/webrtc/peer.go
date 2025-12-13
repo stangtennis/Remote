@@ -256,18 +256,17 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	m.pendingCandidates = nil
 	m.peerConnection = pc
 
-	// Add video track if H.264 mode is enabled
-	if m.useH264 {
-		videoTrack, err := video.NewTrack()
-		if err != nil {
-			log.Printf("⚠️ Failed to create video track: %v", err)
+	// Always add video track (even if not using H.264 yet)
+	// This allows mode switching without renegotiation
+	videoTrack, err := video.NewTrack()
+	if err != nil {
+		log.Printf("⚠️ Failed to create video track: %v", err)
+	} else {
+		m.videoTrack = videoTrack
+		if _, err := pc.AddTrack(videoTrack.GetTrack()); err != nil {
+			log.Printf("⚠️ Failed to add video track: %v", err)
 		} else {
-			m.videoTrack = videoTrack
-			if _, err := pc.AddTrack(videoTrack.GetTrack()); err != nil {
-				log.Printf("⚠️ Failed to add video track: %v", err)
-			} else {
-				log.Println("🎬 Video track added to peer connection")
-			}
+			log.Println("🎬 Video track added (H.264 ready, mode switch without renegotiation)")
 		}
 	}
 
