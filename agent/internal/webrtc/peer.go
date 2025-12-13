@@ -30,6 +30,7 @@ type Manager struct {
 	peerConnection      *webrtc.PeerConnection
 	dataChannel         *webrtc.DataChannel
 	controlChannel      *webrtc.DataChannel // Separate channel for input (low latency)
+	videoChannel        *webrtc.DataChannel // Unreliable channel for video (less latency)
 	screenCapturer      *screen.Capturer
 	dirtyDetector       *screen.DirtyRegionDetector // For bandwidth optimization
 	mouseController     *input.MouseController
@@ -334,7 +335,8 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 		log.Printf("📡 Data channel opened: %s", dc.Label())
 
 		// Route to appropriate handler based on channel label
-		if dc.Label() == "control" {
+		switch dc.Label() {
+		case "control":
 			log.Println("🎮 Control channel ready (low-latency input)")
 			m.controlChannel = dc
 			m.setupControlChannelHandlers(dc)
@@ -344,7 +346,13 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 				m.dataChannel = dc
 				log.Println("📺 Using control channel for frame streaming")
 			}
-		} else {
+		case "video":
+			log.Println("🎬 Video channel ready (unreliable, low-latency)")
+			m.videoChannel = dc
+			dc.OnOpen(func() {
+				log.Println("✅ VIDEO CHANNEL OPEN - Using unreliable channel for frames")
+			})
+		default:
 			m.dataChannel = dc
 			m.setupDataChannelHandlers(dc)
 		}
@@ -1199,9 +1207,19 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 	m.frameID++
 	frameID := m.frameID
 
+	// Use video channel if available (unreliable = lower latency)
+	// Fall back to data channel for compatibility
+	sendChannel := m.dataChannel
+	if m.videoChannel != nil && m.videoChannel.ReadyState() == webrtc.DataChannelStateOpen {
+		sendChannel = m.videoChannel
+	}
+	if sendChannel == nil || sendChannel.ReadyState() != webrtc.DataChannelStateOpen {
+		return fmt.Errorf("no channel available for sending")
+	}
+
 	// If data fits in one message, send directly (no chunking needed)
 	if len(data) <= maxChunkSize {
-		return m.dataChannel.Send(data)
+		return sendChannel.Send(data)
 	}
 
 	// Otherwise, chunk it with frame ID for robustness
@@ -1224,7 +1242,7 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 		chunk[4] = byte(totalChunks)    // Total chunks
 		copy(chunk[5:], data[start:end])
 
-		if err := m.dataChannel.Send(chunk); err != nil {
+		if err := sendChannel.Send(chunk); err != nil {
 			return err
 		}
 	}
