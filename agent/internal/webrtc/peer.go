@@ -847,12 +847,38 @@ func (m *Manager) startScreenStreaming() {
 
 		bufferedAmount := m.dataChannel.BufferedAmount()
 
-		// Capture RGBA for motion detection
+		// Capture RGBA for motion detection (also used for JPEG encoding - single capture)
 		rgbaFrame, err := m.screenCapturer.CaptureRGBA()
 		if err != nil {
 			errorCount++
-			if errorCount%100 == 1 {
-				log.Printf("⚠️ Screen capture error: %v", err)
+			
+			// Check if DXGI needs reinitialization (screensaver, lock screen, power save)
+			errStr := err.Error()
+			isDXGIError := strings.Contains(errStr, "AcquireNextFrame") || 
+				strings.Contains(errStr, "error -2") || 
+				strings.Contains(errStr, "DXGI") ||
+				strings.Contains(errStr, "capture failed")
+			
+			if isDXGIError {
+				if errorCount%10 == 1 {
+					log.Printf("⚠️ DXGI error: %s (#%d)", errStr, errorCount)
+				}
+				
+				// Try to reinitialize on first error, then every 3 errors
+				if errorCount == 1 || errorCount%3 == 0 {
+					log.Printf("🔄 Reinitializing screen capturer...")
+					time.Sleep(500 * time.Millisecond)
+					
+					if reinitErr := m.screenCapturer.Reinitialize(false); reinitErr != nil {
+						log.Printf("⚠️ Reinit failed: %v", reinitErr)
+					} else {
+						log.Printf("✅ Screen capturer reinitialized!")
+						errorCount = 0
+					}
+				}
+				time.Sleep(200 * time.Millisecond)
+			} else if errorCount%50 == 1 {
+				log.Printf("⚠️ Capture error: %v", err)
 			}
 			continue
 		}
@@ -1025,36 +1051,12 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
-		// Tiles mode: encode RGBA to JPEG with scaling
-		jpeg, scaledW, scaledH, err := m.screenCapturer.CaptureJPEGScaled(quality, scale)
+		// Tiles mode: encode RGBA to JPEG with scaling (reuse rgbaFrame to avoid double-capture)
+		jpeg, scaledW, scaledH, err := m.screenCapturer.EncodeRGBAToJPEG(rgbaFrame, quality, scale)
 		if err != nil {
 			errorCount++
-			
-			// Check if DXGI needs reinitialization (screensaver, lock screen, power save)
-			errStr := err.Error()
-			isDXGIError := strings.Contains(errStr, "AcquireNextFrame") || 
-				strings.Contains(errStr, "error -2") || 
-				strings.Contains(errStr, "DXGI") ||
-				strings.Contains(errStr, "capture failed")
-			
-			if isDXGIError {
-				log.Printf("⚠️ DXGI error detected: %s (error #%d)", errStr, errorCount)
-				
-				// Try to reinitialize immediately on first error, then every 3 errors
-				if errorCount == 1 || errorCount%3 == 0 {
-					log.Printf("🔄 Reinitializing screen capturer...")
-					time.Sleep(500 * time.Millisecond) // Brief wait
-					
-					if reinitErr := m.screenCapturer.Reinitialize(false); reinitErr != nil {
-						log.Printf("⚠️ Reinit failed: %v - will retry", reinitErr)
-					} else {
-						log.Printf("✅ Screen capturer reinitialized!")
-						errorCount = 0
-					}
-				}
-				time.Sleep(200 * time.Millisecond) // Don't spam
-			} else if errorCount%50 == 1 {
-				log.Printf("⚠️ Capture error: %v", err)
+			if errorCount%50 == 1 {
+				log.Printf("⚠️ JPEG encode error: %v", err)
 			}
 			
 			if lastFrame != nil {
