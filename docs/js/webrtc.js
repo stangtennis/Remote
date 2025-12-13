@@ -3,6 +3,43 @@
 let peerConnection = null;
 let dataChannel = null;
 
+// ICE Configuration - fetched dynamically for security
+let iceConfig = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ]
+};
+
+// Fetch dynamic TURN credentials from backend
+async function fetchTurnCredentials() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      console.log('⚠️ No session, using STUN only');
+      return;
+    }
+
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/turn-credentials`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      iceConfig = { iceServers: data.iceServers };
+      console.log(`✅ TURN credentials fetched (expires in ${data.ttl}s)`);
+    } else {
+      console.warn('⚠️ Failed to fetch TURN credentials, using STUN only');
+    }
+  } catch (error) {
+    console.warn('⚠️ Error fetching TURN credentials:', error);
+  }
+}
+
 // Clean up existing connection before creating new one
 function cleanupWebRTC() {
   console.log('🧹 Cleaning up WebRTC connection...');
@@ -58,23 +95,14 @@ async function initWebRTC(session) {
     // Check if we should force relay mode (for testing TURN)
     const forceRelay = new URLSearchParams(window.location.search).get('relay') === 'true';
     
-    // Always use our own TURN server configuration
+    // Fetch TURN credentials if not already fetched
+    if (iceConfig.iceServers.length <= 2) {
+      await fetchTurnCredentials();
+    }
+    
+    // Use dynamically fetched ICE configuration
     const configuration = {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        // Egen TURN server på hawkeye123.dk
-        {
-          urls: 'turn:188.228.14.94:3478',
-          username: 'remotedesktop',
-          credential: 'Hawkeye2025Turn!'
-        },
-        {
-          urls: 'turn:188.228.14.94:3478?transport=tcp',
-          username: 'remotedesktop',
-          credential: 'Hawkeye2025Turn!'
-        }
-      ],
+      ...iceConfig,
       // Force relay mode if ?relay=true in URL (for testing)
       ...(forceRelay && { iceTransportPolicy: 'relay' })
     };

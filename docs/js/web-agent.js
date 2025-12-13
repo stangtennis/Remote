@@ -18,24 +18,42 @@ let heartbeatInterval = null;
 let sessionPollInterval = null;
 let signalingChannel = null;
 
-// ICE Configuration (STUN/TURN servers)
-const iceConfig = {
+// ICE Configuration - fetched dynamically for security
+let iceConfig = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    // TURN server for NAT traversal
-    {
-      urls: 'turn:188.228.14.94:3478',
-      username: 'remotedesktop',
-      credential: 'Hawkeye2025Turn!'
-    },
-    {
-      urls: 'turn:188.228.14.94:3478?transport=tcp',
-      username: 'remotedesktop',
-      credential: 'Hawkeye2025Turn!'
-    }
+    { urls: 'stun:stun1.l.google.com:19302' }
   ]
 };
+
+// Fetch dynamic TURN credentials from backend
+async function fetchTurnCredentials() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      console.log('⚠️ No session, using STUN only');
+      return;
+    }
+
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/turn-credentials`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      iceConfig = { iceServers: data.iceServers };
+      console.log(`✅ TURN credentials fetched (expires in ${data.ttl}s)`);
+    } else {
+      console.warn('⚠️ Failed to fetch TURN credentials, using STUN only');
+    }
+  } catch (error) {
+    console.warn('⚠️ Error fetching TURN credentials:', error);
+  }
+}
 
 // ============================================================================
 // Authentication
@@ -80,6 +98,9 @@ async function login() {
       await supabase.auth.signOut();
       return;
     }
+
+    // Fetch TURN credentials for WebRTC
+    await fetchTurnCredentials();
 
     // Register device
     try {
@@ -1038,7 +1059,7 @@ supabase.auth.getSession().then(({ data: { session } }) => {
   if (session) {
     console.log('Already logged in, initializing...');
     currentUser = session.user;
-    registerDevice().then(() => {
+    fetchTurnCredentials().then(() => registerDevice()).then(() => {
       document.getElementById('loginSection').style.display = 'none';
       document.getElementById('deviceSection').style.display = 'block';
       const userEmailEl = document.getElementById('userEmail');
