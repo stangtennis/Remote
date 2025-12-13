@@ -65,6 +65,9 @@ type Manager struct {
 
 	// Input-triggered frame refresh
 	inputFrameTrigger chan struct{}
+	
+	// Frame ID for chunking (robustness against out-of-order delivery)
+	frameID uint16
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
@@ -1190,14 +1193,18 @@ func (m *Manager) sendDirtyRegion(region screen.DirtyRegion) error {
 
 func (m *Manager) sendFrameChunked(data []byte) error {
 	const maxChunkSize = 60000 // 60KB chunks (safely under 64KB limit)
-	const chunkMagic = 0xFF    // Magic byte to identify chunked frames
+	const chunkMagic = 0xFE    // Magic byte for chunked frames with frame ID (new format)
 
-	// If data fits in one message, send directly
+	// Increment frame ID for each new frame
+	m.frameID++
+	frameID := m.frameID
+
+	// If data fits in one message, send directly (no chunking needed)
 	if len(data) <= maxChunkSize {
 		return m.dataChannel.Send(data)
 	}
 
-	// Otherwise, chunk it
+	// Otherwise, chunk it with frame ID for robustness
 	totalChunks := (len(data) + maxChunkSize - 1) / maxChunkSize
 
 	for i := 0; i < totalChunks; i++ {
@@ -1207,12 +1214,15 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 			end = len(data)
 		}
 
-		// Create chunk with header: [magic, chunk_index, total_chunks, ...data]
-		chunk := make([]byte, 3+len(data[start:end]))
+		// New header format: [magic, frame_id_hi, frame_id_lo, chunk_index, total_chunks, ...data]
+		// This allows receiver to distinguish frames and handle out-of-order delivery
+		chunk := make([]byte, 5+len(data[start:end]))
 		chunk[0] = chunkMagic
-		chunk[1] = byte(i)
-		chunk[2] = byte(totalChunks)
-		copy(chunk[3:], data[start:end])
+		chunk[1] = byte(frameID >> 8)   // Frame ID high byte
+		chunk[2] = byte(frameID & 0xFF) // Frame ID low byte
+		chunk[3] = byte(i)              // Chunk index
+		chunk[4] = byte(totalChunks)    // Total chunks
+		copy(chunk[5:], data[start:end])
 
 		if err := m.dataChannel.Send(chunk); err != nil {
 			return err

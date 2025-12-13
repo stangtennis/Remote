@@ -156,18 +156,21 @@ func (c *Client) CreateOffer() (string, error) {
 		return "", fmt.Errorf("failed to set local description: %w", err)
 	}
 
-	log.Println("⏳ Waiting for ICE gathering to complete...")
-
-	// Wait for ICE gathering to complete
+	// Trickle-ICE: Wait max 2 seconds for ICE gathering, then proceed
+	// This speeds up connection significantly vs waiting for full gathering
+	log.Println("⏳ ICE gathering (trickle-ICE, max 2s)...")
+	
 	gatherComplete := webrtc.GatheringCompletePromise(c.peerConnection)
-	<-gatherComplete
+	select {
+	case <-gatherComplete:
+		log.Println("✅ ICE gathering complete!")
+	case <-time.After(2 * time.Second):
+		log.Println("⚡ Trickle-ICE: Proceeding with partial candidates (faster connect)")
+	}
 
-	log.Println("✅ ICE gathering complete!")
-
-	// Get the complete offer with all ICE candidates
+	// Get the offer with gathered ICE candidates
 	completeOffer := c.peerConnection.LocalDescription()
-	log.Printf("📊 Complete offer SDP length: %d", len(completeOffer.SDP))
-	log.Printf("📊 Full SDP:\n%s", completeOffer.SDP)
+	log.Printf("📊 Offer SDP length: %d", len(completeOffer.SDP))
 
 	offerJSON, err := json.Marshal(completeOffer)
 	if err != nil {
@@ -280,29 +283,32 @@ func (c *Client) Close() error {
 
 // handleDataChannelMessage processes incoming data channel messages with chunk reassembly
 func (c *Client) handleDataChannelMessage(data []byte) {
-	const chunkMagic = 0xFF
+	const chunkMagicOld = 0xFF // Old format: [magic, chunk_index, total_chunks, data]
+	const chunkMagicNew = 0xFE // New format: [magic, frame_id_hi, frame_id_lo, chunk_index, total_chunks, data]
 
-	// Check if this is a chunked frame
-	if len(data) >= 3 && data[0] == chunkMagic {
-		// Extract chunk metadata
-		chunkIndex := int(data[1])
-		totalChunks := int(data[2])
-		chunkData := data[3:]
+	// Check for new chunk format with frame ID (more robust)
+	if len(data) >= 5 && data[0] == chunkMagicNew {
+		frameID := int(data[1])<<8 | int(data[2])
+		chunkIndex := int(data[3])
+		totalChunks := int(data[4])
+		chunkData := data[5:]
 
 		c.frameChunksMu.Lock()
 
-		// Initialize chunk array if needed
-		if c.frameChunks[totalChunks] == nil {
-			c.frameChunks[totalChunks] = make([][]byte, totalChunks)
+		// Use frameID as key for chunk storage (prevents mixing chunks from different frames)
+		if c.frameChunks[frameID] == nil {
+			c.frameChunks[frameID] = make([][]byte, totalChunks)
 		}
 
 		// Store this chunk
-		c.frameChunks[totalChunks][chunkIndex] = chunkData
+		if chunkIndex < len(c.frameChunks[frameID]) {
+			c.frameChunks[frameID][chunkIndex] = chunkData
+		}
 
 		// Check if we have all chunks
 		allChunks := true
 		for i := 0; i < totalChunks; i++ {
-			if c.frameChunks[totalChunks][i] == nil {
+			if i >= len(c.frameChunks[frameID]) || c.frameChunks[frameID][i] == nil {
 				allChunks = false
 				break
 			}
@@ -312,14 +318,61 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 			// Reassemble the frame
 			var completeFrame []byte
 			for i := 0; i < totalChunks; i++ {
-				completeFrame = append(completeFrame, c.frameChunks[totalChunks][i]...)
+				completeFrame = append(completeFrame, c.frameChunks[frameID][i]...)
 			}
 
 			// Clear chunks for this frame
-			delete(c.frameChunks, totalChunks)
+			delete(c.frameChunks, frameID)
+			
+			// Also clean up old incomplete frames (GC)
+			for id := range c.frameChunks {
+				if frameID-id > 100 { // Frames older than 100 IDs are stale
+					delete(c.frameChunks, id)
+				}
+			}
 			c.frameChunksMu.Unlock()
 
 			// Send complete frame
+			if c.onFrame != nil {
+				c.onFrame(completeFrame)
+			}
+		} else {
+			c.frameChunksMu.Unlock()
+		}
+		return
+	}
+
+	// Check for old chunk format (backwards compatibility)
+	if len(data) >= 3 && data[0] == chunkMagicOld {
+		chunkIndex := int(data[1])
+		totalChunks := int(data[2])
+		chunkData := data[3:]
+
+		c.frameChunksMu.Lock()
+
+		// Use totalChunks as key (old behavior)
+		if c.frameChunks[totalChunks] == nil {
+			c.frameChunks[totalChunks] = make([][]byte, totalChunks)
+		}
+
+		c.frameChunks[totalChunks][chunkIndex] = chunkData
+
+		allChunks := true
+		for i := 0; i < totalChunks; i++ {
+			if c.frameChunks[totalChunks][i] == nil {
+				allChunks = false
+				break
+			}
+		}
+
+		if allChunks {
+			var completeFrame []byte
+			for i := 0; i < totalChunks; i++ {
+				completeFrame = append(completeFrame, c.frameChunks[totalChunks][i]...)
+			}
+			delete(c.frameChunks, totalChunks)
+			c.frameChunksMu.Unlock()
+
 			if c.onFrame != nil {
 				c.onFrame(completeFrame)
 			}
