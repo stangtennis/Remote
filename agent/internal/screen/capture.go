@@ -318,6 +318,39 @@ func (c *Capturer) CaptureJPEGScaled(quality int, scale float64) ([]byte, int, i
 	return buf.Bytes(), int(targetWidth), int(targetHeight), nil
 }
 
+// EncodeRGBAToJPEG encodes an existing RGBA frame to JPEG with scaling
+// This avoids double-capture by reusing the RGBA frame from motion detection
+func (c *Capturer) EncodeRGBAToJPEG(img *image.RGBA, quality int, scale float64) ([]byte, int, int, error) {
+	// Clamp scale to valid range
+	if scale < 0.25 {
+		scale = 0.25
+	}
+	if scale > 1.0 {
+		scale = 1.0
+	}
+
+	// Calculate target dimensions
+	origWidth := img.Bounds().Dx()
+	origHeight := img.Bounds().Dy()
+	targetWidth := uint(float64(origWidth) * scale)
+	targetHeight := uint(float64(origHeight) * scale)
+
+	// Scale if needed
+	var finalImg image.Image = img
+	if scale < 1.0 {
+		finalImg = resize.Resize(targetWidth, targetHeight, img, resize.Bilinear)
+	}
+
+	// Encode as JPEG
+	var buf bytes.Buffer
+	opts := &jpeg.Options{Quality: quality}
+	if err := jpeg.Encode(&buf, finalImg, opts); err != nil {
+		return nil, 0, 0, fmt.Errorf("failed to encode JPEG: %w", err)
+	}
+
+	return buf.Bytes(), int(targetWidth), int(targetHeight), nil
+}
+
 // CaptureRGBA captures the screen as RGBA image (for dirty region detection)
 func (c *Capturer) CaptureRGBA() (*image.RGBA, error) {
 	c.mu.Lock()
