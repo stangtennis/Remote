@@ -398,10 +398,11 @@ func (v *Viewer) toggleH264Mode() {
 	}
 
 	// Toggle based on internal state
+	// Note: agent expects "tiles" not "jpeg" for JPEG mode
 	var newMode string
 	if v.currentStreamingMode == "h264" {
-		newMode = "jpeg"
-		log.Println("📺 Switching to JPEG mode...")
+		newMode = "tiles"
+		log.Println("📺 Switching to JPEG tiles mode...")
 	} else {
 		newMode = "h264"
 		log.Println("🎬 Switching to H.264 mode...")

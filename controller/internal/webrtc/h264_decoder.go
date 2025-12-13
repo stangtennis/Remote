@@ -260,21 +260,50 @@ func (d *H264Decoder) IsRunning() bool {
 }
 
 // EnsureAnnexB ensures NAL units have Annex-B start codes (00 00 00 01)
-func EnsureAnnexB(nalUnits []byte) []byte {
-	// Check if already has start code
-	if len(nalUnits) >= 4 && nalUnits[0] == 0 && nalUnits[1] == 0 && nalUnits[2] == 0 && nalUnits[3] == 1 {
-		return nalUnits
-	}
-	if len(nalUnits) >= 3 && nalUnits[0] == 0 && nalUnits[1] == 0 && nalUnits[2] == 1 {
-		return nalUnits
+// Handles: already Annex-B, single NAL without start code, and AVCC (length-prefixed) format
+func EnsureAnnexB(data []byte) []byte {
+	if len(data) < 4 {
+		return data
 	}
 
-	// Add start code
-	result := make([]byte, 4+len(nalUnits))
+	// Check if already has Annex-B start code (00 00 00 01 or 00 00 01)
+	if data[0] == 0 && data[1] == 0 {
+		if data[2] == 0 && data[3] == 1 {
+			return data // Already 4-byte start code
+		}
+		if data[2] == 1 {
+			return data // Already 3-byte start code
+		}
+	}
+
+	// Check for AVCC format (4-byte length prefix)
+	// First 4 bytes are big-endian NAL length
+	nalLen := int(data[0])<<24 | int(data[1])<<16 | int(data[2])<<8 | int(data[3])
+	if nalLen > 0 && nalLen <= len(data)-4 {
+		// Likely AVCC format - convert to Annex-B
+		var result []byte
+		offset := 0
+		for offset+4 <= len(data) {
+			nalLen := int(data[offset])<<24 | int(data[offset+1])<<16 | int(data[offset+2])<<8 | int(data[offset+3])
+			if nalLen <= 0 || offset+4+nalLen > len(data) {
+				break
+			}
+			// Add start code + NAL data
+			result = append(result, 0, 0, 0, 1)
+			result = append(result, data[offset+4:offset+4+nalLen]...)
+			offset += 4 + nalLen
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+
+	// Single NAL without start code - add one
+	result := make([]byte, 4+len(data))
 	result[0] = 0
 	result[1] = 0
 	result[2] = 0
 	result[3] = 1
-	copy(result[4:], nalUnits)
+	copy(result[4:], data)
 	return result
 }
