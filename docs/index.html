@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="da">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Remote Desktop - Login</title>
+  <title>Fjernskrivebord - Log ind</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
@@ -21,49 +21,49 @@
         <div class="logo-glow"></div>
         <span class="logo-icon">🖥️</span>
       </div>
-      <h1>Remote Desktop</h1>
-      <p class="subtitle">Secure remote access powered by <span class="highlight">Supabase</span> & <span class="highlight">WebRTC</span></p>
+      <h1>Fjernskrivebord</h1>
+      <p class="subtitle">Sikker fjernadgang drevet af <span class="highlight">Supabase</span> & <span class="highlight">WebRTC</span></p>
 
       <!-- Login Form -->
       <form id="loginForm" class="auth-form">
         <div class="form-group">
-          <label for="email">Email</label>
-          <input type="email" id="email" placeholder="your@email.com" required autocomplete="email">
+          <label for="email">E-mail</label>
+          <input type="email" id="email" placeholder="din@email.dk" required autocomplete="email">
         </div>
         <div class="form-group">
-          <label for="password">Password</label>
+          <label for="password">Adgangskode</label>
           <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
         </div>
         <button type="submit" class="btn btn-primary" id="loginBtn">
-          <span>Sign In</span>
+          <span>Log ind</span>
         </button>
       </form>
 
       <div class="divider">
-        <span>or</span>
+        <span>eller</span>
       </div>
 
       <!-- Signup Toggle -->
-      <button class="btn btn-secondary" id="showSignupBtn">Create New Account</button>
+      <button class="btn btn-secondary" id="showSignupBtn">Opret ny konto</button>
 
       <!-- Signup Form (hidden by default) -->
       <form id="signupForm" class="auth-form" style="display: none;">
         <div class="form-group">
-          <label for="signupEmail">Email</label>
-          <input type="email" id="signupEmail" placeholder="your@email.com" required autocomplete="email">
+          <label for="signupEmail">E-mail</label>
+          <input type="email" id="signupEmail" placeholder="din@email.dk" required autocomplete="email">
         </div>
         <div class="form-group">
-          <label for="signupPassword">Password</label>
+          <label for="signupPassword">Adgangskode</label>
           <input type="password" id="signupPassword" placeholder="••••••••" required autocomplete="new-password" minlength="6">
         </div>
         <div class="form-group">
-          <label for="signupPasswordConfirm">Confirm Password</label>
+          <label for="signupPasswordConfirm">Bekræft adgangskode</label>
           <input type="password" id="signupPasswordConfirm" placeholder="••••••••" required autocomplete="new-password" minlength="6">
         </div>
         <button type="submit" class="btn btn-primary" id="signupBtn">
-          <span>Create Account</span>
+          <span>Opret konto</span>
         </button>
-        <button type="button" class="btn btn-secondary" id="backToLoginBtn">Back to Login</button>
+        <button type="button" class="btn btn-secondary" id="backToLoginBtn">Tilbage til login</button>
       </form>
 
       <!-- Messages -->
@@ -72,8 +72,8 @@
       <!-- Footer -->
       <div class="login-footer">
         <div class="security-badges">
-          <span class="badge"><i class="fas fa-lock"></i> End-to-End Encrypted</span>
-          <span class="badge"><i class="fas fa-bolt"></i> WebRTC Powered</span>
+          <span class="badge"><i class="fas fa-lock"></i> Ende-til-ende krypteret</span>
+          <span class="badge"><i class="fas fa-bolt"></i> WebRTC drevet</span>
         </div>
       </div>
     </div>

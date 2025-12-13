@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="da">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Remote Agent - Share Your Screen</title>
+  <title>Fjernagent - Del din skærm</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
@@ -24,13 +24,13 @@
           <i class="fas fa-desktop"></i>
         </div>
         <div class="logo-text">
-          <h1>Remote Agent</h1>
-          <span class="tagline">Share your screen securely</span>
+          <h1>Fjernagent</h1>
+          <span class="tagline">Del din skærm sikkert</span>
         </div>
       </div>
       <div class="header-status" id="headerStatus">
         <span class="status-dot offline"></span>
-        <span class="status-text">Not Connected</span>
+        <span class="status-text">Ikke forbundet</span>
       </div>
     </header>
 
@@ -40,8 +40,8 @@
         <div class="card-icon">
           <i class="fas fa-user-shield"></i>
         </div>
-        <h2 id="authTitle">Sign In</h2>
-        <p id="authSubtitle">Login to start sharing your screen</p>
+        <h2 id="authTitle">Log ind</h2>
+        <p id="authSubtitle">Log ind for at dele din skærm</p>
       </div>
 
       <!-- Login Form -->
@@ -50,19 +50,19 @@
           <div class="input-icon">
             <i class="fas fa-envelope"></i>
           </div>
-          <input type="email" id="email" placeholder="Email address" required autocomplete="email">
+          <input type="email" id="email" placeholder="E-mailadresse" required autocomplete="email">
         </div>
 
         <div class="input-group">
           <div class="input-icon">
             <i class="fas fa-lock"></i>
           </div>
-          <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
+          <input type="password" id="password" placeholder="Adgangskode" required autocomplete="current-password">
         </div>
 
         <button type="submit" class="btn btn-primary btn-glow btn-block">
           <i class="fas fa-sign-in-alt"></i>
-          <span>Sign In</span>
+          <span>Log ind</span>
         </button>
       </form>
 
@@ -72,31 +72,31 @@
           <div class="input-icon">
             <i class="fas fa-envelope"></i>
           </div>
-          <input type="email" id="signupEmail" placeholder="Email address" required autocomplete="email">
+          <input type="email" id="signupEmail" placeholder="E-mailadresse" required autocomplete="email">
         </div>
 
         <div class="input-group">
           <div class="input-icon">
             <i class="fas fa-lock"></i>
           </div>
-          <input type="password" id="signupPassword" placeholder="Password (min 6 characters)" required autocomplete="new-password" minlength="6">
+          <input type="password" id="signupPassword" placeholder="Adgangskode (min 6 tegn)" required autocomplete="new-password" minlength="6">
         </div>
 
         <div class="input-group">
           <div class="input-icon">
             <i class="fas fa-lock"></i>
           </div>
-          <input type="password" id="signupPasswordConfirm" placeholder="Confirm password" required autocomplete="new-password" minlength="6">
+          <input type="password" id="signupPasswordConfirm" placeholder="Bekræft adgangskode" required autocomplete="new-password" minlength="6">
         </div>
 
         <button type="submit" class="btn btn-primary btn-glow btn-block">
           <i class="fas fa-user-plus"></i>
-          <span>Create Account</span>
+          <span>Opret konto</span>
         </button>
       </form>
 
       <div class="card-footer">
-        <p id="authToggleText">Don't have an account? <a href="#" onclick="showSignup(); return false;" class="link-primary">Create one</a></p>
+        <p id="authToggleText">Har du ikke en konto? <a href="#" onclick="showSignup(); return false;" class="link-primary">Opret en</a></p>
       </div>
 
       <div id="loginMessage" class="message-box" style="display: none;"></div>
@@ -108,8 +108,8 @@
         <div class="card-icon pulse-icon">
           <i class="fas fa-broadcast-tower"></i>
         </div>
-        <h2>Ready to Share</h2>
-        <p>Your device is registered and ready</p>
+        <h2>Klar til deling</h2>
+        <p>Din enhed er registreret og klar</p>
       </div>
 
       <!-- Device Info Grid -->
@@ -117,7 +117,7 @@
         <div class="info-item">
           <div class="info-icon"><i class="fas fa-laptop"></i></div>
           <div class="info-content">
-            <span class="info-label">Device</span>
+            <span class="info-label">Enhed</span>
             <span class="info-value" id="deviceName">-</span>
           </div>
         </div>
@@ -131,15 +131,15 @@
         <div class="info-item">
           <div class="info-icon"><i class="fas fa-user"></i></div>
           <div class="info-content">
-            <span class="info-label">User</span>
+            <span class="info-label">Bruger</span>
             <span class="info-value" id="userEmail">-</span>
           </div>
         </div>
         <div class="info-item">
           <div class="info-icon"><i class="fas fa-shield-alt"></i></div>
           <div class="info-content">
-            <span class="info-label">Encryption</span>
-            <span class="info-value">End-to-End</span>
+            <span class="info-label">Kryptering</span>
+            <span class="info-value">Ende-til-ende</span>
           </div>
         </div>
       </div>
@@ -151,22 +151,22 @@
             <i class="fas fa-gamepad"></i>
           </div>
           <div class="helper-info">
-            <span class="helper-label">Remote Control</span>
-            <span class="helper-value" id="helperStatusText">Checking...</span>
+            <span class="helper-label">Fjernstyring</span>
+            <span class="helper-value" id="helperStatusText">Tjekker...</span>
           </div>
           <div class="helper-actions">
             <a href="https://github.com/stangtennis/Remote/releases/download/v1.0.0-input-helper/input-helper-v1.0.0.exe" 
                class="btn btn-sm btn-primary" id="downloadHelperBtn" style="display: none;">
-              <i class="fas fa-download"></i> Download
+              <i class="fas fa-download"></i> Hent
             </a>
             <button class="btn btn-sm btn-success" id="helperConnectedBadge" style="display: none;">
-              <i class="fas fa-check"></i> Connected
+              <i class="fas fa-check"></i> Forbundet
             </button>
           </div>
         </div>
         <p class="helper-hint" id="helperHint" style="display: none;">
           <i class="fas fa-info-circle"></i> 
-          Run <code>input-helper.exe</code> to enable remote mouse/keyboard control
+          Kør <code>input-helper.exe</code> for at aktivere fjernmus/tastatur kontrol
         </p>
       </div>
 
@@ -174,20 +174,20 @@
       <div class="action-buttons">
         <button id="startBtn" class="btn btn-success btn-glow btn-lg" onclick="startSharing()">
           <i class="fas fa-play-circle"></i>
-          <span>Start Screen Sharing</span>
+          <span>Start skærmdeling</span>
         </button>
         <button id="stopBtn" class="btn btn-danger btn-lg" onclick="stopSharing()" style="display: none;">
           <i class="fas fa-stop-circle"></i>
-          <span>Stop Sharing</span>
+          <span>Stop deling</span>
         </button>
       </div>
 
       <!-- Preview Window -->
       <div class="preview-window" id="previewWindow" style="display: none;">
         <div class="preview-header">
-          <span><i class="fas fa-eye"></i> Live Preview</span>
+          <span><i class="fas fa-eye"></i> Live forhåndsvisning</span>
           <div class="preview-controls">
-            <span class="live-indicator"><span class="live-dot"></span> LIVE</span>
+            <span class="live-indicator"><span class="live-dot"></span> DIREKTE</span>
           </div>
         </div>
         <div class="preview-content">
@@ -199,7 +199,7 @@
       <div class="card-footer">
         <button class="btn btn-ghost" onclick="logout()">
           <i class="fas fa-sign-out-alt"></i>
-          <span>Sign Out</span>
+          <span>Log ud</span>
         </button>
       </div>
     </div>
@@ -210,12 +210,12 @@
         <div class="card-icon ring-animation">
           <i class="fas fa-bell"></i>
         </div>
-        <h2>Incoming Connection</h2>
-        <p>Someone wants to view your screen</p>
+        <h2>Indgående forbindelse</h2>
+        <p>Nogen vil se din skærm</p>
       </div>
 
       <div class="pin-entry">
-        <p class="pin-instruction">Enter the 6-digit PIN to accept</p>
+        <p class="pin-instruction">Indtast den 6-cifrede PIN for at acceptere</p>
         <div class="pin-input-wrapper">
           <input 
             type="text" 
@@ -233,11 +233,11 @@
       <div class="session-actions">
         <button class="btn btn-success btn-glow" onclick="acceptSession()">
           <i class="fas fa-check-circle"></i>
-          <span>Accept</span>
+          <span>Acceptér</span>
         </button>
         <button class="btn btn-danger" onclick="rejectSession()">
           <i class="fas fa-times-circle"></i>
-          <span>Decline</span>
+          <span>Afvis</span>
         </button>
       </div>
     </div>
@@ -248,8 +248,8 @@
         <div class="card-icon connected-icon">
           <i class="fas fa-link"></i>
         </div>
-        <h2>Session Active</h2>
-        <p>Your screen is being shared</p>
+        <h2>Session aktiv</h2>
+        <p>Din skærm deles</p>
       </div>
 
       <!-- Session Stats -->
@@ -257,22 +257,22 @@
         <div class="stat-item">
           <div class="stat-icon"><i class="fas fa-clock"></i></div>
           <div class="stat-content">
-            <span class="stat-label">Duration</span>
+            <span class="stat-label">Varighed</span>
             <span class="stat-value" id="sessionDuration">00:00</span>
           </div>
         </div>
         <div class="stat-item">
           <div class="stat-icon"><i class="fas fa-signal"></i></div>
           <div class="stat-content">
-            <span class="stat-label">Connection</span>
-            <span class="stat-value" id="connectionQuality">Excellent</span>
+            <span class="stat-label">Forbindelse</span>
+            <span class="stat-value" id="connectionQuality">Fremragende</span>
           </div>
         </div>
         <div class="stat-item">
           <div class="stat-icon"><i class="fas fa-shield-alt"></i></div>
           <div class="stat-content">
-            <span class="stat-label">Security</span>
-            <span class="stat-value">Encrypted</span>
+            <span class="stat-label">Sikkerhed</span>
+            <span class="stat-value">Krypteret</span>
           </div>
         </div>
       </div>
@@ -280,23 +280,23 @@
       <!-- Live Indicator -->
       <div class="live-banner">
         <span class="live-dot"></span>
-        <span>LIVE - Your screen is visible to the remote viewer</span>
+        <span>DIREKTE - Din skærm er synlig for fjernseeren</span>
       </div>
 
       <button class="btn btn-danger btn-lg btn-block" onclick="endSession()">
         <i class="fas fa-phone-slash"></i>
-        <span>End Session</span>
+        <span>Afslut session</span>
       </button>
     </div>
 
     <!-- Footer -->
     <footer class="agent-footer">
       <div class="security-badges">
-        <span class="badge"><i class="fas fa-lock"></i> End-to-End Encrypted</span>
-        <span class="badge"><i class="fas fa-bolt"></i> WebRTC Powered</span>
-        <span class="badge"><i class="fas fa-shield-alt"></i> Secure Connection</span>
+        <span class="badge"><i class="fas fa-lock"></i> Ende-til-ende krypteret</span>
+        <span class="badge"><i class="fas fa-bolt"></i> WebRTC drevet</span>
+        <span class="badge"><i class="fas fa-shield-alt"></i> Sikker forbindelse</span>
       </div>
-      <p class="copyright">Remote Desktop © 2025</p>
+      <p class="copyright">Fjernskrivebord © 2025</p>
     </footer>
   </div>
 
