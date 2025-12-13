@@ -1,6 +1,7 @@
 package filetransfer
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,6 +23,7 @@ type Transfer struct {
 	StartTime    time.Time
 	EndTime      time.Time
 	Error        string
+	File         *os.File // File handle for downloads
 	mu           sync.Mutex
 	onProgress   func(progress int64, total int64)
 	onComplete   func(success bool, err error)
@@ -47,6 +49,8 @@ type Manager struct {
 	mu           sync.Mutex
 	sendData     func(data []byte) error
 	onTransfer   func(transfer *Transfer)
+	dirCallbacks map[string]func(string, []FileInfo, error)
+	onDirListing func(path string, files []FileInfo, err error)
 }
 
 // NewManager creates a new file transfer manager
@@ -145,12 +149,12 @@ func (m *Manager) uploadFile(transfer *Transfer, filePath string) {
 			break
 		}
 
-		// Send chunk
+		// Send chunk with base64 encoding
 		chunk := map[string]interface{}{
 			"type":   "file_chunk",
 			"id":     transfer.ID,
 			"offset": offset,
-			"data":   buffer[:n],
+			"data":   base64.StdEncoding.EncodeToString(buffer[:n]),
 		}
 
 		chunkJSON, _ := json.Marshal(chunk)
@@ -170,7 +174,7 @@ func (m *Manager) uploadFile(transfer *Transfer, filePath string) {
 		}
 
 		// Small delay to avoid overwhelming the connection
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
 
 	// Send completion message
@@ -218,6 +222,10 @@ func (m *Manager) HandleIncomingData(data []byte) error {
 		return m.handleTransferComplete(message)
 	case "file_transfer_error":
 		return m.handleTransferError(message)
+	case "directory_listing":
+		return m.handleDirectoryListing(message)
+	case "operation_result":
+		return m.handleOperationResult(message)
 	}
 
 	return nil
@@ -229,6 +237,20 @@ func (m *Manager) handleTransferStart(message map[string]interface{}) error {
 	filename, _ := message["filename"].(string)
 	size, _ := message["size"].(float64)
 
+	// Create download directory if needed
+	downloadDir := m.GetDownloadDir()
+	if err := os.MkdirAll(downloadDir, 0755); err != nil {
+		log.Printf("⚠️ Failed to create download dir: %v", err)
+	}
+
+	// Create file for writing
+	filePath := filepath.Join(downloadDir, filename)
+	file, err := os.Create(filePath)
+	if err != nil {
+		log.Printf("❌ Failed to create file: %v", err)
+		return err
+	}
+
 	transfer := &Transfer{
 		ID:        id,
 		Filename:  filename,
@@ -236,6 +258,7 @@ func (m *Manager) handleTransferStart(message map[string]interface{}) error {
 		Status:    "transferring",
 		Direction: "download",
 		StartTime: time.Now(),
+		File:      file,
 	}
 
 	m.mu.Lock()
@@ -246,7 +269,7 @@ func (m *Manager) handleTransferStart(message map[string]interface{}) error {
 		m.onTransfer(transfer)
 	}
 
-	log.Printf("📥 Receiving file: %s (%d bytes)", filename, int64(size))
+	log.Printf("📥 Receiving file: %s (%d bytes) -> %s", filename, int64(size), filePath)
 	return nil
 }
 
@@ -264,17 +287,34 @@ func (m *Manager) handleFileChunk(message map[string]interface{}) error {
 		return fmt.Errorf("transfer not found: %s", id)
 	}
 
+	// Decode base64 data
+	data, err := base64.StdEncoding.DecodeString(dataStr)
+	if err != nil {
+		return fmt.Errorf("failed to decode chunk: %w", err)
+	}
+
+	// Write to file if we have a file handle
+	if transfer.File != nil {
+		// Seek to offset position
+		_, err := transfer.File.Seek(int64(offset), 0)
+		if err != nil {
+			return fmt.Errorf("failed to seek: %w", err)
+		}
+		
+		_, err = transfer.File.Write(data)
+		if err != nil {
+			return fmt.Errorf("failed to write chunk: %w", err)
+		}
+	}
+
 	// Update progress
 	transfer.mu.Lock()
-	transfer.Progress = int64(offset) + int64(len(dataStr))
+	transfer.Progress = int64(offset) + int64(len(data))
 	transfer.mu.Unlock()
 
 	if transfer.onProgress != nil {
 		transfer.onProgress(transfer.Progress, transfer.Size)
 	}
-
-	// TODO: Write data to file
-	// For now, just track progress
 
 	return nil
 }
@@ -289,6 +329,12 @@ func (m *Manager) handleTransferComplete(message map[string]interface{}) error {
 
 	if !exists {
 		return fmt.Errorf("transfer not found: %s", id)
+	}
+
+	// Close file if open
+	if transfer.File != nil {
+		transfer.File.Close()
+		transfer.File = nil
 	}
 
 	transfer.mu.Lock()
@@ -402,4 +448,182 @@ func (t *Transfer) GetSpeed() int64 {
 	}
 
 	return int64(float64(t.Progress) / elapsed)
+}
+
+// GetDownloadDir returns the download directory
+func (m *Manager) GetDownloadDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, "Downloads", "RemoteDesktop")
+}
+
+// FileInfo represents a file or directory entry
+type FileInfo struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Size    int64  `json:"size"`
+	IsDir   bool   `json:"is_dir"`
+	ModTime int64  `json:"mod_time"`
+}
+
+// RequestDirectoryListing requests a directory listing from the agent
+func (m *Manager) RequestDirectoryListing(path string, callback func(path string, files []FileInfo, err error)) error {
+	requestID := fmt.Sprintf("dir_%d", time.Now().UnixNano())
+	
+	// Store callback
+	m.mu.Lock()
+	if m.dirCallbacks == nil {
+		m.dirCallbacks = make(map[string]func(string, []FileInfo, error))
+	}
+	m.dirCallbacks[requestID] = callback
+	m.mu.Unlock()
+
+	request := map[string]interface{}{
+		"type":       "list_directory",
+		"path":       path,
+		"request_id": requestID,
+	}
+
+	requestJSON, _ := json.Marshal(request)
+	return m.sendData(requestJSON)
+}
+
+// RequestFile requests a file download from the agent
+func (m *Manager) RequestFile(path string) error {
+	request := map[string]interface{}{
+		"type": "request_file",
+		"path": path,
+	}
+
+	requestJSON, _ := json.Marshal(request)
+	log.Printf("📥 Requesting file: %s", path)
+	return m.sendData(requestJSON)
+}
+
+// CreateRemoteDirectory creates a directory on the agent
+func (m *Manager) CreateRemoteDirectory(path string) error {
+	request := map[string]interface{}{
+		"type":       "create_directory",
+		"path":       path,
+		"request_id": fmt.Sprintf("mkdir_%d", time.Now().UnixNano()),
+	}
+
+	requestJSON, _ := json.Marshal(request)
+	return m.sendData(requestJSON)
+}
+
+// DeleteRemoteItem deletes a file or directory on the agent
+func (m *Manager) DeleteRemoteItem(path string) error {
+	request := map[string]interface{}{
+		"type":       "delete_item",
+		"path":       path,
+		"request_id": fmt.Sprintf("del_%d", time.Now().UnixNano()),
+	}
+
+	requestJSON, _ := json.Marshal(request)
+	return m.sendData(requestJSON)
+}
+
+// RenameRemoteItem renames a file or directory on the agent
+func (m *Manager) RenameRemoteItem(oldPath, newPath string) error {
+	request := map[string]interface{}{
+		"type":       "rename_item",
+		"old_path":   oldPath,
+		"new_path":   newPath,
+		"request_id": fmt.Sprintf("ren_%d", time.Now().UnixNano()),
+	}
+
+	requestJSON, _ := json.Marshal(request)
+	return m.sendData(requestJSON)
+}
+
+// handleDirectoryListing handles directory listing response from agent
+func (m *Manager) handleDirectoryListing(message map[string]interface{}) error {
+	requestID, _ := message["request_id"].(string)
+	path, _ := message["path"].(string)
+	errorMsg, _ := message["error"].(string)
+	
+	// Parse files array
+	var files []FileInfo
+	if filesRaw, ok := message["files"].([]interface{}); ok {
+		for _, f := range filesRaw {
+			if fileMap, ok := f.(map[string]interface{}); ok {
+				fi := FileInfo{
+					Name:  getString(fileMap, "name"),
+					Path:  getString(fileMap, "path"),
+					Size:  getInt64(fileMap, "size"),
+					IsDir: getBool(fileMap, "is_dir"),
+					ModTime: getInt64(fileMap, "mod_time"),
+				}
+				files = append(files, fi)
+			}
+		}
+	}
+
+	// Call callback if exists
+	m.mu.Lock()
+	callback, exists := m.dirCallbacks[requestID]
+	if exists {
+		delete(m.dirCallbacks, requestID)
+	}
+	m.mu.Unlock()
+
+	var err error
+	if errorMsg != "" {
+		err = fmt.Errorf(errorMsg)
+	}
+
+	if callback != nil {
+		callback(path, files, err)
+	} else if m.onDirListing != nil {
+		m.onDirListing(path, files, err)
+	}
+
+	log.Printf("📂 Directory listing: %s (%d items)", path, len(files))
+	return nil
+}
+
+// handleOperationResult handles operation result from agent
+func (m *Manager) handleOperationResult(message map[string]interface{}) error {
+	operation, _ := message["operation"].(string)
+	path, _ := message["path"].(string)
+	success, _ := message["success"].(bool)
+	errorMsg, _ := message["error"].(string)
+
+	if success {
+		log.Printf("✅ Operation %s succeeded: %s", operation, path)
+	} else {
+		log.Printf("❌ Operation %s failed: %s - %s", operation, path, errorMsg)
+	}
+
+	return nil
+}
+
+// SetOnDirListing sets callback for directory listings
+func (m *Manager) SetOnDirListing(callback func(path string, files []FileInfo, err error)) {
+	m.onDirListing = callback
+}
+
+// Helper functions for parsing JSON
+func getString(m map[string]interface{}, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func getInt64(m map[string]interface{}, key string) int64 {
+	if v, ok := m[key].(float64); ok {
+		return int64(v)
+	}
+	return 0
+}
+
+func getBool(m map[string]interface{}, key string) bool {
+	if v, ok := m[key].(bool); ok {
+		return v
+	}
+	return false
 }
