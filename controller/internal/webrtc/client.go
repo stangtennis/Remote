@@ -28,9 +28,10 @@ type Client struct {
 	mu                   sync.Mutex
 	connected            bool
 
-	// Frame reassembly
-	frameChunks   map[int][][]byte // chunk index -> chunk data
-	frameChunksMu sync.Mutex
+	// Frame reassembly with timeout tracking
+	frameChunks     map[int][][]byte   // frameID -> chunk data
+	frameFirstSeen  map[int]time.Time  // frameID -> first chunk arrival time
+	frameChunksMu   sync.Mutex
 
 	// RTT measurement
 	lastPingTime time.Time
@@ -46,8 +47,9 @@ type Client struct {
 // NewClient creates a new WebRTC client
 func NewClient() (*Client, error) {
 	return &Client{
-		connected:   false,
-		frameChunks: make(map[int][][]byte),
+		connected:      false,
+		frameChunks:    make(map[int][][]byte),
+		frameFirstSeen: make(map[int]time.Time),
 	}, nil
 }
 
@@ -401,6 +403,7 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 		// Use frameID as key for chunk storage (prevents mixing chunks from different frames)
 		if c.frameChunks[frameID] == nil {
 			c.frameChunks[frameID] = make([][]byte, totalChunks)
+			c.frameFirstSeen[frameID] = time.Now()
 		}
 
 		// Store this chunk
@@ -426,11 +429,14 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 
 			// Clear chunks for this frame
 			delete(c.frameChunks, frameID)
+			delete(c.frameFirstSeen, frameID)
 			
-			// Also clean up old incomplete frames (GC)
-			for id := range c.frameChunks {
-				if frameID-id > 100 { // Frames older than 100 IDs are stale
+			// GC: Drop incomplete frames older than 200ms (prevents freezes)
+			now := time.Now()
+			for id, firstSeen := range c.frameFirstSeen {
+				if now.Sub(firstSeen) > 200*time.Millisecond {
 					delete(c.frameChunks, id)
+					delete(c.frameFirstSeen, id)
 				}
 			}
 			c.frameChunksMu.Unlock()
