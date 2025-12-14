@@ -39,6 +39,9 @@ type Viewer struct {
 	latencyLabel   *widget.Label
 	bandwidthLabel *widget.Label
 	modeLabel      *widget.Label // Streaming mode (JPEG/H.264)
+	qualityLabel   *widget.Label // Current quality %
+	scaleLabel     *widget.Label // Current scale %
+	cpuLabel       *widget.Label // Agent CPU %
 	qualitySlider  *widget.Slider
 
 	// Bandwidth tracking
@@ -271,6 +274,11 @@ func (v *Viewer) createStatusBar() *fyne.Container {
 	v.modeLabel = widget.NewLabel("📺 JPEG")
 	v.modeLabel.TextStyle = fyne.TextStyle{Bold: true}
 
+	// Quality/Scale/CPU indicators
+	v.qualityLabel = widget.NewLabel("Q: -")
+	v.scaleLabel = widget.NewLabel("Scale: -")
+	v.cpuLabel = widget.NewLabel("CPU: -")
+
 	// Resolution label
 	resolutionLabel := widget.NewLabel("Resolution: 1920x1080")
 
@@ -294,11 +302,15 @@ func (v *Viewer) createStatusBar() *fyne.Container {
 		widget.NewSeparator(),
 		v.fpsLabel,
 		widget.NewSeparator(),
+		v.qualityLabel,
+		widget.NewSeparator(),
+		v.scaleLabel,
+		widget.NewSeparator(),
 		v.bandwidthLabel,
 		widget.NewSeparator(),
 		v.latencyLabel,
 		widget.NewSeparator(),
-		resolutionLabel,
+		v.cpuLabel,
 		widget.NewSeparator(),
 		inputLabel,
 		layout.NewSpacer(),
@@ -338,6 +350,33 @@ func (v *Viewer) UpdateStatus(connected bool) {
 func (v *Viewer) UpdateStats(fps int, latency int) {
 	v.fpsLabel.SetText(fmt.Sprintf("FPS: %d", fps))
 	v.latencyLabel.SetText(fmt.Sprintf("RTT: %dms", latency))
+}
+
+// UpdateQuality updates the quality display
+func (v *Viewer) UpdateQuality(quality int) {
+	if v.qualityLabel != nil {
+		fyne.Do(func() {
+			v.qualityLabel.SetText(fmt.Sprintf("Q: %d%%", quality))
+		})
+	}
+}
+
+// UpdateScale updates the scale display
+func (v *Viewer) UpdateScale(scale float64) {
+	if v.scaleLabel != nil {
+		fyne.Do(func() {
+			v.scaleLabel.SetText(fmt.Sprintf("Scale: %.0f%%", scale*100))
+		})
+	}
+}
+
+// UpdateCPU updates the CPU display
+func (v *Viewer) UpdateCPU(cpu float64) {
+	if v.cpuLabel != nil {
+		fyne.Do(func() {
+			v.cpuLabel.SetText(fmt.Sprintf("CPU: %.0f%%", cpu))
+		})
+	}
 }
 
 // UpdateRTT updates the RTT display from ping/pong measurement
@@ -510,7 +549,36 @@ func (v *Viewer) handleClipboardSync() {
 
 func (v *Viewer) handleQualityChange(value float64) {
 	log.Printf("Quality changed to: %.0f%%", value)
-	// TODO: Adjust video quality
+	// Send stream params to agent
+	v.sendStreamParams(int(value), 30, 1.0, 4000)
+}
+
+// sendStreamParams sends streaming parameters to the agent
+func (v *Viewer) sendStreamParams(maxQuality, maxFPS int, maxScale float64, h264BitrateKbps int) {
+	if !v.connected {
+		return
+	}
+
+	msg := map[string]interface{}{
+		"type":              "set_stream_params",
+		"max_quality":       maxQuality,
+		"max_fps":           maxFPS,
+		"max_scale":         maxScale,
+		"h264_bitrate_kbps": h264BitrateKbps,
+	}
+
+	if client, ok := v.webrtcClient.(interface{ SendInput([]byte) error }); ok {
+		data, err := json.Marshal(msg)
+		if err != nil {
+			log.Printf("❌ Failed to marshal stream params: %v", err)
+			return
+		}
+		if err := client.SendInput(data); err != nil {
+			log.Printf("❌ Failed to send stream params: %v", err)
+		} else {
+			log.Printf("📊 Sent stream params: Q=%d%% FPS=%d Scale=%.0f%% H264=%dkbps", maxQuality, maxFPS, maxScale*100, h264BitrateKbps)
+		}
+	}
 }
 
 func (v *Viewer) showSettings() {

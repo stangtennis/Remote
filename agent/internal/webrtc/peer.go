@@ -69,6 +69,12 @@ type Manager struct {
 	
 	// Frame ID for chunking (robustness against out-of-order delivery)
 	frameID uint16
+
+	// Stream params from controller (caps)
+	streamMaxFPS     int
+	streamMaxQuality int
+	streamMaxScale   float64
+	streamH264Kbps   int
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
@@ -417,7 +423,7 @@ func (m *Manager) setupControlChannelHandlers(dc *webrtc.DataChannel) {
 			return
 		}
 
-		// Check for clipboard messages from controller
+		// Check for control messages from controller
 		if msgType, ok := event["type"].(string); ok {
 			switch msgType {
 			case "clipboard_text":
@@ -431,6 +437,9 @@ func (m *Manager) setupControlChannelHandlers(dc *webrtc.DataChannel) {
 					log.Printf("📋 Received clipboard image from controller")
 					m.handleClipboardImage(contentB64)
 				}
+				return
+			case "set_stream_params":
+				m.handleSetStreamParams(event)
 				return
 			}
 		}
@@ -740,6 +749,24 @@ func (m *Manager) handleClipboardImage(contentB64 string) {
 	}
 }
 
+// handleSetStreamParams handles stream parameter updates from controller
+func (m *Manager) handleSetStreamParams(event map[string]interface{}) {
+	if maxQuality, ok := event["max_quality"].(float64); ok {
+		m.streamMaxQuality = int(maxQuality)
+	}
+	if maxFPS, ok := event["max_fps"].(float64); ok {
+		m.streamMaxFPS = int(maxFPS)
+	}
+	if maxScale, ok := event["max_scale"].(float64); ok {
+		m.streamMaxScale = maxScale
+	}
+	if h264Kbps, ok := event["h264_bitrate_kbps"].(float64); ok {
+		m.streamH264Kbps = int(h264Kbps)
+	}
+	log.Printf("📊 Stream params updated: Q=%d%% FPS=%d Scale=%.0f%% H264=%dkbps",
+		m.streamMaxQuality, m.streamMaxFPS, m.streamMaxScale*100, m.streamH264Kbps)
+}
+
 func (m *Manager) startClipboardMonitoring() {
 	// Initialize clipboard monitor
 	m.clipboardMonitor = clipboard.NewMonitor()
@@ -841,21 +868,32 @@ func (m *Manager) startScreenStreaming() {
 	scale := 1.0           // Scale factor (0.5-1.0)
 	frameInterval := time.Duration(1000/fps) * time.Millisecond
 
-	// Thresholds for adaptation
-	const (
-		bufferHigh    = 8 * 1024 * 1024  // 8MB - reduce quality
-		bufferLow     = 1 * 1024 * 1024  // 1MB - can increase quality
-		minFPS        = 12
-		maxFPS        = 30
-		minQuality    = 50
-		maxQuality    = 80
-		minScale      = 0.5
-		maxScale      = 1.0
-		idleFPS       = 2   // FPS when idle
-		idleQuality   = 50  // Quality when idle
-		idleScale     = 0.75 // Scale when idle
-		idleThreshold = 1.0 // Motion % threshold for idle
-	)
+	// Thresholds for adaptation (use controller caps if set)
+	bufferHigh := 8 * 1024 * 1024  // 8MB - reduce quality
+	bufferLow := 1 * 1024 * 1024   // 1MB - can increase quality
+	minFPS := 12
+	maxFPS := 30
+	minQuality := 50
+	maxQuality := 80
+	minScale := 0.5
+	maxScale := 1.0
+	idleFPS := 2   // FPS when idle
+	idleQuality := 85  // Quality when idle (high for crisp text)
+	idleScale := 1.0 // Scale when idle (full resolution for sharpness)
+	idleThreshold := 1.0 // Motion % threshold for idle
+
+	// Apply controller caps if set
+	if m.streamMaxFPS > 0 {
+		maxFPS = m.streamMaxFPS
+	}
+	if m.streamMaxQuality > 0 {
+		maxQuality = m.streamMaxQuality
+		idleQuality = m.streamMaxQuality // Idle uses same max
+	}
+	if m.streamMaxScale > 0 {
+		maxScale = m.streamMaxScale
+		idleScale = m.streamMaxScale
+	}
 
 	frameCount := 0
 	errorCount := 0

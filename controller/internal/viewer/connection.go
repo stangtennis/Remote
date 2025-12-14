@@ -882,6 +882,16 @@ func (v *Viewer) handleDataChannelMessage(msg []byte) {
 				v.UpdateStats(int(fps), int(rtt))
 			}
 		}
+		// Extended stats: quality, scale, cpu
+		if quality, ok := data["quality"].(float64); ok {
+			v.UpdateQuality(int(quality))
+		}
+		if scale, ok := data["scale"].(float64); ok {
+			v.UpdateScale(scale)
+		}
+		if cpu, ok := data["cpu"].(float64); ok {
+			v.UpdateCPU(cpu)
+		}
 
 	case "file_transfer_start", "file_transfer_chunk", "file_transfer_complete", "file_transfer_error":
 		// Route file transfer messages to handler
