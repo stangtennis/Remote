@@ -936,8 +936,8 @@ func restartApplication() {
 		// On Windows, use cmd.exe to start the process detached
 		var cmd *exec.Cmd
 		if os.PathSeparator == '\\' { // Windows
-			// Use PowerShell to start detached process
-			cmd = exec.Command("powershell", "-Command", "Start-Process", "-FilePath", executable)
+			// Use cmd /c start to launch detached process that survives parent exit
+			cmd = exec.Command("cmd", "/c", "start", "", executable)
 		} else { // Unix-like
 			cmd = exec.Command(executable)
 			cmd.Stdout = os.Stdout
@@ -946,7 +946,8 @@ func restartApplication() {
 
 		logger.Info("Starting new instance with command: %v", cmd.Args)
 
-		if err := cmd.Start(); err != nil {
+		// Run synchronously to ensure process starts before we exit
+		if err := cmd.Run(); err != nil {
 			logger.Error("Failed to start new instance: %v", err)
 			progressDialog.Hide()
 			dialog.ShowError(fmt.Errorf("Failed to restart: %v", err), myWindow)
@@ -955,10 +956,7 @@ func restartApplication() {
 
 		logger.Info("New instance started successfully, shutting down current instance")
 
-		// Small delay to let new instance initialize
-		time.Sleep(1000 * time.Millisecond)
-
-		// Exit current instance
+		// Exit current instance immediately
 		myApp.Quit()
 	}()
 }
