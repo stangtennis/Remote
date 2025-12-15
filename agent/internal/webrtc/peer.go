@@ -869,8 +869,8 @@ func (m *Manager) startScreenStreaming() {
 	frameInterval := time.Duration(1000/fps) * time.Millisecond
 
 	// Thresholds for adaptation (use controller caps if set)
-	bufferHigh := 8 * 1024 * 1024  // 8MB - reduce quality
-	bufferLow := 1 * 1024 * 1024   // 1MB - can increase quality
+	bufferHigh := uint64(8 * 1024 * 1024)  // 8MB - reduce quality
+	bufferLow := uint64(1 * 1024 * 1024)   // 1MB - can increase quality
 	minFPS := 12
 	maxFPS := 30
 	minQuality := 50
