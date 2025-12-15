@@ -12,7 +12,7 @@ import (
 )
 
 // Version of the agent - update this with each release
-const Version = "v2.61.2"
+const Version = "v2.61.3"
 const BuildDate = "2025-12-15"
 const VersionString = Version + " (" + BuildDate + ")"
 
@@ -36,26 +36,26 @@ func (t *TrayApp) onReady() {
 	// Set up the system tray icon and menu
 	systray.SetIcon(getIcon())
 	systray.SetTitle("Remote")
-	systray.SetTooltip(fmt.Sprintf("Remote Desktop Agent\nDevice: %s", t.device.Name))
+	systray.SetTooltip(fmt.Sprintf("Remote Desktop Agent\nEnhed: %s", t.device.Name))
 
 	// Add menu items
-	mDeviceName := systray.AddMenuItem(fmt.Sprintf("Device: %s", t.device.Name), "")
+	mDeviceName := systray.AddMenuItem(fmt.Sprintf("Enhed: %s", t.device.Name), "")
 	mDeviceName.Disable()
 
-	mStatus := systray.AddMenuItem("Status: Online", "Current connection status")
+	mStatus := systray.AddMenuItem("Status: Online", "Aktuel forbindelsesstatus")
 	mStatus.Disable()
 
 	systray.AddSeparator()
 
-	mConsole := systray.AddMenuItem("Show Console Window", "Open live console output")
-	mLogs := systray.AddMenuItem("View Log File", "Open log file in editor")
+	mConsole := systray.AddMenuItem("Vis konsol vindue", "Åbn live konsol output")
+	mLogs := systray.AddMenuItem("Vis log fil", "Åbn log fil i editor")
 	mVersion := systray.AddMenuItem(fmt.Sprintf("Version %s", Version), "Agent version")
 	mVersion.Disable()
 
 	systray.AddSeparator()
 
-	mLogout := systray.AddMenuItem("Switch Account / Logout", "Log out and switch to different account")
-	mQuit := systray.AddMenuItem("Exit", "Quit the agent")
+	mLogout := systray.AddMenuItem("Skift konto / Log ud", "Log ud og skift til anden konto")
+	mQuit := systray.AddMenuItem("Afslut", "Luk agenten")
 
 	// Handle menu clicks
 	go func() {
