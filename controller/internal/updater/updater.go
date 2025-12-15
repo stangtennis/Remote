@@ -240,7 +240,8 @@ func (u *Updater) DownloadUpdate() error {
 	return nil
 }
 
-// InstallUpdate installs the downloaded update using the updater helper
+// InstallUpdate installs the downloaded update
+// The new exe is started with --update-from flag, which handles the replacement
 func (u *Updater) InstallUpdate() error {
 	state := u.state.GetState()
 	if state.DownloadPath == "" {
@@ -262,29 +263,10 @@ func (u *Updater) InstallUpdate() error {
 		return err
 	}
 
-	// Find updater helper (same directory as current exe)
-	exeDir := filepath.Dir(currentExe)
-	updaterPath := filepath.Join(exeDir, "controller-updater.exe")
-
-	// If updater doesn't exist, try to use embedded updater or fallback
-	if _, err := os.Stat(updaterPath); os.IsNotExist(err) {
-		// For now, return error - updater helper must be present
-		u.lastError = fmt.Errorf("updater helper not found: %s", updaterPath)
-		u.setStatus(StatusError)
-		return u.lastError
-	}
-
-	// Backup path
-	backupPath := currentExe + ".old"
-
-	// Launch updater helper
-	log.Printf("🚀 Launching updater: %s", updaterPath)
-	cmd := exec.Command(updaterPath,
-		"--target", currentExe,
-		"--source", state.DownloadPath,
-		"--backup", backupPath,
-		"--start",
-	)
+	// Launch the NEW exe with --update-from flag
+	// The new exe will wait for us to exit, then replace us
+	log.Printf("🚀 Starting new version with update mode: %s --update-from %s", state.DownloadPath, currentExe)
+	cmd := exec.Command(state.DownloadPath, "--update-from", currentExe)
 
 	if err := cmd.Start(); err != nil {
 		u.lastError = err
@@ -295,7 +277,7 @@ func (u *Updater) InstallUpdate() error {
 	// Clear download state
 	u.state.ClearDownload()
 
-	log.Println("✅ Updater started, exiting for update...")
+	log.Println("✅ New version started, exiting for update...")
 	return nil
 }
 

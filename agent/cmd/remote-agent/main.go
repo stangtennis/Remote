@@ -317,6 +317,12 @@ func runAsAdmin() error {
 }
 
 func main() {
+	// Check for update mode FIRST (before admin check or anything else)
+	if len(os.Args) >= 3 && os.Args[1] == "--update-from" {
+		runUpdateMode(os.Args[2])
+		return
+	}
+
 	// Check if running as admin - if not, relaunch with UAC prompt
 	isService, _ := svc.IsWindowsService()
 	if !isService && !isAdmin() {
@@ -1399,4 +1405,95 @@ func stopAgent() {
 		dev.SetOffline()
 	}
 	time.Sleep(500 * time.Millisecond)
+}
+
+// runUpdateMode runs when started with --update-from flag
+// This replaces the old exe and restarts normally
+func runUpdateMode(oldExePath string) {
+	// Simple logging to file
+	logFile := oldExePath + ".update.log"
+	f, _ := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if f != nil {
+		defer f.Close()
+	}
+
+	logMsg := func(msg string) {
+		line := fmt.Sprintf("[%s] %s\n", time.Now().Format("15:04:05"), msg)
+		if f != nil {
+			f.WriteString(line)
+		}
+		fmt.Print(line)
+	}
+
+	logMsg("Update mode started")
+	logMsg(fmt.Sprintf("Old exe: %s", oldExePath))
+
+	currentExe, err := os.Executable()
+	if err != nil {
+		logMsg(fmt.Sprintf("ERROR: Failed to get current exe path: %v", err))
+		return
+	}
+	logMsg(fmt.Sprintf("New exe: %s", currentExe))
+
+	// Wait for old exe to exit (max 10 seconds)
+	logMsg("Waiting for old exe to exit...")
+	for i := 0; i < 100; i++ {
+		file, err := os.OpenFile(oldExePath, os.O_RDWR, 0)
+		if err == nil {
+			file.Close()
+			logMsg("Old exe is unlocked")
+			break
+		}
+		if os.IsNotExist(err) {
+			logMsg("Old exe already deleted")
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Delete old exe
+	logMsg("Deleting old exe...")
+	if err := os.Remove(oldExePath); err != nil {
+		if !os.IsNotExist(err) {
+			logMsg(fmt.Sprintf("WARNING: Failed to delete old exe: %v", err))
+		}
+	} else {
+		logMsg("Old exe deleted")
+	}
+
+	// Copy current exe to old exe location
+	logMsg(fmt.Sprintf("Copying %s to %s", currentExe, oldExePath))
+
+	srcFile, err := os.Open(currentExe)
+	if err != nil {
+		logMsg(fmt.Sprintf("ERROR: Failed to open source: %v", err))
+		return
+	}
+
+	dstFile, err := os.Create(oldExePath)
+	if err != nil {
+		srcFile.Close()
+		logMsg(fmt.Sprintf("ERROR: Failed to create destination: %v", err))
+		return
+	}
+
+	_, err = dstFile.ReadFrom(srcFile)
+	srcFile.Close()
+	dstFile.Close()
+
+	if err != nil {
+		logMsg(fmt.Sprintf("ERROR: Failed to copy: %v", err))
+		return
+	}
+	logMsg("Copy complete")
+
+	// Start the copied exe (now at original location)
+	logMsg("Starting agent from original location...")
+	cmd := exec.Command(oldExePath)
+	if err := cmd.Start(); err != nil {
+		logMsg(fmt.Sprintf("ERROR: Failed to start: %v", err))
+		return
+	}
+
+	logMsg("Update complete!")
 }

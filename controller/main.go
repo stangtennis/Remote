@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	Version     = "v2.62.0"
+	Version     = "v2.62.1"
 	BuildDate   = "2025-12-15"
 	VersionInfo = Version + " (" + BuildDate + ")"
 )
@@ -40,6 +40,12 @@ var (
 )
 
 func main() {
+	// Check for update mode first (before any GUI initialization)
+	if len(os.Args) >= 3 && os.Args[1] == "--update-from" {
+		runUpdateMode(os.Args[2])
+		return
+	}
+
 	// Initialize logger first
 	if err := logger.Init(); err != nil {
 		fmt.Printf("Failed to initialize logger: %v\n", err)
@@ -1179,4 +1185,99 @@ func showUpdateDialog(window fyne.Window) {
 	scrollContent.SetMinSize(fyne.NewSize(400, 350))
 
 	dialog.ShowCustom("Opdateringer", "Luk", scrollContent, window)
+}
+
+// runUpdateMode runs when started with --update-from flag
+// This replaces the old exe and restarts normally
+func runUpdateMode(oldExePath string) {
+	// Simple logging to file since we can't use the normal logger
+	logFile := oldExePath + ".update.log"
+	f, _ := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if f != nil {
+		defer f.Close()
+	}
+
+	log := func(msg string) {
+		line := fmt.Sprintf("[%s] %s\n", time.Now().Format("15:04:05"), msg)
+		if f != nil {
+			f.WriteString(line)
+		}
+	}
+
+	log("Update mode started")
+	log(fmt.Sprintf("Old exe: %s", oldExePath))
+
+	currentExe, err := os.Executable()
+	if err != nil {
+		log(fmt.Sprintf("ERROR: Failed to get current exe path: %v", err))
+		return
+	}
+	log(fmt.Sprintf("New exe: %s", currentExe))
+
+	// Wait for old exe to exit (max 10 seconds)
+	log("Waiting for old exe to exit...")
+	for i := 0; i < 100; i++ {
+		// Try to open file exclusively
+		file, err := os.OpenFile(oldExePath, os.O_RDWR, 0)
+		if err == nil {
+			file.Close()
+			log("Old exe is unlocked")
+			break
+		}
+		if os.IsNotExist(err) {
+			log("Old exe already deleted")
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Delete old exe
+	log("Deleting old exe...")
+	if err := os.Remove(oldExePath); err != nil {
+		if !os.IsNotExist(err) {
+			log(fmt.Sprintf("WARNING: Failed to delete old exe: %v", err))
+		}
+	} else {
+		log("Old exe deleted")
+	}
+
+	// Rename current exe to old exe location (so it's in the right place)
+	log(fmt.Sprintf("Moving %s to %s", currentExe, oldExePath))
+	
+	// Copy instead of rename (works across volumes)
+	srcFile, err := os.Open(currentExe)
+	if err != nil {
+		log(fmt.Sprintf("ERROR: Failed to open source: %v", err))
+		return
+	}
+	
+	dstFile, err := os.Create(oldExePath)
+	if err != nil {
+		srcFile.Close()
+		log(fmt.Sprintf("ERROR: Failed to create destination: %v", err))
+		return
+	}
+	
+	_, err = dstFile.ReadFrom(srcFile)
+	srcFile.Close()
+	dstFile.Close()
+	
+	if err != nil {
+		log(fmt.Sprintf("ERROR: Failed to copy: %v", err))
+		return
+	}
+	log("Copy complete")
+
+	// Start the copied exe (now at original location)
+	log("Starting controller from original location...")
+	cmd := exec.Command(oldExePath)
+	if err := cmd.Start(); err != nil {
+		log(fmt.Sprintf("ERROR: Failed to start: %v", err))
+		return
+	}
+
+	log("Update complete!")
+	
+	// Clean up - delete ourselves (the temp downloaded exe)
+	// This won't work on Windows while running, but that's OK
 }
