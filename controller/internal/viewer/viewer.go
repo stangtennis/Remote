@@ -1,6 +1,7 @@
 package viewer
 
 import (
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
@@ -278,9 +279,6 @@ func (v *Viewer) createStatusBar() *fyne.Container {
 	v.qualityLabel = widget.NewLabel("Q: -")
 	v.scaleLabel = widget.NewLabel("Scale: -")
 	v.cpuLabel = widget.NewLabel("CPU: -")
-
-	// Resolution label
-	resolutionLabel := widget.NewLabel("Resolution: 1920x1080")
 
 	// Keyboard/Mouse status
 	inputLabel := widget.NewLabel("🖱️ Mouse & ⌨️ Keyboard Active")
