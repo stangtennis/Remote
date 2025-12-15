@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -165,33 +164,16 @@ func (fb *FileBrowser) buildUI() fyne.CanvasObject {
 		},
 	)
 
-	// Track last click for double-click detection
-	var localLastClick time.Time
-	var localLastClickID widget.ListItemID = -1
-
 	fb.localList.OnSelected = func(id widget.ListItemID) {
 		fb.localSelected = id
-		
-		// Double-click detection: if same item clicked within 500ms, open it
-		now := time.Now()
-		if id == localLastClickID && now.Sub(localLastClick) < 500*time.Millisecond {
-			if id >= 0 && id < len(fb.localFiles) {
-				file := fb.localFiles[id]
-				if file.IsDir {
-					fb.loadLocalDir(file.Path)
-				}
-			}
-		}
-		localLastClick = now
-		localLastClickID = id
 	}
 
 	fb.localList.OnUnselected = func(id widget.ListItemID) {
 		fb.localSelected = -1
 	}
 
-	// Open button as fallback
-	localOpenBtn := widget.NewButton("Open", func() {
+	// Open button - primary way to navigate into folders
+	localOpenBtn := widget.NewButton("📂 Åbn", func() {
 		if fb.localSelected >= 0 && fb.localSelected < len(fb.localFiles) {
 			file := fb.localFiles[fb.localSelected]
 			if file.IsDir {
@@ -264,33 +246,16 @@ func (fb *FileBrowser) buildUI() fyne.CanvasObject {
 		},
 	)
 
-	// Track last click for double-click detection (remote)
-	var remoteLastClick time.Time
-	var remoteLastClickID widget.ListItemID = -1
-
 	fb.remoteList.OnSelected = func(id widget.ListItemID) {
 		fb.remoteSelected = id
-		
-		// Double-click detection: if same item clicked within 500ms, open it
-		now := time.Now()
-		if id == remoteLastClickID && now.Sub(remoteLastClick) < 500*time.Millisecond {
-			if id >= 0 && id < len(fb.remoteFiles) {
-				file := fb.remoteFiles[id]
-				if file.IsDir {
-					fb.requestRemoteDir(file.Path)
-				}
-			}
-		}
-		remoteLastClick = now
-		remoteLastClickID = id
 	}
 
 	fb.remoteList.OnUnselected = func(id widget.ListItemID) {
 		fb.remoteSelected = -1
 	}
 
-	// Open button as fallback
-	remoteOpenBtn := widget.NewButton("Open", func() {
+	// Open button - primary way to navigate into folders
+	remoteOpenBtn := widget.NewButton("📂 Åbn", func() {
 		if fb.remoteSelected >= 0 && fb.remoteSelected < len(fb.remoteFiles) {
 			file := fb.remoteFiles[fb.remoteSelected]
 			if file.IsDir {
@@ -671,5 +636,3 @@ func CreateDrivesRequest() []byte {
 	return data
 }
 
-// Unused but needed for compilation
-var _ = time.Now
