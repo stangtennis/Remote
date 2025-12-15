@@ -1,11 +1,11 @@
 #!/bin/bash
-# Release to GitHub
+# Release to GitHub with SHA256 checksums for auto-update
 # Usage: ./release-github.sh v2.x.x
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="$SCRIPT_DIR/build"
+BUILD_DIR="$SCRIPT_DIR/builds"
 
 # Colors
 RED='\033[0;31m'
@@ -19,7 +19,7 @@ if [ -z "$VERSION" ]; then
     echo -e "${RED}❌ Error: Version required${NC}"
     echo "Usage: $0 v2.x.x"
     echo ""
-    echo "Example: $0 v2.8.0"
+    echo "Example: $0 v2.61.5"
     exit 1
 fi
 
@@ -30,8 +30,8 @@ echo ""
 
 # Check if gh CLI is installed
 if ! command -v gh &> /dev/null; then
-    echo -e "${YELLOW}Installing GitHub CLI...${NC}"
-    sudo apt-get update && sudo apt-get install -y gh
+    echo -e "${RED}❌ GitHub CLI (gh) not installed${NC}"
+    exit 1
 fi
 
 # Check if logged in
@@ -40,11 +40,36 @@ if ! gh auth status &> /dev/null; then
     gh auth login
 fi
 
+# Define versioned file names
+AGENT_GUI="remote-agent-${VERSION}.exe"
+AGENT_CONSOLE="remote-agent-console-${VERSION}.exe"
+CONTROLLER="controller-${VERSION}.exe"
+
 # Check if executables exist
-if [ ! -f "$BUILD_DIR/remote-agent.exe" ] || [ ! -f "$BUILD_DIR/controller.exe" ]; then
-    echo -e "${YELLOW}Building executables first...${NC}"
-    "$SCRIPT_DIR/build-windows.sh" all
+MISSING_FILES=0
+for FILE in "$AGENT_GUI" "$AGENT_CONSOLE" "$CONTROLLER"; do
+    if [ ! -f "$BUILD_DIR/$FILE" ]; then
+        echo -e "${RED}❌ Missing: $BUILD_DIR/$FILE${NC}"
+        MISSING_FILES=1
+    fi
+done
+
+if [ $MISSING_FILES -eq 1 ]; then
+    echo -e "${YELLOW}Please build the executables first with the correct version.${NC}"
+    exit 1
 fi
+
+# Generate SHA256 checksums
+echo -e "${YELLOW}Generating SHA256 checksums...${NC}"
+cd "$BUILD_DIR"
+
+for FILE in "$AGENT_GUI" "$AGENT_CONSOLE" "$CONTROLLER"; do
+    SHA256_FILE="${FILE}.sha256"
+    sha256sum "$FILE" > "$SHA256_FILE"
+    echo "  ✅ $SHA256_FILE"
+done
+
+cd "$SCRIPT_DIR"
 
 # Get current date
 BUILD_DATE=$(date +%Y-%m-%d)
@@ -55,18 +80,20 @@ RELEASE_NOTES="## Remote Desktop $VERSION
 **Build Date:** $BUILD_DATE
 
 ### Downloads
-- **remote-agent.exe** - Windows Agent (install on remote PCs)
-- **controller.exe** - Windows Controller (admin application)
+| File | Description |
+|------|-------------|
+| \`$AGENT_GUI\` | Windows Agent (GUI mode) |
+| \`$AGENT_CONSOLE\` | Windows Agent (Console mode) |
+| \`$CONTROLLER\` | Windows Controller |
+| \`*.sha256\` | SHA256 checksums for verification |
+
+### Auto-Update
+This release supports auto-update. SHA256 checksums are provided for verification.
 
 ### Installation
 1. Download the appropriate executable
 2. Run as Administrator for first-time setup
 3. Follow the on-screen instructions
-
-### Changes
-- Persistent device ID based on Windows MachineGUID
-- Improved login dialog with better feedback
-- Thread-safe UI updates
 
 See [README.md](https://github.com/stangtennis/Remote/blob/main/README.md) for full documentation.
 "
@@ -83,13 +110,22 @@ if ! git rev-parse "$VERSION" >/dev/null 2>&1; then
     git push origin "$VERSION"
 fi
 
-# Create release and upload assets
+# Create release and upload assets (exe + sha256 files)
 gh release create "$VERSION" \
     --title "Remote Desktop $VERSION" \
     --notes "$RELEASE_NOTES" \
-    "$BUILD_DIR/remote-agent.exe" \
-    "$BUILD_DIR/controller.exe"
+    "$BUILD_DIR/$AGENT_GUI" \
+    "$BUILD_DIR/$AGENT_CONSOLE" \
+    "$BUILD_DIR/$CONTROLLER" \
+    "$BUILD_DIR/${AGENT_GUI}.sha256" \
+    "$BUILD_DIR/${AGENT_CONSOLE}.sha256" \
+    "$BUILD_DIR/${CONTROLLER}.sha256"
 
 echo -e "\n${GREEN}✅ Release $VERSION created successfully!${NC}"
+echo ""
+echo "Assets uploaded:"
+echo "  - $AGENT_GUI + .sha256"
+echo "  - $AGENT_CONSOLE + .sha256"
+echo "  - $CONTROLLER + .sha256"
 echo ""
 echo "View release: https://github.com/stangtennis/Remote/releases/tag/$VERSION"

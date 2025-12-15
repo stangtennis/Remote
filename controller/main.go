@@ -18,11 +18,12 @@ import (
 	"github.com/stangtennis/Remote/controller/internal/logger"
 	"github.com/stangtennis/Remote/controller/internal/settings"
 	"github.com/stangtennis/Remote/controller/internal/supabase"
+	"github.com/stangtennis/Remote/controller/internal/updater"
 	"github.com/stangtennis/Remote/controller/internal/viewer"
 )
 
 const (
-	Version     = "v2.61.4"
+	Version     = "v2.62.0"
 	BuildDate   = "2025-12-15"
 	VersionInfo = Version + " (" + BuildDate + ")"
 )
@@ -283,9 +284,9 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	})
 
 	// Restart button
-	restartButton := widget.NewButton("🔄 Restart App", func() {
-		dialog.ShowConfirm("Restart Application",
-			"Are you sure you want to restart the application?",
+	restartButton := widget.NewButton("🔄 Genstart", func() {
+		dialog.ShowConfirm("Genstart applikation",
+			"Er du sikker på at du vil genstarte?",
 			func(confirmed bool) {
 				if confirmed {
 					logger.Info("Restarting application...")
@@ -294,6 +295,12 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			}, window)
 	})
 	restartButton.Importance = widget.MediumImportance
+
+	// Update button
+	updateButton := widget.NewButton("🔄 Tjek opdatering", func() {
+		showUpdateDialog(window)
+	})
+	updateButton.Importance = widget.LowImportance
 
 	loginForm = container.NewVBox(
 		widget.NewSeparator(),
@@ -310,7 +317,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	loggedInContainer = container.NewVBox(
 		widget.NewSeparator(),
 		statusLabel,
-		container.NewGridWithColumns(2, logoutButton, restartButton),
+		container.NewGridWithColumns(3, logoutButton, restartButton, updateButton),
 		widget.NewSeparator(),
 	)
 	loggedInContainer.Hide() // Hidden by default
@@ -1032,4 +1039,144 @@ func stopDeviceRefreshTicker() {
 		}
 		deviceRefreshStop = nil
 	}
+}
+
+// showUpdateDialog shows the update check dialog
+func showUpdateDialog(window fyne.Window) {
+	// Create updater
+	u, err := updater.NewUpdater(Version, "controller")
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("Kunne ikke initialisere opdatering: %v", err), window)
+		return
+	}
+
+	// Status label
+	statusLabel := widget.NewLabel("Klar til at tjekke for opdateringer")
+	statusLabel.Wrapping = fyne.TextWrapWord
+
+	// Progress bar (hidden initially)
+	progressBar := widget.NewProgressBar()
+	progressBar.Hide()
+
+	// Version info
+	currentVersionLabel := widget.NewLabel(fmt.Sprintf("Nuværende version: %s", Version))
+
+	// Channel selector
+	channelSelect := widget.NewSelect([]string{"stable", "beta"}, func(value string) {
+		u.SetChannel(value)
+	})
+	channelSelect.SetSelected(u.GetChannel())
+
+	// Check button
+	var checkBtn, downloadBtn, installBtn *widget.Button
+
+	checkBtn = widget.NewButton("🔍 Tjek for opdateringer", func() {
+		checkBtn.Disable()
+		statusLabel.SetText("Tjekker for opdateringer...")
+
+		go func() {
+			err := u.CheckForUpdate()
+			fyne.Do(func() {
+				checkBtn.Enable()
+				if err != nil {
+					statusLabel.SetText(fmt.Sprintf("❌ Fejl: %v", err))
+					return
+				}
+
+				info := u.GetAvailableUpdate()
+				if info == nil {
+					statusLabel.SetText("✅ Du har den nyeste version!")
+				} else {
+					statusLabel.SetText(fmt.Sprintf("🆕 Ny version tilgængelig: %s", info.TagName))
+					downloadBtn.Show()
+				}
+			})
+		}()
+	})
+	checkBtn.Importance = widget.HighImportance
+
+	// Download button (hidden initially)
+	downloadBtn = widget.NewButton("📥 Download opdatering", func() {
+		downloadBtn.Disable()
+		progressBar.Show()
+		progressBar.SetValue(0)
+		statusLabel.SetText("Downloader...")
+
+		u.SetProgressCallback(func(p updater.DownloadProgress) {
+			fyne.Do(func() {
+				progressBar.SetValue(p.Percent / 100)
+				statusLabel.SetText(fmt.Sprintf("Downloader... %.0f%%", p.Percent))
+			})
+		})
+
+		go func() {
+			err := u.DownloadUpdate()
+			fyne.Do(func() {
+				progressBar.Hide()
+				if err != nil {
+					statusLabel.SetText(fmt.Sprintf("❌ Download fejlede: %v", err))
+					downloadBtn.Enable()
+					return
+				}
+
+				statusLabel.SetText("✅ Download færdig! Klar til installation.")
+				downloadBtn.Hide()
+				installBtn.Show()
+			})
+		}()
+	})
+	downloadBtn.Importance = widget.HighImportance
+	downloadBtn.Hide()
+
+	// Install button (hidden initially)
+	installBtn = widget.NewButton("🚀 Installer og genstart", func() {
+		dialog.ShowConfirm("Installer opdatering",
+			"Applikationen vil lukke og genstarte med den nye version.\n\nFortsæt?",
+			func(confirmed bool) {
+				if !confirmed {
+					return
+				}
+
+				statusLabel.SetText("Installerer...")
+				installBtn.Disable()
+
+				go func() {
+					err := u.InstallUpdate()
+					if err != nil {
+						fyne.Do(func() {
+							statusLabel.SetText(fmt.Sprintf("❌ Installation fejlede: %v", err))
+							installBtn.Enable()
+						})
+						return
+					}
+
+					// Exit app - updater will restart it
+					fyne.Do(func() {
+						myApp.Quit()
+					})
+				}()
+			}, window)
+	})
+	installBtn.Importance = widget.DangerImportance
+	installBtn.Hide()
+
+	// Layout
+	content := container.NewVBox(
+		widget.NewLabelWithStyle("🔄 Opdateringer", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewSeparator(),
+		currentVersionLabel,
+		container.NewHBox(widget.NewLabel("Kanal:"), channelSelect),
+		widget.NewSeparator(),
+		statusLabel,
+		progressBar,
+		widget.NewSeparator(),
+		checkBtn,
+		downloadBtn,
+		installBtn,
+	)
+
+	scrollContent := container.NewScroll(content)
+	scrollContent.SetMinSize(fyne.NewSize(400, 350))
+
+	dialog.ShowCustom("Opdateringer", "Luk", scrollContent, window)
 }
