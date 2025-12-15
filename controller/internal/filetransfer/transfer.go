@@ -108,11 +108,14 @@ func (m *Manager) SendFile(filePath string) (*Transfer, error) {
 	}
 
 	metadataJSON, _ := json.Marshal(metadata)
+	log.Printf("📤 Sending file metadata: %s (%d bytes)", transfer.Filename, transfer.Size)
 	if err := m.sendData(metadataJSON); err != nil {
+		log.Printf("❌ Failed to send metadata: %v", err)
 		transfer.Status = "failed"
 		transfer.Error = err.Error()
 		return transfer, err
 	}
+	log.Printf("✅ Metadata sent, starting upload...")
 
 	// Start transfer in background
 	go m.uploadFile(transfer, filePath)
@@ -159,9 +162,11 @@ func (m *Manager) uploadFile(transfer *Transfer, filePath string) {
 
 		chunkJSON, _ := json.Marshal(chunk)
 		if err := m.sendData(chunkJSON); err != nil {
+			log.Printf("❌ Failed to send chunk at offset %d: %v", offset, err)
 			m.failTransfer(transfer, err)
 			return
 		}
+		log.Printf("📦 Sent chunk: offset=%d, size=%d", offset, n)
 
 		offset += int64(n)
 		transfer.mu.Lock()
