@@ -549,10 +549,10 @@ func mapFyneKeyToJSCode(keyName fyne.KeyName) string {
 func (v *Viewer) InitializeFileTransfer() {
 	ftManager := filetransfer.NewManager()
 
-	// Set callback to send data via WebRTC
+	// Set callback to send data via WebRTC data channel
 	ftManager.SetSendDataCallback(func(data []byte) error {
 		if client, ok := v.webrtcClient.(*rtc.Client); ok {
-			return client.SendInput(string(data))
+			return client.SendData(data)
 		}
 		return fmt.Errorf("WebRTC client not available")
 	})
