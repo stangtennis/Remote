@@ -79,11 +79,12 @@ type Viewer struct {
 // NewViewer creates a new remote desktop viewer
 func NewViewer(app fyne.App, deviceID, deviceName string) *Viewer {
 	v := &Viewer{
-		deviceID:       deviceID,
-		deviceName:     deviceName,
-		connected:      false,
-		fullscreen:     false,
-		toolbarVisible: true,
+		deviceID:             deviceID,
+		deviceName:           deviceName,
+		connected:            false,
+		fullscreen:           false,
+		toolbarVisible:       true,
+		currentStreamingMode: "jpeg", // Default to JPEG mode
 	}
 
 	// Create window - start at reasonable size, user can resize
@@ -454,6 +455,15 @@ func (v *Viewer) toggleH264Mode() {
 		} else {
 			// Update internal state immediately for responsive UI
 			v.currentStreamingMode = newMode
+			// Update mode label in UI
+			fyne.Do(func() {
+				if newMode == "h264" {
+					v.modeLabel.SetText("🎬 H.264")
+				} else {
+					v.modeLabel.SetText("📺 JPEG")
+				}
+			})
+			log.Printf("✅ Streaming mode changed to: %s", newMode)
 		}
 	}
 }
