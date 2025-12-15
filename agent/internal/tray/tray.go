@@ -9,10 +9,11 @@ import (
 
 	"github.com/getlantern/systray"
 	"github.com/stangtennis/remote-agent/internal/device"
+	"github.com/stangtennis/remote-agent/internal/updater"
 )
 
 // Version of the agent - update this with each release
-const Version = "v2.61.4"
+const Version = "v2.62.0"
 const BuildDate = "2025-12-15"
 const VersionString = Version + " (" + BuildDate + ")"
 
@@ -54,6 +55,7 @@ func (t *TrayApp) onReady() {
 
 	systray.AddSeparator()
 
+	mUpdate := systray.AddMenuItem("🔄 Tjek opdatering", "Tjek for nye versioner")
 	mLogout := systray.AddMenuItem("Skift konto / Log ud", "Log ud og skift til anden konto")
 	mQuit := systray.AddMenuItem("Afslut", "Luk agenten")
 
@@ -65,6 +67,9 @@ func (t *TrayApp) onReady() {
 				openConsole()
 			case <-mLogs.ClickedCh:
 				openLogFile()
+			case <-mUpdate.ClickedCh:
+				log.Println("🔄 Update check requested from system tray")
+				checkForUpdates()
 			case <-mLogout.ClickedCh:
 				log.Println("🔄 Logout requested from system tray")
 				clearCredentialsAndRestart()
@@ -295,4 +300,45 @@ func getIcon() []byte {
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	}
+}
+
+// checkForUpdates checks for available updates and shows notification
+func checkForUpdates() {
+	log.Println("🔍 Checking for updates...")
+
+	u, err := updater.NewUpdater(Version)
+	if err != nil {
+		log.Printf("❌ Failed to initialize updater: %v", err)
+		return
+	}
+
+	if err := u.CheckForUpdate(); err != nil {
+		log.Printf("❌ Update check failed: %v", err)
+		return
+	}
+
+	info := u.GetAvailableUpdate()
+	if info == nil {
+		log.Println("✅ Agent is up to date")
+		return
+	}
+
+	log.Printf("🆕 Update available: %s (current: %s)", info.TagName, Version)
+	log.Println("📥 Downloading update...")
+
+	if err := u.DownloadUpdate(); err != nil {
+		log.Printf("❌ Download failed: %v", err)
+		return
+	}
+
+	log.Println("✅ Update downloaded! Installing...")
+
+	// Install update (empty service name = run-once mode)
+	if err := u.InstallUpdate(""); err != nil {
+		log.Printf("❌ Install failed: %v", err)
+		return
+	}
+
+	log.Println("🚀 Update installed, restarting...")
+	systray.Quit()
 }

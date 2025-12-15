@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Remote Desktop - Links</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <style>
+    body.links-page {
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .links-shell {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .links-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .links-title {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .links-title h1 {
+      font-size: 1.6rem;
+      line-height: 1.2;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin: 0;
+    }
+
+    .links-title p {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .links-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .links-actions a.btn {
+      width: auto;
+      padding: 0.7rem 1rem;
+      text-decoration: none;
+    }
+
+    .links-card {
+      padding: 18px;
+    }
+
+    .search-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin: 14px 0 18px;
+    }
+
+    .search-row input {
+      width: 100%;
+      padding: 0.85rem 1rem;
+      background: var(--background);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 1rem;
+      transition: var(--transition);
+    }
+
+    .search-row input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px var(--primary-light);
+    }
+
+    .section {
+      margin-top: 18px;
+    }
+
+    .section-title {
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      margin: 16px 0 10px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    @media (max-width: 980px) {
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      body.links-page {
+        padding: 16px;
+      }
+      .links-header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .links-actions {
+        justify-content: flex-start;
+      }
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    a.link-tile {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 14px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.35);
+      text-decoration: none;
+      color: var(--text);
+      transition: var(--transition);
+      min-height: 92px;
+    }
+
+    a.link-tile:hover {
+      transform: translateY(-2px);
+      background: rgba(30, 41, 59, 0.55);
+      border-color: var(--border-glow);
+      box-shadow: var(--shadow);
+    }
+
+    .tile-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .tile-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+    }
+
+    .tile-title i {
+      color: var(--text-secondary);
+    }
+
+    .tile-meta {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      word-break: break-word;
+    }
+
+    .pill {
+      font-size: 0.75rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: var(--radius-full);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      background: rgba(255,255,255,0.04);
+      white-space: nowrap;
+    }
+
+    .pill.local {
+      border-color: rgba(34, 197, 94, 0.25);
+      background: rgba(34, 197, 94, 0.08);
+    }
+
+    .pill.external {
+      border-color: rgba(14, 165, 233, 0.25);
+      background: rgba(14, 165, 233, 0.08);
+    }
+
+    .footer {
+      margin-top: 18px;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .footer code {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 0.2rem 0.4rem;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body class="links-page">
+  <div class="links-shell">
+    <div class="links-header">
+      <div class="links-title">
+        <h1>🧭 Remote Desktop Links</h1>
+        <p>Samlet indgang til dashboard, adminpanel, web-agent og relevante docs.</p>
+      </div>
+      <div class="links-actions">
+        <a class="btn btn-primary" href="dashboard.html"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+        <a class="btn btn-secondary" href="admin.html"><i class="fa-solid fa-user-shield"></i> Admin</a>
+        <a class="btn btn-secondary" href="agent.html"><i class="fa-solid fa-desktop"></i> Web Agent</a>
+      </div>
+    </div>
+
+    <div class="glass-card links-card">
+      <div class="search-row">
+        <input id="search" type="search" placeholder="Søg… (fx “TURN”, “agent”, “docs”, “release”)" autocomplete="off" />
+      </div>
+
+      <div class="section">
+        <div class="section-title">Web (lokale sider)</div>
+        <div class="grid" id="grid-local">
+          <a class="link-tile" href="index.html" data-title="login index">
+            <div class="tile-top">
+              <div class="tile-title"><i class="fa-solid fa-right-to-bracket"></i> Login</div>
+              <span class="pill local">local</span>
+            </div>
+            <div class="tile-meta">docs/index.html</div>
+          </a>
+
+          <a class="link-tile" href="dashboard.html" data-title="dashboard kontrolpanel viewer">
+            <div class="tile-top">
+              <div class="tile-title"><i class="fa-solid fa-gauge-high"></i> Dashboard</div>
+              <span class="pill local">local</span>
+            </div>
+            <div class="tile-meta">docs/dashboard.html</div>
+          </a>
+
+          <a class="link-tile" href="admin.html" data-title="adminpanel users devices">
+            <div class="tile-top">
+              <div class="tile-title"><i class="fa-solid fa-user-shield"></i> Adminpanel</div>
+              <span class="pill local">local</span>
+            </div>
+            <div class="tile-meta">docs/admin.html</div>
+          </a>
+
+          <a class="link-tile" href="agent.html" data-title="web agent del skærm">
+            <div class="tile-top">
+              <div class="tile-title"><i class="fa-solid fa-desktop"></i> Web Agent</div>
+              <span class="pill local">local</span>
+            </div>
+            <div class="tile-meta">docs/agent.html</div>
+          </a>
+
+          <a class="link-tile" href="turn-test.html" data-title="turn test webrtc stun">
+            <div class="tile-top">
+              <div class="tile-title"><i class="fa-solid fa-network-wired"></i> TURN Test</div>
+              <span class="pill local">local</span>
+            </div>
+            <div class="tile-meta">docs/turn-test.html</div>
+          </a>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Docs (repo)</div>
+        <div class="grid" id="grid-external">
+          <a class="link-tile" href="https://github.com/stangtennis/Remote" target="_blank" rel="noreferrer" data-title="github repo source">
+            <div class="tile-top">
+              <div class="tile-title"><i class="fa-brands fa-github"></i> GitHub Repo</div>
+              <span class="pill external">external</span>
+            </div>
+            <div class="tile-meta">github.com/stangtennis/Remote</div>
+          </a>
+
+          <a class="link-tile" href="https://github.com/stangtennis/Remote/blob/main/README.md" target="_blank" rel="noreferrer" data-title="readme overview">
+            <div class="tile-top">
+              <div class="tile-title"><i class="fa-regular fa-file-lines"></i> README</div>
+              <span class="pill external">external</span>
+            </div>
+            <div class="tile-meta">README.md</div>
+          </a>
+
+          <a class="link-tile" href="https://github.com/stangtennis/Remote/blob/main/CONFIGURATION.md" target="_blank" rel="noreferrer" data-title="configuration env">
+            <div class="tile-top">
+              <div class="tile-title"><i class="fa-solid fa-sliders"></i> Configuration</div>
+              <span class="pill external">external</span>
+            </div>
+            <div class="tile-meta">CONFIGURATION.md</div>
+          </a>
+
+          <a class="link-tile" href="https://github.com/stangtennis/Remote/blob/main/agent/README.md" target="_blank" rel="noreferrer" data-title="agent readme install service">
+            <div class="tile-top">
+              <div class="tile-title"><i class="fa-solid fa-robot"></i> Agent README</div>
+              <span class="pill external">external</span>
+            </div>
+            <div class="tile-meta">agent/README.md</div>
+          </a>
+
+          <a class="link-tile" href="https://github.com/stangtennis/Remote/blob/main/controller/README.md" target="_blank" rel="noreferrer" data-title="controller readme fyne">
+            <div class="tile-top">
+              <div class="tile-title"><i class="fa-solid fa-gamepad"></i> Controller README</div>
+              <span class="pill external">external</span>
+            </div>
+            <div class="tile-meta">controller/README.md</div>
+          </a>
+
+          <a class="link-tile" href="https://github.com/stangtennis/Remote/releases" target="_blank" rel="noreferrer" data-title="releases download">
+            <div class="tile-top">
+              <div class="tile-title"><i class="fa-solid fa-download"></i> Releases</div>
+              <span class="pill external">external</span>
+            </div>
+            <div class="tile-meta">Download agent/controller</div>
+          </a>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div>Tip: Åbn direkte lokalt via <code>docs/links.html</code>.</div>
+        <div id="count"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const search = document.getElementById('search');
+      const tiles = Array.from(document.querySelectorAll('a.link-tile'));
+      const count = document.getElementById('count');
+
+      function updateCount(visible) {
+        count.textContent = visible === 1 ? '1 link' : `${visible} links`;
+      }
+
+      function normalize(s) {
+        return (s || '').toLowerCase().trim();
+      }
+
+      function filter() {
+        const q = normalize(search.value);
+        let visible = 0;
+
+        for (const tile of tiles) {
+          const hay = normalize(tile.getAttribute('data-title') + ' ' + tile.href + ' ' + tile.textContent);
+          const ok = q === '' || hay.includes(q);
+          tile.style.display = ok ? 'flex' : 'none';
+          if (ok) visible++;
+        }
+
+        updateCount(visible);
+      }
+
+      search.addEventListener('input', filter);
+      filter();
+    })();
+  </script>
+</body>
+</html>
+
