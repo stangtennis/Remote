@@ -13,7 +13,7 @@ import (
 )
 
 // Version of the agent - update this with each release
-const Version = "v2.62.0"
+const Version = "v2.62.1"
 const BuildDate = "2025-12-15"
 const VersionString = Version + " (" + BuildDate + ")"
 
@@ -333,8 +333,8 @@ func checkForUpdates() {
 
 	log.Println("✅ Update downloaded! Installing...")
 
-	// Install update (empty service name = run-once mode)
-	if err := u.InstallUpdate(""); err != nil {
+	// Install update - new exe handles the replacement
+	if err := u.InstallUpdate(); err != nil {
 		log.Printf("❌ Install failed: %v", err)
 		return
 	}

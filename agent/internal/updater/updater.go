@@ -268,8 +268,8 @@ func (u *Updater) DownloadUpdate() error {
 }
 
 // InstallUpdate installs the downloaded update
-// serviceName: name of the Windows service (empty for run-once mode)
-func (u *Updater) InstallUpdate(serviceName string) error {
+// The new exe is started with --update-from flag, which handles the replacement
+func (u *Updater) InstallUpdate() error {
 	if u.state.DownloadPath == "" {
 		return fmt.Errorf("no update downloaded")
 	}
@@ -287,30 +287,10 @@ func (u *Updater) InstallUpdate(serviceName string) error {
 		return err
 	}
 
-	exeDir := filepath.Dir(currentExe)
-	updaterPath := filepath.Join(exeDir, "agent-updater.exe")
-
-	if _, err := os.Stat(updaterPath); os.IsNotExist(err) {
-		u.lastError = fmt.Errorf("updater helper not found: %s", updaterPath)
-		u.setStatus(StatusError)
-		return u.lastError
-	}
-
-	backupPath := currentExe + ".old"
-
-	args := []string{
-		"--target", currentExe,
-		"--source", u.state.DownloadPath,
-		"--backup", backupPath,
-		"--restart",
-	}
-
-	if serviceName != "" {
-		args = append(args, "--service-name", serviceName)
-	}
-
-	log.Printf("🚀 Launching updater: %s %v", updaterPath, args)
-	cmd := exec.Command(updaterPath, args...)
+	// Launch the NEW exe with --update-from flag
+	// The new exe will wait for us to exit, then replace us
+	log.Printf("🚀 Starting new version with update mode: %s --update-from %s", u.state.DownloadPath, currentExe)
+	cmd := exec.Command(u.state.DownloadPath, "--update-from", currentExe)
 
 	if err := cmd.Start(); err != nil {
 		u.lastError = err
@@ -322,7 +302,7 @@ func (u *Updater) InstallUpdate(serviceName string) error {
 	u.state.DownloadPath = ""
 	u.saveState()
 
-	log.Println("✅ Updater started, exiting for update...")
+	log.Println("✅ New version started, exiting for update...")
 	return nil
 }
 
