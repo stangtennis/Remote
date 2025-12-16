@@ -15,13 +15,14 @@ import (
 
 // H264Decoder decodes H.264 NAL units to frames using FFmpeg subprocess
 type H264Decoder struct {
-	cmd       *exec.Cmd
-	stdin     io.WriteCloser
-	stdout    io.ReadCloser
-	onFrame   func([]byte) // Callback for decoded JPEG frames
-	running   bool
-	mu        sync.Mutex
-	stopChan  chan struct{}
+	cmd      *exec.Cmd
+	stdin    io.WriteCloser
+	stdout   io.ReadCloser
+	stderr   io.ReadCloser
+	onFrame  func([]byte) // Callback for decoded JPEG frames
+	running  bool
+	mu       sync.Mutex
+	stopChan chan struct{}
 }
 
 // NewH264Decoder creates a new FFmpeg-based H.264 decoder
@@ -125,6 +126,8 @@ func (d *H264Decoder) start() error {
 		return fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
 
+	d.stderr, _ = d.cmd.StderrPipe()
+
 	if err := d.cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start ffmpeg: %w", err)
 	}
@@ -134,8 +137,30 @@ func (d *H264Decoder) start() error {
 
 	// Start goroutine to read decoded frames
 	go d.readFrames()
+	go d.readStderr()
 
 	return nil
+}
+
+func (d *H264Decoder) readStderr() {
+	if d.stderr == nil {
+		return
+	}
+	buf := make([]byte, 4096)
+	for {
+		select {
+		case <-d.stopChan:
+			return
+		default:
+		}
+		n, err := d.stderr.Read(buf)
+		if n > 0 {
+			log.Printf("🎬 ffmpeg: %s", bytes.TrimSpace(buf[:n]))
+		}
+		if err != nil {
+			return
+		}
+	}
 }
 
 // readFrames reads MJPEG frames from FFmpeg stdout

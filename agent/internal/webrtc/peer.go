@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pion/interceptor"
+	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
 	"github.com/stangtennis/remote-agent/internal/clipboard"
 	"github.com/stangtennis/remote-agent/internal/config"
@@ -66,7 +68,7 @@ type Manager struct {
 
 	// Input-triggered frame refresh
 	inputFrameTrigger chan struct{}
-	
+
 	// Frame ID for chunking (robustness against out-of-order delivery)
 	frameID uint16
 
@@ -229,10 +231,11 @@ func (m *Manager) SetH264Mode(enabled bool) {
 			log.Printf("⚠️ Kan ikke aktivere H.264 - encoder understøtter ikke H.264 (encoder: %s)", encName)
 			return
 		}
-		
+
 		// Start video track
 		m.videoTrack.Start()
 		m.useH264 = true
+		m.videoEncoder.ForceKeyframe()
 		log.Printf("🎬 H.264 tilstand aktiveret (encoder: %s)", encName)
 	} else {
 		m.useH264 = false
@@ -266,7 +269,23 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 		ICEServers: iceServers,
 	}
 
-	pc, err := webrtc.NewPeerConnection(config)
+	// Create MediaEngine with H.264 codec support (required for H.264 track negotiation).
+	me := &webrtc.MediaEngine{}
+	_ = me.RegisterCodec(webrtc.RTPCodecParameters{
+		RTPCodecCapability: webrtc.RTPCodecCapability{
+			MimeType:    webrtc.MimeTypeH264,
+			ClockRate:   90000,
+			SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
+		},
+		PayloadType: 96,
+	}, webrtc.RTPCodecTypeVideo)
+
+	ir := &interceptor.Registry{}
+	// Default interceptors are needed for RTCP feedback, NACK/PLI plumbing, etc.
+	_ = webrtc.RegisterDefaultInterceptors(me, ir)
+
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(me), webrtc.WithInterceptorRegistry(ir))
+	pc, err := api.NewPeerConnection(config)
 	if err != nil {
 		return fmt.Errorf("failed to create peer connection: %w", err)
 	}
@@ -283,10 +302,29 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 		log.Printf("⚠️ Failed to create video track: %v", err)
 	} else {
 		m.videoTrack = videoTrack
-		if _, err := pc.AddTrack(videoTrack.GetTrack()); err != nil {
+		sender, err := pc.AddTrack(videoTrack.GetTrack())
+		if err != nil {
 			log.Printf("⚠️ Failed to add video track: %v", err)
 		} else {
 			log.Println("🎬 Video track added (H.264 ready, mode switch without renegotiation)")
+
+			// Drain RTCP and react to keyframe requests (PLI/FIR) to avoid stalls and improve recovery.
+			go func() {
+				for {
+					pkts, _, rtcpErr := sender.ReadRTCP()
+					if rtcpErr != nil {
+						return
+					}
+					for _, pkt := range pkts {
+						switch pkt.(type) {
+						case *rtcp.PictureLossIndication, *rtcp.FullIntraRequest:
+							if m.videoEncoder != nil {
+								m.videoEncoder.ForceKeyframe()
+							}
+						}
+					}
+				}
+			}()
 		}
 	}
 
@@ -877,23 +915,23 @@ func (m *Manager) startScreenStreaming() {
 	}
 
 	// Adaptive streaming parameters
-	fps := 20              // Current FPS (12-30)
-	quality := 65          // JPEG quality (50-80)
-	scale := 1.0           // Scale factor (0.5-1.0)
+	fps := 20     // Current FPS (12-30)
+	quality := 65 // JPEG quality (50-80)
+	scale := 1.0  // Scale factor (0.5-1.0)
 	frameInterval := time.Duration(1000/fps) * time.Millisecond
 
 	// Thresholds for adaptation (use controller caps if set)
-	bufferHigh := uint64(8 * 1024 * 1024)  // 8MB - reduce quality
-	bufferLow := uint64(1 * 1024 * 1024)   // 1MB - can increase quality
+	bufferHigh := uint64(8 * 1024 * 1024) // 8MB - reduce quality
+	bufferLow := uint64(1 * 1024 * 1024)  // 1MB - can increase quality
 	minFPS := 12
 	maxFPS := 30
 	minQuality := 50
 	maxQuality := 80
 	minScale := 0.5
 	maxScale := 1.0
-	idleFPS := 2   // FPS when idle
-	idleQuality := 85  // Quality when idle (high for crisp text)
-	idleScale := 1.0 // Scale when idle (full resolution for sharpness)
+	idleFPS := 2         // FPS when idle
+	idleQuality := 85    // Quality when idle (high for crisp text)
+	idleScale := 1.0     // Scale when idle (full resolution for sharpness)
 	idleThreshold := 1.0 // Motion % threshold for idle
 
 	// Apply controller caps if set
@@ -917,8 +955,8 @@ func (m *Manager) startScreenStreaming() {
 	var lastRGBA *image.RGBA
 	lastAdaptTime := time.Now()
 	lastLogTime := time.Now()
-	lastFullFrame := time.Now() // For full-frame refresh cadence
-	lowMotionStart := time.Time{}  // When low motion started
+	lastFullFrame := time.Now()   // For full-frame refresh cadence
+	lowMotionStart := time.Time{} // When low motion started
 	isIdle := false
 	motionPct := 0.0
 	forceFullFrame := false
@@ -955,24 +993,24 @@ func (m *Manager) startScreenStreaming() {
 		rgbaFrame, err := m.screenCapturer.CaptureRGBA()
 		if err != nil {
 			errorCount++
-			
+
 			// Check if DXGI needs reinitialization (screensaver, lock screen, power save)
 			errStr := err.Error()
-			isDXGIError := strings.Contains(errStr, "AcquireNextFrame") || 
-				strings.Contains(errStr, "error -2") || 
+			isDXGIError := strings.Contains(errStr, "AcquireNextFrame") ||
+				strings.Contains(errStr, "error -2") ||
 				strings.Contains(errStr, "DXGI") ||
 				strings.Contains(errStr, "capture failed")
-			
+
 			if isDXGIError {
 				if errorCount%10 == 1 {
 					log.Printf("⚠️ DXGI error: %s (#%d)", errStr, errorCount)
 				}
-				
+
 				// Try to reinitialize on first error, then every 3 errors
 				if errorCount == 1 || errorCount%3 == 0 {
 					log.Printf("🔄 Reinitializing screen capturer...")
 					time.Sleep(500 * time.Millisecond)
-					
+
 					if reinitErr := m.screenCapturer.Reinitialize(false); reinitErr != nil {
 						log.Printf("⚠️ Reinit failed: %v", reinitErr)
 					} else {
@@ -1173,7 +1211,7 @@ func (m *Manager) startScreenStreaming() {
 			if errorCount%50 == 1 {
 				log.Printf("⚠️ JPEG encode error: %v", err)
 			}
-			
+
 			if lastFrame != nil {
 				m.sendFrameChunked(lastFrame)
 			}

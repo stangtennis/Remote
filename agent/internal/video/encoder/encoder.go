@@ -10,10 +10,10 @@ import (
 
 // Config holds encoder configuration
 type Config struct {
-	Width      int
-	Height     int
-	Bitrate    int // kbps
-	Framerate  int
+	Width            int
+	Height           int
+	Bitrate          int // kbps
+	Framerate        int
 	KeyframeInterval int // frames between keyframes
 }
 

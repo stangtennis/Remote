@@ -29,9 +29,9 @@ type Client struct {
 	connected            bool
 
 	// Frame reassembly with timeout tracking
-	frameChunks     map[int][][]byte   // frameID -> chunk data
-	frameFirstSeen  map[int]time.Time  // frameID -> first chunk arrival time
-	frameChunksMu   sync.Mutex
+	frameChunks    map[int][][]byte  // frameID -> chunk data
+	frameFirstSeen map[int]time.Time // frameID -> first chunk arrival time
+	frameChunksMu  sync.Mutex
 
 	// RTT measurement
 	lastPingTime time.Time
@@ -57,7 +57,7 @@ func NewClient() (*Client, error) {
 func (c *Client) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	// Create MediaEngine with H.264 codec support
 	m := &webrtc.MediaEngine{}
-	
+
 	// Register H.264 codec (baseline profile for compatibility)
 	if err := m.RegisterCodec(webrtc.RTPCodecParameters{
 		RTPCodecCapability: webrtc.RTPCodecCapability{
@@ -72,7 +72,7 @@ func (c *Client) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 
 	// Create interceptor registry for PLI (Picture Loss Indication)
 	i := &interceptor.Registry{}
-	
+
 	// Add PLI interceptor to request keyframes
 	pliFactory, err := intervalpli.NewReceiverInterceptor()
 	if err != nil {
@@ -128,20 +128,23 @@ func (c *Client) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	// Handle incoming tracks (H.264 video)
 	pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		codecMime := track.Codec().MimeType
-		log.Printf("📺 Received track: %s (codec: %s)", track.Kind().String(), codecMime)
+		log.Printf("📺 OnTrack CALLED! Kind: %s, Codec: %s, SSRC: %d, PayloadType: %d", 
+			track.Kind().String(), codecMime, track.SSRC(), track.PayloadType())
 		
 		if track.Kind() == webrtc.RTPCodecTypeVideo {
 			// Only start H.264 decoder for H.264 tracks
 			if codecMime == webrtc.MimeTypeH264 {
 				c.videoTrack = track
 				c.h264Receiving = true
-				log.Println("🎬 H.264 video track received - starting decoder")
+				log.Println("🎬 H.264 video track received - starting decoder goroutine NOW")
 				
 				// Start H.264 RTP receiver goroutine
 				go c.receiveH264Track(track)
 			} else {
 				log.Printf("⚠️ Ignoring non-H.264 video track: %s", codecMime)
 			}
+		} else {
+			log.Printf("⚠️ Ignoring non-video track: %s", track.Kind().String())
 		}
 	})
 
@@ -264,7 +267,7 @@ func (c *Client) CreateOffer() (string, error) {
 	// 5s gives TURN/relay candidates time to gather (important for NAT traversal)
 	// while still being faster than full gathering which can take 10-30s
 	log.Println("⏳ ICE gathering (semi-trickle, max 5s)...")
-	
+
 	gatherComplete := webrtc.GatheringCompletePromise(c.peerConnection)
 	select {
 	case <-gatherComplete:
@@ -430,7 +433,7 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 			// Clear chunks for this frame
 			delete(c.frameChunks, frameID)
 			delete(c.frameFirstSeen, frameID)
-			
+
 			// GC: Drop incomplete frames older than 200ms (prevents freezes)
 			now := time.Now()
 			for id, firstSeen := range c.frameFirstSeen {
@@ -588,7 +591,8 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 		c.h264Receiving = false
 	}()
 
-	log.Printf("🎬 Starting H.264 receiver (codec: %s, SSRC: %d)", track.Codec().MimeType, track.SSRC())
+	log.Printf("🎬 receiveH264Track STARTED (codec: %s, SSRC: %d, ClockRate: %d)", 
+		track.Codec().MimeType, track.SSRC(), track.Codec().ClockRate)
 
 	// Create sample builder for H.264 depacketization
 	// Max late is 50 packets (about 1.5 seconds at 30fps)
@@ -622,18 +626,21 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 	// Read RTP packets and decode
 	rtpCount := 0
 	sampleCount := 0
+	log.Println("🎬 Entering RTP read loop...")
 	for {
 		// Read RTP packet
 		rtpPacket, _, err := track.ReadRTP()
 		if err != nil {
-			if err.Error() != "EOF" {
-				log.Printf("⚠️ RTP read error: %v", err)
-			}
+			log.Printf("⚠️ RTP read error (after %d packets): %v", rtpCount, err)
 			break
 		}
 
 		rtpCount++
-		if rtpCount%100 == 1 {
+		if rtpCount == 1 {
+			log.Printf("🎬 FIRST RTP packet received! SeqNum: %d, Timestamp: %d, PayloadLen: %d", 
+				rtpPacket.SequenceNumber, rtpPacket.Timestamp, len(rtpPacket.Payload))
+		}
+		if rtpCount%100 == 0 {
 			log.Printf("🎬 RTP packets received: %d", rtpCount)
 		}
 
