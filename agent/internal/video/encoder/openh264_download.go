@@ -25,12 +25,45 @@ func EnsureOpenH264DLL() (string, error) {
 		return "", fmt.Errorf("failed to get executable path: %w", err)
 	}
 	exeDir := filepath.Dir(exePath)
-	dllPath := filepath.Join(exeDir, openH264DLLName)
 
-	// Check if DLL already exists
-	if _, err := os.Stat(dllPath); err == nil {
-		log.Printf("🎬 OpenH264 DLL found: %s", dllPath)
-		return dllPath, nil
+	// Prefer placing the DLL next to the executable (best for portability),
+	// but fall back to a writable per-machine/per-user location if exeDir isn't writable.
+	primaryPath := filepath.Join(exeDir, openH264DLLName)
+	paths := []string{primaryPath}
+	if cacheDir, err := os.UserCacheDir(); err == nil && cacheDir != "" {
+		paths = append(paths, filepath.Join(cacheDir, "RemoteDesktopAgent", "openh264", openH264DLLName))
+	}
+	if programData := os.Getenv("PROGRAMDATA"); programData != "" {
+		paths = append(paths, filepath.Join(programData, "RemoteDesktopAgent", "openh264", openH264DLLName))
+	}
+
+	// Check if DLL already exists in any candidate location
+	for _, dllPath := range paths {
+		if _, err := os.Stat(dllPath); err == nil {
+			log.Printf("🎬 OpenH264 DLL found: %s", dllPath)
+			return dllPath, nil
+		}
+	}
+
+	// Pick a target path we can write to
+	var dllPath string
+	for _, p := range paths {
+		dir := filepath.Dir(p)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			continue
+		}
+		// Try creating a temp file in the directory to ensure it's writable.
+		f, err := os.CreateTemp(dir, "openh264-write-test-*")
+		if err != nil {
+			continue
+		}
+		f.Close()
+		_ = os.Remove(f.Name())
+		dllPath = p
+		break
+	}
+	if dllPath == "" {
+		return "", fmt.Errorf("no writable location found for OpenH264 DLL (tried: %v)", paths)
 	}
 
 	// Download DLL

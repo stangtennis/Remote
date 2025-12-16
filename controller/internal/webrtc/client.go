@@ -606,6 +606,10 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 		if err != nil {
 			log.Printf("❌ Failed to start H.264 decoder: %v", err)
 			log.Println("⚠️ Falling back to JPEG datachannel mode")
+			// Ask agent to switch back to tiles so the user isn't left with a frozen view.
+			if switchErr := c.SetStreamingMode("tiles", 0); switchErr != nil {
+				log.Printf("⚠️ Failed to request tiles fallback: %v", switchErr)
+			}
 			return
 		}
 	}

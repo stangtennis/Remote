@@ -224,11 +224,16 @@ func (m *Manager) SetH264Mode(enabled bool) {
 			log.Println("⚠️ Kan ikke aktivere H.264 - video encoder ikke initialiseret")
 			return
 		}
+		encName := m.videoEncoder.GetEncoderName()
+		if encName != "openh264" {
+			log.Printf("⚠️ Kan ikke aktivere H.264 - encoder understøtter ikke H.264 (encoder: %s)", encName)
+			return
+		}
 		
 		// Start video track
 		m.videoTrack.Start()
 		m.useH264 = true
-		log.Printf("🎬 H.264 tilstand aktiveret (encoder: %s)", m.videoEncoder.GetEncoderName())
+		log.Printf("🎬 H.264 tilstand aktiveret (encoder: %s)", encName)
 	} else {
 		m.useH264 = false
 		// Stop video track
