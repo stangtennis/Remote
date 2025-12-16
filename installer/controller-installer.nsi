@@ -11,13 +11,14 @@ InstallDirRegKey HKLM "Software\RemoteDesktopController" "InstallDir"
 RequestExecutionLevel admin
 
 ; Version info
-!define VERSION "2.59.0"
-VIProductVersion "2.59.0.0"
+!define VERSION "2.62.5"
+VIProductVersion "2.62.5.0"
 VIAddVersionKey "ProductName" "Remote Desktop Controller"
 VIAddVersionKey "CompanyName" "StangTennis"
 VIAddVersionKey "FileDescription" "Remote Desktop Controller with H.264 support"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
+VIAddVersionKey "LegalCopyright" "StangTennis"
 
 ; Interface Settings
 !define MUI_ABORTWARNING
@@ -35,11 +36,38 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 !insertmacro MUI_UNPAGE_INSTFILES
 
 ; Languages
-!insertmacro MUI_LANGUAGE "English"
+!insertmacro MUI_LANGUAGE "Danish"
+
+; Check for existing installation
+Function .onInit
+    ; Check if already installed
+    ReadRegStr $0 HKLM "Software\RemoteDesktopController" "Version"
+    StrCmp $0 "" done
+    
+    ; Show upgrade message
+    MessageBox MB_YESNO|MB_ICONQUESTION "Remote Desktop Controller v$0 er allerede installeret.$\n$\nVil du opgradere til v${VERSION}?" IDYES upgrade IDNO abort
+    
+    abort:
+        Abort
+    
+    upgrade:
+        ; Close running controller
+        nsExec::ExecToLog 'taskkill /F /IM controller.exe'
+        Sleep 1000
+    
+    done:
+FunctionEnd
 
 ; Installer Section
 Section "Install"
     SetOutPath "$INSTDIR"
+    
+    ; Overwrite files without asking (upgrade mode)
+    SetOverwrite on
+    
+    ; Stop controller if running
+    nsExec::ExecToLog 'taskkill /F /IM controller.exe'
+    Sleep 500
     
     ; Main application
     File "controller.exe"
