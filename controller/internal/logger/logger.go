@@ -2,7 +2,6 @@ package logger
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -61,13 +60,10 @@ func Init() error {
 	// Create sync writer that flushes after every write
 	syncFile := &syncWriter{file: logFile}
 
-	// Create multi-writer for both file and console
-	multiWriter := io.MultiWriter(os.Stdout, syncFile)
-
-	// Initialize loggers with different prefixes
-	InfoLogger = log.New(multiWriter, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(multiWriter, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
-	DebugLogger = log.New(multiWriter, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
+	// Initialize loggers - write directly to file (GUI apps have no stdout)
+	InfoLogger = log.New(syncFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	ErrorLogger = log.New(syncFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+	DebugLogger = log.New(syncFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
 
 	InfoLogger.Printf("Logger initialized. Log file: %s", logFilePath)
 	return nil
