@@ -463,6 +463,12 @@ func (v *Viewer) toggleH264Mode() {
 					v.modeLabel.SetText("📺 JPEG")
 				}
 			})
+			// If we switched away from H.264, stop local decoder (kills ffmpeg process)
+			if newMode == "tiles" {
+				if stopper, ok := v.webrtcClient.(interface{ StopH264Decoder() }); ok {
+					stopper.StopH264Decoder()
+				}
+			}
 			log.Printf("✅ Streaming mode changed to: %s", newMode)
 		}
 	}

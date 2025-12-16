@@ -4,6 +4,7 @@ package encoder
 import (
 	"fmt"
 	"image"
+	"log"
 	"sync"
 )
 
@@ -59,6 +60,8 @@ func (m *Manager) Init(cfg Config) error {
 	if err := openh264Enc.Init(cfg); err == nil {
 		m.encoder = openh264Enc
 		return nil
+	} else {
+		log.Printf("⚠️ OpenH264 init fejlede (%v) - fallback til %s", err, NewSoftwareEncoder().Name())
 	}
 
 	// Fallback to software encoder (JPEG placeholder)

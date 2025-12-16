@@ -112,6 +112,7 @@ func (d *H264Decoder) start() error {
 		"-q:v", "2",
 		"pipe:1",
 	)
+	configureFFmpegCmd(d.cmd)
 
 	var err error
 	d.stdin, err = d.cmd.StdinPipe()

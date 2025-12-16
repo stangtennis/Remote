@@ -71,6 +71,12 @@ func (e *OpenH264Encoder) Init(cfg Config) error {
 	var videoFormat int = int(openh264.VideoFormatI420)
 	e.encoder.SetOption(openh264.ENCODER_OPTION_DATAFORMAT, &videoFormat)
 
+	// Configure keyframe cadence once at init (safer than mutating options per-frame).
+	if cfg.KeyframeInterval > 0 {
+		idrInterval := cfg.KeyframeInterval
+		_ = e.encoder.SetOption(openh264.ENCODER_OPTION_IDR_INTERVAL, &idrInterval)
+	}
+
 	e.pinner = &runtime.Pinner{}
 	e.initialized = true
 	e.frameNum = 0
@@ -98,6 +104,8 @@ func (e *OpenH264Encoder) Encode(frame *image.RGBA, forceKeyframe bool) (output 
 		return nil, fmt.Errorf("encoder ikke initialiseret")
 	}
 
+	_ = forceKeyframe
+
 	// Convert RGBA to YCbCr (I420)
 	bounds := frame.Bounds()
 	width := bounds.Dx()
@@ -106,12 +114,6 @@ func (e *OpenH264Encoder) Encode(frame *image.RGBA, forceKeyframe bool) (output 
 	// Create YCbCr image
 	ycbcr := image.NewYCbCr(bounds, image.YCbCrSubsampleRatio420)
 	rgbaToYCbCr(frame, ycbcr)
-
-	// Force keyframe if requested
-	if forceKeyframe {
-		var forceIDR int = 1
-		e.encoder.SetOption(openh264.ENCODER_OPTION_IDR_INTERVAL, &forceIDR)
-	}
 
 	// Prepare source picture
 	encSrcPic := openh264.SSourcePicture{
@@ -149,16 +151,27 @@ func (e *OpenH264Encoder) Encode(frame *image.RGBA, forceKeyframe bool) (output 
 		return nil, nil
 	}
 
-	// Collect NAL units
+	// Collect NAL units as Annex-B (00 00 00 01 + NAL...).
+	// OpenH264 provides per-NAL lengths; the raw buffer does not guarantee start codes.
 	for iLayer := 0; iLayer < int(encInfo.ILayerNum); iLayer++ {
 		pLayerBsInfo := &encInfo.SLayerInfo[iLayer]
-		var iLayerSize int32
-		nallens := unsafe.Slice(pLayerBsInfo.PNalLengthInByte, pLayerBsInfo.INalCount)
-		for _, l := range nallens {
-			iLayerSize += l
+		nalLens := unsafe.Slice(pLayerBsInfo.PNalLengthInByte, pLayerBsInfo.INalCount)
+
+		totalLen := int32(0)
+		for _, l := range nalLens {
+			totalLen += l
 		}
-		nals := unsafe.Slice(pLayerBsInfo.PBsBuf, iLayerSize)
-		output = append(output, nals...)
+		buf := unsafe.Slice(pLayerBsInfo.PBsBuf, totalLen)
+
+		offset := int32(0)
+		for _, l := range nalLens {
+			if l <= 0 || offset+l > totalLen {
+				break
+			}
+			output = append(output, 0, 0, 0, 1)
+			output = append(output, buf[offset:offset+l]...)
+			offset += l
+		}
 	}
 
 	return output, nil
