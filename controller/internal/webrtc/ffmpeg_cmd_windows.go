@@ -13,4 +13,3 @@ func configureFFmpegCmd(cmd *exec.Cmd) {
 	}
 	cmd.SysProcAttr.HideWindow = true
 }
-

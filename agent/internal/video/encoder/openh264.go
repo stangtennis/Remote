@@ -14,11 +14,11 @@ import (
 // OpenH264Encoder implements H.264 encoding using Cisco's OpenH264
 // This uses purego for dynamic loading - no CGO required!
 type OpenH264Encoder struct {
-	config    Config
-	mu        sync.Mutex
-	encoder   *openh264.ISVCEncoder
-	pinner    *runtime.Pinner
-	frameNum  int64
+	config      Config
+	mu          sync.Mutex
+	encoder     *openh264.ISVCEncoder
+	pinner      *runtime.Pinner
+	frameNum    int64
 	initialized bool
 }
 
@@ -77,6 +77,11 @@ func (e *OpenH264Encoder) Init(cfg Config) error {
 		_ = e.encoder.SetOption(openh264.ENCODER_OPTION_IDR_INTERVAL, &idrInterval)
 	}
 
+	// Prefer including prefix NALs so downstream decoders can lock on quickly.
+	// This can help when a decoder starts mid-stream and needs SPS/PPS near an IDR.
+	enablePrefix := 1
+	_ = e.encoder.SetOption(openh264.ENCODER_OPTION_ENABLE_PREFIX_NAL_ADDING, &enablePrefix)
+
 	e.pinner = &runtime.Pinner{}
 	e.initialized = true
 	e.frameNum = 0
@@ -114,6 +119,17 @@ func (e *OpenH264Encoder) Encode(frame *image.RGBA, forceKeyframe bool) (output 
 	// Create YCbCr image
 	ycbcr := image.NewYCbCr(bounds, image.YCbCrSubsampleRatio420)
 	rgbaToYCbCr(frame, ycbcr)
+
+	// Best-effort "force keyframe": temporarily set IDR interval to 1 for this encode,
+	// then restore configured cadence. This isn't perfect, but it improves startup and PLI recovery.
+	if forceKeyframe && e.config.KeyframeInterval > 0 {
+		one := 1
+		_ = e.encoder.SetOption(openh264.ENCODER_OPTION_IDR_INTERVAL, &one)
+		defer func() {
+			restore := e.config.KeyframeInterval
+			_ = e.encoder.SetOption(openh264.ENCODER_OPTION_IDR_INTERVAL, &restore)
+		}()
+	}
 
 	// Prepare source picture
 	encSrcPic := openh264.SSourcePicture{

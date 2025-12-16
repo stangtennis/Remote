@@ -7,4 +7,3 @@ import "os/exec"
 func configureFFmpegCmd(cmd *exec.Cmd) {
 	_ = cmd
 }
-
