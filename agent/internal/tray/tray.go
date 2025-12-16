@@ -13,8 +13,8 @@ import (
 )
 
 // Version of the agent - update this with each release
-const Version = "v2.62.1"
-const BuildDate = "2025-12-15"
+const Version = "v2.62.2"
+const BuildDate = "2025-12-16"
 const VersionString = Version + " (" + BuildDate + ")"
 
 type TrayApp struct {
@@ -302,43 +302,43 @@ func getIcon() []byte {
 	}
 }
 
-// checkForUpdates checks for available updates and shows notification
+// checkForUpdates tjekker for tilgængelige opdateringer
 func checkForUpdates() {
-	log.Println("🔍 Checking for updates...")
+	log.Println("🔍 Tjekker for opdateringer...")
 
 	u, err := updater.NewUpdater(Version)
 	if err != nil {
-		log.Printf("❌ Failed to initialize updater: %v", err)
+		log.Printf("❌ Kunne ikke initialisere opdatering: %v", err)
 		return
 	}
 
 	if err := u.CheckForUpdate(); err != nil {
-		log.Printf("❌ Update check failed: %v", err)
+		log.Printf("❌ Opdateringstjek fejlede: %v", err)
 		return
 	}
 
 	info := u.GetAvailableUpdate()
 	if info == nil {
-		log.Println("✅ Agent is up to date")
+		log.Println("✅ Agent er opdateret")
 		return
 	}
 
-	log.Printf("🆕 Update available: %s (current: %s)", info.TagName, Version)
-	log.Println("📥 Downloading update...")
+	log.Printf("🆕 Ny version tilgængelig: %s (nuværende: %s)", info.TagName, Version)
+	log.Println("📥 Downloader opdatering...")
 
 	if err := u.DownloadUpdate(); err != nil {
-		log.Printf("❌ Download failed: %v", err)
+		log.Printf("❌ Download fejlede: %v", err)
 		return
 	}
 
-	log.Println("✅ Update downloaded! Installing...")
+	log.Println("✅ Opdatering downloadet! Installerer...")
 
-	// Install update - new exe handles the replacement
+	// Installer opdatering - ny exe håndterer udskiftningen
 	if err := u.InstallUpdate(); err != nil {
-		log.Printf("❌ Install failed: %v", err)
+		log.Printf("❌ Installation fejlede: %v", err)
 		return
 	}
 
-	log.Println("🚀 Update installed, restarting...")
+	log.Println("🚀 Opdatering installeret, genstarter...")
 	systray.Quit()
 }

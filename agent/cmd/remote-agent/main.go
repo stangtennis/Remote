@@ -108,9 +108,9 @@ func setupLogging() error {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 
 	log.Printf("========================================")
-	log.Printf("🖥️  Remote Desktop Agent Starting...")
+	log.Printf("🖥️  Remote Desktop Agent Starter...")
 	log.Printf("📦 Version: %s", tray.VersionString)
-	log.Printf("📝 Log file: %s", logPath)
+	log.Printf("📝 Log fil: %s", logPath)
 	log.Printf("========================================")
 
 	// Sync log file immediately
@@ -159,7 +159,7 @@ func isAdmin() bool {
 func relaunchAsAdmin() {
 	exe, err := os.Executable()
 	if err != nil {
-		log.Printf("❌ Failed to get executable path: %v", err)
+		log.Printf("❌ Kunne ikke finde exe sti: %v", err)
 		return
 	}
 
@@ -182,7 +182,7 @@ func relaunchAsAdmin() {
 	)
 
 	if ret <= 32 {
-		log.Printf("❌ Failed to relaunch as admin (error code: %d)", ret)
+		log.Printf("❌ Kunne ikke genstarte som admin (fejlkode: %d)", ret)
 	}
 }
 
@@ -220,23 +220,23 @@ func isFirewallRuleExists() bool {
 func setupFirewallRules() {
 	exePath, err := os.Executable()
 	if err != nil {
-		log.Printf("⚠️ Could not get executable path for firewall: %v", err)
+		log.Printf("⚠️ Kunne ikke finde exe sti til firewall: %v", err)
 		return
 	}
 
-	log.Printf("🔥 Checking firewall rules for: %s", exePath)
+	log.Printf("🔥 Tjekker firewall regler for: %s", exePath)
 
 	// Check if rule already exists for THIS exe
 	if isFirewallRuleExists() {
-		log.Println("✅ Firewall rule already exists for this executable")
+		log.Println("✅ Firewall regel findes allerede for denne exe")
 		return
 	}
 
-	log.Println("🔥 Firewall rule missing or outdated - adding new rules...")
+	log.Println("🔥 Firewall regel mangler eller forældet - tilføjer nye regler...")
 
 	// If not admin, we can't add rules (but we should be admin due to self-elevation)
 	if !isAdmin() {
-		log.Println("⚠️ Not running as admin - cannot add firewall rules")
+		log.Println("⚠️ Kører ikke som admin - kan ikke tilføje firewall regler")
 		
 		// Run netsh as admin using PowerShell
 		// This will show a UAC prompt
@@ -253,14 +253,14 @@ func setupFirewallRules() {
 			"-Verb", "RunAs", "-Wait")
 		
 		if err := cmd.Run(); err != nil {
-			log.Printf("⚠️ Failed to setup firewall (UAC denied?): %v", err)
+			log.Printf("⚠️ Kunne ikke opsætte firewall (UAC afvist?): %v", err)
 		} else {
-			log.Println("✅ Firewall rules added via UAC")
+			log.Println("✅ Firewall regler tilføjet via UAC")
 		}
 		return
 	}
 
-	log.Println("🔥 Setting up Windows Firewall rules...")
+	log.Println("🔥 Opsætter Windows Firewall regler...")
 
 	// Delete existing rules first (ignore errors)
 	deleteCmd := exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name=Remote Desktop Agent")
@@ -275,9 +275,9 @@ func setupFirewallRules() {
 		"enable=yes",
 		"profile=any")
 	if err := inCmd.Run(); err != nil {
-		log.Printf("⚠️ Failed to add inbound firewall rule: %v", err)
+		log.Printf("⚠️ Kunne ikke tilføje indgående firewall regel: %v", err)
 	} else {
-		log.Println("✅ Inbound firewall rule added")
+		log.Println("✅ Indgående firewall regel tilføjet")
 	}
 
 	// Add outbound rule
@@ -289,9 +289,9 @@ func setupFirewallRules() {
 		"enable=yes",
 		"profile=any")
 	if err := outCmd.Run(); err != nil {
-		log.Printf("⚠️ Failed to add outbound firewall rule: %v", err)
+		log.Printf("⚠️ Kunne ikke tilføje udgående firewall regel: %v", err)
 	} else {
-		log.Println("✅ Outbound firewall rule added")
+		log.Println("✅ Udgående firewall regel tilføjet")
 	}
 }
 
@@ -408,7 +408,7 @@ func main() {
 				logFile.Close()
 			}
 		}()
-		log.Println("🔧 Running as Windows Service")
+		log.Println("🔧 Kører som Windows Service")
 		runService()
 		return
 	}
@@ -433,12 +433,12 @@ func main() {
 	
 	// Console mode - run without system tray, keep CMD open
 	if *consoleFlag {
-		log.Println("🔧 Running in CONSOLE mode (no system tray)")
+		log.Println("🔧 Kører i KONSOL tilstand (ingen system tray)")
 		runConsoleMode()
 		return
 	}
 	
-	log.Println("🔧 Running in interactive mode")
+	log.Println("🔧 Kører i interaktiv tilstand")
 	runInteractive()
 }
 
@@ -536,7 +536,7 @@ func showStartupDialog() {
 					logFile.Close()
 				}
 			}()
-			log.Println("🔧 Running in interactive mode")
+			log.Println("🔧 Kører i interaktiv tilstand")
 			runInteractive()
 			return
 		} else if action == "exit" {
@@ -1142,9 +1142,9 @@ func showServiceStatus() {
 func runConsoleMode() {
 	// Console mode - runs without system tray, keeps CMD window open with full logging
 	log.Println("========================================")
-	log.Println("🖥️  CONSOLE MODE - Full Logging Enabled")
+	log.Println("🖥️  KONSOL TILSTAND - Fuld Logging Aktiveret")
 	log.Println("========================================")
-	log.Println("Press Ctrl+C to stop the agent")
+	log.Println("Tryk Ctrl+C for at stoppe agenten")
 	log.Println("")
 
 	// Setup firewall rules
@@ -1152,38 +1152,38 @@ func runConsoleMode() {
 
 	// Check if already logged in
 	if !auth.IsLoggedIn() {
-		log.Println("❌ Not logged in! Run without --console first to login via GUI")
-		log.Println("   Or run: remote-agent.exe --silent to login via native dialog")
+		log.Println("❌ Ikke logget ind! Kør uden --console først for at logge ind via GUI")
+		log.Println("   Eller kør: remote-agent.exe --silent for at logge ind via native dialog")
 		return
 	}
 
 	// Load existing credentials
 	creds, err := auth.GetCurrentUser()
 	if err != nil {
-		log.Printf("❌ Could not load saved credentials: %v", err)
+		log.Printf("❌ Kunne ikke indlæse gemte credentials: %v", err)
 		return
 	}
-	log.Printf("✅ Logged in as: %s", creds.Email)
+	log.Printf("✅ Logget ind som: %s", creds.Email)
 	currentUser = creds
 
 	// Check current desktop
 	desktopName, err := desktop.GetInputDesktop()
 	if err != nil {
-		log.Printf("⚠️  Cannot detect desktop: %v", err)
+		log.Printf("⚠️  Kan ikke detektere skrivebord: %v", err)
 	} else {
-		log.Printf("🖥️  Current desktop: %s", desktopName)
+		log.Printf("🖥️  Nuværende skrivebord: %s", desktopName)
 	}
 
 	// Start agent
 	if err := startAgent(); err != nil {
-		log.Fatalf("❌ Failed to start agent: %v", err)
+		log.Fatalf("❌ Kunne ikke starte agent: %v", err)
 	}
 
 	log.Println("")
 	log.Println("========================================")
-	log.Println("✅ Agent is running! Waiting for connections...")
-	log.Println("   Check dashboard to connect")
-	log.Println("   Press Ctrl+C to stop")
+	log.Println("✅ Agent kører! Venter på forbindelser...")
+	log.Println("   Tjek dashboard for at forbinde")
+	log.Println("   Tryk Ctrl+C for at stoppe")
 	log.Println("========================================")
 
 	// Block forever (until Ctrl+C)
@@ -1197,12 +1197,12 @@ func runInteractive() {
 	// Check if already logged in
 	if !auth.IsLoggedIn() {
 		// Show login dialog
-		log.Println("🔐 Login required...")
+		log.Println("🔐 Login påkrævet...")
 
 		// Load config for auth
 		tempCfg, err := config.Load()
 		if err != nil {
-			log.Fatalf("Failed to load config: %v", err)
+			log.Fatalf("Kunne ikke indlæse config: %v", err)
 		}
 
 		authConfig := auth.AuthConfig{
@@ -1212,21 +1212,21 @@ func runInteractive() {
 
 		result := auth.ShowLoginDialog(authConfig)
 		if result == nil || !result.Success {
-			log.Println("❌ Login cancelled or failed")
+			log.Println("❌ Login annulleret eller fejlet")
 			return
 		}
 
-		log.Printf("✅ Logged in as: %s", result.Email)
+		log.Printf("✅ Logget ind som: %s", result.Email)
 	} else {
 		// Load existing credentials
 		creds, err := auth.GetCurrentUser()
 		if err != nil {
-			log.Println("⚠️  Could not load saved credentials, please login again")
+			log.Println("⚠️  Kunne ikke indlæse gemte credentials, log venligst ind igen")
 			auth.ClearCredentials()
 			runInteractive() // Retry with login
 			return
 		}
-		log.Printf("✅ Already logged in as: %s", creds.Email)
+		log.Printf("✅ Allerede logget ind som: %s", creds.Email)
 	}
 
 	// Load current user credentials
@@ -1235,29 +1235,29 @@ func runInteractive() {
 	// Check current desktop (non-fatal if fails)
 	desktopName, err := desktop.GetInputDesktop()
 	if err != nil {
-		log.Printf("⚠️  Cannot detect desktop: %v", err)
-		log.Println("   (This is normal when running as a service)")
+		log.Printf("⚠️  Kan ikke detektere skrivebord: %v", err)
+		log.Println("   (Dette er normalt når der køres som service)")
 	} else {
-		log.Printf("🖥️  Current desktop: %s", desktopName)
+		log.Printf("🖥️  Nuværende skrivebord: %s", desktopName)
 		if desktop.IsOnLoginScreen() {
-			log.Println("⚠️  Running on login screen - limited functionality")
+			log.Println("⚠️  Kører på login skærm - begrænset funktionalitet")
 		}
 	}
 
 	if err := startAgent(); err != nil {
-		log.Fatalf("Failed to start agent: %v", err)
+		log.Fatalf("Kunne ikke starte agent: %v", err)
 	}
 
 	// Desktop monitoring is now handled by WebRTC manager
 	// It will automatically reinitialize screen capture on desktop switch
 
-	log.Println("🔔 Starting system tray...")
+	log.Println("🔔 Starter system tray...")
 
 	// Run system tray (blocks until user exits from tray menu)
 	trayApp := tray.New(dev, func() {
-		log.Println("🛑 Shutting down from system tray...")
+		log.Println("🛑 Lukker ned fra system tray...")
 		stopAgent()
-		log.Println("👋 Goodbye!")
+		log.Println("👋 Farvel!")
 	})
 
 	trayApp.Run()
@@ -1265,7 +1265,7 @@ func runInteractive() {
 
 func runService() {
 	// Windows Service mode
-	log.Println("Starting as Windows Service...")
+	log.Println("Starter som Windows Service...")
 
 	// Setup firewall rules (service runs as SYSTEM, has admin rights)
 	setupFirewallRules()
@@ -1274,7 +1274,7 @@ func runService() {
 
 	err := svc.Run(serviceName, &windowsService{})
 	if err != nil {
-		log.Fatalf("Service failed: %v", err)
+		log.Fatalf("Service fejlede: %v", err)
 	}
 }
 
@@ -1285,21 +1285,21 @@ func (s *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, chan
 	changes <- svc.Status{State: svc.StartPending}
 
 	if err := startAgent(); err != nil {
-		log.Printf("Service start failed: %v", err)
+		log.Printf("Service start fejlede: %v", err)
 		return true, 1
 	}
 
 	// Desktop monitoring is now handled by WebRTC manager
 	// It will automatically detect Session 0 and reinitialize screen capture on desktop switch
 	if _, err := desktop.GetInputDesktop(); err == nil {
-		log.Println("✅ Desktop access available")
+		log.Println("✅ Skrivebords adgang tilgængelig")
 	} else {
-		log.Println("⚠️  No desktop access (Session 0 / pre-login)")
-		log.Println("   Service will run - WebRTC manager handles desktop detection")
+		log.Println("⚠️  Ingen skrivebords adgang (Session 0 / før-login)")
+		log.Println("   Service kører - WebRTC manager håndterer skrivebords detektion")
 	}
 
 	changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
-	log.Println("Service running")
+	log.Println("Service kører")
 
 loop:
 	for {
@@ -1308,15 +1308,15 @@ loop:
 			switch c.Cmd {
 			case svc.Interrogate:
 				changes <- c.CurrentStatus
-				log.Println("Service interrogated - responding")
+				log.Println("Service forespørgt - svarer")
 			case svc.Stop:
-				log.Println("Service received STOP command")
+				log.Println("Service modtog STOP kommando")
 				break loop
 			case svc.Shutdown:
-				log.Println("Service received SHUTDOWN command")
+				log.Println("Service modtog SHUTDOWN kommando")
 				break loop
 			default:
-				log.Printf("Unexpected control request #%d", c)
+				log.Printf("Uventet kontrol forespørgsel #%d", c)
 			}
 		}
 	}
