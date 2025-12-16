@@ -597,7 +597,12 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 	// Start FFmpeg decoder if not already running
 	if c.h264Decoder == nil {
 		var err error
+		frameCount := 0
 		c.h264Decoder, err = NewH264Decoder(func(jpegData []byte) {
+			frameCount++
+			if frameCount%30 == 1 {
+				log.Printf("🎬 H.264 decoded frame #%d (%d bytes)", frameCount, len(jpegData))
+			}
 			// Forward decoded JPEG frame to onFrame callback
 			if c.onFrame != nil {
 				c.onFrame(jpegData)
@@ -615,6 +620,8 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 	}
 
 	// Read RTP packets and decode
+	rtpCount := 0
+	sampleCount := 0
 	for {
 		// Read RTP packet
 		rtpPacket, _, err := track.ReadRTP()
@@ -625,6 +632,11 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 			break
 		}
 
+		rtpCount++
+		if rtpCount%100 == 1 {
+			log.Printf("🎬 RTP packets received: %d", rtpCount)
+		}
+
 		// Push to sample builder
 		sb.Push(rtpPacket)
 
@@ -633,6 +645,11 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 			sample := sb.Pop()
 			if sample == nil {
 				break
+			}
+
+			sampleCount++
+			if sampleCount%30 == 1 {
+				log.Printf("🎬 H.264 samples: %d (data size: %d bytes)", sampleCount, len(sample.Data))
 			}
 
 			// Ensure Annex-B format and send to decoder
