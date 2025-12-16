@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	Version     = "v2.62.7"
+	Version     = "v2.62.8"
 	BuildDate   = "2025-12-16"
 	VersionInfo = Version + " (" + BuildDate + ")"
 )
@@ -982,11 +982,11 @@ func startDeviceRefreshTicker() {
 	// Stop any existing ticker
 	stopDeviceRefreshTicker()
 	
-	deviceRefreshTicker = time.NewTicker(10 * time.Second)
+	deviceRefreshTicker = time.NewTicker(5 * time.Second)
 	deviceRefreshStop = make(chan bool)
 	
 	go func() {
-		logger.Info("📡 Started device refresh ticker (every 10 seconds)")
+		logger.Info("📡 Started device refresh ticker (every 5 seconds)")
 		for {
 			select {
 			case <-deviceRefreshTicker.C:
@@ -1000,25 +1000,32 @@ func startDeviceRefreshTicker() {
 					continue
 				}
 				
-				// Check if any device status changed
-				statusChanged := false
+				// Check if any device changed (count, status, or last_seen)
 				if len(devices) != len(devicesData) {
-					statusChanged = true
+					logger.Info("📡 Device count changed: %d -> %d", len(devicesData), len(devices))
 				} else {
 					for i, d := range devices {
-						if i < len(devicesData) && d.Status != devicesData[i].Status {
-							statusChanged = true
-							logger.Info("📡 Device %s status changed: %s -> %s", d.DeviceName, devicesData[i].Status, d.Status)
-							break
+						if i < len(devicesData) {
+							old := devicesData[i]
+							// Check status change
+							if d.Status != old.Status {
+								logger.Info("📡 Device %s status changed: %s -> %s", d.DeviceName, old.Status, d.Status)
+								break
+							}
+							// Check last_seen change (device came online/offline)
+							if d.LastSeen != old.LastSeen {
+								logger.Debug("📡 Device %s last_seen updated", d.DeviceName)
+								break
+							}
 						}
 					}
 				}
 				
 				devicesData = devices
-				if statusChanged && deviceListWidget != nil {
+				// Always refresh UI to update "X minutes ago" text
+				if deviceListWidget != nil {
 					fyne.Do(func() {
 						deviceListWidget.Refresh()
-						logger.Debug("Device list refreshed: %d devices", len(devices))
 					})
 				}
 				
