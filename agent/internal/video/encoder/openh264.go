@@ -82,12 +82,20 @@ func (e *OpenH264Encoder) Init(cfg Config) error {
 }
 
 // Encode encodes an RGBA frame to H.264 NAL units
-func (e *OpenH264Encoder) Encode(frame *image.RGBA, forceKeyframe bool) ([]byte, error) {
+func (e *OpenH264Encoder) Encode(frame *image.RGBA, forceKeyframe bool) (output []byte, err error) {
+	// Panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic i OpenH264 encode: %v", r)
+			output = nil
+		}
+	}()
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if !e.initialized || e.encoder == nil {
-		return nil, fmt.Errorf("encoder not initialized")
+		return nil, fmt.Errorf("encoder ikke initialiseret")
 	}
 
 	// Convert RGBA to YCbCr (I420)
@@ -142,7 +150,6 @@ func (e *OpenH264Encoder) Encode(frame *image.RGBA, forceKeyframe bool) ([]byte,
 	}
 
 	// Collect NAL units
-	var output []byte
 	for iLayer := 0; iLayer < int(encInfo.ILayerNum); iLayer++ {
 		pLayerBsInfo := &encInfo.SLayerInfo[iLayer]
 		var iLayerSize int32

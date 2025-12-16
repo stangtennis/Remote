@@ -214,19 +214,28 @@ func (m *Manager) monitorDesktopChanges() {
 
 // SetH264Mode enables or disables H.264 video track mode
 func (m *Manager) SetH264Mode(enabled bool) {
-	m.useH264 = enabled
 	if enabled {
-		// Start video track if available
-		if m.videoTrack != nil {
-			m.videoTrack.Start()
+		// Check prerequisites
+		if m.videoTrack == nil {
+			log.Println("⚠️ Kan ikke aktivere H.264 - video track ikke oprettet")
+			return
 		}
-		log.Println("🎬 H.264 mode enabled")
+		if m.videoEncoder == nil {
+			log.Println("⚠️ Kan ikke aktivere H.264 - video encoder ikke initialiseret")
+			return
+		}
+		
+		// Start video track
+		m.videoTrack.Start()
+		m.useH264 = true
+		log.Printf("🎬 H.264 tilstand aktiveret (encoder: %s)", m.videoEncoder.GetEncoderName())
 	} else {
+		m.useH264 = false
 		// Stop video track
 		if m.videoTrack != nil {
 			m.videoTrack.Stop()
 		}
-		log.Println("🎬 H.264 mode disabled (using JPEG tiles)")
+		log.Println("🎬 H.264 tilstand deaktiveret (bruger JPEG tiles)")
 	}
 }
 
@@ -1115,29 +1124,40 @@ func (m *Manager) startScreenStreaming() {
 
 		// H.264 mode: encode and send via video track
 		if m.useH264 && m.videoTrack != nil && m.videoEncoder != nil {
-			// Encode RGBA to H.264
-			nalUnits, err := m.videoEncoder.Encode(rgbaFrame)
-			if err != nil {
-				errorCount++
-				if errorCount%100 == 1 {
-					log.Printf("⚠️ H.264 encode error: %v", err)
-				}
-				continue
-			}
+			// Wrap H.264 encoding in panic recovery
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("❌ PANIC i H.264 encoding: %v", r)
+						m.useH264 = false // Disable H.264 on panic
+						errorCount++
+					}
+				}()
 
-			if nalUnits != nil && len(nalUnits) > 0 {
-				// Write H.264 NAL units to video track
-				frameDuration := time.Second / time.Duration(fps)
-				if err := m.videoTrack.WriteFrame(nalUnits, frameDuration); err != nil {
+				// Encode RGBA to H.264
+				nalUnits, err := m.videoEncoder.Encode(rgbaFrame)
+				if err != nil {
 					errorCount++
 					if errorCount%100 == 1 {
-						log.Printf("⚠️ Video track write error: %v", err)
+						log.Printf("⚠️ H.264 encode fejl: %v", err)
 					}
-				} else {
-					frameCount++
-					bytesSent += int64(len(nalUnits))
+					return
 				}
-			}
+
+				if nalUnits != nil && len(nalUnits) > 0 {
+					// Write H.264 NAL units to video track
+					frameDuration := time.Second / time.Duration(fps)
+					if err := m.videoTrack.WriteFrame(nalUnits, frameDuration); err != nil {
+						errorCount++
+						if errorCount%100 == 1 {
+							log.Printf("⚠️ Video track write fejl: %v", err)
+						}
+					} else {
+						frameCount++
+						bytesSent += int64(len(nalUnits))
+					}
+				}
+			}()
 			continue
 		}
 
