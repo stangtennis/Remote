@@ -11,10 +11,10 @@ import (
 )
 
 const (
-	// OpenH264 version and download URL
-	openH264Version = "2.4.1"
-	openH264URL     = "https://github.com/cisco/openh264/releases/download/v2.4.1/openh264-2.4.1-win64.dll.bz2"
-	openH264DLLName = "openh264-2.4.1-win64.dll"
+	// OpenH264 version and download URL (v2.1.1 is latest available on GitHub)
+	openH264Version = "2.1.1"
+	openH264URL     = "https://github.com/cisco/openh264/releases/download/v2.1.1/openh264-2.1.1-win64.dll.bz2"
+	openH264DLLName = "openh264-2.1.1-win64.dll"
 )
 
 // EnsureOpenH264DLL checks if OpenH264 DLL exists, downloads if not
