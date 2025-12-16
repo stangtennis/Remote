@@ -30,25 +30,32 @@ func (w *syncWriter) Write(p []byte) (n int, err error) {
 
 // Init initializes the logger with both file and console output
 func Init() error {
-	// Get executable directory for log file
-	exePath, err := os.Executable()
-	if err != nil {
-		// Fallback to current directory
-		exePath = "."
+	var logFilePath string
+	
+	// Try AppData first (always writable), then exe directory
+	if appData := os.Getenv("APPDATA"); appData != "" {
+		logDir := filepath.Join(appData, "RemoteDesktopController")
+		os.MkdirAll(logDir, 0755)
+		logFilePath = filepath.Join(logDir, "controller.log")
+	} else {
+		// Fallback to executable directory
+		exePath, err := os.Executable()
+		if err != nil {
+			exePath = "."
+		}
+		logFilePath = filepath.Join(filepath.Dir(exePath), "controller.log")
 	}
-	exeDir := filepath.Dir(exePath)
 	
-	// Create log file in same directory as executable
-	logFilePath := filepath.Join(exeDir, "controller.log")
-	
-	// Use O_APPEND to keep previous logs, O_TRUNC to start fresh each run
+	// Open log file (truncate on each run)
+	var err error
 	logFile, err = os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
-		return fmt.Errorf("failed to open log file: %w", err)
+		return fmt.Errorf("failed to open log file %s: %w", logFilePath, err)
 	}
 
 	// Write initial marker directly to verify file works
 	logFile.WriteString("=== Controller Log Started ===\n")
+	logFile.WriteString(fmt.Sprintf("Log file: %s\n", logFilePath))
 	logFile.Sync()
 
 	// Create sync writer that flushes after every write
@@ -106,6 +113,9 @@ func Fatal(format string, v ...interface{}) {
 
 // GetLogPath returns the path to the log file
 func GetLogPath() string {
+	if appData := os.Getenv("APPDATA"); appData != "" {
+		return filepath.Join(appData, "RemoteDesktopController", "controller.log")
+	}
 	exePath, err := os.Executable()
 	if err != nil {
 		return "controller.log"

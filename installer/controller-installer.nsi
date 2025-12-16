@@ -95,6 +95,9 @@ Section "Install"
     
     ; Create uninstaller
     WriteUninstaller "$INSTDIR\uninstall.exe"
+    
+    ; Start controller after install
+    Exec "$INSTDIR\controller.exe"
 SectionEnd
 
 ; Uninstaller Section
