@@ -37,12 +37,38 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 ; Languages
 !insertmacro MUI_LANGUAGE "Danish"
 
+; Check for existing installation
+Function .onInit
+    ; Check if already installed
+    ReadRegStr $0 HKLM "Software\RemoteDesktopAgent" "Version"
+    StrCmp $0 "" done
+    
+    ; Show upgrade message
+    MessageBox MB_YESNO|MB_ICONQUESTION "Remote Desktop Agent v$0 er allerede installeret.$\n$\nVil du opgradere til v${VERSION}?" IDYES upgrade IDNO abort
+    
+    abort:
+        Abort
+    
+    upgrade:
+        ; Close running agent
+        nsExec::ExecToLog 'taskkill /F /IM remote-agent.exe'
+        nsExec::ExecToLog 'taskkill /F /IM remote-agent-console.exe'
+        Sleep 1000
+    
+    done:
+FunctionEnd
+
 ; Installer Section
 Section "Install"
     SetOutPath "$INSTDIR"
     
+    ; Overwrite files without asking (upgrade mode)
+    SetOverwrite on
+    
     ; Stop existing agent if running
     nsExec::ExecToLog 'taskkill /F /IM remote-agent.exe'
+    nsExec::ExecToLog 'taskkill /F /IM remote-agent-console.exe'
+    Sleep 500
     
     ; Main application (GUI version)
     File "remote-agent.exe"
