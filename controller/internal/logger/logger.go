@@ -15,6 +15,19 @@ var (
 	logFile     *os.File
 )
 
+// syncWriter wraps a file and syncs after every write
+type syncWriter struct {
+	file *os.File
+}
+
+func (w *syncWriter) Write(p []byte) (n int, err error) {
+	n, err = w.file.Write(p)
+	if err == nil {
+		w.file.Sync() // Flush to disk immediately
+	}
+	return
+}
+
 // Init initializes the logger with both file and console output
 func Init() error {
 	// Get executable directory for log file
@@ -25,16 +38,24 @@ func Init() error {
 	}
 	exeDir := filepath.Dir(exePath)
 	
-	// Create log file in same directory as executable (simpler, always works)
+	// Create log file in same directory as executable
 	logFilePath := filepath.Join(exeDir, "controller.log")
 	
+	// Use O_APPEND to keep previous logs, O_TRUNC to start fresh each run
 	logFile, err = os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
 
+	// Write initial marker directly to verify file works
+	logFile.WriteString("=== Controller Log Started ===\n")
+	logFile.Sync()
+
+	// Create sync writer that flushes after every write
+	syncFile := &syncWriter{file: logFile}
+
 	// Create multi-writer for both file and console
-	multiWriter := io.MultiWriter(os.Stdout, logFile)
+	multiWriter := io.MultiWriter(os.Stdout, syncFile)
 
 	// Initialize loggers with different prefixes
 	InfoLogger = log.New(multiWriter, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
