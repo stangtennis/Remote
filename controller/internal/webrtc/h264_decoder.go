@@ -3,6 +3,8 @@ package webrtc
 import (
 	"bytes"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"io"
 	"log"
 	"os"
@@ -10,9 +12,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 )
 
 // H264Decoder decodes H.264 NAL units to frames using FFmpeg subprocess
+// Uses hardware acceleration (DXVA2) and outputs raw NV12 frames for fast processing
 type H264Decoder struct {
 	cmd      *exec.Cmd
 	stdin    io.WriteCloser
@@ -97,22 +101,22 @@ func (d *H264Decoder) start() error {
 	// Find FFmpeg executable
 	ffmpegPath := findFFmpeg()
 
-	// FFmpeg command: read H.264 Annex-B from stdin, output MJPEG to stdout
+	// FFmpeg command: read H.264 Annex-B from stdin, output raw NV12 to stdout
 	// Using hardware acceleration (DXVA2) on Windows for fast decoding
-	// -hwaccel dxva2: use DirectX Video Acceleration
-	// -hwaccel_output_format nv12: hardware output format
-	// -threads 0: use all available CPU cores
+	// NV12 is the native GPU format - much faster than MJPEG re-encoding!
+	// -hwaccel dxva2: use DirectX Video Acceleration (GPU decode)
+	// -hwaccel_output_format nv12: keep frames in GPU-native format
 	// -flags low_delay: minimize decoding latency
 	// -fflags nobuffer+discardcorrupt: disable buffering, discard corrupt frames
 	// -probesize 32: minimal probing for faster start
 	// -analyzeduration 0: skip analysis for faster start
-	// -q:v 10: lower quality JPEG for speed (range 2-31, higher=faster)
 	// -vsync 0: no frame sync, output as fast as possible
+	// -f rawvideo -pix_fmt nv12: output raw NV12 frames (Y plane + interleaved UV)
 	d.cmd = exec.Command(ffmpegPath,
 		"-hide_banner",
-		"-loglevel", "warning",
+		"-loglevel", "info",
 		"-hwaccel", "dxva2",
-		"-threads", "4",
+		"-hwaccel_output_format", "nv12",
 		"-flags", "low_delay",
 		"-fflags", "nobuffer+discardcorrupt",
 		"-probesize", "32",
@@ -120,9 +124,8 @@ func (d *H264Decoder) start() error {
 		"-f", "h264",
 		"-i", "pipe:0",
 		"-vsync", "0",
-		"-f", "image2pipe",
-		"-vcodec", "mjpeg",
-		"-q:v", "10",
+		"-f", "rawvideo",
+		"-pix_fmt", "nv12",
 		"pipe:1",
 	)
 	configureFFmpegCmd(d.cmd)
@@ -216,7 +219,7 @@ func (d *H264Decoder) parseResolution(line string) {
 	}
 }
 
-// readFrames reads MJPEG frames from FFmpeg stdout
+// readFrames reads raw NV12 frames from FFmpeg stdout and converts to JPEG
 func (d *H264Decoder) readFrames() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -224,9 +227,10 @@ func (d *H264Decoder) readFrames() {
 		}
 	}()
 
-	buf := make([]byte, 512*1024) // 512KB buffer
 	var frameBuf bytes.Buffer
 	frameCount := 0
+	lastLogTime := time.Now()
+	var lastFPS float64
 
 	for {
 		select {
@@ -235,55 +239,136 @@ func (d *H264Decoder) readFrames() {
 		default:
 		}
 
-		n, err := d.stdout.Read(buf)
-		if err != nil {
-			if err != io.EOF {
-				log.Printf("⚠️ FFmpeg stdout read error: %v", err)
+		// Get current resolution
+		d.mu.Lock()
+		width := d.width
+		height := d.height
+		d.mu.Unlock()
+
+		// If we don't have resolution yet, read small chunks and wait
+		if width == 0 || height == 0 {
+			buf := make([]byte, 4096)
+			n, err := d.stdout.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					log.Printf("⚠️ FFmpeg stdout read error: %v", err)
+				}
+				return
 			}
-			return
+			frameBuf.Write(buf[:n])
+			continue
 		}
 
-		// Append to frame buffer
-		frameBuf.Write(buf[:n])
+		// Calculate NV12 frame size: Y plane (width*height) + UV plane (width*height/2)
+		frameSize := width*height + width*height/2
 
-		// Look for complete JPEG frames (SOI...EOI)
-		data := frameBuf.Bytes()
-		for {
-			// Find SOI marker (0xFFD8)
-			soiIdx := bytes.Index(data, []byte{0xFF, 0xD8})
-			if soiIdx == -1 {
-				break
+		// Read until we have a complete frame
+		for frameBuf.Len() < frameSize {
+			buf := make([]byte, 65536) // 64KB chunks
+			n, err := d.stdout.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					log.Printf("⚠️ FFmpeg stdout read error: %v", err)
+				}
+				return
 			}
-
-			// Find EOI marker (0xFFD9) after SOI
-			eoiIdx := bytes.Index(data[soiIdx+2:], []byte{0xFF, 0xD9})
-			if eoiIdx == -1 {
-				break
-			}
-			eoiIdx += soiIdx + 2 + 2 // Include the EOI marker itself
-
-			// Extract complete JPEG frame
-			jpegData := make([]byte, eoiIdx-soiIdx)
-			copy(jpegData, data[soiIdx:eoiIdx])
-
-			frameCount++
-			if frameCount%30 == 0 {
-				log.Printf("🎬 H.264 decoded frames: %d", frameCount)
-			}
-
-			// Send to callback
-			if d.onFrame != nil {
-				d.onFrame(jpegData)
-			}
-
-			// Remove processed data from buffer
-			data = data[eoiIdx:]
+			frameBuf.Write(buf[:n])
 		}
 
-		// Keep remaining data in buffer
-		frameBuf.Reset()
-		frameBuf.Write(data)
+		// Extract one frame
+		frameData := frameBuf.Next(frameSize)
+		frameCount++
+
+		// Log FPS periodically
+		now := time.Now()
+		elapsed := now.Sub(lastLogTime).Seconds()
+		if elapsed >= 1.0 {
+			fps := float64(frameCount) / elapsed
+			if fps != lastFPS {
+				log.Printf("🎬 H.264 NV12 frames: %d (%.1f fps, %dx%d)", frameCount, fps, width, height)
+				lastFPS = fps
+			}
+			lastLogTime = now
+			frameCount = 0
+		}
+
+		// Convert NV12 to JPEG (fast, in-memory)
+		jpegData := nv12ToJPEG(frameData, width, height)
+		if jpegData != nil && d.onFrame != nil {
+			d.onFrame(jpegData)
+		}
 	}
+}
+
+// nv12ToJPEG converts NV12 raw frame to JPEG
+// NV12 format: Y plane (width*height bytes) followed by interleaved UV plane (width*height/2 bytes)
+func nv12ToJPEG(nv12 []byte, width, height int) []byte {
+	ySize := width * height
+	if len(nv12) < ySize+ySize/2 {
+		return nil
+	}
+
+	// Create RGB image
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+
+	// Y plane
+	yPlane := nv12[:ySize]
+	// UV plane (interleaved)
+	uvPlane := nv12[ySize:]
+
+	// Convert NV12 to RGB
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			// Get Y value
+			yIdx := y*width + x
+			yVal := int(yPlane[yIdx])
+
+			// Get UV values (subsampled 2x2)
+			uvIdx := (y/2)*(width) + (x/2)*2
+			if uvIdx+1 >= len(uvPlane) {
+				continue
+			}
+			uVal := int(uvPlane[uvIdx]) - 128
+			vVal := int(uvPlane[uvIdx+1]) - 128
+
+			// YUV to RGB conversion (BT.601)
+			r := yVal + (359*vVal)>>8
+			g := yVal - (88*uVal+183*vVal)>>8
+			b := yVal + (454*uVal)>>8
+
+			// Clamp values
+			if r < 0 {
+				r = 0
+			} else if r > 255 {
+				r = 255
+			}
+			if g < 0 {
+				g = 0
+			} else if g > 255 {
+				g = 255
+			}
+			if b < 0 {
+				b = 0
+			} else if b > 255 {
+				b = 255
+			}
+
+			// Set pixel
+			idx := (y*width + x) * 4
+			img.Pix[idx+0] = uint8(r)
+			img.Pix[idx+1] = uint8(g)
+			img.Pix[idx+2] = uint8(b)
+			img.Pix[idx+3] = 255
+		}
+	}
+
+	// Encode to JPEG with medium quality (faster)
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 75}); err != nil {
+		return nil
+	}
+
+	return buf.Bytes()
 }
 
 // Decode sends H.264 NAL units to the decoder
