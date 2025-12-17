@@ -97,20 +97,27 @@ func (d *H264Decoder) start() error {
 	ffmpegPath := findFFmpeg()
 
 	// FFmpeg command: read H.264 Annex-B from stdin, output MJPEG to stdout
-	// -f h264: input format is raw H.264
-	// -i pipe:0: read from stdin
-	// -f image2pipe: output as image stream
-	// -vcodec mjpeg: encode output as MJPEG (easy to parse)
-	// -q:v 2: high quality JPEG (1-31, lower is better)
-	// pipe:1: write to stdout
+	// Optimized for low-latency real-time decoding
+	// -threads 0: use all available CPU cores
+	// -flags low_delay: minimize decoding latency
+	// -fflags nobuffer: disable input buffering
+	// -probesize 32: minimal probing for faster start
+	// -analyzeduration 0: skip analysis for faster start
+	// -q:v 5: medium quality JPEG (faster than q:v 2)
 	d.cmd = exec.Command(ffmpegPath,
 		"-hide_banner",
 		"-loglevel", "error",
+		"-threads", "0",
+		"-flags", "low_delay",
+		"-fflags", "nobuffer",
+		"-probesize", "32",
+		"-analyzeduration", "0",
 		"-f", "h264",
 		"-i", "pipe:0",
+		"-threads", "0",
 		"-f", "image2pipe",
 		"-vcodec", "mjpeg",
-		"-q:v", "2",
+		"-q:v", "5",
 		"pipe:1",
 	)
 	configureFFmpegCmd(d.cmd)
