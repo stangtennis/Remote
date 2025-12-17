@@ -11,8 +11,8 @@ InstallDirRegKey HKLM "Software\RemoteDesktopController" "InstallDir"
 RequestExecutionLevel admin
 
 ; Version info
-!define VERSION "2.62.5"
-VIProductVersion "2.62.5.0"
+!define VERSION "2.62.17"
+VIProductVersion "2.62.17.0"
 VIAddVersionKey "ProductName" "Remote Desktop Controller"
 VIAddVersionKey "CompanyName" "StangTennis"
 VIAddVersionKey "FileDescription" "Remote Desktop Controller with H.264 support"
