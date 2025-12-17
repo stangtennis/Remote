@@ -3,7 +3,7 @@
   <assemblyIdentity
     type="win32"
     name="RemoteDesktopAgent"
-    version="2.6.5.0"
+    version="2.62.17.0"
     processorArchitecture="amd64"/>
   <description>Remote Desktop Agent</description>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
