@@ -220,17 +220,17 @@ func (g *AgentGUI) buildUI() {
 
 func (g *AgentGUI) updateStatusLabels() {
 	if g.isLoggedIn {
-		g.userLabel.SetText("Logged in as: " + g.userEmail)
+		g.userLabel.SetText("Logget ind som: " + g.userEmail)
 	} else {
-		g.userLabel.SetText("Not logged in")
+		g.userLabel.SetText("Ikke logget ind")
 	}
 
 	if g.serviceRunning {
-		g.serviceLabel.SetText("Service: ✅ Running")
+		g.serviceLabel.SetText("Service: ✅ Kører")
 	} else if g.serviceInstalled {
-		g.serviceLabel.SetText("Service: ⏸️ Stopped")
+		g.serviceLabel.SetText("Service: ⏸️ Stoppet")
 	} else {
-		g.serviceLabel.SetText("Service: ❌ Not installed")
+		g.serviceLabel.SetText("Service: ❌ Ikke installeret")
 	}
 }
 
@@ -239,47 +239,47 @@ func (g *AgentGUI) updateActionButtons() {
 
 	if !g.isLoggedIn {
 		// Login button
-		loginBtn := widget.NewButton("🔑  Login", g.showLoginDialog)
+		loginBtn := widget.NewButton("🔑  Log ind", g.showLoginDialog)
 		loginBtn.Importance = widget.HighImportance
 		g.actionButtons.Add(loginBtn)
 	} else {
 		// Service management buttons
 		if !g.serviceInstalled {
-			installBtn := widget.NewButton("📦  Install as Service", g.doInstall)
+			installBtn := widget.NewButton("📦  Installer som Service", g.doInstall)
 			installBtn.Importance = widget.HighImportance
 			g.actionButtons.Add(installBtn)
 
-			runOnceBtn := widget.NewButton("▶️  Run Once (This Session)", g.doRunOnce)
+			runOnceBtn := widget.NewButton("▶️  Kør én gang (denne session)", g.doRunOnce)
 			g.actionButtons.Add(runOnceBtn)
 		} else if !g.serviceRunning {
 			startBtn := widget.NewButton("▶️  Start Service", g.doStart)
 			startBtn.Importance = widget.HighImportance
 			g.actionButtons.Add(startBtn)
 
-			uninstallBtn := widget.NewButton("🗑️  Uninstall Service", g.doUninstall)
+			uninstallBtn := widget.NewButton("🗑️  Afinstaller Service", g.doUninstall)
 			g.actionButtons.Add(uninstallBtn)
 		} else {
 			stopBtn := widget.NewButton("⏹️  Stop Service", g.doStop)
 			g.actionButtons.Add(stopBtn)
 
-			uninstallBtn := widget.NewButton("🗑️  Uninstall Service", g.doUninstall)
+			uninstallBtn := widget.NewButton("🗑️  Afinstaller Service", g.doUninstall)
 			g.actionButtons.Add(uninstallBtn)
 		}
 
 		g.actionButtons.Add(widget.NewSeparator())
 
 		// Always show these when logged in
-		updateBtn := widget.NewButton("🔄  Check for Updates", g.doCheckUpdates)
+		updateBtn := widget.NewButton("🔄  Tjek opdateringer", g.doCheckUpdates)
 		g.actionButtons.Add(updateBtn)
 
-		logoutBtn := widget.NewButton("🚪  Logout / Switch Account", g.doLogout)
+		logoutBtn := widget.NewButton("🚪  Log ud / Skift konto", g.doLogout)
 		g.actionButtons.Add(logoutBtn)
 	}
 
 	g.actionButtons.Add(widget.NewSeparator())
 
 	// Exit button
-	exitBtn := widget.NewButton("❌  Exit", func() {
+	exitBtn := widget.NewButton("❌  Afslut", func() {
 		g.app.Quit()
 	})
 	g.actionButtons.Add(exitBtn)
@@ -292,14 +292,14 @@ func (g *AgentGUI) showLoginDialog() {
 	emailEntry.SetPlaceHolder("your@email.com")
 
 	passwordEntry := widget.NewPasswordEntry()
-	passwordEntry.SetPlaceHolder("Password")
+	passwordEntry.SetPlaceHolder("Adgangskode")
 
 	form := widget.NewForm(
 		widget.NewFormItem("Email", emailEntry),
-		widget.NewFormItem("Password", passwordEntry),
+		widget.NewFormItem("Adgangskode", passwordEntry),
 	)
 
-	d := dialog.NewCustomConfirm("Login", "Login", "Cancel", form, func(ok bool) {
+	d := dialog.NewCustomConfirm("Log ind", "Log ind", "Annuller", form, func(ok bool) {
 		if !ok {
 			return
 		}
@@ -308,12 +308,12 @@ func (g *AgentGUI) showLoginDialog() {
 		password := passwordEntry.Text
 
 		if email == "" || password == "" {
-			dialog.ShowError(fmt.Errorf("Please enter email and password"), g.window)
+			dialog.ShowError(fmt.Errorf("Indtast email og adgangskode"), g.window)
 			return
 		}
 
 		// Show progress
-		progress := dialog.NewCustomWithoutButtons("Logging in...", widget.NewProgressBarInfinite(), g.window)
+		progress := dialog.NewCustomWithoutButtons("Logger ind...", widget.NewProgressBarInfinite(), g.window)
 		progress.Show()
 
 		go func() {
@@ -324,7 +324,7 @@ func (g *AgentGUI) showLoginDialog() {
 				log.Printf("❌ Failed to load config: %v", err)
 				fyne.Do(func() {
 					progress.Hide()
-					dialog.ShowError(fmt.Errorf("Failed to load config: %v", err), g.window)
+					dialog.ShowError(fmt.Errorf("Kunne ikke indlæse konfiguration: %v", err), g.window)
 				})
 				return
 			}
@@ -343,7 +343,7 @@ func (g *AgentGUI) showLoginDialog() {
 			if err != nil {
 				log.Printf("❌ Login error: %v", err)
 				fyne.Do(func() {
-					dialog.ShowError(fmt.Errorf("Login failed: %v", err), g.window)
+					dialog.ShowError(fmt.Errorf("Login fejlede: %v", err), g.window)
 				})
 				return
 			}
@@ -374,9 +374,9 @@ func (g *AgentGUI) showLoginDialog() {
 			
 			fyne.Do(func() {
 				// Show success message - simple approach
-				dialog.ShowInformation("Login Successful", 
-					"✅ Welcome, "+result.Email+"!\n\n"+
-					"You can now use Run Once or install as a Windows service.", g.window)
+				dialog.ShowInformation("Login lykkedes", 
+					"✅ Velkommen, "+result.Email+"!\n\n"+
+					"Du kan nu bruge Kør én gang eller installere som Windows service.", g.window)
 			})
 		}()
 	}, g.window)
@@ -387,8 +387,8 @@ func (g *AgentGUI) showLoginDialog() {
 
 func (g *AgentGUI) doInstall() {
 	if !isAdmin() {
-		dialog.ShowConfirm("Administrator Required",
-			"Installing as a service requires Administrator privileges.\n\nRestart as Administrator?",
+		dialog.ShowConfirm("Administrator kræves",
+			"Installation som service kræver Administrator rettigheder.\n\nGenstart som Administrator?",
 			func(ok bool) {
 				if ok {
 					runAsAdmin()
@@ -398,7 +398,7 @@ func (g *AgentGUI) doInstall() {
 		return
 	}
 
-	progress := dialog.NewCustomWithoutButtons("Installing service...", widget.NewProgressBarInfinite(), g.window)
+	progress := dialog.NewCustomWithoutButtons("Installerer service...", widget.NewProgressBarInfinite(), g.window)
 	progress.Show()
 
 	go func() {
@@ -406,7 +406,7 @@ func (g *AgentGUI) doInstall() {
 		if err != nil {
 			fyne.Do(func() {
 				progress.Hide()
-				dialog.ShowError(fmt.Errorf("Failed to install: %v", err), g.window)
+				dialog.ShowError(fmt.Errorf("Kunne ikke installere: %v", err), g.window)
 			})
 			return
 		}
@@ -416,14 +416,14 @@ func (g *AgentGUI) doInstall() {
 			progress.Hide()
 
 			if err != nil {
-				dialog.ShowError(fmt.Errorf("Installed but failed to start: %v", err), g.window)
+				dialog.ShowError(fmt.Errorf("Installeret men kunne ikke starte: %v", err), g.window)
 			} else {
-				dialog.ShowInformation("Installation Complete",
-					"✅ Service installed and started!\n\n"+
-						"The Remote Desktop Agent is now running.\n\n"+
-						"• Starts automatically with Windows\n"+
-						"• Works on login screen\n"+
-						"• Run this app to manage the service", g.window)
+				dialog.ShowInformation("Installation færdig",
+					"✅ Service installeret og startet!\n\n"+
+						"Remote Desktop Agent kører nu.\n\n"+
+						"• Starter automatisk med Windows\n"+
+						"• Virker på login skærm\n"+
+						"• Kør denne app for at administrere servicen", g.window)
 			}
 
 			g.refreshStatus()
@@ -434,14 +434,14 @@ func (g *AgentGUI) doInstall() {
 }
 
 func (g *AgentGUI) doUninstall() {
-	dialog.ShowConfirm("Uninstall Service", "Are you sure you want to uninstall the service?", func(ok bool) {
+	dialog.ShowConfirm("Afinstaller Service", "Er du sikker på at du vil afinstallere servicen?", func(ok bool) {
 		if !ok {
 			return
 		}
 
 		if !isAdmin() {
-			dialog.ShowConfirm("Administrator Required",
-				"Uninstalling requires Administrator privileges.\n\nRestart as Administrator?",
+			dialog.ShowConfirm("Administrator kræves",
+				"Afinstallation kræver Administrator rettigheder.\n\nGenstart som Administrator?",
 				func(ok bool) {
 					if ok {
 						runAsAdmin()
@@ -451,7 +451,7 @@ func (g *AgentGUI) doUninstall() {
 			return
 		}
 
-		progress := dialog.NewCustomWithoutButtons("Uninstalling...", widget.NewProgressBarInfinite(), g.window)
+		progress := dialog.NewCustomWithoutButtons("Afinstallerer...", widget.NewProgressBarInfinite(), g.window)
 		progress.Show()
 
 		go func() {
@@ -465,11 +465,11 @@ func (g *AgentGUI) doUninstall() {
 				progress.Hide()
 
 				if err != nil {
-					dialog.ShowError(fmt.Errorf("Failed to uninstall: %v", err), g.window)
+					dialog.ShowError(fmt.Errorf("Kunne ikke afinstallere: %v", err), g.window)
 				} else {
-					dialog.ShowInformation("Uninstall Complete", 
-						"✅ Service uninstalled successfully.\n\n"+
-						"The Remote Desktop Agent is no longer running as a service.", g.window)
+					dialog.ShowInformation("Afinstallation færdig", 
+						"✅ Service afinstalleret.\n\n"+
+						"Remote Desktop Agent kører ikke længere som service.", g.window)
 				}
 
 				g.refreshStatus()
@@ -481,7 +481,7 @@ func (g *AgentGUI) doUninstall() {
 }
 
 func (g *AgentGUI) doStart() {
-	progress := dialog.NewCustomWithoutButtons("Starting service...", widget.NewProgressBarInfinite(), g.window)
+	progress := dialog.NewCustomWithoutButtons("Starter service...", widget.NewProgressBarInfinite(), g.window)
 	progress.Show()
 
 	go func() {
@@ -490,11 +490,11 @@ func (g *AgentGUI) doStart() {
 			progress.Hide()
 
 			if err != nil {
-				dialog.ShowError(fmt.Errorf("Failed to start: %v", err), g.window)
+				dialog.ShowError(fmt.Errorf("Kunne ikke starte: %v", err), g.window)
 			} else {
-				dialog.ShowInformation("Service Started", 
-					"✅ Service started successfully!\n\n"+
-					"The Remote Desktop Agent is now running and ready for connections.", g.window)
+				dialog.ShowInformation("Service startet", 
+					"✅ Service startet!\n\n"+
+					"Remote Desktop Agent kører nu og er klar til forbindelser.", g.window)
 			}
 
 			g.refreshStatus()
@@ -505,7 +505,7 @@ func (g *AgentGUI) doStart() {
 }
 
 func (g *AgentGUI) doStop() {
-	progress := dialog.NewCustomWithoutButtons("Stopping service...", widget.NewProgressBarInfinite(), g.window)
+	progress := dialog.NewCustomWithoutButtons("Stopper service...", widget.NewProgressBarInfinite(), g.window)
 	progress.Show()
 
 	go func() {
@@ -514,11 +514,11 @@ func (g *AgentGUI) doStop() {
 			progress.Hide()
 
 			if err != nil {
-				dialog.ShowError(fmt.Errorf("Failed to stop: %v", err), g.window)
+				dialog.ShowError(fmt.Errorf("Kunne ikke stoppe: %v", err), g.window)
 			} else {
-				dialog.ShowInformation("Service Stopped", 
-					"✅ Service stopped successfully.\n\n"+
-					"Remote connections are no longer possible until the service is started again.", g.window)
+				dialog.ShowInformation("Service stoppet", 
+					"✅ Service stoppet.\n\n"+
+					"Fjernforbindelser er ikke mulige før servicen startes igen.", g.window)
 			}
 
 			g.refreshStatus()
@@ -531,7 +531,7 @@ func (g *AgentGUI) doStop() {
 func (g *AgentGUI) doRunOnce() {
 	// Check if logged in first
 	if !auth.IsLoggedIn() {
-		dialog.ShowError(fmt.Errorf("Please login first before running the agent"), g.window)
+		dialog.ShowError(fmt.Errorf("Log ind først før du kører agenten"), g.window)
 		return
 	}
 
@@ -547,15 +547,15 @@ func (g *AgentGUI) doRunOnce() {
 	// Start agent
 	if err := startAgent(); err != nil {
 		log.Printf("❌ Failed to start agent: %v", err)
-		dialog.ShowError(fmt.Errorf("Failed to start agent: %v", err), g.window)
+		dialog.ShowError(fmt.Errorf("Kunne ikke starte agent: %v", err), g.window)
 		return
 	}
 
 	log.Println("✅ Agent started successfully")
 
 	// Update GUI to show running status
-	g.statusLabel.SetText("🟢 Agent Running")
-	g.serviceLabel.SetText("Mode: Interactive (Run Once)")
+	g.statusLabel.SetText("🟢 Agent kører")
+	g.serviceLabel.SetText("Tilstand: Interaktiv (Kør én gang)")
 	
 	// Disable Run Once button, enable a Stop button
 	g.actionButtons.RemoveAll()
@@ -563,15 +563,15 @@ func (g *AgentGUI) doRunOnce() {
 	stopBtn := widget.NewButton("⏹️  Stop Agent", func() {
 		log.Println("🛑 Stopping agent...")
 		stopAgent()
-		g.statusLabel.SetText("🔴 Agent Stopped")
-		g.serviceLabel.SetText("Mode: Stopped")
+		g.statusLabel.SetText("🔴 Agent stoppet")
+		g.serviceLabel.SetText("Tilstand: Stoppet")
 		g.updateActionButtons()
-		dialog.ShowInformation("Agent Stopped", "The agent has been stopped.", g.window)
+		dialog.ShowInformation("Agent stoppet", "Agenten er stoppet.", g.window)
 	})
 	stopBtn.Importance = widget.DangerImportance
 	g.actionButtons.Add(stopBtn)
 	
-	exitBtn := widget.NewButton("❌  Exit", func() {
+	exitBtn := widget.NewButton("❌  Afslut", func() {
 		stopAgent()
 		g.app.Quit()
 	})
@@ -579,32 +579,32 @@ func (g *AgentGUI) doRunOnce() {
 	
 	g.actionButtons.Refresh()
 
-	dialog.ShowInformation("Agent Started", 
-		"✅ Agent is now running!\n\n"+
-		"You can minimize this window.\n"+
-		"Click 'Stop Agent' to stop.", g.window)
+	dialog.ShowInformation("Agent startet", 
+		"✅ Agent kører nu!\n\n"+
+		"Du kan minimere dette vindue.\n"+
+		"Klik 'Stop Agent' for at stoppe.", g.window)
 }
 
 func (g *AgentGUI) doCheckUpdates() {
-	dialog.ShowInformation("Check for Updates",
-		"Current version: "+tray.Version+"\n\n"+
-			"To update:\n"+
-			"1. Download latest from GitHub Releases\n"+
-			"2. Stop the service (if running)\n"+
-			"3. Replace this exe\n"+
-			"4. Start the service again", g.window)
+	dialog.ShowInformation("Tjek opdateringer",
+		"Nuværende version: "+tray.Version+"\n\n"+
+			"For at opdatere:\n"+
+			"1. Download seneste fra GitHub Releases\n"+
+			"2. Stop servicen (hvis den kører)\n"+
+			"3. Erstat denne exe\n"+
+			"4. Start servicen igen", g.window)
 }
 
 func (g *AgentGUI) doLogout() {
-	dialog.ShowConfirm("Logout", "Are you sure you want to logout?", func(ok bool) {
+	dialog.ShowConfirm("Log ud", "Er du sikker på at du vil logge ud?", func(ok bool) {
 		if !ok {
 			return
 		}
 
 		if err := auth.ClearCredentials(); err != nil {
-			dialog.ShowError(fmt.Errorf("Failed to logout: %v", err), g.window)
+			dialog.ShowError(fmt.Errorf("Kunne ikke logge ud: %v", err), g.window)
 		} else {
-			dialog.ShowInformation("Success", "✅ Logged out successfully!", g.window)
+			dialog.ShowInformation("Succes", "✅ Logget ud!", g.window)
 		}
 
 		g.refreshStatus()
