@@ -338,6 +338,8 @@ func (c *Client) SendData(data []byte) error {
 // mode: "tiles" | "h264" | "hybrid"
 // bitrate: target bitrate in kbps (0 = use default)
 func (c *Client) SetStreamingMode(mode string, bitrate int) error {
+	log.Printf("🎬 SetStreamingMode called: mode=%s, bitrate=%d", mode, bitrate)
+	
 	msg := map[string]interface{}{
 		"type": "set_mode",
 		"mode": mode,
@@ -351,7 +353,14 @@ func (c *Client) SetStreamingMode(mode string, bitrate int) error {
 		return fmt.Errorf("failed to marshal mode message: %w", err)
 	}
 
-	return c.SendData(data)
+	log.Printf("🎬 Sending set_mode message to agent: %s", string(data))
+	err = c.SendData(data)
+	if err != nil {
+		log.Printf("❌ Failed to send set_mode: %v", err)
+	} else {
+		log.Printf("✅ set_mode message sent successfully")
+	}
+	return err
 }
 
 // SetOnFrame sets the callback for received video frames
