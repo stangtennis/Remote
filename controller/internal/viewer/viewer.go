@@ -581,22 +581,40 @@ func (v *Viewer) sendStreamParams(maxQuality, maxFPS int, maxScale float64, h264
 		"h264_bitrate_kbps": h264BitrateKbps,
 	}
 
-	if client, ok := v.webrtcClient.(interface{ SendInput([]byte) error }); ok {
-		data, err := json.Marshal(msg)
-		if err != nil {
-			log.Printf("❌ Failed to marshal stream params: %v", err)
-			return
-		}
-		if err := client.SendInput(data); err != nil {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("❌ Failed to marshal stream params: %v", err)
+		return
+	}
+
+	// Try SendInput with string (control channel)
+	if client, ok := v.webrtcClient.(interface{ SendInput(string) error }); ok {
+		if err := client.SendInput(string(data)); err != nil {
 			log.Printf("❌ Failed to send stream params: %v", err)
 		} else {
 			log.Printf("📊 Sent stream params: Q=%d%% FPS=%d Scale=%.0f%% H264=%dkbps", maxQuality, maxFPS, maxScale*100, h264BitrateKbps)
 		}
+		return
+	}
+
+	// Fallback to SendData with bytes (data channel)
+	if client, ok := v.webrtcClient.(interface{ SendData([]byte) error }); ok {
+		if err := client.SendData(data); err != nil {
+			log.Printf("❌ Failed to send stream params via data channel: %v", err)
+		} else {
+			log.Printf("📊 Sent stream params (data channel): Q=%d%% FPS=%d Scale=%.0f%% H264=%dkbps", maxQuality, maxFPS, maxScale*100, h264BitrateKbps)
+		}
+	} else {
+		log.Printf("❌ No channel available to send stream params")
 	}
 }
 
 func (v *Viewer) showSettings() {
 	log.Println("Opening settings...")
+
+	// Store current values for sending combined updates
+	currentFPS := 30
+	currentQuality := 70
 
 	// FPS display
 	fpsLabel := widget.NewLabel("Target FPS: 30")
@@ -605,7 +623,8 @@ func (v *Viewer) showSettings() {
 	fpsSlider.Step = 5
 	fpsSlider.OnChanged = func(value float64) {
 		fpsLabel.SetText(fmt.Sprintf("Target FPS: %.0f", value))
-		// TODO: Send FPS change to agent
+		currentFPS = int(value)
+		v.sendStreamParams(currentQuality, currentFPS, 1.0, 4000)
 	}
 
 	// Quality display
@@ -615,7 +634,8 @@ func (v *Viewer) showSettings() {
 	qualitySlider.Step = 5
 	qualitySlider.OnChanged = func(value float64) {
 		qualityLabel.SetText(fmt.Sprintf("JPEG Quality: %.0f%%", value))
-		// TODO: Send quality change to agent
+		currentQuality = int(value)
+		v.sendStreamParams(currentQuality, currentFPS, 1.0, 4000)
 	}
 
 	// Connection info
