@@ -550,10 +550,13 @@ func (v *Viewer) toggleToolbarVisibility() {
 
 func (v *Viewer) handleFileTransfer() {
 	log.Println("Opening file transfer dialog...")
-	if v.onFileTransfer != nil {
-		v.onFileTransfer()
+	
+	// Open file browser if we have a webrtc client
+	if v.webrtcClient != nil {
+		v.openFileBrowser()
+	} else {
+		log.Println("❌ No WebRTC client available for file transfer")
 	}
-	// TODO: Implement file transfer
 }
 
 func (v *Viewer) handleClipboardSync() {
@@ -710,6 +713,24 @@ func (v *Viewer) startCanvasRefreshLoop() {
 			}
 		}
 	}
+}
+
+// openFileBrowser opens the TotalCMD-style file browser
+func (v *Viewer) openFileBrowser() {
+	log.Println("📁 Opening file browser...")
+	
+	// Get the app from window
+	app := v.window.Canvas().Content().(fyne.CanvasObject)
+	_ = app // We'll use the window's app
+	
+	// For now, show a simple dialog - full implementation requires file datachannel
+	dialog.ShowInformation("Filoverførsel", 
+		"Filoverførsel er under udvikling.\n\n"+
+		"Funktioner der kommer:\n"+
+		"• TotalCMD-style dual-pane browser\n"+
+		"• Download/upload filer\n"+
+		"• Opret/slet/omdøb mapper\n"+
+		"• Træk-og-slip support", v.window)
 }
 
 // Helper functions

@@ -1,6 +1,6 @@
 1 VERSIONINFO
-FILEVERSION 2,62,17,0
-PRODUCTVERSION 2,62,17,0
+FILEVERSION 2,63,0,0
+PRODUCTVERSION 2,63,0,0
 FILEFLAGSMASK 0x3fL
 FILEFLAGS 0x0L
 FILEOS 0x40004L
@@ -13,12 +13,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Remote Desktop"
             VALUE "FileDescription", "Remote Desktop Agent"
-            VALUE "FileVersion", "2.62.17.0"
+            VALUE "FileVersion", "2.63.0.0"
             VALUE "InternalName", "remote-agent"
             VALUE "LegalCopyright", "Copyright 2025"
             VALUE "OriginalFilename", "remote-agent.exe"
             VALUE "ProductName", "Remote Desktop Agent"
-            VALUE "ProductVersion", "2.62.17.0"
+            VALUE "ProductVersion", "2.63.0.0"
         END
     END
     BLOCK "VarFileInfo"

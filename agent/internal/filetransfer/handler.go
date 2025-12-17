@@ -55,6 +55,12 @@ func (h *Handler) HandleIncomingData(data []byte) error {
 		return err
 	}
 
+	// Check for "op" field (new TotalCMD protocol)
+	if op, ok := message["op"].(string); ok {
+		return h.handleTotalCMDMessage(op, message, data)
+	}
+
+	// Legacy "type" field
 	msgType, ok := message["type"].(string)
 	if !ok {
 		return fmt.Errorf("invalid message type")
@@ -82,6 +88,326 @@ func (h *Handler) HandleIncomingData(data []byte) error {
 	}
 
 	return nil
+}
+
+// handleTotalCMDMessage handles the new TotalCMD-style protocol
+func (h *Handler) handleTotalCMDMessage(op string, message map[string]interface{}, rawData []byte) error {
+	switch op {
+	case "list":
+		path, _ := message["path"].(string)
+		return h.handleListOp(path)
+	case "drives":
+		return h.handleDrivesOp()
+	case "get":
+		path, _ := message["path"].(string)
+		fid, _ := message["fid"].(float64)
+		offset, _ := message["off"].(float64)
+		return h.handleGetOp(path, uint16(fid), int64(offset))
+	case "put":
+		return h.handlePutOp(message)
+	case "mkdir":
+		path, _ := message["path"].(string)
+		return h.handleMkdirOp(path)
+	case "rm":
+		path, _ := message["path"].(string)
+		return h.handleRmOp(path)
+	case "mv":
+		path, _ := message["path"].(string)
+		target, _ := message["target"].(string)
+		return h.handleMvOp(path, target)
+	}
+	return nil
+}
+
+// Entry for TotalCMD protocol
+type Entry struct {
+	Name  string `json:"name"`
+	Path  string `json:"path"`
+	IsDir bool   `json:"dir"`
+	Size  int64  `json:"size"`
+	Mod   int64  `json:"mod"`
+}
+
+// handleListOp lists directory contents
+func (h *Handler) handleListOp(path string) error {
+	if path == "" {
+		home, _ := os.UserHomeDir()
+		path = home
+	}
+
+	log.Printf("📂 List: %s", path)
+
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return h.sendTotalCMDError(err.Error())
+	}
+
+	result := make([]Entry, 0, len(entries))
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		result = append(result, Entry{
+			Name:  e.Name(),
+			Path:  filepath.Join(path, e.Name()),
+			IsDir: e.IsDir(),
+			Size:  info.Size(),
+			Mod:   info.ModTime().Unix(),
+		})
+	}
+
+	// Sort: directories first, then by name
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].IsDir != result[j].IsDir {
+			return result[i].IsDir
+		}
+		return strings.ToLower(result[i].Name) < strings.ToLower(result[j].Name)
+	})
+
+	response := map[string]interface{}{
+		"op":      "list",
+		"path":    path,
+		"entries": result,
+	}
+	return h.sendJSON(response)
+}
+
+// handleDrivesOp lists available drives
+func (h *Handler) handleDrivesOp() error {
+	log.Printf("📂 List drives")
+	
+	drives := make([]Entry, 0)
+	for _, letter := range "CDEFGHIJKLMNOPQRSTUVWXYZ" {
+		path := string(letter) + ":\\"
+		if _, err := os.Stat(path); err == nil {
+			drives = append(drives, Entry{
+				Name:  string(letter) + ":",
+				Path:  path,
+				IsDir: true,
+			})
+		}
+	}
+
+	response := map[string]interface{}{
+		"op":      "drives",
+		"entries": drives,
+	}
+	return h.sendJSON(response)
+}
+
+// handleGetOp sends a file to the controller
+func (h *Handler) handleGetOp(path string, fid uint16, offset int64) error {
+	log.Printf("📤 Get: %s (fid=%d, offset=%d)", path, fid, offset)
+
+	f, err := os.Open(path)
+	if err != nil {
+		return h.sendTotalCMDError(err.Error())
+	}
+	defer f.Close()
+
+	info, _ := f.Stat()
+	fileSize := info.Size()
+
+	if offset > 0 {
+		f.Seek(offset, 0)
+	}
+
+	remaining := fileSize - offset
+	totalChunks := uint16((remaining + 59999) / 60000) // 60KB chunks
+	
+	buf := make([]byte, 60000)
+	var chunk uint16
+
+	for {
+		n, err := f.Read(buf)
+		if n > 0 {
+			// Send chunk with binary data as base64
+			msg := map[string]interface{}{
+				"op":   "put",
+				"path": path,
+				"fid":  fid,
+				"c":    chunk,
+				"t":    totalChunks,
+				"size": fileSize,
+				"data": buf[:n],
+			}
+			if err := h.sendJSON(msg); err != nil {
+				return err
+			}
+			chunk++
+
+			// Progress every 64 chunks
+			if chunk%64 == 0 {
+				log.Printf("📤 Progress: %d/%d chunks", chunk, totalChunks)
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return h.sendTotalCMDError(err.Error())
+		}
+	}
+
+	log.Printf("✅ File sent: %s (%d bytes, %d chunks)", path, fileSize, chunk)
+	
+	// Send ACK
+	ack := map[string]interface{}{
+		"op":   "ack",
+		"fid":  fid,
+		"path": path,
+	}
+	return h.sendJSON(ack)
+}
+
+// handlePutOp receives a file chunk from the controller
+func (h *Handler) handlePutOp(message map[string]interface{}) error {
+	path, _ := message["path"].(string)
+	fid, _ := message["fid"].(float64)
+	chunk, _ := message["c"].(float64)
+	total, _ := message["t"].(float64)
+	
+	// Get data - could be []byte or base64 string
+	var data []byte
+	if d, ok := message["data"].([]byte); ok {
+		data = d
+	} else if s, ok := message["data"].(string); ok {
+		var err error
+		data, err = base64.StdEncoding.DecodeString(s)
+		if err != nil {
+			return h.sendTotalCMDError("invalid data encoding")
+		}
+	}
+
+	// Create/open file
+	h.mu.Lock()
+	transfer, exists := h.activeTransfers[fmt.Sprintf("%d", int(fid))]
+	if !exists {
+		// First chunk - create file
+		dir := filepath.Dir(path)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			h.mu.Unlock()
+			return h.sendTotalCMDError(err.Error())
+		}
+		
+		f, err := os.Create(path)
+		if err != nil {
+			h.mu.Unlock()
+			return h.sendTotalCMDError(err.Error())
+		}
+		
+		transfer = &activeTransfer{
+			ID:   fmt.Sprintf("%d", int(fid)),
+			File: f,
+		}
+		h.activeTransfers[transfer.ID] = transfer
+		log.Printf("📥 Receiving: %s", path)
+	}
+	h.mu.Unlock()
+
+	// Write chunk
+	if len(data) > 0 {
+		transfer.File.Write(data)
+		transfer.Received += int64(len(data))
+	}
+
+	// Check if complete
+	if total > 0 && uint16(chunk) == uint16(total)-1 {
+		transfer.File.Close()
+		h.mu.Lock()
+		delete(h.activeTransfers, transfer.ID)
+		h.mu.Unlock()
+		
+		log.Printf("✅ File received: %s (%d bytes)", path, transfer.Received)
+		
+		// Send ACK
+		ack := map[string]interface{}{
+			"op":   "ack",
+			"fid":  int(fid),
+			"path": path,
+		}
+		return h.sendJSON(ack)
+	}
+
+	// Periodic ACK every 64 chunks
+	if int(chunk)%64 == 0 && chunk > 0 {
+		ack := map[string]interface{}{
+			"op":  "ack",
+			"fid": int(fid),
+			"c":   int(chunk),
+		}
+		return h.sendJSON(ack)
+	}
+
+	return nil
+}
+
+// handleMkdirOp creates a directory
+func (h *Handler) handleMkdirOp(path string) error {
+	log.Printf("📁 Mkdir: %s", path)
+	
+	if err := os.MkdirAll(path, 0755); err != nil {
+		return h.sendTotalCMDError(err.Error())
+	}
+	
+	ack := map[string]interface{}{
+		"op":   "ack",
+		"path": path,
+	}
+	return h.sendJSON(ack)
+}
+
+// handleRmOp removes a file or directory
+func (h *Handler) handleRmOp(path string) error {
+	log.Printf("🗑️ Rm: %s", path)
+	
+	if err := os.RemoveAll(path); err != nil {
+		return h.sendTotalCMDError(err.Error())
+	}
+	
+	ack := map[string]interface{}{
+		"op":   "ack",
+		"path": path,
+	}
+	return h.sendJSON(ack)
+}
+
+// handleMvOp moves/renames a file or directory
+func (h *Handler) handleMvOp(oldPath, newPath string) error {
+	log.Printf("✏️ Mv: %s -> %s", oldPath, newPath)
+	
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return h.sendTotalCMDError(err.Error())
+	}
+	
+	ack := map[string]interface{}{
+		"op":     "ack",
+		"path":   oldPath,
+		"target": newPath,
+	}
+	return h.sendJSON(ack)
+}
+
+// sendTotalCMDError sends an error in TotalCMD protocol format
+func (h *Handler) sendTotalCMDError(errMsg string) error {
+	msg := map[string]interface{}{
+		"op":    "err",
+		"error": errMsg,
+	}
+	return h.sendJSON(msg)
+}
+
+// sendJSON marshals and sends a JSON message
+func (h *Handler) sendJSON(msg map[string]interface{}) error {
+	if h.sendData == nil {
+		return fmt.Errorf("sendData not set")
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return h.sendData(data)
 }
 
 // handleTransferStart initiates a new file transfer

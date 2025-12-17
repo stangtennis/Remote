@@ -409,6 +409,9 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 			dc.OnOpen(func() {
 				log.Println("✅ VIDEO CHANNEL OPEN - Using unreliable channel for frames")
 			})
+		case "file":
+			log.Println("📁 File channel ready (reliable, ordered)")
+			m.setupFileChannelHandlers(dc)
 		default:
 			m.dataChannel = dc
 			m.setupDataChannelHandlers(dc)
@@ -455,6 +458,36 @@ func (m *Manager) setupDataChannelHandlers(dc *webrtc.DataChannel) {
 		}
 
 		m.handleControlEvent(event)
+	})
+}
+
+// setupFileChannelHandlers sets up the reliable file transfer channel
+func (m *Manager) setupFileChannelHandlers(dc *webrtc.DataChannel) {
+	dc.OnOpen(func() {
+		log.Println("📁 FILE CHANNEL READY - File transfer enabled!")
+		
+		// Set up file transfer send callback to use file channel
+		if m.fileTransferHandler != nil {
+			m.fileTransferHandler.SetSendDataCallback(func(data []byte) error {
+				if dc.ReadyState() == webrtc.DataChannelStateOpen {
+					return dc.Send(data)
+				}
+				return fmt.Errorf("file channel not ready")
+			})
+		}
+	})
+
+	dc.OnClose(func() {
+		log.Println("📁 File channel closed")
+	})
+
+	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+		// Handle file transfer messages
+		if m.fileTransferHandler != nil {
+			if err := m.fileTransferHandler.HandleIncomingData(msg.Data); err != nil {
+				log.Printf("❌ File transfer error: %v", err)
+			}
+		}
 	})
 }
 
