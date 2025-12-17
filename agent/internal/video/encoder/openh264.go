@@ -82,6 +82,11 @@ func (e *OpenH264Encoder) Init(cfg Config) error {
 	enablePrefix := 1
 	_ = e.encoder.SetOption(openh264.ENCODER_OPTION_ENABLE_PREFIX_NAL_ADDING, &enablePrefix)
 
+	// Avoid "VideoFrameTypeSkip" output starvation on static screens.
+	// Remote desktop UX is better when we always emit frames (at least at low FPS).
+	rcFrameSkip := 0
+	_ = e.encoder.SetOption(openh264.ENCODER_OPTION_RC_FRAME_SKIP, &rcFrameSkip)
+
 	e.pinner = &runtime.Pinner{}
 	e.initialized = true
 	e.frameNum = 0
@@ -122,7 +127,7 @@ func (e *OpenH264Encoder) Encode(frame *image.RGBA, forceKeyframe bool) (output 
 
 	// Best-effort "force keyframe": temporarily set IDR interval to 1 for this encode,
 	// then restore configured cadence. This isn't perfect, but it improves startup and PLI recovery.
-	if forceKeyframe && e.config.KeyframeInterval > 0 {
+	if forceKeyframe {
 		one := 1
 		_ = e.encoder.SetOption(openh264.ENCODER_OPTION_IDR_INTERVAL, &one)
 		defer func() {
