@@ -3,8 +3,6 @@ package webrtc
 import (
 	"bytes"
 	"fmt"
-	"image"
-	"image/jpeg"
 	"io"
 	"log"
 	"os"
@@ -99,28 +97,32 @@ func (d *H264Decoder) start() error {
 	// Find FFmpeg executable
 	ffmpegPath := findFFmpeg()
 
-	// FFmpeg command: read H.264 Annex-B from stdin, output raw BGRA to stdout
-	// BGRA is fastest for Windows display and avoids JPEG encoding overhead
+	// FFmpeg command: read H.264 Annex-B from stdin, output MJPEG to stdout
+	// Using hardware acceleration (DXVA2) on Windows for fast decoding
+	// -hwaccel dxva2: use DirectX Video Acceleration
+	// -hwaccel_output_format nv12: hardware output format
 	// -threads 0: use all available CPU cores
 	// -flags low_delay: minimize decoding latency
-	// -fflags nobuffer: disable input buffering
+	// -fflags nobuffer+discardcorrupt: disable buffering, discard corrupt frames
 	// -probesize 32: minimal probing for faster start
 	// -analyzeduration 0: skip analysis for faster start
-	// -pix_fmt bgra: output format (4 bytes per pixel, compatible with Windows)
-	// -f rawvideo: raw uncompressed output
+	// -q:v 10: lower quality JPEG for speed (range 2-31, higher=faster)
+	// -vsync 0: no frame sync, output as fast as possible
 	d.cmd = exec.Command(ffmpegPath,
 		"-hide_banner",
-		"-loglevel", "info",
-		"-threads", "0",
+		"-loglevel", "warning",
+		"-hwaccel", "dxva2",
+		"-threads", "4",
 		"-flags", "low_delay",
-		"-fflags", "nobuffer",
+		"-fflags", "nobuffer+discardcorrupt",
 		"-probesize", "32",
 		"-analyzeduration", "0",
 		"-f", "h264",
 		"-i", "pipe:0",
-		"-threads", "0",
-		"-pix_fmt", "bgra",
-		"-f", "rawvideo",
+		"-vsync", "0",
+		"-f", "image2pipe",
+		"-vcodec", "mjpeg",
+		"-q:v", "10",
 		"pipe:1",
 	)
 	configureFFmpegCmd(d.cmd)
@@ -214,7 +216,7 @@ func (d *H264Decoder) parseResolution(line string) {
 	}
 }
 
-// readFrames reads raw BGRA frames from FFmpeg stdout and converts to JPEG
+// readFrames reads MJPEG frames from FFmpeg stdout
 func (d *H264Decoder) readFrames() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -222,9 +224,9 @@ func (d *H264Decoder) readFrames() {
 		}
 	}()
 
+	buf := make([]byte, 512*1024) // 512KB buffer
 	var frameBuf bytes.Buffer
 	frameCount := 0
-	lastLogTime := int64(0)
 
 	for {
 		select {
@@ -233,87 +235,55 @@ func (d *H264Decoder) readFrames() {
 		default:
 		}
 
-		// Get current resolution
-		d.mu.Lock()
-		width := d.width
-		height := d.height
-		d.mu.Unlock()
-
-		// If we don't have resolution yet, read small chunks and wait
-		if width == 0 || height == 0 {
-			buf := make([]byte, 4096)
-			n, err := d.stdout.Read(buf)
-			if err != nil {
-				if err != io.EOF {
-					log.Printf("⚠️ FFmpeg stdout read error: %v", err)
-				}
-				return
+		n, err := d.stdout.Read(buf)
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("⚠️ FFmpeg stdout read error: %v", err)
 			}
-			frameBuf.Write(buf[:n])
-			continue
+			return
 		}
 
-		// Calculate frame size (BGRA = 4 bytes per pixel)
-		frameSize := width * height * 4
+		// Append to frame buffer
+		frameBuf.Write(buf[:n])
 
-		// Read until we have a complete frame
-		for frameBuf.Len() < frameSize {
-			buf := make([]byte, 65536) // 64KB chunks
-			n, err := d.stdout.Read(buf)
-			if err != nil {
-				if err != io.EOF {
-					log.Printf("⚠️ FFmpeg stdout read error: %v", err)
-				}
-				return
+		// Look for complete JPEG frames (SOI...EOI)
+		data := frameBuf.Bytes()
+		for {
+			// Find SOI marker (0xFFD8)
+			soiIdx := bytes.Index(data, []byte{0xFF, 0xD8})
+			if soiIdx == -1 {
+				break
 			}
-			frameBuf.Write(buf[:n])
+
+			// Find EOI marker (0xFFD9) after SOI
+			eoiIdx := bytes.Index(data[soiIdx+2:], []byte{0xFF, 0xD9})
+			if eoiIdx == -1 {
+				break
+			}
+			eoiIdx += soiIdx + 2 + 2 // Include the EOI marker itself
+
+			// Extract complete JPEG frame
+			jpegData := make([]byte, eoiIdx-soiIdx)
+			copy(jpegData, data[soiIdx:eoiIdx])
+
+			frameCount++
+			if frameCount%30 == 0 {
+				log.Printf("🎬 H.264 decoded frames: %d", frameCount)
+			}
+
+			// Send to callback
+			if d.onFrame != nil {
+				d.onFrame(jpegData)
+			}
+
+			// Remove processed data from buffer
+			data = data[eoiIdx:]
 		}
 
-		// Extract one frame
-		frameData := frameBuf.Next(frameSize)
-		frameCount++
-
-		// Log periodically (every 30 frames)
-		now := frameCount / 30
-		if now > int(lastLogTime) {
-			lastLogTime = int64(now)
-			log.Printf("🎬 Raw frames decoded: %d (%dx%d)", frameCount, width, height)
-		}
-
-		// Convert BGRA to JPEG
-		jpegData := d.bgraToJPEG(frameData, width, height)
-		if jpegData != nil && d.onFrame != nil {
-			d.onFrame(jpegData)
-		}
+		// Keep remaining data in buffer
+		frameBuf.Reset()
+		frameBuf.Write(data)
 	}
-}
-
-// bgraToJPEG converts raw BGRA pixel data to JPEG
-func (d *H264Decoder) bgraToJPEG(bgra []byte, width, height int) []byte {
-	if len(bgra) < width*height*4 {
-		return nil
-	}
-
-	// Create RGBA image (swap B and R channels)
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			i := (y*width + x) * 4
-			// BGRA -> RGBA
-			img.Pix[(y*width+x)*4+0] = bgra[i+2] // R
-			img.Pix[(y*width+x)*4+1] = bgra[i+1] // G
-			img.Pix[(y*width+x)*4+2] = bgra[i+0] // B
-			img.Pix[(y*width+x)*4+3] = bgra[i+3] // A
-		}
-	}
-
-	// Encode to JPEG with good quality
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 85}); err != nil {
-		return nil
-	}
-
-	return buf.Bytes()
 }
 
 // Decode sends H.264 NAL units to the decoder
