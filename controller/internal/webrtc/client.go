@@ -128,16 +128,16 @@ func (c *Client) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	// Handle incoming tracks (H.264 video)
 	pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		codecMime := track.Codec().MimeType
-		log.Printf("📺 OnTrack CALLED! Kind: %s, Codec: %s, SSRC: %d, PayloadType: %d", 
+		log.Printf("📺 OnTrack CALLED! Kind: %s, Codec: %s, SSRC: %d, PayloadType: %d",
 			track.Kind().String(), codecMime, track.SSRC(), track.PayloadType())
-		
+
 		if track.Kind() == webrtc.RTPCodecTypeVideo {
 			// Only start H.264 decoder for H.264 tracks
 			if codecMime == webrtc.MimeTypeH264 {
 				c.videoTrack = track
 				c.h264Receiving = true
 				log.Println("🎬 H.264 video track received - starting decoder goroutine NOW")
-				
+
 				// Start H.264 RTP receiver goroutine
 				go c.receiveH264Track(track)
 			} else {
@@ -591,12 +591,13 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 		c.h264Receiving = false
 	}()
 
-	log.Printf("🎬 receiveH264Track STARTED (codec: %s, SSRC: %d, ClockRate: %d)", 
+	log.Printf("🎬 receiveH264Track STARTED (codec: %s, SSRC: %d, ClockRate: %d)",
 		track.Codec().MimeType, track.SSRC(), track.Codec().ClockRate)
 
 	// Create sample builder for H.264 depacketization
-	// Max late is 50 packets (about 1.5 seconds at 30fps)
-	sb := samplebuilder.New(50, &codecs.H264Packet{}, track.Codec().ClockRate)
+	// MaxLate is packet buffer size. Keyframes for screen content can easily exceed 50 RTP packets,
+	// which would prevent SampleBuilder from ever outputting a complete access unit (freeze).
+	sb := samplebuilder.New(2000, &codecs.H264Packet{}, track.Codec().ClockRate)
 
 	// Start FFmpeg decoder if not already running
 	if c.h264Decoder == nil {
@@ -637,7 +638,7 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 
 		rtpCount++
 		if rtpCount == 1 {
-			log.Printf("🎬 FIRST RTP packet received! SeqNum: %d, Timestamp: %d, PayloadLen: %d", 
+			log.Printf("🎬 FIRST RTP packet received! SeqNum: %d, Timestamp: %d, PayloadLen: %d",
 				rtpPacket.SequenceNumber, rtpPacket.Timestamp, len(rtpPacket.Payload))
 		}
 		if rtpCount%100 == 0 {

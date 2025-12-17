@@ -41,6 +41,7 @@ type Manager struct {
 	config     Config
 	mu         sync.Mutex
 	frameCount int
+	forceNext  bool
 }
 
 // NewManager creates a new encoder manager
@@ -84,7 +85,13 @@ func (m *Manager) Encode(frame *image.RGBA) ([]byte, error) {
 	}
 
 	m.frameCount++
-	forceKeyframe := m.frameCount%m.config.KeyframeInterval == 0
+	forceKeyframe := false
+	if m.forceNext {
+		forceKeyframe = true
+		m.forceNext = false
+	} else if m.config.KeyframeInterval > 0 && m.frameCount%m.config.KeyframeInterval == 0 {
+		forceKeyframe = true
+	}
 
 	return m.encoder.Encode(frame, forceKeyframe)
 }
@@ -106,7 +113,7 @@ func (m *Manager) SetBitrate(kbps int) error {
 func (m *Manager) ForceKeyframe() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.frameCount = 0 // Reset to trigger keyframe on next encode
+	m.forceNext = true
 }
 
 // Close releases resources

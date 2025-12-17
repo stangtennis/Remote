@@ -30,7 +30,7 @@ func (w *syncWriter) Write(p []byte) (n int, err error) {
 // Init initializes the logger with both file and console output
 func Init() error {
 	var logFilePath string
-	
+
 	// Try AppData first (always writable), then exe directory
 	if appData := os.Getenv("APPDATA"); appData != "" {
 		logDir := filepath.Join(appData, "RemoteDesktopController")
@@ -44,7 +44,7 @@ func Init() error {
 		}
 		logFilePath = filepath.Join(filepath.Dir(exePath), "controller.log")
 	}
-	
+
 	// Open log file (truncate on each run)
 	var err error
 	logFile, err = os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
@@ -64,6 +64,10 @@ func Init() error {
 	InfoLogger = log.New(syncFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLogger = log.New(syncFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	DebugLogger = log.New(syncFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
+
+	// Capture stdlib log output from packages that still use log.Printf (e.g. WebRTC/FFmpeg paths).
+	log.SetOutput(syncFile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	InfoLogger.Printf("Logger initialized. Log file: %s", logFilePath)
 	return nil
@@ -126,15 +130,15 @@ func ReadLog(maxLines int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to read log: %w", err)
 	}
-	
+
 	content := string(data)
 	lines := splitLines(content)
-	
+
 	// Return last N lines
 	if len(lines) > maxLines {
 		lines = lines[len(lines)-maxLines:]
 	}
-	
+
 	result := ""
 	for _, line := range lines {
 		result += line + "\n"
