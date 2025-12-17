@@ -19,12 +19,14 @@ type Client struct {
 	peerConnection       *webrtc.PeerConnection
 	dataChannel          *webrtc.DataChannel
 	controlChannel       *webrtc.DataChannel // Separate channel for input (low latency)
+	fileChannel          *webrtc.DataChannel // Reliable channel for file transfer
 	videoTrack           *webrtc.TrackRemote
 	onFrame              func([]byte)
 	onH264Frame          func([]byte) // Callback for decoded H.264 frames
 	onConnected          func()
 	onDisconnected       func()
 	onDataChannelMessage func([]byte)
+	onFileMessage        func([]byte) // Callback for file transfer messages
 	mu                   sync.Mutex
 	connected            bool
 
@@ -243,6 +245,27 @@ func (c *Client) CreateOffer() (string, error) {
 		log.Println("🎬 Video channel created (ordered=false, maxRetransmits=0)")
 	}
 
+	// Create file channel for reliable file transfer (ordered, reliable)
+	fileOrdered := true
+	fileOpts := &webrtc.DataChannelInit{
+		Ordered: &fileOrdered,
+	}
+	fc, err := c.peerConnection.CreateDataChannel("file", fileOpts)
+	if err != nil {
+		log.Printf("⚠️ Failed to create file channel: %v", err)
+	} else {
+		c.fileChannel = fc
+		fc.OnOpen(func() {
+			log.Println("📁 File channel OPENED (reliable, ordered)")
+		})
+		fc.OnMessage(func(msg webrtc.DataChannelMessage) {
+			if c.onFileMessage != nil {
+				c.onFileMessage(msg.Data)
+			}
+		})
+		log.Println("📁 File channel created (ordered=true, reliable)")
+	}
+
 	// Add video transceiver for H.264 (recvonly) - enables agent to send video track
 	// This is critical for H.264 support without renegotiation
 	_, err = c.peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo, webrtc.RTPTransceiverInit{
@@ -381,6 +404,19 @@ func (c *Client) SetOnDisconnected(callback func()) {
 // SetOnDataChannelMessage sets the callback for data channel messages
 func (c *Client) SetOnDataChannelMessage(callback func([]byte)) {
 	c.onDataChannelMessage = callback
+}
+
+// SetOnFileMessage sets the callback for file transfer messages
+func (c *Client) SetOnFileMessage(callback func([]byte)) {
+	c.onFileMessage = callback
+}
+
+// SendFileData sends data over the file channel
+func (c *Client) SendFileData(data []byte) error {
+	if c.fileChannel == nil || c.fileChannel.ReadyState() != webrtc.DataChannelStateOpen {
+		return fmt.Errorf("file channel not ready")
+	}
+	return c.fileChannel.Send(data)
 }
 
 // IsConnected returns the connection status
