@@ -11,8 +11,8 @@ InstallDirRegKey HKLM "Software\RemoteDesktopAgent" "InstallDir"
 RequestExecutionLevel admin
 
 ; Version info - will be replaced by build script
-!define VERSION "2.62.5"
-VIProductVersion "2.62.5.0"
+!define VERSION "2.62.17"
+VIProductVersion "2.62.17.0"
 VIAddVersionKey "ProductName" "Remote Desktop Agent"
 VIAddVersionKey "CompanyName" "StangTennis"
 VIAddVersionKey "FileDescription" "Remote Desktop Agent med H.264 support og auto-opdatering"
