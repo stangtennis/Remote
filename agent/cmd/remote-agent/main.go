@@ -326,7 +326,7 @@ func main() {
 	// Check if running as admin - if not, relaunch with UAC prompt
 	isService, _ := svc.IsWindowsService()
 	if !isService && !isAdmin() {
-		fmt.Println("🔒 Administrator privileges required. Requesting elevation...")
+		fmt.Println("🔒 Administrator rettigheder kræves. Anmoder om elevation...")
 		relaunchAsAdmin()
 		return // Exit this instance, the elevated one will take over
 	}
@@ -350,28 +350,28 @@ func main() {
 	}
 	if *installFlag {
 		if err := installService(); err != nil {
-			fmt.Printf("❌ Failed to install service: %v\n", err)
+			fmt.Printf("❌ Kunne ikke installere service: %v\n", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if *uninstallFlag {
 		if err := uninstallService(); err != nil {
-			fmt.Printf("❌ Failed to uninstall service: %v\n", err)
+			fmt.Printf("❌ Kunne ikke afinstallere service: %v\n", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if *startFlag {
 		if err := startService(); err != nil {
-			fmt.Printf("❌ Failed to start service: %v\n", err)
+			fmt.Printf("❌ Kunne ikke starte service: %v\n", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if *stopFlag {
 		if err := stopService(); err != nil {
-			fmt.Printf("❌ Failed to stop service: %v\n", err)
+			fmt.Printf("❌ Kunne ikke stoppe service: %v\n", err)
 			os.Exit(1)
 		}
 		return
@@ -382,11 +382,11 @@ func main() {
 	}
 	if *logoutFlag {
 		if err := auth.ClearCredentials(); err != nil {
-			fmt.Printf("❌ Failed to clear credentials: %v\n", err)
+			fmt.Printf("❌ Kunne ikke rydde login oplysninger: %v\n", err)
 		} else {
-			fmt.Println("✅ Logged out successfully!")
-			fmt.Println("   Credentials have been cleared.")
-			fmt.Println("   Run the agent again to log in with a different account.")
+			fmt.Println("✅ Logget ud!")
+			fmt.Println("   Login oplysninger er ryddet.")
+			fmt.Println("   Kør agent igen for at logge ind med en anden konto.")
 		}
 		return
 	}
@@ -394,7 +394,7 @@ func main() {
 	// Check if running as Windows Service
 	isWindowsService, err := svc.IsWindowsService()
 	if err != nil {
-		fmt.Printf("Failed to determine if running as service: %v\n", err)
+		fmt.Printf("Kunne ikke afgøre om kører som service: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -422,7 +422,7 @@ func main() {
 
 	// Silent mode - just run interactively
 	if err := setupLogging(); err != nil {
-		fmt.Printf("Failed to setup logging: %v\n", err)
+		fmt.Printf("Kunne ikke opsætte logging: %v\n", err)
 		os.Exit(1)
 	}
 	defer func() {
@@ -463,17 +463,17 @@ func showStartupDialog() {
 	// Build status message
 	statusLine := ""
 	if isLoggedIn {
-		statusLine = "👤 Logged in as: " + userEmail + "\n"
+		statusLine = "👤 Logget ind som: " + userEmail + "\n"
 	} else {
-		statusLine = "⚠️ Not logged in\n"
+		statusLine = "⚠️ Ikke logget ind\n"
 	}
 
 	if serviceRunning {
-		statusLine += "✅ Service: RUNNING\n"
+		statusLine += "✅ Service: KØRER\n"
 	} else if serviceInstalled {
-		statusLine += "⏸️ Service: STOPPED\n"
+		statusLine += "⏸️ Service: STOPPET\n"
 	} else {
-		statusLine += "❌ Service: Not installed\n"
+		statusLine += "❌ Service: Ikke installeret\n"
 	}
 
 	// Show main menu
@@ -484,7 +484,7 @@ func showStartupDialog() {
 			statusLine + "\n" +
 			"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
 			menuOptions + "\n\n" +
-			"Enter number (or Cancel to exit):"
+			"Indtast nummer (eller Annuller for at afslutte):"
 
 		// Use input dialog
 		choice := showInputDialog("Remote Desktop Agent", message)
@@ -514,16 +514,16 @@ func showStartupDialog() {
 
 			// Update status line
 			if isLoggedIn {
-				statusLine = "👤 Logged in as: " + userEmail + "\n"
+				statusLine = "👤 Logget ind som: " + userEmail + "\n"
 			} else {
-				statusLine = "⚠️ Not logged in\n"
+				statusLine = "⚠️ Ikke logget ind\n"
 			}
 			if serviceRunning {
-				statusLine += "✅ Service: RUNNING\n"
+				statusLine += "✅ Service: KØRER\n"
 			} else if serviceInstalled {
-				statusLine += "⏸️ Service: STOPPED\n"
+				statusLine += "⏸️ Service: STOPPET\n"
 			} else {
-				statusLine += "❌ Service: Not installed\n"
+				statusLine += "❌ Service: Ikke installeret\n"
 			}
 		} else if action == "run_interactive" {
 			// Run interactively
@@ -551,35 +551,35 @@ func buildMenuOptions(isLoggedIn, serviceInstalled, serviceRunning bool) string 
 	num := 1
 
 	if !isLoggedIn {
-		options += fmt.Sprintf("[%d] 🔑 Login\n", num)
+		options += fmt.Sprintf("[%d] 🔑 Log ind\n", num)
 		num++
 	}
 
 	if isLoggedIn {
 		if !serviceInstalled {
-			options += fmt.Sprintf("[%d] 📦 Install as Service (recommended)\n", num)
+			options += fmt.Sprintf("[%d] 📦 Installer som Service (anbefalet)\n", num)
 			num++
-			options += fmt.Sprintf("[%d] ▶️ Run Once (this session only)\n", num)
+			options += fmt.Sprintf("[%d] ▶️ Kør én gang (kun denne session)\n", num)
 			num++
 		} else if !serviceRunning {
 			options += fmt.Sprintf("[%d] ▶️ Start Service\n", num)
 			num++
-			options += fmt.Sprintf("[%d] 🗑️ Uninstall Service\n", num)
+			options += fmt.Sprintf("[%d] 🗑️ Afinstaller Service\n", num)
 			num++
 		} else {
 			options += fmt.Sprintf("[%d] ⏹️ Stop Service\n", num)
 			num++
-			options += fmt.Sprintf("[%d] 🗑️ Uninstall Service\n", num)
+			options += fmt.Sprintf("[%d] 🗑️ Afinstaller Service\n", num)
 			num++
 		}
 
-		options += fmt.Sprintf("[%d] 🔄 Check for Updates\n", num)
+		options += fmt.Sprintf("[%d] 🔄 Tjek for opdateringer\n", num)
 		num++
-		options += fmt.Sprintf("[%d] 🚪 Logout / Switch Account\n", num)
+		options += fmt.Sprintf("[%d] 🚪 Log ud / Skift konto\n", num)
 		num++
 	}
 
-	options += fmt.Sprintf("[0] ❌ Exit")
+	options += fmt.Sprintf("[0] ❌ Afslut")
 	return options
 }
 
@@ -614,9 +614,9 @@ func handleMenuChoice(choice string, isLoggedIn, serviceInstalled, serviceRunnin
 			if choice == fmt.Sprintf("%d", num) {
 				// Start service
 				if err := startService(); err != nil {
-					messageBox("Error", "Failed to start service: "+err.Error(), MB_OK|MB_ICONERROR)
+					messageBox("Fejl", "Kunne ikke starte service: "+err.Error(), MB_OK|MB_ICONERROR)
 				} else {
-					messageBox("Success", "✅ Service started!", MB_OK|MB_ICONINFORMATION)
+					messageBox("Succes", "✅ Service startet!", MB_OK|MB_ICONINFORMATION)
 				}
 				return "refresh"
 			}
@@ -631,9 +631,9 @@ func handleMenuChoice(choice string, isLoggedIn, serviceInstalled, serviceRunnin
 			if choice == fmt.Sprintf("%d", num) {
 				// Stop service
 				if err := stopService(); err != nil {
-					messageBox("Error", "Failed to stop service: "+err.Error(), MB_OK|MB_ICONERROR)
+					messageBox("Fejl", "Kunne ikke stoppe service: "+err.Error(), MB_OK|MB_ICONERROR)
 				} else {
-					messageBox("Success", "✅ Service stopped!", MB_OK|MB_ICONINFORMATION)
+					messageBox("Succes", "✅ Service stoppet!", MB_OK|MB_ICONINFORMATION)
 				}
 				return "refresh"
 			}
@@ -655,9 +655,9 @@ func handleMenuChoice(choice string, isLoggedIn, serviceInstalled, serviceRunnin
 		if choice == fmt.Sprintf("%d", num) {
 			// Logout
 			if err := auth.ClearCredentials(); err != nil {
-				messageBox("Error", "Failed to logout: "+err.Error(), MB_OK|MB_ICONERROR)
+				messageBox("Fejl", "Kunne ikke logge ud: "+err.Error(), MB_OK|MB_ICONERROR)
 			} else {
-				messageBox("Success", "✅ Logged out successfully!", MB_OK|MB_ICONINFORMATION)
+				messageBox("Succes", "✅ Logget ud!", MB_OK|MB_ICONINFORMATION)
 			}
 			return "refresh"
 		}
@@ -673,29 +673,29 @@ func showInputDialog(title, message string) string {
 	// For simplicity, show numbered options and use Yes/No to navigate
 
 	// Show the menu and ask for first digit
-	result := messageBox(title, message+"\n\nClick YES for option 1, NO for other options", MB_YESNO|MB_ICONQUESTION)
+	result := messageBox(title, message+"\n\nKlik JA for mulighed 1, NEJ for andre muligheder", MB_YESNO|MB_ICONQUESTION)
 
 	if result == IDYES {
 		return "1"
 	}
 
 	// Ask for next option
-	result = messageBox(title, "Option 2?\n\nYES = Select option 2\nNO = More options", MB_YESNO|MB_ICONQUESTION)
+	result = messageBox(title, "Mulighed 2?\n\nJA = Vælg mulighed 2\nNEJ = Flere muligheder", MB_YESNO|MB_ICONQUESTION)
 	if result == IDYES {
 		return "2"
 	}
 
-	result = messageBox(title, "Option 3?\n\nYES = Select option 3\nNO = More options", MB_YESNO|MB_ICONQUESTION)
+	result = messageBox(title, "Mulighed 3?\n\nJA = Vælg mulighed 3\nNEJ = Flere muligheder", MB_YESNO|MB_ICONQUESTION)
 	if result == IDYES {
 		return "3"
 	}
 
-	result = messageBox(title, "Option 4?\n\nYES = Select option 4\nNO = More options", MB_YESNO|MB_ICONQUESTION)
+	result = messageBox(title, "Mulighed 4?\n\nJA = Vælg mulighed 4\nNEJ = Flere muligheder", MB_YESNO|MB_ICONQUESTION)
 	if result == IDYES {
 		return "4"
 	}
 
-	result = messageBox(title, "Option 5?\n\nYES = Select option 5\nNO = Exit", MB_YESNO|MB_ICONQUESTION)
+	result = messageBox(title, "Mulighed 5?\n\nJA = Vælg mulighed 5\nNEJ = Afslut", MB_YESNO|MB_ICONQUESTION)
 	if result == IDYES {
 		return "5"
 	}
@@ -708,18 +708,18 @@ func doLogin() {
 	// Load config for Supabase credentials
 	cfg, err := config.Load()
 	if err != nil {
-		messageBox("Error", "Failed to load config: "+err.Error(), MB_OK|MB_ICONERROR)
+		messageBox("Fejl", "Kunne ikke indlæse konfiguration: "+err.Error(), MB_OK|MB_ICONERROR)
 		return
 	}
 
 	// Get email
-	email := showTextInputDialog("Login - Email", "Enter your email address:")
+	email := showTextInputDialog("Log ind - Email", "Indtast din email adresse:")
 	if email == "" {
 		return
 	}
 
 	// Get password
-	password := showTextInputDialog("Login - Password", "Enter your password:")
+	password := showTextInputDialog("Log ind - Adgangskode", "Indtast din adgangskode:")
 	if password == "" {
 		return
 	}
@@ -732,16 +732,16 @@ func doLogin() {
 
 	result, err := auth.Login(authConfig, email, password)
 	if err != nil {
-		messageBox("Login Failed", "Error: "+err.Error(), MB_OK|MB_ICONERROR)
+		messageBox("Login fejlede", "Fejl: "+err.Error(), MB_OK|MB_ICONERROR)
 		return
 	}
 
 	if !result.Success {
-		messageBox("Login Failed", result.Message, MB_OK|MB_ICONWARNING)
+		messageBox("Login fejlede", result.Message, MB_OK|MB_ICONWARNING)
 		return
 	}
 
-	messageBox("Login Successful", "✅ Welcome, "+result.Email+"!\n\nYou can now install the service.", MB_OK|MB_ICONINFORMATION)
+	messageBox("Login lykkedes", "✅ Velkommen, "+result.Email+"!\n\nDu kan nu installere servicen.", MB_OK|MB_ICONINFORMATION)
 }
 
 // showTextInputDialog shows a simple text input dialog using PowerShell
@@ -789,36 +789,36 @@ func escapeForPowerShell(s string) string {
 // doInstallService handles service installation
 func doInstallService() {
 	if !isAdmin() {
-		messageBox("Administrator Required",
-			"Installing as a service requires Administrator privileges.\n\n"+
-				"Click OK to restart as Administrator.", MB_OK|MB_ICONWARNING)
+		messageBox("Administrator kræves",
+			"Installation som service kræver Administrator rettigheder.\n\n"+
+				"Klik OK for at genstarte som Administrator.", MB_OK|MB_ICONWARNING)
 		runAsAdmin()
 		return
 	}
 
 	if err := installService(); err != nil {
-		messageBox("Error", "Failed to install service:\n\n"+err.Error(), MB_OK|MB_ICONERROR)
+		messageBox("Fejl", "Kunne ikke installere service:\n\n"+err.Error(), MB_OK|MB_ICONERROR)
 		return
 	}
 
 	if err := startService(); err != nil {
-		messageBox("Warning", "Service installed but failed to start:\n\n"+err.Error(), MB_OK|MB_ICONWARNING)
+		messageBox("Advarsel", "Service installeret men kunne ikke startes:\n\n"+err.Error(), MB_OK|MB_ICONWARNING)
 		return
 	}
 
-	messageBox("Success",
-		"✅ Service installed and started!\n\n"+
-			"The Remote Desktop Agent is now running as a Windows Service.\n\n"+
-			"• It will start automatically when Windows boots\n"+
-			"• It can capture the login screen\n"+
-			"• Run this exe again to manage the service", MB_OK|MB_ICONINFORMATION)
+	messageBox("Succes",
+		"✅ Service installeret og startet!\n\n"+
+			"Remote Desktop Agent kører nu som Windows Service.\n\n"+
+			"• Den starter automatisk når Windows starter\n"+
+			"• Den kan optage login skærmen\n"+
+			"• Kør denne exe igen for at administrere servicen", MB_OK|MB_ICONINFORMATION)
 }
 
 // doUninstallService handles service uninstallation
 func doUninstallService() {
 	if !isAdmin() {
-		messageBox("Administrator Required",
-			"Please click OK to restart as Administrator.", MB_OK|MB_ICONWARNING)
+		messageBox("Administrator kræves",
+			"Klik OK for at genstarte som Administrator.", MB_OK|MB_ICONWARNING)
 		runAsAdmin()
 		return
 	}
@@ -826,29 +826,29 @@ func doUninstallService() {
 	// Stop first if running
 	if isServiceRunning() {
 		if err := stopService(); err != nil {
-			messageBox("Error", "Failed to stop service: "+err.Error(), MB_OK|MB_ICONERROR)
+			messageBox("Fejl", "Kunne ikke stoppe service: "+err.Error(), MB_OK|MB_ICONERROR)
 			return
 		}
 	}
 
 	if err := uninstallService(); err != nil {
-		messageBox("Error", "Failed to uninstall service: "+err.Error(), MB_OK|MB_ICONERROR)
+		messageBox("Fejl", "Kunne ikke afinstallere service: "+err.Error(), MB_OK|MB_ICONERROR)
 		return
 	}
 
-	messageBox("Success", "✅ Service uninstalled.", MB_OK|MB_ICONINFORMATION)
+	messageBox("Succes", "✅ Service afinstalleret.", MB_OK|MB_ICONINFORMATION)
 }
 
 // doCheckUpdates checks for updates from GitHub
 func doCheckUpdates() {
-	messageBox("Check for Updates",
-		"To update the agent:\n\n"+
-			"1. Download the latest version from:\n"+
+	messageBox("Tjek for opdateringer",
+		"For at opdatere agent:\n\n"+
+			"1. Download seneste version fra:\n"+
 			"   https://github.com/stangtennis/Remote/releases\n\n"+
-			"2. Stop the current service (if running)\n"+
-			"3. Replace this exe with the new one\n"+
-			"4. Start the service again\n\n"+
-			"Current version: v"+tray.VersionString, MB_OK|MB_ICONINFORMATION)
+			"2. Stop den nuværende service (hvis den kører)\n"+
+			"3. Erstat denne exe med den nye\n"+
+			"4. Start servicen igen\n\n"+
+			"Nuværende version: v"+tray.VersionString, MB_OK|MB_ICONINFORMATION)
 }
 
 // isServiceInstalled checks if the service is installed

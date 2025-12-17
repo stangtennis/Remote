@@ -13,7 +13,7 @@ import (
 )
 
 // Version of the agent - update this with each release
-const Version = "v2.62.11"
+const Version = "v2.62.12"
 const BuildDate = "2025-12-17"
 const VersionString = Version + " (" + BuildDate + ")"
 
@@ -86,7 +86,7 @@ func openConsole() {
 	// Get the executable directory
 	exePath, err := os.Executable()
 	if err != nil {
-		log.Printf("Failed to get executable path: %v", err)
+		log.Printf("Kunne ikke finde exe sti: %v", err)
 		return
 	}
 	exeDir := filepath.Dir(exePath)
@@ -94,12 +94,12 @@ func openConsole() {
 
 	// Check if log file exists
 	if _, err := os.Stat(logPath); os.IsNotExist(err) {
-		log.Printf("Log file does not exist: %s", logPath)
+		log.Printf("Log fil findes ikke: %s", logPath)
 		return
 	}
 
 	// Open a PowerShell window that tails the log file
-	log.Println("🪟 Opening console window with live logs...")
+	log.Println("🪟 Åbner konsol vindue med live logs...")
 
 	// Use cmd to start PowerShell with proper escaping
 	// This ensures the window opens correctly
@@ -107,9 +107,9 @@ func openConsole() {
 	cmd := exec.Command("cmd", "/c", "start", "powershell", "-NoExit", "-Command", psCmd)
 
 	if err := cmd.Start(); err != nil {
-		log.Printf("Failed to open console: %v", err)
+		log.Printf("Kunne ikke åbne konsol: %v", err)
 	} else {
-		log.Printf("✅ Console window opened for: %s", logPath)
+		log.Printf("✅ Konsol vindue åbnet for: %s", logPath)
 	}
 }
 
@@ -117,7 +117,7 @@ func openLogFile() {
 	// Get the executable directory
 	exePath, err := os.Executable()
 	if err != nil {
-		log.Printf("Failed to get executable path: %v", err)
+		log.Printf("Kunne ikke finde exe sti: %v", err)
 		return
 	}
 	exeDir := filepath.Dir(exePath)
@@ -125,7 +125,7 @@ func openLogFile() {
 
 	// Check if log file exists
 	if _, err := os.Stat(logPath); os.IsNotExist(err) {
-		log.Printf("Log file does not exist: %s", logPath)
+		log.Printf("Log fil findes ikke: %s", logPath)
 		return
 	}
 
@@ -135,7 +135,7 @@ func openLogFile() {
 	// Use notepad as it's always available on Windows
 	cmd := exec.Command("notepad", logPath)
 	if err := cmd.Start(); err != nil {
-		log.Printf("Failed to open log file: %v", err)
+		log.Printf("Kunne ikke åbne log fil: %v", err)
 	}
 }
 
@@ -153,19 +153,19 @@ func clearCredentialsAndRestart() {
 
 	// Remove credentials file
 	if err := os.Remove(credPath); err != nil && !os.IsNotExist(err) {
-		log.Printf("⚠️ Failed to remove credentials: %v", err)
+		log.Printf("⚠️ Kunne ikke fjerne login oplysninger: %v", err)
 	} else {
-		log.Println("✅ Credentials cleared")
+		log.Println("✅ Login oplysninger ryddet")
 	}
 
 	// Restart the agent
 	exePath, err := os.Executable()
 	if err != nil {
-		log.Printf("❌ Failed to get executable path: %v", err)
+		log.Printf("❌ Kunne ikke finde exe sti: %v", err)
 		return
 	}
 
-	log.Println("🔄 Restarting agent for new login...")
+	log.Println("🔄 Genstarter agent for nyt login...")
 
 	// Start new instance
 	cmd := exec.Command(exePath)
