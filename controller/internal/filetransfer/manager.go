@@ -207,15 +207,16 @@ func (m *Manager) Rename(oldPath, newPath string) error {
 
 // HandleMessage processes incoming file transfer messages
 func (m *Manager) HandleMessage(data []byte) {
-	log.Printf("📥 Received file message: %d bytes", len(data))
+	// Log raw data for debugging
+	previewLen := len(data)
+	if previewLen > 200 {
+		previewLen = 200
+	}
+	log.Printf("📥 Received file message: %d bytes, raw: %s", len(data), string(data[:previewLen]))
 	
 	var msg Message
 	if err := json.Unmarshal(data, &msg); err != nil {
-		previewLen := len(data)
-		if previewLen > 100 {
-			previewLen = 100
-		}
-		log.Printf("❌ Failed to unmarshal file message: %v (data: %s)", err, string(data[:previewLen]))
+		log.Printf("❌ Failed to unmarshal file message: %v", err)
 		return
 	}
 

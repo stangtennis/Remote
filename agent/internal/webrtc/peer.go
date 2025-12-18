@@ -427,15 +427,8 @@ func (m *Manager) setupDataChannelHandlers(dc *webrtc.DataChannel) {
 	dc.OnOpen(func() {
 		log.Println("✅ DATA CHANNEL READY - Controller can now receive frames!")
 
-		// Set up file transfer send callback
-		if m.fileTransferHandler != nil {
-			m.fileTransferHandler.SetSendDataCallback(func(data []byte) error {
-				if m.dataChannel != nil && m.dataChannel.ReadyState() == webrtc.DataChannelStateOpen {
-					return m.dataChannel.Send(data)
-				}
-				return fmt.Errorf("data channel not ready")
-			})
-		}
+		// NOTE: File transfer callback is set in setupFileChannelHandlers
+		// Do NOT set it here as it would override the file channel callback
 
 		// Start clipboard monitoring
 		log.Println("📋 Starting clipboard monitoring...")
