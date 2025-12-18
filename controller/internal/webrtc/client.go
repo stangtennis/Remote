@@ -434,6 +434,20 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// stripFrameHeader removes frame type markers and returns the JPEG data
+func stripFrameHeader(data []byte) []byte {
+	const frameTypeFull = 0x01   // Full frame JPEG with 4-byte header
+	const frameTypeRegion = 0x02 // Dirty region update with 9-byte header
+
+	if len(data) > 4 && data[0] == frameTypeFull {
+		return data[4:]
+	}
+	if len(data) > 9 && data[0] == frameTypeRegion {
+		return data[9:]
+	}
+	return data
+}
+
 // handleDataChannelMessage processes incoming data channel messages with chunk reassembly
 func (c *Client) handleDataChannelMessage(data []byte) {
 	const chunkMagicOld = 0xFF // Old format: [magic, chunk_index, total_chunks, data]
@@ -489,9 +503,9 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 			}
 			c.frameChunksMu.Unlock()
 
-			// Send complete frame
+			// Send complete frame (strip frame type header if present)
 			if c.onFrame != nil {
-				c.onFrame(completeFrame)
+				c.onFrame(stripFrameHeader(completeFrame))
 			}
 		} else {
 			c.frameChunksMu.Unlock()
@@ -537,8 +551,9 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 			}
 			c.frameChunksMu.Unlock()
 
+			// Send complete frame (strip frame type header if present)
 			if c.onFrame != nil {
-				c.onFrame(completeFrame)
+				c.onFrame(stripFrameHeader(completeFrame))
 			}
 		} else {
 			c.frameChunksMu.Unlock()
