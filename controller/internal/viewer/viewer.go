@@ -398,7 +398,9 @@ func (v *Viewer) UpdateBandwidth() {
 	if elapsed > 0 && v.bytesReceived > 0 {
 		bitsPerSecond := float64(v.bytesReceived*8) / elapsed
 		v.currentBandwidth = bitsPerSecond / 1000000 // Convert to Mbit/s
-		v.bandwidthLabel.SetText(fmt.Sprintf("%.1f Mbit/s", v.currentBandwidth))
+		fyne.Do(func() {
+			v.bandwidthLabel.SetText(fmt.Sprintf("%.1f Mbit/s", v.currentBandwidth))
+		})
 	}
 
 	// Reset counters

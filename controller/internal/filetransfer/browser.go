@@ -276,14 +276,16 @@ func (fb *FileBrowser) createListItem() fyne.CanvasObject {
 	size := widget.NewLabel("0 KB")
 	size.Alignment = fyne.TextAlignTrailing
 	
-	return container.NewBorder(nil, nil, icon, size, name)
+	// Use HBox for predictable object order
+	return container.NewHBox(icon, name, layout.NewSpacer(), size)
 }
 
 func (fb *FileBrowser) updateListItem(obj fyne.CanvasObject, entry Entry, isLocal bool) {
 	c := obj.(*fyne.Container)
+	// HBox order: icon, name, spacer, size
 	icon := c.Objects[0].(*widget.Icon)
 	name := c.Objects[1].(*widget.Label)
-	size := c.Objects[2].(*widget.Label)
+	size := c.Objects[3].(*widget.Label) // Skip spacer at index 2
 	
 	name.SetText(entry.Name)
 	

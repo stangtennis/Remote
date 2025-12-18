@@ -2,18 +2,18 @@ package filetransfer
 
 // Message types for file transfer protocol
 type Message struct {
-	Op      string  `json:"op"`               // "list","get","put","mkdir","rm","mv","ack","err","progress","drives"
-	Path    string  `json:"path,omitempty"`   // File/directory path
-	Target  string  `json:"target,omitempty"` // mv destination
-	Size    int64   `json:"size,omitempty"`   // File size
-	Mode    uint32  `json:"mode,omitempty"`   // File mode/permissions
-	FrameID uint16  `json:"fid,omitempty"`    // Transfer/frame ID
-	Chunk   uint16  `json:"c,omitempty"`      // Chunk index
-	Total   uint16  `json:"t,omitempty"`      // Total chunks
-	Offset  int64   `json:"off,omitempty"`    // Resume offset
-	Error   string  `json:"error,omitempty"`  // Error message
-	Entries []Entry `json:"entries,omitempty"`// Directory entries
-	Data    []byte  `json:"data,omitempty"`   // Binary data for chunks
+	Op      string      `json:"op"`               // "list","get","put","mkdir","rm","mv","ack","err","progress","drives"
+	Path    string      `json:"path,omitempty"`   // File/directory path
+	Target  string      `json:"target,omitempty"` // mv destination
+	Size    int64       `json:"size,omitempty"`   // File size
+	Mode    interface{} `json:"mode,omitempty"`   // File mode/permissions (can be string or number)
+	FrameID uint16      `json:"fid,omitempty"`    // Transfer/frame ID
+	Chunk   uint16      `json:"c,omitempty"`      // Chunk index
+	Total   uint16      `json:"t,omitempty"`      // Total chunks
+	Offset  int64       `json:"off,omitempty"`    // Resume offset
+	Error   string      `json:"error,omitempty"`  // Error message
+	Entries []Entry     `json:"entries,omitempty"`// Directory entries
+	Data    []byte      `json:"data,omitempty"`   // Binary data for chunks
 }
 
 // Entry represents a file or directory

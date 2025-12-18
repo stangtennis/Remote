@@ -58,7 +58,9 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 	client.SetOnConnected(func() {
 		log.Println("✅ WebRTC connected!")
 		v.connected = true
-		v.statusLabel.SetText("🟢 Connected")
+		fyne.Do(func() {
+			v.statusLabel.SetText("🟢 Connected")
+		})
 
 		// Enable input forwarding
 		v.setupInputForwarding()
@@ -139,7 +141,9 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 
 	// Wait for answer from agent
 	log.Println("⏳ Waiting for answer from agent...")
-	v.statusLabel.SetText("⏳ Waiting for agent...")
+	fyne.Do(func() {
+		v.statusLabel.SetText("⏳ Waiting for agent...")
+	})
 
 	go func() {
 		answerJSON, err := signalingClient.WaitForAnswer(session.SessionID, 30*time.Second)
