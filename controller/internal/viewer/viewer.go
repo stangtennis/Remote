@@ -56,6 +56,12 @@ type Viewer struct {
 	// Buttons
 	fullscreenBtn *widget.Button
 
+	// Fullscreen overlay toolbar
+	overlayToolbar     *fyne.Container
+	overlayVisible     bool
+	overlayHideTimer   *time.Timer
+	fullscreenContent  *fyne.Container
+
 	// WebRTC and Input
 	webrtcClient      interface{} // Will be *webrtc.Client
 	inputHandler      *InputHandler
@@ -520,13 +526,155 @@ func (v *Viewer) toggleFullscreen() {
 	v.window.SetFullScreen(v.fullscreen)
 
 	if v.fullscreen {
-		// In fullscreen, hide toolbar and status bar initially
+		// In fullscreen, use overlay toolbar that auto-hides
 		v.fullscreenBtn.SetText("⛶ Exit Fullscreen")
-		v.hideToolbars()
+		v.enterFullscreenMode()
 	} else {
 		// Windowed mode, show toolbars
 		v.fullscreenBtn.SetText("⛶ Fullscreen")
-		v.showToolbars()
+		v.exitFullscreenMode()
+	}
+}
+
+func (v *Viewer) enterFullscreenMode() {
+	v.toolbarVisible = false
+	v.overlayVisible = false
+	
+	// Create overlay toolbar if not exists
+	if v.overlayToolbar == nil {
+		v.createOverlayToolbar()
+	}
+	
+	// Create fullscreen content with overlay
+	v.fullscreenContent = container.NewStack(
+		v.videoContainer,
+	)
+	
+	v.window.SetContent(v.fullscreenContent)
+	
+	// Show hint briefly
+	v.showOverlayToolbar()
+	v.scheduleOverlayHide(3 * time.Second)
+}
+
+func (v *Viewer) exitFullscreenMode() {
+	v.toolbarVisible = true
+	v.overlayVisible = false
+	
+	// Cancel any pending hide timer
+	if v.overlayHideTimer != nil {
+		v.overlayHideTimer.Stop()
+		v.overlayHideTimer = nil
+	}
+	
+	// Restore full layout with toolbar and statusbar
+	v.window.SetContent(v.mainContent)
+}
+
+func (v *Viewer) createOverlayToolbar() {
+	// Semi-transparent background
+	bg := canvas.NewRectangle(color.NRGBA{R: 30, G: 30, B: 30, A: 230})
+	
+	// Exit fullscreen button
+	exitBtn := widget.NewButton("⛶ Exit Fullscreen (ESC)", func() {
+		v.toggleFullscreen()
+	})
+	exitBtn.Importance = widget.HighImportance
+	
+	// File browser button
+	fileBtn := widget.NewButton("📁 Files", func() {
+		v.OpenFileBrowser()
+	})
+	
+	// Clipboard button
+	clipboardBtn := widget.NewButton("📋 Clipboard", func() {
+		v.handleClipboardSync()
+	})
+	
+	// Disconnect button
+	disconnectBtn := widget.NewButton("🔌 Disconnect", func() {
+		v.handleDisconnect()
+	})
+	disconnectBtn.Importance = widget.DangerImportance
+	
+	// Status info
+	statusInfo := widget.NewLabel("💡 Move mouse to top to show toolbar")
+	statusInfo.TextStyle = fyne.TextStyle{Italic: true}
+	
+	// Layout
+	buttons := container.NewHBox(
+		exitBtn,
+		widget.NewSeparator(),
+		fileBtn,
+		clipboardBtn,
+		widget.NewSeparator(),
+		disconnectBtn,
+		layout.NewSpacer(),
+		statusInfo,
+	)
+	
+	// Wrap with padding
+	padded := container.NewPadded(buttons)
+	
+	v.overlayToolbar = container.NewStack(bg, padded)
+}
+
+func (v *Viewer) showOverlayToolbar() {
+	if !v.fullscreen || v.overlayVisible {
+		return
+	}
+	
+	v.overlayVisible = true
+	
+	// Add overlay to top of fullscreen content
+	fyne.Do(func() {
+		v.fullscreenContent = container.NewBorder(
+			v.overlayToolbar, // top
+			nil,              // bottom
+			nil,              // left
+			nil,              // right
+			v.videoContainer, // center
+		)
+		v.window.SetContent(v.fullscreenContent)
+	})
+}
+
+func (v *Viewer) hideOverlayToolbar() {
+	if !v.fullscreen || !v.overlayVisible {
+		return
+	}
+	
+	v.overlayVisible = false
+	
+	// Remove overlay, show only video
+	fyne.Do(func() {
+		v.fullscreenContent = container.NewStack(v.videoContainer)
+		v.window.SetContent(v.fullscreenContent)
+	})
+}
+
+func (v *Viewer) scheduleOverlayHide(delay time.Duration) {
+	// Cancel any existing timer
+	if v.overlayHideTimer != nil {
+		v.overlayHideTimer.Stop()
+	}
+	
+	v.overlayHideTimer = time.AfterFunc(delay, func() {
+		v.hideOverlayToolbar()
+	})
+}
+
+// CheckMousePosition should be called on mouse move to show/hide overlay
+func (v *Viewer) CheckMousePosition(y float32) {
+	if !v.fullscreen {
+		return
+	}
+	
+	// Show toolbar when mouse is in top 50 pixels
+	if y < 50 {
+		v.showOverlayToolbar()
+		// Reset hide timer
+		v.scheduleOverlayHide(2 * time.Second)
 	}
 }
 

@@ -236,6 +236,8 @@ func (v *Viewer) setupInputForwarding() {
 	// Hook up mouse move
 	v.interactiveCanvas.SetOnMouseMove(func(x, y float32) {
 		v.SendMouseMove(x, y)
+		// Check if mouse is at top of screen for fullscreen overlay
+		v.CheckMousePosition(y)
 	})
 
 	// Hook up mouse buttons
