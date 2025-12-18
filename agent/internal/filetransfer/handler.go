@@ -50,13 +50,17 @@ func (h *Handler) SetSendDataCallback(callback func(data []byte) error) {
 
 // HandleIncomingData processes incoming file transfer messages
 func (h *Handler) HandleIncomingData(data []byte) error {
+	log.Printf("📥 Agent received file message: %d bytes", len(data))
+	
 	var message map[string]interface{}
 	if err := json.Unmarshal(data, &message); err != nil {
+		log.Printf("❌ Failed to parse file message: %v", err)
 		return err
 	}
 
 	// Check for "op" field (new TotalCMD protocol)
 	if op, ok := message["op"].(string); ok {
+		log.Printf("📥 TotalCMD op: %s", op)
 		return h.handleTotalCMDMessage(op, message, data)
 	}
 
@@ -92,11 +96,13 @@ func (h *Handler) HandleIncomingData(data []byte) error {
 
 // handleTotalCMDMessage handles the new TotalCMD-style protocol
 func (h *Handler) handleTotalCMDMessage(op string, message map[string]interface{}, rawData []byte) error {
+	log.Printf("📁 TotalCMD message: op=%s", op)
 	switch op {
 	case "list":
 		path, _ := message["path"].(string)
 		return h.handleListOp(path)
 	case "drives":
+		log.Println("📁 Handling drives request...")
 		return h.handleDrivesOp()
 	case "get":
 		path, _ := message["path"].(string)
@@ -175,7 +181,7 @@ func (h *Handler) handleListOp(path string) error {
 
 // handleDrivesOp lists available drives
 func (h *Handler) handleDrivesOp() error {
-	log.Printf("📂 List drives")
+	log.Println("📂 handleDrivesOp called - listing drives...")
 	
 	drives := make([]Entry, 0)
 	for _, letter := range "CDEFGHIJKLMNOPQRSTUVWXYZ" {
@@ -401,12 +407,14 @@ func (h *Handler) sendTotalCMDError(errMsg string) error {
 // sendJSON marshals and sends a JSON message
 func (h *Handler) sendJSON(msg map[string]interface{}) error {
 	if h.sendData == nil {
+		log.Println("❌ sendJSON: sendData callback not set!")
 		return fmt.Errorf("sendData not set")
 	}
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
+	log.Printf("📤 Sending file response: %d bytes, op=%v", len(data), msg["op"])
 	return h.sendData(data)
 }
 

@@ -13,7 +13,7 @@ import (
 )
 
 // Version of the agent - update this with each release
-const Version = "v2.63.2"
+const Version = "v2.63.7"
 const BuildDate = "2025-12-18"
 const VersionString = Version + " (" + BuildDate + ")"
 

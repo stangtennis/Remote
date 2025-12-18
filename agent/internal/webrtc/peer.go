@@ -33,6 +33,7 @@ type Manager struct {
 	dataChannel         *webrtc.DataChannel
 	controlChannel      *webrtc.DataChannel // Separate channel for input (low latency)
 	videoChannel        *webrtc.DataChannel // Unreliable channel for video (less latency)
+	fileChannel         *webrtc.DataChannel // Reliable channel for file transfer
 	screenCapturer      *screen.Capturer
 	dirtyDetector       *screen.DirtyRegionDetector // For bandwidth optimization
 	mouseController     *input.MouseController
@@ -411,6 +412,7 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 			})
 		case "file":
 			log.Println("📁 File channel ready (reliable, ordered)")
+			m.fileChannel = dc
 			m.setupFileChannelHandlers(dc)
 		default:
 			m.dataChannel = dc
