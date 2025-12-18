@@ -272,20 +272,20 @@ func (fb *FileBrowser) buildUI() {
 func (fb *FileBrowser) createListItem() fyne.CanvasObject {
 	icon := widget.NewIcon(theme.FileIcon())
 	name := widget.NewLabel("Filename")
-	name.Truncation = fyne.TextTruncateEllipsis
 	size := widget.NewLabel("0 KB")
 	size.Alignment = fyne.TextAlignTrailing
 	
-	// Use HBox for predictable object order
-	return container.NewHBox(icon, name, layout.NewSpacer(), size)
+	// Use Border layout: icon on left, size on right, name fills center
+	return container.NewBorder(nil, nil, icon, size, name)
 }
 
 func (fb *FileBrowser) updateListItem(obj fyne.CanvasObject, entry Entry, isLocal bool) {
 	c := obj.(*fyne.Container)
-	// HBox order: icon, name, spacer, size
-	icon := c.Objects[0].(*widget.Icon)
-	name := c.Objects[1].(*widget.Label)
-	size := c.Objects[3].(*widget.Label) // Skip spacer at index 2
+	// Border layout order: [center, top, bottom, left, right] -> [name, nil, nil, icon, size]
+	// Objects[0] = center (name), Objects[1] = left (icon), Objects[2] = right (size)
+	name := c.Objects[0].(*widget.Label)
+	icon := c.Objects[1].(*widget.Icon)
+	size := c.Objects[2].(*widget.Label)
 	
 	name.SetText(entry.Name)
 	
