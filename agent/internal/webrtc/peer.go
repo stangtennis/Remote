@@ -978,6 +978,7 @@ func (m *Manager) startScreenStreaming() {
 	frameCount := 0
 	errorCount := 0
 	droppedFrames := 0
+	skippedFrames := 0 // Frames skipped due to no change (bandwidth optimization)
 	bytesSent := int64(0)
 	var lastFrame []byte
 	var lastRGBA *image.RGBA
@@ -1232,6 +1233,14 @@ func (m *Manager) startScreenStreaming() {
 			continue
 		}
 
+		// BANDWIDTH OPTIMIZATION: Skip frame if no change detected (except forced refresh)
+		// This can save 50-80% bandwidth on static desktop
+		if !forceFullFrame && motionPct < 0.1 && lastFrame != nil {
+			// No significant change - skip encoding and sending
+			skippedFrames++
+			continue
+		}
+
 		// Tiles mode: encode RGBA to JPEG with scaling (reuse rgbaFrame to avoid double-capture)
 		jpeg, scaledW, scaledH, err := m.screenCapturer.EncodeRGBAToJPEG(rgbaFrame, quality, scale)
 		if err != nil {
@@ -1299,10 +1308,11 @@ func (m *Manager) startScreenStreaming() {
 				mode = "h264"
 			}
 
-			log.Printf("📊 FPS:%d Q:%d Scale:%.0f%% Motion:%.1f%% RTT:%dms Loss:%.1f%% CPU:%.0f%%%s | %.1fKB/f %.1fMbit/s | Buf:%.1fMB | Err:%d Drop:%d",
+			log.Printf("📊 FPS:%d Q:%d Scale:%.0f%% Motion:%.1f%% RTT:%dms Loss:%.1f%% CPU:%.0f%%%s | %.1fKB/f %.1fMbit/s | Buf:%.1fMB | Err:%d Drop:%d Skip:%d",
 				fps, quality, scale*100, motionPct, rttMs, m.lossPct, cpuPct, idleStr, avgKBPerFrame, sendMbps,
-				float64(bufferedAmount)/1024/1024, errorCount, droppedFrames)
-			droppedFrames = 0 // Reset per-second counter
+				float64(bufferedAmount)/1024/1024, errorCount, droppedFrames, skippedFrames)
+			droppedFrames = 0  // Reset per-second counter
+			skippedFrames = 0  // Reset per-second counter
 
 			// Send stats to controller
 			m.sendStats(fps, quality, scale, mode, rttMs, cpuPct)
