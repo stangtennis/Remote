@@ -719,18 +719,8 @@ func (v *Viewer) startCanvasRefreshLoop() {
 func (v *Viewer) openFileBrowser() {
 	log.Println("📁 Opening file browser...")
 	
-	// Get the app from window
-	app := v.window.Canvas().Content().(fyne.CanvasObject)
-	_ = app // We'll use the window's app
-	
-	// For now, show a simple dialog - full implementation requires file datachannel
-	dialog.ShowInformation("Filoverførsel", 
-		"Filoverførsel er under udvikling.\n\n"+
-		"Funktioner der kommer:\n"+
-		"• TotalCMD-style dual-pane browser\n"+
-		"• Download/upload filer\n"+
-		"• Opret/slet/omdøb mapper\n"+
-		"• Træk-og-slip support", v.window)
+	// Use the OpenFileBrowser from connection.go which has full implementation
+	v.OpenFileBrowser()
 }
 
 // Helper functions

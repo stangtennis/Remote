@@ -46,6 +46,12 @@ type FileBrowser struct {
 	activePaneLocal bool
 	mu              sync.Mutex
 	
+	// Double-click tracking
+	lastLocalClick    time.Time
+	lastLocalClickID  int
+	lastRemoteClick   time.Time
+	lastRemoteClickID int
+	
 	// Callbacks
 	onClose func()
 }
@@ -124,6 +130,17 @@ func (fb *FileBrowser) buildUI() {
 	fb.localList.OnSelected = func(id widget.ListItemID) {
 		fb.activePaneLocal = true
 		fb.localSelected = int(id)
+		
+		// Double-click detection via rapid selection
+		now := time.Now()
+		if fb.lastLocalClick.Add(400*time.Millisecond).After(now) && fb.lastLocalClickID == int(id) {
+			// Double-click - navigate or upload
+			if id < len(fb.localEntries) {
+				fb.handleLocalDoubleClick(fb.localEntries[id])
+			}
+		}
+		fb.lastLocalClick = now
+		fb.lastLocalClickID = int(id)
 	}
 	
 	localPane := container.NewBorder(localHeader, nil, nil, nil, fb.localList)
@@ -174,6 +191,17 @@ func (fb *FileBrowser) buildUI() {
 	fb.remoteList.OnSelected = func(id widget.ListItemID) {
 		fb.activePaneLocal = false
 		fb.remoteSelected = int(id)
+		
+		// Double-click detection via rapid selection
+		now := time.Now()
+		if fb.lastRemoteClick.Add(400*time.Millisecond).After(now) && fb.lastRemoteClickID == int(id) {
+			// Double-click - navigate or download
+			if id < len(fb.remoteEntries) {
+				fb.handleRemoteDoubleClick(fb.remoteEntries[id])
+			}
+		}
+		fb.lastRemoteClick = now
+		fb.lastRemoteClickID = int(id)
 	}
 	
 	remotePane := container.NewBorder(remoteHeader, nil, nil, nil, fb.remoteList)

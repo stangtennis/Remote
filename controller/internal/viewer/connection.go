@@ -664,35 +664,43 @@ func (v *Viewer) OpenFileBrowser() {
 		return
 	}
 
-	log.Println("📁 Opening file browser...")
+	log.Println("📁 Opening TotalCMD-style file browser...")
 
-	// Create file browser if not exists
-	fb := filebrowser.NewFileBrowser(v.window)
+	// Get WebRTC client
+	client, ok := v.webrtcClient.(*rtc.Client)
+	if !ok {
+		dialog.ShowError(fmt.Errorf("WebRTC client not available"), v.window)
+		return
+	}
+
+	// Create file transfer manager
+	ftManager := filetransfer.NewManager()
+	
+	// Set send function to use file channel
+	ftManager.SetSendFunc(func(data []byte) error {
+		return client.SendFileData(data)
+	})
+	
+	// Set up file channel message handler
+	client.SetOnFileMessage(func(data []byte) {
+		ftManager.HandleMessage(data)
+	})
+
+	// Get app from window
+	app := fyne.CurrentApp()
+	
+	// Create new TotalCMD-style file browser
+	fb := filetransfer.NewFileBrowser(app, ftManager, func() {
+		log.Println("📁 File browser closed")
+	})
+	
 	if fb == nil {
 		log.Println("❌ Failed to create file browser")
 		dialog.ShowError(fmt.Errorf("Failed to create file browser"), v.window)
 		return
 	}
-	v.fileBrowser = fb
-
-	// Set up callbacks
-	fb.SetOnRequestRemoteDir(func(path string) {
-		v.requestRemoteDirListing(path)
-	})
-
-	fb.SetOnSendFile(func(localPath, remotePath string) error {
-		return v.sendFileToRemote(localPath, remotePath)
-	})
-
-	fb.SetOnReceiveFile(func(remotePath, localPath string) error {
-		return v.receiveFileFromRemote(remotePath, localPath)
-	})
 
 	fb.Show()
-
-	// Request initial remote directory and drives
-	v.requestRemoteDirListing("C:\\")
-	v.requestRemoteDrives()
 }
 
 // requestRemoteDirListing requests directory listing from remote agent
