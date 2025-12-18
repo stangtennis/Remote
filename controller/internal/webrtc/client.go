@@ -546,6 +546,29 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 		return
 	}
 
+	// Check for frame type markers (dirty region protocol)
+	const frameTypeFull = 0x01   // Full frame JPEG with 4-byte header
+	const frameTypeRegion = 0x02 // Dirty region update with 9-byte header
+
+	if len(data) > 4 && data[0] == frameTypeFull {
+		// Full frame: [type(1), reserved(3), ...jpeg_data]
+		jpegData := data[4:]
+		if c.onFrame != nil {
+			c.onFrame(jpegData)
+		}
+		return
+	}
+
+	if len(data) > 9 && data[0] == frameTypeRegion {
+		// Dirty region: [type(1), x(2), y(2), w(2), h(2), ...jpeg_data]
+		// For now, treat as full frame (dirty region compositing not implemented)
+		jpegData := data[9:]
+		if c.onFrame != nil {
+			c.onFrame(jpegData)
+		}
+		return
+	}
+
 	// Not a chunked frame - try to parse as JSON first (for clipboard and other messages)
 	var jsonMsg map[string]interface{}
 	if err := json.Unmarshal(data, &jsonMsg); err == nil {
