@@ -122,10 +122,15 @@ func (m *Manager) ListDirectory(path string) error {
 
 // ListDrives requests available drives from the agent
 func (m *Manager) ListDrives() error {
+	log.Println("📂 Requesting remote drives...")
 	msg := Message{
 		Op: OpDrives,
 	}
-	return m.send(msg)
+	err := m.send(msg)
+	if err != nil {
+		log.Printf("❌ Failed to request drives: %v", err)
+	}
+	return err
 }
 
 // Download starts downloading a file from the agent
@@ -202,11 +207,19 @@ func (m *Manager) Rename(oldPath, newPath string) error {
 
 // HandleMessage processes incoming file transfer messages
 func (m *Manager) HandleMessage(data []byte) {
+	log.Printf("📥 Received file message: %d bytes", len(data))
+	
 	var msg Message
 	if err := json.Unmarshal(data, &msg); err != nil {
-		log.Printf("❌ Failed to unmarshal file message: %v", err)
+		previewLen := len(data)
+		if previewLen > 100 {
+			previewLen = 100
+		}
+		log.Printf("❌ Failed to unmarshal file message: %v (data: %s)", err, string(data[:previewLen]))
 		return
 	}
+
+	log.Printf("📥 File message op=%s, path=%s, entries=%d", msg.Op, msg.Path, len(msg.Entries))
 
 	switch msg.Op {
 	case OpList:
@@ -467,6 +480,7 @@ func (m *Manager) send(msg Message) error {
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
+	log.Printf("📤 Sending file message: op=%s, path=%s, len=%d", msg.Op, msg.Path, len(data))
 	return m.sendFunc(data)
 }
 
