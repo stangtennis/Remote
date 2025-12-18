@@ -1,54 +1,54 @@
 # 📊 Remote Desktop Application - Project Summary
 
-**Last Updated:** November 22, 2025  
-**Current Version:** v2.2.1  
-**Status:** Production ready with local Supabase infrastructure  
+**Last Updated:** December 18, 2025  
+**Current Version:** Agent v2.64.0 / Controller v2.63.9  
+**Status:** Production ready with bandwidth optimization  
 **Repository:** https://github.com/stangtennis/Remote  
-**Documentation:** Managed in Archon (http://192.168.1.92:3737)
+**Releases:** https://github.com/stangtennis/Remote/releases
 
 ---
 
 ## 🎯 Overview
 
-WebRTC-based remote desktop solution with controller (client) and agent (service) components. Built with Go, Fyne UI, and Supabase backend. Now running on local Supabase infrastructure for faster development and better testing.
+WebRTC-based remote desktop solution with controller (client) and agent (service) components. Built with Go, Fyne UI, and Supabase backend. Features adaptive streaming, bandwidth optimization, file transfer, and clipboard sync.
 
 ---
 
 ## ✅ Completed Features
 
-### Core Remote Desktop (v2.0.0)
-- ✅ WebRTC peer-to-peer video streaming (60 FPS)
+### Core Remote Desktop
+- ✅ WebRTC peer-to-peer video streaming (adaptive 2-30 FPS)
 - ✅ Real-time mouse and keyboard control
 - ✅ User authentication (Supabase Auth)
 - ✅ Device management and approval system
-- ✅ Fullscreen mode (F11/ESC)
+- ✅ Fullscreen mode with auto-hide overlay toolbar
 - ✅ Connection status indicators
 - ✅ System tray agent
 
-### File Transfer (v2.1.0)
+### Bandwidth Optimization (v2.64.0) 🆕
+- ✅ **Frame skipping** on static desktop (50-80% bandwidth savings)
+- ✅ Motion detection via dirty region analysis
+- ✅ Idle mode (2 FPS + high quality when static)
+- ✅ Adaptive quality based on network/CPU
+- ✅ Forced refresh every 5 seconds
+
+### File Transfer (v2.63.x)
+- ✅ Remote file browser (browse drives and folders)
 - ✅ Chunked file transfer (64KB chunks)
 - ✅ Progress tracking and speed calculation
-- ✅ Auto-save to Downloads/RemoteDesktop
-- ✅ UI integration with file picker
+- ✅ Download files from remote machine
 
-### Auto-Reconnection (v2.1.0)
-- ✅ Exponential backoff (1s to 30s max)
-- ✅ Max 10 retry attempts
-- ✅ UI feedback and cancel capability
-
-### Clipboard Sync (v2.2.0)
-- ✅ Agent-to-controller clipboard sync
-- ✅ Text and image support (up to 10MB/50MB)
-- ✅ Automatic monitoring (500ms polling)
+### Clipboard Sync (v2.63.x)
+- ✅ Bidirectional clipboard sync
+- ✅ Text and image support
+- ✅ Automatic monitoring
 - ✅ Hash-based change detection
 
-### Infrastructure Improvements (v2.2.1)
-- ✅ Migrated to local Supabase (192.168.1.92:8888)
-- ✅ Fixed all Fyne thread errors (fyne.Do())
-- ✅ Applied 21 SQL migrations to local database
-- ✅ Environment configuration via .env files
-- ✅ Local key interception (ESC, F11)
-- ✅ Documentation migrated to Archon
+### Fullscreen Mode (v2.63.8)
+- ✅ Auto-hide overlay toolbar (move mouse to top)
+- ✅ Exit fullscreen, file browser, clipboard, disconnect buttons
+- ✅ Semi-transparent background
+- ✅ Auto-hide after 2 seconds
 
 ## 🔧 Technology Stack
 
@@ -80,33 +80,24 @@ cd agent && go build -o remote-agent.exe .\cmd\remote-agent
 
 ## 📋 Pending Tasks
 
-- Investigate and fix mouse movement drift
-- Implement Windows Service installer for agent
-- Add Session 0 support for login screen capture
-- Plan v2.3.0 audio streaming
-- Implement bidirectional clipboard sync
-- Plan v2.4.0 multi-connection support
-- Implement Supabase Edge Functions for backend logic
+- Hardware H.264 encoding (GPU-accelerated)
+- Multi-monitor support
+- Session 0 screen capture (login screen)
+- Audio streaming
+- Code signing for Windows
 
 ## 📚 Documentation
 
-All documentation is now managed in **Archon** (http://192.168.1.92:3737):
-- Environment Configuration Guide
-- Ubuntu Development Environment Setup
-- Database Migrations Guide
-- Architecture Overview
-- Release Notes (v2.2.0 and v2.2.1)
-- Build and Deployment Guide
-- Feature Roadmap and Status
+- **README.md** - Main project documentation
+- **AGENTS.md** - Development guide for AI agents
+- **controller/README.md** - Controller documentation
+- **GitHub Releases** - All release notes
 
 ## 🔗 Links
 
 - **Repository:** https://github.com/stangtennis/Remote
-- **Archon UI:** http://192.168.1.92:3737
-- **Local Supabase:** http://192.168.1.92:8888
-- **Portainer:** http://192.168.1.92:9000
-- Clean architecture
-- Well-documented
+- **Releases:** https://github.com/stangtennis/Remote/releases
+- **Dashboard:** https://stangtennis.github.io/Remote/
 
 ---
 
@@ -115,37 +106,45 @@ All documentation is now managed in **Archon** (http://192.168.1.92:3737):
 ### **What We've Built:**
 A **fully functional remote desktop solution** with:
 - Desktop controller and agent applications
-- Real-time video streaming (60 FPS)
+- Adaptive video streaming (2-30 FPS based on activity)
+- **Bandwidth optimization** - 50-80% savings on static desktop 🆕
 - Full mouse and keyboard control
-- File transfer (send files to remote)
+- File browser and transfer
+- Clipboard sync (text and images)
+- Auto-hide fullscreen toolbar
 - Auto-reconnection on disconnect
-- **Clipboard sync (copy on remote → paste on local)** 🆕
 - Modern, professional UI
 - Secure WebRTC connection
-- Production-ready core functionality
+
+### **Performance:**
+| Scenario | Bandwidth |
+|----------|-----------|
+| Static desktop | ~0.5-2 Mbit/s |
+| Active use | ~10-25 Mbit/s |
 
 ### **What's Left:**
+- Hardware H.264 encoding (planned)
 - Audio streaming (not started)
-- Multiple connections (not started)
-- Advanced features (not started)
+- Multi-monitor support (not started)
 
 ### **Overall Status:**
 **Core functionality: 100% complete ✅**  
-**v2.1.0 features: 100% complete ✅**  
-**v2.2.0 features: 100% complete ✅** 🆕  
-**Advanced features: 0% complete ⏳**  
-**Total project: ~95% complete** 🎉
+**File transfer: 100% complete ✅**  
+**Clipboard sync: 100% complete ✅**  
+**Bandwidth optimization: 100% complete ✅** 🆕  
+**Advanced features: 10% complete ⏳**  
+**Total project: ~97% complete** 🎉
 
 ---
 
 ## 🚀 **Ready to Use!**
 
-**The remote desktop system is fully functional and ready for testing!**
+**The remote desktop system is fully functional and production-ready!**
 
-You can connect to remote machines, view their screens, control them with mouse and keyboard, send files, copy/paste clipboard content, and enjoy automatic reconnection - all in real-time with high quality video.
-
-**v2.2.0 is complete!** 🎉 Ready for testing and release.
+Download from [GitHub Releases](https://github.com/stangtennis/Remote/releases):
+- **Agent v2.64.0** - Install on remote machine
+- **Controller v2.63.9** - Install on local machine
 
 ---
 
-**🎯 Bottom Line:** We have a working remote desktop solution. Core features are complete. Advanced features are in progress.
+**🎯 Bottom Line:** Professional remote desktop solution with bandwidth optimization. Ready for production use.

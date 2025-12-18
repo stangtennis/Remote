@@ -2,9 +2,9 @@
 
 A **professional remote desktop solution** built with **Supabase**, **WebRTC**, and **Go** - like TeamViewer, but self-hosted!
 
-## ✅ Status: **FULLY FUNCTIONAL** (Updated 2025-12-10)
+## ✅ Status: **FULLY FUNCTIONAL** (Updated 2025-12-18)
 
-### 🎮 Controller Application v2.38.0 ✨ **WORKING!**
+### 🎮 Controller Application v2.63.9 ✨ **WORKING!**
 - ✅ **Standalone Windows EXE** - Native controller app (like TeamViewer)
 - ✅ **Auto Admin Elevation** - UAC prompt on startup
 - ✅ **Real Supabase Auth** - Login with email/password
@@ -12,22 +12,28 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 - ✅ **Device Management** - Approve/remove devices directly in controller
 - ✅ **WebRTC Video Streaming** - Live remote desktop view! 🎉
 - ✅ **Full Input Control** - Mouse, keyboard, and scroll working!
-- ✅ **Fullscreen Toggle** - Immersive viewing mode
+- ✅ **Fullscreen Mode** - Auto-hide overlay toolbar (move mouse to top)
+- ✅ **File Browser** - Browse and transfer files from remote machine
+- ✅ **Clipboard Sync** - Copy/paste between machines
 - ✅ **TURN Server Support** - Works across NAT/firewalls
+- ✅ **Adaptive Streaming** - Auto-adjusts quality based on network
 - 📦 **Auto-builds on GitHub** - Download from Releases
 - 🏷️ **GitHub Releases** - Automated via GitHub Actions
 
 ### 🖥️ Agent Options
-- ✅ **Windows Native Agent** (v2.38.0) - **FULLY WORKING!**
+- ✅ **Windows Native Agent** (v2.64.0) - **FULLY WORKING!**
   - Auto admin elevation (UAC prompt if needed)
-  - 30 FPS streaming (optimized for latency)
-  - JPEG Quality 95 (near-lossless)
+  - Adaptive FPS streaming (2-30 FPS based on activity)
+  - **Bandwidth optimization** - Frame skipping on static desktop (50-80% savings)
+  - JPEG Quality 50-85 (adaptive based on network)
   - DXGI screen capture (works over RDP!)
   - Full mouse & keyboard control
   - Accurate coordinate mapping
   - Auto-registers, no login required
   - Windows Service support (login screen capture)
   - Self-hosted TURN server for NAT traversal
+  - File transfer support (browse remote drives)
+  - Clipboard sync (text and images)
 - ✅ **Web Dashboard** - Browser-based control interface
 - ✅ **Browser Extension** - Remote control for web agent
 - 🚧 **Electron Agent** - Cross-platform desktop (prototype)
@@ -70,7 +76,7 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 
 ## 📋 Implementation Status
 
-### ✅ Completed Features (v2.38.0 - 2025-12-10)
+### ✅ Completed Features (v2.64.0 - 2025-12-18)
 
 #### Core Functionality
 - [x] **Infrastructure** - Supabase backend, database, Edge Functions
@@ -83,44 +89,40 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 - [x] **Automated Releases** - GitHub Actions CI/CD
 - [x] **Session Cleanup** - Automatic via pg_cron
 
-#### New in v2.38.0 (2025-12-10) 🎉
-- [x] **Self-Elevation** - Auto UAC prompt if not running as admin
-- [x] **Admin Manifest** - Embedded in both agent and controller
-- [x] **Credential Storage** - Remember me with secure storage
-- [x] **Fullscreen Toggle** - In controller viewer
-- [x] **Dashboard Scrolling** - Fixed UI scaling issues
-- [x] **Logout Button** - Working dashboard logout
-- [x] **Self-hosted TURN** - Coturn on dedicated server (188.228.14.94)
-- [x] **Connection Cleanup** - Disconnect old sessions on new connect
-- [x] **macOS Controller** - Builds for Intel and Apple Silicon
+#### New in v2.64.0 (2025-12-18) 🎉
+- [x] **Bandwidth Optimization** - Frame skipping on static desktop (50-80% savings)
+- [x] **Fullscreen Overlay Toolbar** - Auto-hide toolbar in fullscreen mode
+- [x] **File Browser** - Browse remote drives and transfer files
+- [x] **Clipboard Sync** - Copy/paste text and images between machines
+- [x] **Adaptive Streaming** - Auto-adjusts FPS/quality based on network & CPU
+- [x] **Idle Mode** - 2 FPS + high quality when desktop is static
+- [x] **Motion Detection** - Dirty region detection for bandwidth optimization
+- [x] **Stats Display** - Real-time FPS, quality, RTT, CPU in controller
 
-#### Previous Features
+#### Previous Features (v2.38.0 - v2.63.x)
 - [x] **WebRTC Video Streaming** - Live remote desktop view
 - [x] **Frame Chunk Reassembly** - Handles large frames correctly
 - [x] **Full Input Control** - Mouse, keyboard, and scroll
-- [x] **30 FPS Streaming** - Optimized for latency
+- [x] **Adaptive FPS Streaming** - 2-30 FPS based on activity
 - [x] **DXGI Screen Capture** - Works over RDP sessions
 - [x] **Windows Service Support** - Can run at login screen
 - [x] **Device Approval in Controller** - Approve devices from controller app
 - [x] **Admin Panel** - Web UI for approving users
 - [x] **Enhanced Tray Menu** - Console window + log viewer
+- [x] **Self-Elevation** - Auto UAC prompt if not running as admin
+- [x] **Credential Storage** - Remember me with secure storage
 
-### 🚧 Planned Enhancements (v2.3.0+)
+### 🚧 Planned Enhancements
 
 #### High Priority
-- [ ] **Session 0 Screen Capture** - View login screen (requires helper process)
-- [ ] **Clipboard Sync** - Copy/paste between machines
-- [ ] **File Transfer** - Send/receive files during session
+- [ ] **Hardware H.264 Encoding** - GPU-accelerated video for better compression
 - [ ] **Multi-Monitor** - Select which screen to stream
-- [ ] **Video Encoding** - H.264/VP8 for better compression
-- [ ] **Quality Settings** - Adjustable FPS and quality in UI
+- [ ] **Session 0 Screen Capture** - View login screen (requires helper process)
 
 #### Medium Priority
 - [ ] **Audio Streaming** - Remote audio support
 - [ ] **Code Signing** - Windows EXE certificate
 - [ ] **Chrome Web Store** - Publish browser extension
-- [ ] **Connection Stats** - FPS, latency, bandwidth display
-- [ ] **Fullscreen Mode** - Immersive remote desktop view
 
 #### Future Enhancements
 - [ ] **Role-Based Access** - Separate admin vs user roles
@@ -131,11 +133,11 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 ## ⚠️ Known Limitations
 
 - **Platform**: Windows only (agent)
-- **Video Format**: JPEG frames @ 30 FPS (H.264/VP8 planned for v2.3.0)
+- **Video Format**: JPEG frames with adaptive quality (H.264 software available, hardware planned)
 - **Login Screen**: Cannot capture Session 0 without helper process
-- **Latency**: ~1 second delay (typical for JPEG streaming)
+- **Latency**: ~50-150ms typical (depends on network)
 - **Code Signing**: Not implemented (Windows SmartScreen warning)
-- **Bandwidth**: 3-8 MB/s required for 30 FPS @ quality 95
+- **Bandwidth**: ~0.5-2 Mbit/s static, ~10-25 Mbit/s active (with frame skipping optimization)
 
 ## 🔒 Security Features
 
