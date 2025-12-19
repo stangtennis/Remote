@@ -1,46 +1,63 @@
 # Remote Desktop Agent
 
-Windows agent application for remote desktop access.
+Windows agent application for remote desktop access. **Current version: v2.64.0**
 
-## Prerequisites
+## 🚀 Quick Start
 
-**Install Go:**
-1. Download: https://go.dev/dl/
-2. Install Go 1.21 or higher
-3. Verify: `go version`
+### Download
+Get the latest release from [GitHub Releases](https://github.com/stangtennis/Remote/releases)
 
-## Build
+### Install
+1. Download `RemoteDesktopAgent-Setup-v2.64.0.exe`
+2. Run the installer
+3. Agent starts automatically and appears in system tray
 
-```bash
-cd f:\#Remote\agent
-
-# Initialize module
-go mod init github.com/stangtennis/remote-agent
-
-# Download dependencies
-go mod tidy
-
-# Build
-go build -o remote-agent.exe ./cmd/remote-agent
-
-# Build for production (smaller, optimized)
-go build -ldflags="-s -w" -o remote-agent.exe ./cmd/remote-agent
-```
-
-## Run
-
-### Quick Start (One-Time Manual Run)
+### Manual Run
 ```bash
 # Double-click or run:
-run-agent-once.bat
-
-# Or directly:
 .\remote-agent.exe
 ```
 
-### Auto-Start Options
+---
 
-**Option 1: Windows Service (Recommended for servers/lock screen access)**
+## 📋 Features (v2.64.0)
+
+### Streaming
+- ✅ **Adaptive FPS** - 2-30 FPS based on activity
+- ✅ **Bandwidth Optimization** - Frame skipping on static desktop (50-80% savings)
+- ✅ **DXGI Capture** - Works over RDP sessions
+- ✅ **Idle Mode** - 2 FPS + high quality when static
+
+### Remote Control
+- ✅ **Full Input** - Mouse, keyboard, scroll
+- ✅ **Accurate Mapping** - Correct coordinate translation
+
+### File & Clipboard
+- ✅ **File Browser** - Browse drives and folders
+- ✅ **File Transfer** - Send files to controller
+- ✅ **Clipboard Sync** - Text and images
+
+### System
+- ✅ **System Tray** - Minimize to tray
+- ✅ **Auto-Registration** - No login required
+- ✅ **Windows Service** - Run at login screen
+- ✅ **Auto-Elevation** - UAC prompt if needed
+
+---
+
+## 🛠️ Development
+
+### Prerequisites
+- Go 1.21+
+- MinGW (for CGO)
+
+### Build
+```bash
+cd agent
+go build -ldflags="-s -w -H windowsgui" -o remote-agent.exe ./cmd/remote-agent
+```
+
+### Windows Service
 ```bash
 # Install as service (requires Admin)
 install-service.bat
