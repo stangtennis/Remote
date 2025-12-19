@@ -26,6 +26,36 @@ import (
 	"github.com/stangtennis/remote-agent/internal/video/encoder"
 )
 
+// StreamMode represents the current streaming mode
+type StreamMode int
+
+const (
+	ModeIdleTiles   StreamMode = iota // Low motion, high quality tiles
+	ModeActiveTiles                   // Active use, moderate quality tiles
+	ModeActiveH264                    // Active use, H.264 encoding
+)
+
+func (m StreamMode) String() string {
+	switch m {
+	case ModeIdleTiles:
+		return "idle-tiles"
+	case ModeActiveTiles:
+		return "active-tiles"
+	case ModeActiveH264:
+		return "h264"
+	default:
+		return "unknown"
+	}
+}
+
+// ModeState tracks mode switching with hysteresis
+type ModeState struct {
+	current       StreamMode
+	lastSwitch    time.Time
+	minModeDur    time.Duration // Minimum time in mode before switching
+	switchHistory []time.Time   // Recent switches for flapping detection
+}
+
 type Manager struct {
 	cfg                 *config.Config
 	device              *device.Device
@@ -78,6 +108,13 @@ type Manager struct {
 	streamMaxQuality int
 	streamMaxScale   float64
 	streamH264Kbps   int
+
+	// Mode management
+	modeState *ModeState
+
+	// CPU/RTT moving averages for mode switching
+	cpuAvg []float64
+	rttAvg []time.Duration
 }
 
 func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
@@ -162,6 +199,13 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 		useH264:             false, // Disabled by default, enable via signaling
 		cpuMonitor:          cpuMon,
 		inputFrameTrigger:   make(chan struct{}, 1), // Buffered to avoid blocking
+		modeState: &ModeState{
+			current:    ModeIdleTiles,
+			lastSwitch: time.Now(),
+			minModeDur: 2 * time.Second, // Minimum 2s in mode before switching
+		},
+		cpuAvg: make([]float64, 0, 6),       // 3 seconds at 500ms intervals
+		rttAvg: make([]time.Duration, 0, 6), // 3 seconds at 500ms intervals
 	}
 
 	log.Printf("🎬 Video encoder: %s", videoEncoder.GetEncoderName())
@@ -906,6 +950,108 @@ func (m *Manager) startClipboardMonitoring() {
 	}
 }
 
+// updateMovingAverage updates a moving average array (max 6 samples = 3 seconds at 500ms)
+func updateMovingAverage(arr *[]float64, val float64, maxLen int) float64 {
+	*arr = append(*arr, val)
+	if len(*arr) > maxLen {
+		*arr = (*arr)[1:]
+	}
+	sum := 0.0
+	for _, v := range *arr {
+		sum += v
+	}
+	return sum / float64(len(*arr))
+}
+
+func updateMovingAverageDuration(arr *[]time.Duration, val time.Duration, maxLen int) time.Duration {
+	*arr = append(*arr, val)
+	if len(*arr) > maxLen {
+		*arr = (*arr)[1:]
+	}
+	sum := time.Duration(0)
+	for _, v := range *arr {
+		sum += v
+	}
+	return sum / time.Duration(len(*arr))
+}
+
+// lightMotionProbe performs a cheap motion detection by sampling pixels
+// Returns estimated motion percentage without full RGBA capture
+func (m *Manager) lightMotionProbe() (float64, error) {
+	// For now, we'll use a downscaled capture (1/4 resolution)
+	// This is much cheaper than full resolution capture
+	width, height := m.screenCapturer.GetResolution()
+	probeWidth := width / 4
+	probeHeight := height / 4
+	
+	// TODO: Implement actual downscaled capture in screen.Capturer
+	// For now, return 0 to indicate we need full capture
+	_ = probeWidth
+	_ = probeHeight
+	return 0, nil
+}
+
+// determineMode decides which mode to use based on current conditions
+func (m *Manager) determineMode(motionPct float64, timeSinceInput time.Duration, avgCPU float64, avgRTT time.Duration, lossPct float64) StreamMode {
+	// Can't switch if minimum duration not elapsed
+	if time.Since(m.modeState.lastSwitch) < m.modeState.minModeDur {
+		return m.modeState.current
+	}
+
+	// Mode 1: Idle Tiles (default for low motion + no recent input)
+	if motionPct < 0.3 && timeSinceInput > 1*time.Second {
+		return ModeIdleTiles
+	}
+
+	// Mode 3: Active H.264 (only if conditions are good and H.264 enabled)
+	if m.useH264 && avgCPU < 75 && avgRTT < 200*time.Millisecond && lossPct < 3 {
+		return ModeActiveH264
+	}
+
+	// Mode 2: Active Tiles (default for active use)
+	return ModeActiveTiles
+}
+
+// switchMode changes the streaming mode and logs the transition
+func (m *Manager) switchMode(newMode StreamMode, fps *int, quality *int, scale *float64, frameInterval *time.Duration, ticker *time.Ticker) {
+	if newMode == m.modeState.current {
+		return
+	}
+
+	oldMode := m.modeState.current
+	m.modeState.current = newMode
+	m.modeState.lastSwitch = time.Now()
+
+	// Track switch history for flapping detection
+	m.modeState.switchHistory = append(m.modeState.switchHistory, time.Now())
+	if len(m.modeState.switchHistory) > 10 {
+		m.modeState.switchHistory = m.modeState.switchHistory[1:]
+	}
+
+	// Apply mode-specific parameters
+	switch newMode {
+	case ModeIdleTiles:
+		*fps = 2
+		*quality = 85
+		*scale = 1.0
+		log.Printf("🔄 Mode switch: %s -> %s (FPS:%d Q:%d Scale:%.0f%%)", oldMode, newMode, *fps, *quality, *scale*100)
+	case ModeActiveTiles:
+		*fps = 20
+		*quality = 65
+		*scale = 1.0
+		log.Printf("🔄 Mode switch: %s -> %s (FPS:%d Q:%d Scale:%.0f%%)", oldMode, newMode, *fps, *quality, *scale*100)
+	case ModeActiveH264:
+		*fps = 25
+		*quality = 70 // Not used for H.264, but keep reasonable
+		*scale = 1.0
+		log.Printf("🔄 Mode switch: %s -> %s (FPS:%d H.264 active)", oldMode, newMode, *fps)
+	}
+
+	// Update ticker with new FPS
+	*frameInterval = time.Duration(1000 / *fps) * time.Millisecond
+	ticker.Reset(*frameInterval)
+}
+
 func (m *Manager) startScreenStreaming() {
 	log.Println("🎥 Starting adaptive screen streaming...")
 
@@ -984,9 +1130,8 @@ func (m *Manager) startScreenStreaming() {
 	var lastRGBA *image.RGBA
 	lastAdaptTime := time.Now()
 	lastLogTime := time.Now()
-	lastFullFrame := time.Now()   // For full-frame refresh cadence
-	lowMotionStart := time.Time{} // When low motion started
-	isIdle := false
+	lastFullFrame := time.Now() // For full-frame refresh cadence
+	isIdle := false             // Tracked from modeState for logging
 	motionPct := 0.0
 	forceFullFrame := false
 
@@ -1068,34 +1213,21 @@ func (m *Manager) startScreenStreaming() {
 			lastFullFrame = time.Now()
 		}
 
-		// Idle mode detection
+		// Update moving averages for mode switching
 		timeSinceInput := time.Since(m.lastInputTime)
-		if motionPct < idleThreshold && timeSinceInput > 500*time.Millisecond {
-			if lowMotionStart.IsZero() {
-				lowMotionStart = time.Now()
-			} else if time.Since(lowMotionStart) > 1*time.Second && !isIdle {
-				// Enter idle mode
-				isIdle = true
-				fps = idleFPS
-				quality = idleQuality
-				scale = idleScale
-				frameInterval = time.Duration(1000/fps) * time.Millisecond
-				ticker.Reset(frameInterval)
-				log.Println("💤 Entering idle mode (low motion)")
-			}
-		} else {
-			// Exit idle mode
-			lowMotionStart = time.Time{}
-			if isIdle {
-				isIdle = false
-				fps = 20
-				quality = 65
-				scale = 1.0
-				frameInterval = time.Duration(1000/fps) * time.Millisecond
-				ticker.Reset(frameInterval)
-				log.Println("⚡ Exiting idle mode (activity detected)")
-			}
+		cpuPct := float64(0)
+		if m.cpuMonitor != nil {
+			cpuPct = m.cpuMonitor.GetCPUPercent()
 		}
+		avgCPU := updateMovingAverage(&m.cpuAvg, cpuPct, 6)
+		avgRTT := updateMovingAverageDuration(&m.rttAvg, m.lastRTT, 6)
+
+		// Determine and switch mode based on conditions
+		desiredMode := m.determineMode(motionPct, timeSinceInput, avgCPU, avgRTT, m.lossPct)
+		m.switchMode(desiredMode, &fps, &quality, &scale, &frameInterval, ticker)
+		
+		// Track if we're in idle mode for logging
+		isIdle = (m.modeState.current == ModeIdleTiles)
 
 		// Adaptive quality adjustment (every 500ms, skip if idle)
 		if !isIdle && time.Since(lastAdaptTime) > 500*time.Millisecond {
@@ -1134,22 +1266,21 @@ func (m *Manager) startScreenStreaming() {
 			}
 
 			if congested {
-				// Network congested - reduce quality aggressively
-				if fps > minFPS {
-					fps -= 4
-					if fps < minFPS {
-						fps = minFPS
-					}
-					changed = true
-				}
+				// Network congested - SCALE-FIRST strategy for better text readability
+				// Reduce scale first, then FPS, then quality
 				if scale > minScale {
 					scale -= 0.1
 					if scale < minScale {
 						scale = minScale
 					}
 					changed = true
-				}
-				if quality > minQuality {
+				} else if fps > minFPS {
+					fps -= 4
+					if fps < minFPS {
+						fps = minFPS
+					}
+					changed = true
+				} else if quality > minQuality {
 					quality -= 5
 					if quality < minQuality {
 						quality = minQuality
@@ -1157,22 +1288,20 @@ func (m *Manager) startScreenStreaming() {
 					changed = true
 				}
 			} else if bufferedAmount < bufferLow && droppedFrames == 0 && m.lossPct < 1 && m.lastRTT < 120*time.Millisecond {
-				// Network clear - can increase quality
+				// Network clear - can increase quality (reverse order: quality, scale, fps)
 				if quality < maxQuality {
 					quality += 2
 					if quality > maxQuality {
 						quality = maxQuality
 					}
 					changed = true
-				}
-				if scale < maxScale {
+				} else if scale < maxScale {
 					scale += 0.05
 					if scale > maxScale {
 						scale = maxScale
 					}
 					changed = true
-				}
-				if fps < maxFPS {
+				} else if fps < maxFPS {
 					fps += 2
 					if fps > maxFPS {
 						fps = maxFPS
@@ -1188,9 +1317,16 @@ func (m *Manager) startScreenStreaming() {
 			}
 		}
 
-		// Drop frames if buffer is critically high
-		if bufferedAmount > bufferHigh*2 {
+		// EARLY-DROP: Drop frames before encode if buffer/CPU is critically high
+		// This saves CPU compared to encoding and then dropping
+		criticalBuffer := bufferedAmount > bufferHigh*2
+		criticalCPU := m.cpuMonitor != nil && m.cpuMonitor.IsCriticalCPU()
+		
+		if criticalBuffer || criticalCPU {
 			droppedFrames++
+			if criticalCPU && droppedFrames%10 == 1 {
+				log.Printf("⚠️ Early-drop: CPU %.1f%% - skipping encode", cpuPct)
+			}
 			continue
 		}
 
@@ -1302,14 +1438,11 @@ func (m *Manager) startScreenStreaming() {
 				cpuPct = m.cpuMonitor.GetCPUPercent()
 			}
 
-			// Determine current mode
-			mode := "jpeg"
-			if m.useH264 {
-				mode = "h264"
-			}
+			// Get current mode string
+			mode := m.modeState.current.String()
 
-			log.Printf("📊 FPS:%d Q:%d Scale:%.0f%% Motion:%.1f%% RTT:%dms Loss:%.1f%% CPU:%.0f%%%s | %.1fKB/f %.1fMbit/s | Buf:%.1fMB | Err:%d Drop:%d Skip:%d",
-				fps, quality, scale*100, motionPct, rttMs, m.lossPct, cpuPct, idleStr, avgKBPerFrame, sendMbps,
+			log.Printf("📊 Mode:%s FPS:%d Q:%d Scale:%.0f%% Motion:%.1f%% RTT:%dms Loss:%.1f%% CPU:%.0f%% | %.1fKB/f %.1fMbit/s | Buf:%.1fMB | Err:%d Drop:%d Skip:%d",
+				mode, fps, quality, scale*100, motionPct, rttMs, m.lossPct, cpuPct, avgKBPerFrame, sendMbps,
 				float64(bufferedAmount)/1024/1024, errorCount, droppedFrames, skippedFrames)
 			droppedFrames = 0  // Reset per-second counter
 			skippedFrames = 0  // Reset per-second counter
