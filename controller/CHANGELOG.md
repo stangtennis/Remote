@@ -1,25 +1,47 @@
 # Controller Application Changelog
 
+## [v2.63.9] - 2025-12-18
+
+### Added
+- ✅ **Fullscreen Overlay Toolbar** - Auto-hide toolbar when mouse at top of screen
+- ✅ **File Browser** - Browse remote drives and folders
+- ✅ **File Transfer** - Download files from remote machine
+- ✅ **Clipboard Sync** - Copy/paste text and images between machines
+- ✅ **Stats Display** - Real-time FPS, quality, RTT, CPU in status bar
+
+### Fixed
+- Fixed file transfer channel callback override issue
+- Fixed file browser filenames not displaying correctly
+- Fixed JPEG decode errors with chunked frames
+- Fixed Fyne thread errors with fyne.Do() wrapping
+
+---
+
+## [v2.63.x] - 2025-12-17
+
+### Added
+- ✅ **Adaptive Streaming** - Auto-adjusts quality based on network/CPU
+- ✅ **Quality Slider** - Adjust streaming quality in real-time
+- ✅ **H.264 Toggle** - Switch between JPEG and H.264 modes
+
+---
+
+## [v2.38.0] - 2025-12-10
+
+### Added
+- ✅ **Self-Elevation** - Auto UAC prompt if not running as admin
+- ✅ **Credential Storage** - Remember me with secure storage
+- ✅ **Fullscreen Toggle** - F11/ESC for fullscreen mode
+- ✅ **TURN Server Support** - Works across NAT/firewalls
+
+---
+
 ## [v0.2.0] - 2025-11-04
 
 ### Added
 - ✅ **Supabase Authentication** - Real login with email/password
-- ✅ **User Approval Check** - Verifies user is approved before allowing access
 - ✅ **Real Device List** - Fetches actual devices from database
 - ✅ **Device Status Indicators** - Shows online/offline/away status
-- ✅ **Connection Dialog** - Shows device info when connecting
-- ✅ **Configuration System** - Loads from .env file or uses defaults
-- ✅ **Error Handling** - Proper error messages for auth failures
-
-### Changed
-- Device list now uses real data from Supabase
-- Login button disables during authentication
-- Status messages update in real-time
-
-### Technical
-- Added `internal/supabase/client.go` - Supabase API client
-- Added `internal/config/config.go` - Configuration loader
-- Updated `main.go` - Integrated Supabase authentication
 
 ---
 
@@ -28,26 +50,7 @@
 ### Added
 - ✅ **Initial Prototype** - Working Fyne application
 - ✅ **Login Window** - Email/password input fields
-- ✅ **Device List** - Mock device list with 5 devices
-- ✅ **Tab Navigation** - Login, Devices, Settings tabs
-- ✅ **Build Scripts** - build.bat and run.bat
-- ✅ **Documentation** - README.md and QUICKSTART.md
-
-### Features
-- Native Windows UI
-- Tab-based interface
-- Status indicators (mock)
-- Connect buttons (mock)
-
----
-
-## Roadmap
-
-### v0.3.0 - WebRTC Viewer (Coming Soon)
-- [ ] WebRTC connection setup
-- [ ] Viewer window
-- [ ] Display remote screen
-- [ ] Connection management
+- ✅ **Device List** - Mock device list with status indicators
 
 ### v0.4.0 - Remote Control
 - [ ] Mouse input capture

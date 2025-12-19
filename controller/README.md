@@ -2,48 +2,44 @@
 
 **Standalone Windows application for controlling remote clients** - Like TeamViewer!
 
-## ✅ Status: Prototype Running!
+## ✅ Status: Production Ready (v2.63.9)
 
-The controller application is **working** and ready for testing!
+The controller application is **fully functional** and ready for use!
 
 ## 🚀 Quick Start
 
-### Run the App
+### Download
+Get the latest release from [GitHub Releases](https://github.com/stangtennis/Remote/releases)
 
-```bash
-cd controller
-.\run.bat
-```
-
-Or build an EXE:
-
-```bash
-.\build.bat
-.\controller.exe
-```
-
-### What You'll See
-
-A native Windows application with:
-- ✅ Login window
-- ✅ Device list (mock data)
-- ✅ Tab-based interface
-- ✅ Professional UI
-
-See **[QUICKSTART.md](./QUICKSTART.md)** for detailed instructions.
+### Run
+1. Download `controller-v2.63.9.exe` or `RemoteDesktopController-Setup-v2.63.9.exe`
+2. Run the installer or EXE directly
+3. Login with your credentials
+4. Select a device and click Connect
 
 ---
 
-## 📋 Current Features (v0.1 Prototype)
+## 📋 Features (v2.63.9)
 
+### Core
 - ✅ **Native Windows UI** - Built with Fyne
-- ✅ **Login Form** - Email/password input
-- ✅ **Device List** - Shows mock devices with status
-- ✅ **Tab Navigation** - Login, Devices, Settings
-- ✅ **Status Indicators** - Online/Offline/Away
-- 🚧 **Supabase Auth** - Coming next
-- 🚧 **WebRTC Viewer** - Coming soon
-- 🚧 **Remote Control** - Coming soon
+- ✅ **Supabase Auth** - Login with email/password
+- ✅ **Device Management** - View and approve devices
+- ✅ **WebRTC Streaming** - Real-time remote desktop view
+
+### Remote Control
+- ✅ **Full Input Control** - Mouse, keyboard, scroll
+- ✅ **Fullscreen Mode** - F11/ESC with auto-hide toolbar
+- ✅ **Adaptive Quality** - Auto-adjusts based on network
+
+### File & Clipboard
+- ✅ **File Browser** - Browse remote drives and folders
+- ✅ **File Transfer** - Download files from remote machine
+- ✅ **Clipboard Sync** - Copy/paste text and images
+
+### Stats & Monitoring
+- ✅ **Real-time Stats** - FPS, quality, RTT, CPU display
+- ✅ **Connection Status** - Online/offline indicators
 
 ---
 
