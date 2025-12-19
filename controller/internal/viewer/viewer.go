@@ -344,17 +344,21 @@ func (v *Viewer) UpdateFrame(img image.Image) {
 // UpdateStatus updates connection status
 func (v *Viewer) UpdateStatus(connected bool) {
 	v.connected = connected
-	if connected {
-		v.statusLabel.SetText("🟢 Connected")
-	} else {
-		v.statusLabel.SetText("🔴 Disconnected")
-	}
+	fyne.Do(func() {
+		if connected {
+			v.statusLabel.SetText("🟢 Connected")
+		} else {
+			v.statusLabel.SetText("🔴 Disconnected")
+		}
+	})
 }
 
 // UpdateStats updates performance statistics
 func (v *Viewer) UpdateStats(fps int, latency int) {
-	v.fpsLabel.SetText(fmt.Sprintf("FPS: %d", fps))
-	v.latencyLabel.SetText(fmt.Sprintf("RTT: %dms", latency))
+	fyne.Do(func() {
+		v.fpsLabel.SetText(fmt.Sprintf("FPS: %d", fps))
+		v.latencyLabel.SetText(fmt.Sprintf("RTT: %dms", latency))
+	})
 }
 
 // UpdateQuality updates the quality display
@@ -510,7 +514,9 @@ func (v *Viewer) handleDisconnect() {
 
 	// Update status
 	v.connected = false
-	v.statusLabel.SetText("🔴 Disconnected")
+	fyne.Do(func() {
+		v.statusLabel.SetText("🔴 Disconnected")
+	})
 
 	// Call disconnect callback if set
 	if v.onDisconnect != nil {
@@ -525,15 +531,17 @@ func (v *Viewer) toggleFullscreen() {
 	v.fullscreen = !v.fullscreen
 	v.window.SetFullScreen(v.fullscreen)
 
-	if v.fullscreen {
-		// In fullscreen, use overlay toolbar that auto-hides
-		v.fullscreenBtn.SetText("⛶ Exit Fullscreen")
-		v.enterFullscreenMode()
-	} else {
-		// Windowed mode, show toolbars
-		v.fullscreenBtn.SetText("⛶ Fullscreen")
-		v.exitFullscreenMode()
-	}
+	fyne.Do(func() {
+		if v.fullscreen {
+			// In fullscreen, use overlay toolbar that auto-hides
+			v.fullscreenBtn.SetText("⛶ Exit Fullscreen")
+			v.enterFullscreenMode()
+		} else {
+			// Windowed mode, show toolbars
+			v.fullscreenBtn.SetText("⛶ Fullscreen")
+			v.exitFullscreenMode()
+		}
+	})
 }
 
 func (v *Viewer) enterFullscreenMode() {

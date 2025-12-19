@@ -84,7 +84,9 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 	client.SetOnDisconnected(func() {
 		log.Println("❌ WebRTC disconnected")
 		v.connected = false
-		v.statusLabel.SetText("🔴 Disconnected")
+		fyne.Do(func() {
+			v.statusLabel.SetText("🔴 Disconnected")
+		})
 
 		// Stop clipboard monitor
 		if mon, ok := v.clipboardMonitor.(*clipboard.Monitor); ok {
@@ -1000,19 +1002,25 @@ func (v *Viewer) setupReconnection() {
 	// Set callbacks
 	reconnMgr.SetOnReconnecting(func(attempt int, maxAttempts int, nextDelay time.Duration) {
 		statusText := fmt.Sprintf("🔄 Reconnecting... (%d/%d)", attempt, maxAttempts)
-		v.statusLabel.SetText(statusText)
+		fyne.Do(func() {
+			v.statusLabel.SetText(statusText)
+		})
 		log.Printf("🔄 Reconnection attempt %d/%d, next attempt in %v", attempt, maxAttempts, nextDelay)
 	})
 
 	reconnMgr.SetOnReconnected(func() {
 		log.Println("✅ Reconnection successful!")
-		v.statusLabel.SetText("🟢 Connected")
-		dialog.ShowInformation("Reconnected", "Connection restored successfully!", v.window)
+		fyne.Do(func() {
+			v.statusLabel.SetText("🟢 Connected")
+			dialog.ShowInformation("Reconnected", "Connection restored successfully!", v.window)
+		})
 	})
 
 	reconnMgr.SetOnReconnectFailed(func() {
 		log.Println("❌ Reconnection failed after all attempts")
-		v.statusLabel.SetText("❌ Connection Failed")
+		fyne.Do(func() {
+			v.statusLabel.SetText("❌ Connection Failed")
+		})
 		dialog.ShowError(
 			fmt.Errorf("failed to reconnect after %d attempts", reconnMgr.GetMaxRetries()),
 			v.window,
