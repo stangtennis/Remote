@@ -308,15 +308,17 @@ func (fb *FileBrowser) updateListItem(obj fyne.CanvasObject, entry Entry, isLoca
 		return
 	}
 	
-	data.name.SetText(entry.Name)
-	
-	if entry.IsDir {
-		data.icon.SetResource(theme.FolderIcon())
-		data.size.SetText("")
-	} else {
-		data.icon.SetResource(theme.FileIcon())
-		data.size.SetText(formatSize(entry.Size))
-	}
+	fyne.Do(func() {
+		data.name.SetText(entry.Name)
+		
+		if entry.IsDir {
+			data.icon.SetResource(theme.FolderIcon())
+			data.size.SetText("")
+		} else {
+			data.icon.SetResource(theme.FileIcon())
+			data.size.SetText(formatSize(entry.Size))
+		}
+	})
 }
 
 func (fb *FileBrowser) handleLocalDoubleClick(entry Entry) {
@@ -337,14 +339,18 @@ func (fb *FileBrowser) handleRemoteDoubleClick(entry Entry) {
 		// Download file
 		localDst := filepath.Join(fb.localPath, entry.Name)
 		fb.manager.Download(entry.Path, localDst, entry.Size)
-		fb.statusLabel.SetText(fmt.Sprintf("Downloader: %s", entry.Name))
-		fb.progressBar.Show()
-		fb.progressBar.SetValue(0)
+		fyne.Do(func() {
+			fb.statusLabel.SetText(fmt.Sprintf("Downloader: %s", entry.Name))
+			fb.progressBar.Show()
+			fb.progressBar.SetValue(0)
+		})
 	}
 }
 
 func (fb *FileBrowser) refreshLocal() {
-	fb.localPathLabel.SetText(fb.localPath)
+	fyne.Do(func() {
+		fb.localPathLabel.SetText(fb.localPath)
+	})
 	
 	entries, err := os.ReadDir(fb.localPath)
 	if err != nil {
@@ -381,15 +387,14 @@ func (fb *FileBrowser) refreshLocal() {
 		return strings.ToLower(fb.localEntries[i].Name) < strings.ToLower(fb.localEntries[j].Name)
 	})
 	
-	fb.localList.Refresh()
+	fyne.Do(func() {
+		fb.localList.Refresh()
+	})
 }
 
 func (fb *FileBrowser) handleListResult(path string, entries []Entry) {
 	fb.mu.Lock()
-	defer fb.mu.Unlock()
-	
 	fb.remotePath = path
-	fb.remotePathLabel.SetText(path)
 	fb.remoteEntries = entries
 	
 	// Sort: directories first, then by name
@@ -399,36 +404,46 @@ func (fb *FileBrowser) handleListResult(path string, entries []Entry) {
 		}
 		return strings.ToLower(fb.remoteEntries[i].Name) < strings.ToLower(fb.remoteEntries[j].Name)
 	})
+	fb.mu.Unlock()
 	
-	fb.remoteList.Refresh()
-	fb.statusLabel.SetText(fmt.Sprintf("%d elementer", len(entries)))
+	fyne.Do(func() {
+		fb.remotePathLabel.SetText(path)
+		fb.remoteList.Refresh()
+		fb.statusLabel.SetText(fmt.Sprintf("%d elementer", len(entries)))
+	})
 }
 
 func (fb *FileBrowser) handleDrives(entries []Entry) {
 	fb.mu.Lock()
-	defer fb.mu.Unlock()
-	
 	fb.remotePath = ""
-	fb.remotePathLabel.SetText("Drev")
 	fb.remoteEntries = entries
-	fb.remoteList.Refresh()
-	fb.statusLabel.SetText(fmt.Sprintf("%d drev", len(entries)))
+	fb.mu.Unlock()
+	
+	fyne.Do(func() {
+		fb.remotePathLabel.SetText("Drev")
+		fb.remoteList.Refresh()
+		fb.statusLabel.SetText(fmt.Sprintf("%d drev", len(entries)))
+	})
 }
 
 func (fb *FileBrowser) handleProgress(job *Job) {
 	if job.Size > 0 {
 		progress := float64(job.Done) / float64(job.Size)
-		fb.progressBar.SetValue(progress)
-		
 		pct := int(progress * 100)
 		speed := formatSize(job.Done) // Simplified - should calculate actual speed
-		fb.statusLabel.SetText(fmt.Sprintf("%s: %d%% (%s)", filepath.Base(job.SrcPath), pct, speed))
+		
+		fyne.Do(func() {
+			fb.progressBar.SetValue(progress)
+			fb.statusLabel.SetText(fmt.Sprintf("%s: %d%% (%s)", filepath.Base(job.SrcPath), pct, speed))
+		})
 	}
 }
 
 func (fb *FileBrowser) handleComplete(job *Job) {
-	fb.progressBar.Hide()
-	fb.statusLabel.SetText(fmt.Sprintf("✅ Færdig: %s", filepath.Base(job.SrcPath)))
+	fyne.Do(func() {
+		fb.progressBar.Hide()
+		fb.statusLabel.SetText(fmt.Sprintf("✅ Færdig: %s", filepath.Base(job.SrcPath)))
+	})
 	
 	// Refresh appropriate pane
 	if job.Op == "download" {
@@ -443,10 +458,11 @@ func (fb *FileBrowser) handleComplete(job *Job) {
 }
 
 func (fb *FileBrowser) handleError(job *Job, err error) {
-	fb.progressBar.Hide()
-	fb.statusLabel.SetText(fmt.Sprintf("❌ Fejl: %v", err))
-	
-	dialog.ShowError(err, fb.window)
+	fyne.Do(func() {
+		fb.progressBar.Hide()
+		fb.statusLabel.SetText(fmt.Sprintf("❌ Fejl: %v", err))
+		dialog.ShowError(err, fb.window)
+	})
 }
 
 func (fb *FileBrowser) doDownload() {
@@ -465,9 +481,11 @@ func (fb *FileBrowser) doDownload() {
 	
 	localDst := filepath.Join(fb.localPath, entry.Name)
 	fb.manager.Download(entry.Path, localDst, entry.Size)
-	fb.statusLabel.SetText(fmt.Sprintf("Downloader: %s", entry.Name))
-	fb.progressBar.Show()
-	fb.progressBar.SetValue(0)
+	fyne.Do(func() {
+		fb.statusLabel.SetText(fmt.Sprintf("Downloader: %s", entry.Name))
+		fb.progressBar.Show()
+		fb.progressBar.SetValue(0)
+	})
 }
 
 func (fb *FileBrowser) doUpload() {
