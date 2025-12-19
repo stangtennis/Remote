@@ -1103,10 +1103,6 @@ func (m *Manager) startScreenStreaming() {
 	maxQuality := 80
 	minScale := 0.5
 	maxScale := 1.0
-	idleFPS := 2         // FPS when idle
-	idleQuality := 85    // Quality when idle (high for crisp text)
-	idleScale := 1.0     // Scale when idle (full resolution for sharpness)
-	idleThreshold := 1.0 // Motion % threshold for idle
 
 	// Apply controller caps if set
 	if m.streamMaxFPS > 0 {
@@ -1114,11 +1110,9 @@ func (m *Manager) startScreenStreaming() {
 	}
 	if m.streamMaxQuality > 0 {
 		maxQuality = m.streamMaxQuality
-		idleQuality = m.streamMaxQuality // Idle uses same max
 	}
 	if m.streamMaxScale > 0 {
 		maxScale = m.streamMaxScale
-		idleScale = m.streamMaxScale
 	}
 
 	frameCount := 0
@@ -1428,10 +1422,6 @@ func (m *Manager) startScreenStreaming() {
 			lastLogTime = time.Now()
 			avgKBPerFrame := float64(bytesSent) / float64(frameCount) / 1024
 			sendMbps := m.sendBps / 1000000
-			idleStr := ""
-			if isIdle {
-				idleStr = " 💤IDLE"
-			}
 			rttMs := m.lastRTT.Milliseconds()
 			cpuPct := float64(0)
 			if m.cpuMonitor != nil {
