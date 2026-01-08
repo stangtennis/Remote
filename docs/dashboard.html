@@ -159,6 +159,33 @@
           </button>
         </section>
 
+        <!-- Downloads Section -->
+        <section class="downloads-section" style="margin-bottom: 2rem;">
+          <div class="section-header">
+            <h2>📥 Downloads</h2>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
+            <a href="https://github.com/stangtennis/Remote/releases/latest/download/remote-agent-v2.65.0.exe" 
+               class="btn btn-primary" 
+               style="text-decoration: none; text-align: center;">
+              🖥️ Windows Agent
+            </a>
+            <a href="?mode=agent" 
+               class="btn btn-primary" 
+               style="text-decoration: none; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+              🌐 Web Agent
+            </a>
+            <a href="https://github.com/stangtennis/Remote/releases/latest/download/controller-v2.65.0.exe" 
+               class="btn btn-secondary" 
+               style="text-decoration: none; text-align: center;">
+              🎮 Controller
+            </a>
+          </div>
+          <p style="margin-top: 0.5rem; font-size: 0.875rem; color: #888; text-align: center;">
+            Windows Agent (anbefalet) • Web Agent (browser) • Controller (kontrol andre)
+          </p>
+        </section>
+
         <!-- Devices Section -->
         <section class="devices-section">
           <div class="section-header">
@@ -178,8 +205,10 @@
             <p>📱 Ingen enheder registreret endnu</p>
             <p class="muted">Download og kør agenten på en computer for at komme i gang</p>
             <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <button class="btn btn-primary" id="downloadAgentBtn">📥 Hent agent</button>
-              <button class="btn btn-secondary" id="downloadControllerBtn">🖥️ Hent controller</button>
+              <a href="https://github.com/stangtennis/Remote/releases/latest/download/remote-agent-v2.65.0.exe" 
+                 class="btn btn-primary" style="text-decoration: none;">📥 Hent Windows Agent</a>
+              <a href="?mode=agent" 
+                 class="btn btn-primary" style="text-decoration: none;">🌐 Web Agent</a>
             </div>
           </div>
 

@@ -39,6 +39,31 @@
       <button onclick="showTab('transfers')" id="tabTransfers" class="admin-tab" style="display: none;">🔄 Enhedsoverførsler</button>
     </div>
 
+    <!-- Downloads Section -->
+    <div style="background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; border: 1px solid rgba(255, 255, 255, 0.1);">
+      <h3 style="margin: 0 0 1rem 0; font-size: 1.125rem;">📥 Downloads</h3>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
+        <a href="https://github.com/stangtennis/Remote/releases/latest/download/remote-agent-v2.65.0.exe" 
+           class="btn btn-primary" 
+           style="text-decoration: none; text-align: center;">
+          🖥️ Windows Agent
+        </a>
+        <a href="?mode=agent" 
+           class="btn btn-primary" 
+           style="text-decoration: none; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+          🌐 Web Agent
+        </a>
+        <a href="https://github.com/stangtennis/Remote/releases/latest/download/controller-v2.65.0.exe" 
+           class="btn btn-secondary" 
+           style="text-decoration: none; text-align: center;">
+          🎮 Controller
+        </a>
+      </div>
+      <p style="margin-top: 0.75rem; font-size: 0.875rem; color: #aaa; text-align: center;">
+        Windows Agent (anbefalet) • Web Agent (browser) • Controller (kontrol enheder)
+      </p>
+    </div>
+
     <!-- Users Tab -->
     <div id="usersTab" class="tab-content">
       <!-- Stats -->
