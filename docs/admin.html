@@ -20,7 +20,7 @@
     <div class="admin-header">
       <h1>🔐 Adminpanel</h1>
       <div class="header-actions">
-        <button onclick="window.location.href='dashboard.html'" class="btn btn-secondary btn-sm">← Kontrolpanel</button>
+        <button onclick="window.location.href='index.html'" class="btn btn-secondary btn-sm">← Kontrolpanel</button>
         <button onclick="logout()" class="btn btn-secondary btn-sm">Log ud</button>
       </div>
     </div>
@@ -34,6 +34,7 @@
     <div class="admin-tabs">
       <button onclick="showTab('users')" id="tabUsers" class="admin-tab active">👥 Brugergodkendelser</button>
       <button onclick="showTab('devices')" id="tabDevices" class="admin-tab">📱 Enhedsstyring</button>
+      <button onclick="showTab('remote')" id="tabRemote" class="admin-tab">🖥️ Remote Control</button>
       <button onclick="showTab('invites')" id="tabInvites" class="admin-tab">✉️ Invitationer</button>
       <button onclick="showTab('transfers')" id="tabTransfers" class="admin-tab" style="display: none;">🔄 Enhedsoverførsler</button>
     </div>
@@ -120,6 +121,42 @@
       <div id="invitationsList"></div>
     </div>
 
+    <!-- Remote Control Tab -->
+    <div id="remoteTab" class="tab-content" style="display: none;">
+      <h3>🖥️ Remote Control - Administrer enheder direkte</h3>
+      
+      <!-- Device Selection -->
+      <div class="form-group" style="max-width: 600px; margin-bottom: 2rem;">
+        <label for="remoteDeviceSelect">Vælg enhed at kontrollere</label>
+        <select id="remoteDeviceSelect" class="input" onchange="selectRemoteDevice()">
+          <option value="">Vælg en online enhed...</option>
+        </select>
+      </div>
+
+      <!-- Remote Preview Container -->
+      <div id="remotePreviewContainer" style="display: none;">
+        <div class="remote-preview-section">
+          <div class="section-header">
+            <h3 id="remoteDeviceName">Enhed</h3>
+            <div class="preview-controls">
+              <button id="remoteDisconnectBtn" class="btn btn-danger btn-sm" onclick="disconnectRemote()">Afbryd</button>
+            </div>
+          </div>
+          
+          <!-- Video Preview -->
+          <div class="preview-container" style="position: relative; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 16/9;">
+            <canvas id="remoteCanvas" style="width: 100%; height: 100%; object-fit: contain;"></canvas>
+            <div id="remoteStatus" style="position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); color: white; padding: 8px 12px; border-radius: 6px; font-size: 14px;">
+              🔴 Ikke forbundet
+            </div>
+            <div id="remoteStats" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; display: none;">
+              FPS: 0 | RTT: 0ms
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Device Transfers Tab (Super Admin Only) -->
     <div id="transfersTab" class="tab-content" style="display: none;">
       <h3>🔄 Overfør enhed til en anden administrator</h3>
@@ -174,13 +211,8 @@
 
   <!-- Supabase Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
   <script>
-    const SUPABASE_URL = 'https://supabase.hawkeye123.dk';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    // Web3Forms Configuration - https://web3forms.com
-    const WEB3FORMS_ACCESS_KEY = '2f296c6b-c8aa-46f0-8c3d-bf12cc7cc837';
 
     let currentFilter = 'all';
     let allUsers = [];
@@ -196,7 +228,7 @@
       // Check if user is logged in
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        window.location.href = 'index.html';
+        window.location.href = 'login.html';
         return;
       }
       
@@ -211,7 +243,7 @@
       
       if (!approval || !['admin', 'super_admin'].includes(approval.role)) {
         alert('⛔ Access denied. Admin privileges required.');
-        window.location.href = 'dashboard.html';
+        window.location.href = 'index.html';
         return;
       }
       
@@ -512,43 +544,22 @@
 
         if (error) throw error;
 
-        // Send welcome email via Web3Forms
+        // Send welcome email via Edge Function
         let emailSent = false;
         try {
-          const response = await fetch('https://api.web3forms.com/submit', {
-            method: 'POST',
+          const { data: { session } } = await supabase.auth.getSession();
+          const response = await supabase.functions.invoke('send-welcome-email', {
+            body: { email },
             headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              access_key: WEB3FORMS_ACCESS_KEY,
-              subject: '✅ Your Remote Desktop Account is Approved!',
-              from_name: 'Remote Desktop',
-              to_email: email,
-              name: email.split('@')[0],
-              email: email,
-              message: `
-🎉 Great news! Your Remote Desktop account has been approved.
-
-You can now log in and start sharing your screen securely.
-
-📧 Email: ${email}
-
-🔗 Login here: https://stangtennis.github.io/Remote/agent.html
-
----
-🔒 All connections are encrypted end-to-end
-Remote Desktop © 2025
-              `.trim()
-            })
+              Authorization: `Bearer ${session.access_token}`
+            }
           });
           
-          const result = await response.json();
-          if (result.success) {
-            console.log('✅ Welcome email sent:', result);
+          if (response.data?.success) {
+            console.log('✅ Welcome email sent:', response.data);
             emailSent = true;
           } else {
-            console.warn('⚠️ Email failed:', result);
+            console.warn('⚠️ Email failed:', response.data?.message || response.error);
           }
         } catch (emailError) {
           console.warn('⚠️ Could not send welcome email:', emailError);
@@ -564,7 +575,7 @@ Remote Desktop © 2025
 
     window.logout = async function() {
       await supabase.auth.signOut();
-      window.location.href = 'index.html';
+      window.location.href = 'login.html?status=logout';
     };
 
     window.makeAdmin = async function(userId, email) {
@@ -803,19 +814,239 @@ Remote Desktop © 2025
       }
     };
 
+    // Remote Control State
+    let remoteSession = null;
+    let remotePeerConnection = null;
+    let remoteDataChannel = null;
+    let remoteCanvas = null;
+    let remoteCtx = null;
+
+    // Load online devices for remote control
+    async function loadRemoteDevices() {
+      try {
+        const { data: devices, error } = await supabase
+          .from('remote_devices')
+          .select('device_id, device_name, is_online')
+          .eq('is_online', true)
+          .eq('approved', true)
+          .order('device_name');
+
+        if (error) throw error;
+
+        const select = document.getElementById('remoteDeviceSelect');
+        select.innerHTML = '<option value="">Vælg en online enhed...</option>';
+        
+        if (devices && devices.length > 0) {
+          devices.forEach(device => {
+            const option = document.createElement('option');
+            option.value = device.device_id;
+            option.textContent = device.device_name || device.device_id;
+            select.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error('Error loading remote devices:', error);
+      }
+    }
+
+    // Select device for remote control
+    window.selectRemoteDevice = async function() {
+      const deviceId = document.getElementById('remoteDeviceSelect').value;
+      if (!deviceId) {
+        document.getElementById('remotePreviewContainer').style.display = 'none';
+        return;
+      }
+
+      const deviceName = document.getElementById('remoteDeviceSelect').selectedOptions[0].textContent;
+      document.getElementById('remoteDeviceName').textContent = deviceName;
+      document.getElementById('remotePreviewContainer').style.display = 'block';
+
+      // Initialize canvas
+      remoteCanvas = document.getElementById('remoteCanvas');
+      remoteCtx = remoteCanvas.getContext('2d');
+
+      // Start WebRTC session
+      await startRemoteSession(deviceId);
+    };
+
+    // Start remote WebRTC session
+    async function startRemoteSession(deviceId) {
+      try {
+        updateRemoteStatus('🟡 Forbinder...');
+
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        // Create session via Edge Function
+        const { data: sessionData, error } = await supabase.functions.invoke('session-token', {
+          body: { device_id: deviceId, use_pin: false },
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+
+        if (error) throw error;
+        remoteSession = sessionData;
+
+        // Setup WebRTC
+        const config = {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        };
+
+        remotePeerConnection = new RTCPeerConnection(config);
+
+        // Handle incoming video track
+        remotePeerConnection.ontrack = (event) => {
+          console.log('📹 Received video track');
+          const stream = event.streams[0];
+          const video = document.createElement('video');
+          video.srcObject = stream;
+          video.autoplay = true;
+          video.muted = true;
+          
+          video.onloadedmetadata = () => {
+            remoteCanvas.width = video.videoWidth;
+            remoteCanvas.height = video.videoHeight;
+            
+            function drawFrame() {
+              if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                remoteCtx.drawImage(video, 0, 0, remoteCanvas.width, remoteCanvas.height);
+              }
+              requestAnimationFrame(drawFrame);
+            }
+            drawFrame();
+          };
+        };
+
+        // Handle data channel
+        remotePeerConnection.ondatachannel = (event) => {
+          remoteDataChannel = event.channel;
+          console.log('📡 Data channel opened');
+        };
+
+        // Handle connection state
+        remotePeerConnection.onconnectionstatechange = () => {
+          const state = remotePeerConnection.connectionState;
+          console.log('Connection state:', state);
+          
+          if (state === 'connected') {
+            updateRemoteStatus('🟢 Forbundet');
+            document.getElementById('remoteStats').style.display = 'block';
+          } else if (state === 'disconnected' || state === 'failed') {
+            updateRemoteStatus('🔴 Afbrudt');
+            document.getElementById('remoteStats').style.display = 'none';
+          }
+        };
+
+        // Create offer
+        const offer = await remotePeerConnection.createOffer({
+          offerToReceiveVideo: true,
+          offerToReceiveAudio: false
+        });
+        await remotePeerConnection.setLocalDescription(offer);
+
+        // Send offer via signaling
+        await sendRemoteSignal({
+          session_id: remoteSession.session_id,
+          from: 'dashboard',
+          type: 'offer',
+          sdp: offer.sdp
+        });
+
+        // Listen for answer
+        subscribeToRemoteSignaling(remoteSession.session_id);
+
+      } catch (error) {
+        console.error('Error starting remote session:', error);
+        updateRemoteStatus('🔴 Fejl: ' + error.message);
+      }
+    }
+
+    // Send signaling message
+    async function sendRemoteSignal(payload) {
+      const { error } = await supabase
+        .from('session_signaling')
+        .insert({
+          session_id: payload.session_id,
+          from_side: payload.from,
+          msg_type: payload.type,
+          payload: payload.type === 'ice' ? payload.candidate : { sdp: payload.sdp }
+        });
+
+      if (error) throw error;
+    }
+
+    // Subscribe to signaling
+    function subscribeToRemoteSignaling(sessionId) {
+      const channel = supabase
+        .channel(`session:${sessionId}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'session_signaling',
+          filter: `session_id=eq.${sessionId}`
+        }, async (payload) => {
+          const signal = payload.new;
+          
+          if (signal.from_side === 'agent') {
+            if (signal.msg_type === 'answer') {
+              const answer = new RTCSessionDescription({
+                type: 'answer',
+                sdp: signal.payload.sdp
+              });
+              await remotePeerConnection.setRemoteDescription(answer);
+              console.log('✅ Answer received');
+            } else if (signal.msg_type === 'ice') {
+              const candidate = new RTCIceCandidate(signal.payload);
+              await remotePeerConnection.addIceCandidate(candidate);
+            }
+          }
+        })
+        .subscribe();
+    }
+
+    // Update remote status
+    function updateRemoteStatus(text) {
+      document.getElementById('remoteStatus').textContent = text;
+    }
+
+    // Disconnect remote session
+    window.disconnectRemote = function() {
+      if (remotePeerConnection) {
+        remotePeerConnection.close();
+        remotePeerConnection = null;
+      }
+      if (remoteDataChannel) {
+        remoteDataChannel.close();
+        remoteDataChannel = null;
+      }
+      
+      updateRemoteStatus('🔴 Ikke forbundet');
+      document.getElementById('remoteStats').style.display = 'none';
+      document.getElementById('remotePreviewContainer').style.display = 'none';
+      document.getElementById('remoteDeviceSelect').value = '';
+    };
+
     // Tab switching
     window.showTab = function(tab) {
-      if (tab === 'users') {
-        document.getElementById('usersTab').style.display = 'block';
-        document.getElementById('devicesTab').style.display = 'none';
-        document.getElementById('tabUsers').classList.add('active');
-        document.getElementById('tabDevices').classList.remove('active');
-      } else if (tab === 'devices') {
-        document.getElementById('usersTab').style.display = 'none';
-        document.getElementById('devicesTab').style.display = 'block';
-        document.getElementById('tabUsers').classList.remove('active');
-        document.getElementById('tabDevices').classList.add('active');
+      // Hide all tabs
+      document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+      document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+      
+      // Show selected tab
+      const tabId = tab.charAt(0).toUpperCase() + tab.slice(1);
+      document.getElementById(tab + 'Tab').style.display = 'block';
+      document.getElementById('tab' + tabId).classList.add('active');
+      
+      // Load data for specific tabs
+      if (tab === 'devices') {
         loadDevices();
+      } else if (tab === 'remote') {
+        loadRemoteDevices();
+      } else if (tab === 'invites') {
+        loadInvitations();
+      } else if (tab === 'transfers' && isSuperAdmin) {
+        loadTransferData();
       }
     };
 

@@ -3,84 +3,114 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fjernskrivebord - Log ind</title>
+  <title>Fjernskrivebord</title>
   <link rel="stylesheet" href="css/styles.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .loader {
+      text-align: center;
+      color: white;
+    }
+    .spinner {
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top: 4px solid white;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
-<body class="login-page">
-  <!-- Animated Background -->
-  <div class="animated-bg">
-    <div class="gradient-orb orb-1"></div>
-    <div class="gradient-orb orb-2"></div>
-    <div class="gradient-orb orb-3"></div>
-  </div>
-
-  <div class="login-container">
-    <div class="login-card glass-card">
-      <div class="login-logo">
-        <div class="logo-glow"></div>
-        <span class="logo-icon">🖥️</span>
-      </div>
-      <h1>Fjernskrivebord</h1>
-      <p class="subtitle">Sikker fjernadgang drevet af <span class="highlight">Supabase</span> & <span class="highlight">WebRTC</span></p>
-
-      <!-- Login Form -->
-      <form id="loginForm" class="auth-form">
-        <div class="form-group">
-          <label for="email">E-mail</label>
-          <input type="email" id="email" placeholder="din@email.dk" required autocomplete="email">
-        </div>
-        <div class="form-group">
-          <label for="password">Adgangskode</label>
-          <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
-        </div>
-        <button type="submit" class="btn btn-primary" id="loginBtn">
-          <span>Log ind</span>
-        </button>
-      </form>
-
-      <div class="divider">
-        <span>eller</span>
-      </div>
-
-      <!-- Signup Toggle -->
-      <button class="btn btn-secondary" id="showSignupBtn">Opret ny konto</button>
-
-      <!-- Signup Form (hidden by default) -->
-      <form id="signupForm" class="auth-form" style="display: none;">
-        <div class="form-group">
-          <label for="signupEmail">E-mail</label>
-          <input type="email" id="signupEmail" placeholder="din@email.dk" required autocomplete="email">
-        </div>
-        <div class="form-group">
-          <label for="signupPassword">Adgangskode</label>
-          <input type="password" id="signupPassword" placeholder="••••••••" required autocomplete="new-password" minlength="6">
-        </div>
-        <div class="form-group">
-          <label for="signupPasswordConfirm">Bekræft adgangskode</label>
-          <input type="password" id="signupPasswordConfirm" placeholder="••••••••" required autocomplete="new-password" minlength="6">
-        </div>
-        <button type="submit" class="btn btn-primary" id="signupBtn">
-          <span>Opret konto</span>
-        </button>
-        <button type="button" class="btn btn-secondary" id="backToLoginBtn">Tilbage til login</button>
-      </form>
-
-      <!-- Messages -->
-      <div id="authMessage" class="message" style="display: none;"></div>
-
-      <!-- Footer -->
-      <div class="login-footer">
-        <div class="security-badges">
-          <span class="badge"><i class="fas fa-lock"></i> Ende-til-ende krypteret</span>
-          <span class="badge"><i class="fas fa-bolt"></i> WebRTC drevet</span>
-        </div>
-      </div>
-    </div>
+<body>
+  <div class="loader">
+    <div class="spinner"></div>
+    <h2>🖥️ Fjernskrivebord</h2>
+    <p>Indlæser...</p>
   </div>
 
   <!-- Supabase Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/auth.js"></script>
+  <script src="js/config.js"></script>
+  <script>
+    // Unified entry point with role-based routing
+    (async function() {
+      try {
+        // Check if user is logged in
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        // Check for URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const mode = urlParams.get('mode'); // ?mode=agent for web agent
+        const invite = urlParams.get('invite'); // ?invite=token for invitations
+        
+        // If invite token present, go to login with invite
+        if (invite) {
+          window.location.href = `login.html?invite=${invite}`;
+          return;
+        }
+        
+        // If mode=agent requested, go to agent page
+        if (mode === 'agent') {
+          if (!session) {
+            window.location.href = 'login.html?redirect=agent';
+            return;
+          }
+          window.location.href = 'agent.html';
+          return;
+        }
+        
+        // Not logged in - go to login
+        if (!session) {
+          window.location.href = 'login.html';
+          return;
+        }
+        
+        // Logged in - check user role and approval status
+        const { data: approval, error } = await supabase
+          .from('user_approvals')
+          .select('role, approved')
+          .eq('user_id', session.user.id)
+          .single();
+        
+        if (error || !approval) {
+          // No approval record - go to login
+          window.location.href = 'login.html';
+          return;
+        }
+        
+        // Not approved yet - show pending message
+        if (!approval.approved) {
+          window.location.href = 'login.html?status=pending';
+          return;
+        }
+        
+        // Route based on role
+        if (approval.role === 'admin' || approval.role === 'super_admin') {
+          // Admins go to admin panel by default
+          window.location.href = 'admin.html';
+        } else {
+          // Regular users go to dashboard
+          window.location.href = 'dashboard.html';
+        }
+        
+      } catch (error) {
+        console.error('Routing error:', error);
+        // On error, go to login
+        window.location.href = 'login.html';
+      }
+    })();
+  </script>
 </body>
 </html>

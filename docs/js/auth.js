@@ -1,27 +1,38 @@
 // Authentication Module
 // Handles user login, signup, and session management
 
-const SUPABASE_URL = 'https://supabase.hawkeye123.dk';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE';
-
-// Initialize Supabase client
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Supabase client is initialized in config.js
+// Access via window.supabase
 
 // Check if user is already logged in
 async function checkAuth() {
   const { data: { session } } = await supabase.auth.getSession();
   
-  const isLoginPage = window.location.pathname.endsWith('index.html') || 
+  const isLoginPage = window.location.pathname.endsWith('login.html');
+  const isIndexPage = window.location.pathname.endsWith('index.html') || 
                       window.location.pathname.endsWith('/') ||
                       window.location.pathname.endsWith('/Remote/');
   const isAdminPage = window.location.pathname.endsWith('admin.html');
   
+  // Index page handles routing, skip auth check there
+  if (isIndexPage) {
+    return;
+  }
+  
   if (session && isLoginPage) {
-    // User is logged in on login page -> redirect to dashboard
-    window.location.href = 'dashboard.html';
+    // Check for redirect target
+    const redirectTarget = sessionStorage.getItem('loginRedirect');
+    sessionStorage.removeItem('loginRedirect');
+    
+    if (redirectTarget === 'agent') {
+      window.location.href = 'agent.html';
+    } else {
+      // Let index.html handle role-based routing
+      window.location.href = 'index.html';
+    }
   } else if (!session && !isLoginPage) {
-    // User is not logged in on dashboard -> redirect to login
-    window.location.href = 'index.html';
+    // User is not logged in -> redirect to login
+    window.location.href = 'login.html';
   } else if (session && !isLoginPage && !isAdminPage) {
     // Check if user is approved (only for dashboard, not admin page)
     const { data: approval, error } = await supabase
@@ -33,10 +44,9 @@ async function checkAuth() {
     if (error) {
       console.error('Error checking approval status:', error);
     } else if (approval && !approval.approved) {
-      // User is not approved - show message and logout
-      alert('⏸️ Your account is pending approval.\n\nPlease wait for an administrator to approve your account before you can access the dashboard.');
+      // User is not approved - redirect to login with pending status
       await supabase.auth.signOut();
-      window.location.href = 'index.html';
+      window.location.href = 'login.html?status=pending';
       return null;
     }
   }
@@ -193,16 +203,15 @@ if (document.getElementById('logoutBtn')) {
         alert('Logout failed: ' + error.message);
       } else {
         console.log('✅ Logged out successfully');
-        window.location.href = 'index.html';
+        window.location.href = 'login.html?status=logout';
       }
     } catch (err) {
       console.error('Logout exception:', err);
       // Force redirect anyway
-      window.location.href = 'index.html';
+      window.location.href = 'login.html?status=logout';
     }
   });
 }
 
 // Export for use in other modules
-window.supabase = supabase;
 window.checkAuth = checkAuth;
