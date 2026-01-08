@@ -36,7 +36,7 @@ DECLARE
     v_new_session_id text;
     v_kicked_count int := 0;
 BEGIN
-    -- Find and kick all existing active sessions for this device
+    -- Kick all existing active sessions in webrtc_sessions (controller)
     FOR v_old_sessions IN 
         SELECT session_id, controller_id, controller_type 
         FROM public.webrtc_sessions 
@@ -44,7 +44,6 @@ BEGIN
           AND status IN ('pending', 'offer_sent', 'answered', 'connected')
           AND kicked_at IS NULL
     LOOP
-        -- Mark old session as kicked (agent polls kicked_at to detect takeover)
         UPDATE public.webrtc_sessions 
         SET 
             kicked_at = now(),
@@ -53,9 +52,39 @@ BEGIN
             updated_at = now()
         WHERE session_id = v_old_sessions.session_id;
         
-        -- Note: We don't insert kick signals to session_signaling because
-        -- it has a FK constraint to remote_sessions, not webrtc_sessions.
-        -- Instead, agent/controller poll check_session_kicked() or kicked_at column.
+        v_kicked_count := v_kicked_count + 1;
+    END LOOP;
+
+    -- Kick all existing active sessions in remote_sessions (dashboard)
+    FOR v_old_sessions IN 
+        SELECT id::text as session_id, created_by::text as controller_id
+        FROM public.remote_sessions 
+        WHERE device_id = p_device_id 
+          AND status IN ('pending', 'active')
+          AND expires_at > now()
+    LOOP
+        UPDATE public.remote_sessions 
+        SET 
+            status = 'ended',
+            ended_at = now()
+        WHERE id::text = v_old_sessions.session_id;
+        
+        -- Send kick signal to session_signaling for dashboard to detect
+        INSERT INTO public.session_signaling (
+            session_id,
+            from_side,
+            msg_type,
+            payload
+        ) VALUES (
+            v_old_sessions.session_id,
+            'system',
+            'kick',
+            jsonb_build_object(
+                'reason', 'taken_over',
+                'new_controller_id', p_controller_id,
+                'new_controller_type', p_controller_type
+            )
+        );
         
         v_kicked_count := v_kicked_count + 1;
     END LOOP;

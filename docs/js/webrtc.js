@@ -20,7 +20,7 @@ async function fetchTurnCredentials() {
       return;
     }
 
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/turn-credentials`, {
+    const response = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/turn-credentials`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${session.access_token}`,

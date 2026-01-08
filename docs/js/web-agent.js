@@ -1,11 +1,7 @@
 // Web Agent - Browser-based remote desktop agent
 
-// Supabase configuration
-const SUPABASE_URL = 'https://supabase.hawkeye123.dk';
-const SUPABASE_ANON_KEY = 'REDACTED_JWT';
-
-// Initialize Supabase client
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Supabase client is initialized in config.js
+// Access via window.supabase and window.SUPABASE_CONFIG
 
 // State
 let currentUser = null;
@@ -35,7 +31,7 @@ async function fetchTurnCredentials() {
       return;
     }
 
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/turn-credentials`, {
+    const response = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/turn-credentials`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${session.access_token}`,

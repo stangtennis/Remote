@@ -53,10 +53,10 @@ serve(async (req) => {
       throw new Error('device_id is required')
     }
 
-    // Verify device exists and user owns it
+    // Verify device exists
     const { data: device, error: deviceError } = await supabaseClient
       .from('remote_devices')
-      .select('device_id, is_online, owner_id')
+      .select('device_id, is_online, owner_id, approved')
       .eq('device_id', device_id)
       .single()
 
@@ -65,11 +65,33 @@ serve(async (req) => {
       throw new Error(`Device not found: ${deviceError?.message || 'Unknown error'}`)
     }
 
-    // Skip ownership check for now - allow any authenticated user to connect
-    // TODO: Re-enable ownership check once device registration is fixed
-    if (device.owner_id && device.owner_id !== user.id) {
-      console.log('Ownership mismatch (allowing anyway):', { device_owner: device.owner_id, user_id: user.id })
-      // throw new Error(`You do not own this device. Owner: ${device.owner_id}, You: ${user.id}`)
+    // Check if device is approved
+    if (!device.approved) {
+      throw new Error('Device is not approved by admin')
+    }
+
+    // Check if user is admin
+    const { data: userApproval } = await supabaseClient
+      .from('user_approvals')
+      .select('role')
+      .eq('user_id', user.id)
+      .single()
+
+    const isAdmin = userApproval?.role === 'admin' || userApproval?.role === 'super_admin'
+
+    // Check device assignment (unless user is admin)
+    if (!isAdmin) {
+      const { data: assignment } = await supabaseClient
+        .from('device_assignments')
+        .select('id')
+        .eq('device_id', device_id)
+        .eq('user_id', user.id)
+        .is('revoked_at', null)
+        .single()
+
+      if (!assignment) {
+        throw new Error('You do not have access to this device. Please contact your administrator.')
+      }
     }
 
     if (!device.is_online) {

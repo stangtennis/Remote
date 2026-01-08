@@ -29,17 +29,25 @@ async function loadDevices() {
     
     const isAdmin = approval && (approval.role === 'admin' || approval.role === 'super_admin');
 
-    // Admins see ALL devices, regular users see only their own or unassigned
-    let query = supabase
-      .from('remote_devices')
-      .select('*')
-      .order('last_seen', { ascending: false });
-    
-    if (!isAdmin) {
-      query = query.or(`owner_id.eq.${session.user.id},owner_id.is.null`);
+    let devices;
+    let error;
+
+    if (isAdmin) {
+      // Admins see ALL devices
+      const result = await supabase
+        .from('remote_devices')
+        .select('*')
+        .order('last_seen', { ascending: false });
+      devices = result.data;
+      error = result.error;
+    } else {
+      // Regular users: use get_user_devices function to get assigned devices
+      const result = await supabase.rpc('get_user_devices', {
+        p_user_id: session.user.id
+      });
+      devices = result.data;
+      error = result.error;
     }
-    
-    const { data: devices, error } = await query;
 
     if (error) throw error;
 

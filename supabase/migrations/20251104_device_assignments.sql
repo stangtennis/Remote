@@ -197,12 +197,13 @@ BEGIN
         assigned_by = v_admin_id,
         notes = p_notes;
 
-    -- Approve device if requested
+    -- Approve device and sync owner_id if requested
     IF p_approve_device THEN
         UPDATE remote_devices
         SET approved = TRUE,
             assigned_by = v_admin_id,
-            assigned_at = NOW()
+            assigned_at = NOW(),
+            owner_id = p_user_id::TEXT
         WHERE device_id = p_device_id;
     END IF;
 
@@ -248,6 +249,18 @@ BEGIN
     WHERE device_id = p_device_id
         AND user_id = p_user_id
         AND revoked_at IS NULL;
+
+    -- Clear owner_id if this was the only assignment
+    IF NOT EXISTS (
+        SELECT 1 FROM device_assignments
+        WHERE device_id = p_device_id
+        AND revoked_at IS NULL
+        AND user_id != p_user_id
+    ) THEN
+        UPDATE remote_devices
+        SET owner_id = NULL
+        WHERE device_id = p_device_id;
+    END IF;
 
     -- Return result
     SELECT jsonb_build_object(

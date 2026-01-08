@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fjernskrivebord - Log ind</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body class="login-page">
+  <!-- Animated Background -->
+  <div class="animated-bg">
+    <div class="gradient-orb orb-1"></div>
+    <div class="gradient-orb orb-2"></div>
+    <div class="gradient-orb orb-3"></div>
+  </div>
+
+  <div class="login-container">
+    <div class="login-card glass-card">
+      <div class="login-logo">
+        <div class="logo-glow"></div>
+        <span class="logo-icon">🖥️</span>
+      </div>
+      <h1>Fjernskrivebord</h1>
+      <p class="subtitle">Sikker fjernadgang drevet af <span class="highlight">Supabase</span> & <span class="highlight">WebRTC</span></p>
+      
+      <!-- Status Messages -->
+      <div id="statusMessage" style="display: none; padding: 12px; border-radius: 8px; margin-bottom: 20px; text-align: center;"></div>
+
+      <!-- Login Form -->
+      <form id="loginForm" class="auth-form">
+        <div class="form-group">
+          <label for="email">E-mail</label>
+          <input type="email" id="email" placeholder="din@email.dk" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="password">Adgangskode</label>
+          <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary" id="loginBtn">
+          <span>Log ind</span>
+        </button>
+      </form>
+
+      <div class="divider">
+        <span>eller</span>
+      </div>
+
+      <!-- Signup Toggle -->
+      <button class="btn btn-secondary" id="showSignupBtn">Opret ny konto</button>
+
+      <!-- Signup Form (hidden by default) -->
+      <form id="signupForm" class="auth-form" style="display: none;">
+        <div class="form-group">
+          <label for="signupEmail">E-mail</label>
+          <input type="email" id="signupEmail" placeholder="din@email.dk" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="signupPassword">Adgangskode</label>
+          <input type="password" id="signupPassword" placeholder="••••••••" required autocomplete="new-password" minlength="6">
+        </div>
+        <div class="form-group">
+          <label for="signupPasswordConfirm">Bekræft adgangskode</label>
+          <input type="password" id="signupPasswordConfirm" placeholder="••••••••" required autocomplete="new-password" minlength="6">
+        </div>
+        <button type="submit" class="btn btn-primary" id="signupBtn">
+          <span>Opret konto</span>
+        </button>
+        <button type="button" class="btn btn-secondary" id="backToLoginBtn">Tilbage til login</button>
+      </form>
+
+      <!-- Messages -->
+      <div id="authMessage" class="message" style="display: none;"></div>
+
+      <!-- Footer -->
+      <div class="login-footer">
+        <div class="security-badges">
+          <span class="badge"><i class="fas fa-lock"></i> Ende-til-ende krypteret</span>
+          <span class="badge"><i class="fas fa-bolt"></i> WebRTC drevet</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supabase Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    // Handle URL parameters for status messages and redirects
+    (function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const status = urlParams.get('status');
+      const redirect = urlParams.get('redirect');
+      const statusMsg = document.getElementById('statusMessage');
+      
+      // Store redirect target for after login
+      if (redirect) {
+        sessionStorage.setItem('loginRedirect', redirect);
+      }
+      
+      // Show status messages
+      if (status === 'pending') {
+        statusMsg.style.display = 'block';
+        statusMsg.style.background = 'rgba(251, 191, 36, 0.2)';
+        statusMsg.style.border = '1px solid rgba(251, 191, 36, 0.5)';
+        statusMsg.style.color = '#fbbf24';
+        statusMsg.innerHTML = '⏳ Din konto afventer godkendelse fra en administrator.';
+      } else if (status === 'logout') {
+        statusMsg.style.display = 'block';
+        statusMsg.style.background = 'rgba(34, 197, 94, 0.2)';
+        statusMsg.style.border = '1px solid rgba(34, 197, 94, 0.5)';
+        statusMsg.style.color = '#22c55e';
+        statusMsg.innerHTML = '✅ Du er nu logget ud.';
+      }
+    })();
+  </script>
+</body>
+</html>
