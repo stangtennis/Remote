@@ -2,7 +2,7 @@
 // Single source of truth for Supabase connection settings
 
 const SUPABASE_CONFIG = {
-  url: 'http://192.168.1.92:8888',
+  url: 'https://supabase.hawkeye123.dk',
   anonKey: 'REDACTED_JWT'
 };
 
