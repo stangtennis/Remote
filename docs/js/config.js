@@ -6,9 +6,6 @@ const SUPABASE_CONFIG = {
   anonKey: 'REDACTED_JWT'
 };
 
-// Initialize Supabase client
-const supabase = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
-
-// Export for use in other modules
+// Initialize Supabase client and export to window
 window.SUPABASE_CONFIG = SUPABASE_CONFIG;
-window.supabase = supabase;
+window.supabase = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
