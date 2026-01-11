@@ -36,6 +36,7 @@ agent/.device_id
 # Build artifacts
 dist/
 build/
+builds/
 *.zip
 *.tar.gz
 

@@ -20,12 +20,14 @@ import (
 	"github.com/stangtennis/Remote/controller/internal/supabase"
 	"github.com/stangtennis/Remote/controller/internal/updater"
 	"github.com/stangtennis/Remote/controller/internal/viewer"
+	"github.com/stangtennis/remote-agent/pkg/version"
 )
 
-const (
-	Version     = "v2.65.0"
-	BuildDate   = "2025-12-19"
-	VersionInfo = Version + " (" + BuildDate + ")"
+// Version information now comes from centralized version package
+var (
+	Version     = "v" + version.Version
+	BuildDate   = version.BuildDate
+	VersionInfo = version.GetFullVersion()
 )
 
 var (

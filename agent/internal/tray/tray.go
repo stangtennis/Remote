@@ -10,12 +10,15 @@ import (
 	"github.com/getlantern/systray"
 	"github.com/stangtennis/remote-agent/internal/device"
 	"github.com/stangtennis/remote-agent/internal/updater"
+	"github.com/stangtennis/remote-agent/pkg/version"
 )
 
-// Version of the agent - update this with each release
-const Version = "v2.65.0"
-const BuildDate = "2025-12-19"
-const VersionString = Version + " (" + BuildDate + ")"
+// Version information now comes from centralized version package
+var (
+	Version       = "v" + version.Version
+	BuildDate     = version.BuildDate
+	VersionString = version.GetFullVersion()
+)
 
 type TrayApp struct {
 	device *device.Device

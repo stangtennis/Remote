@@ -22,6 +22,7 @@ import (
 	"github.com/stangtennis/remote-agent/internal/device"
 	"github.com/stangtennis/remote-agent/internal/tray"
 	"github.com/stangtennis/remote-agent/internal/webrtc"
+	"github.com/stangtennis/remote-agent/pkg/logging"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 )
@@ -66,52 +67,21 @@ var (
 )
 
 func setupLogging() error {
-	// Try multiple locations for log file
-	var logPath string
-	
-	// 1. Try AppData first (always writable)
-	appData := os.Getenv("APPDATA")
-	if appData != "" {
-		logDir := filepath.Join(appData, "RemoteDesktopAgent")
-		os.MkdirAll(logDir, 0755)
-		logPath = filepath.Join(logDir, "agent.log")
-	} else {
-		// 2. Fallback to exe directory
-		exePath, _ := os.Executable()
-		exeDir := filepath.Dir(exePath)
-		logPath = filepath.Join(exeDir, "agent.log")
-	}
-
-	// Open log file (truncate mode - clears previous logs)
-	var err error
-	logFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open log file: %w", err)
-	}
-
-	// Write directly to file first to verify it works
-	logFile.WriteString("=== LOG FILE OPENED ===\n")
-	logFile.Sync()
-
-	// Write to both file and console (if interactive)
+	// Initialize structured logging with rotation
 	isService, _ := svc.IsWindowsService()
-	if isService {
-		// Service: only write to file
-		log.SetOutput(logFile)
-	} else {
-		// Interactive: write to both file and console
-		multiWriter := io.MultiWriter(os.Stdout, logFile)
-		log.SetOutput(multiWriter)
+	
+	cfg := logging.DefaultConfig()
+	cfg.Console = !isService // Only log to console if not running as service
+	cfg.Level = "info"        // Can be changed to "debug" for troubleshooting
+	
+	if err := logging.Init(cfg); err != nil {
+		return fmt.Errorf("failed to initialize logging: %w", err)
 	}
 
-	// Add timestamp to log entries
-	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
-
-	log.Printf("========================================")
-	log.Printf("🖥️  Remote Desktop Agent Starter...")
-	log.Printf("📦 Version: %s", tray.VersionString)
-	log.Printf("📝 Log fil: %s", logPath)
-	log.Printf("========================================")
+	logging.Logger.Info().
+		Str("version", tray.VersionString).
+		Bool("is_service", isService).
+		Msg("Remote Desktop Agent starting")
 
 	// Sync log file immediately
 	logFile.Sync()
