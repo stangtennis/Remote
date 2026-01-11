@@ -22,6 +22,18 @@ remote.hawkeye123.dk {
     redir https://stangtennis.github.io/Remote{uri} permanent
 }
 
+# Remote Desktop Downloads - serve binære filer
+downloads.hawkeye123.dk {
+    root * /home/dennis/projekter/Remote Desktop/builds
+    file_server browse
+    
+    # CORS headers så GitHub Pages kan linke til downloads
+    header {
+        Access-Control-Allow-Origin *
+        Access-Control-Allow-Methods "GET, OPTIONS"
+    }
+}
+
 # Archon MCP endpoint (hvis nødvendigt)
 # mcp.hawkeye123.dk {
 #     reverse_proxy 192.168.1.92:8051
