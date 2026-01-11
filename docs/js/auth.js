@@ -178,15 +178,32 @@ if (document.getElementById('logoutBtn')) {
       userEmail.textContent = session.user.email;
       
       // Check if user is admin or super_admin
-      if (adminLink) {
-        const { data: approval } = await supabase
-          .from('user_approvals')
-          .select('role')
-          .eq('user_id', session.user.id)
-          .single();
+      const { data: approval } = await supabase
+        .from('user_approvals')
+        .select('role')
+        .eq('user_id', session.user.id)
+        .single();
+      
+      const isAdmin = approval && (approval.role === 'admin' || approval.role === 'super_admin');
+      
+      // Show admin link if user is admin
+      if (adminLink && isAdmin) {
+        adminLink.style.display = 'inline-flex';
+      }
+      
+      // Add controller download for admins
+      const downloadsGrid = document.getElementById('downloadsGrid');
+      const downloadsDescription = document.getElementById('downloadsDescription');
+      if (downloadsGrid && isAdmin) {
+        const controllerLink = document.createElement('a');
+        controllerLink.href = 'https://downloads.hawkeye123.dk/controller.exe';
+        controllerLink.className = 'btn btn-secondary';
+        controllerLink.style.cssText = 'text-decoration: none; text-align: center;';
+        controllerLink.innerHTML = '🎮 Controller';
+        downloadsGrid.appendChild(controllerLink);
         
-        if (approval && (approval.role === 'admin' || approval.role === 'super_admin')) {
-          adminLink.style.display = 'inline-flex';
+        if (downloadsDescription) {
+          downloadsDescription.textContent = 'Windows Agent (anbefalet) • Web Agent (browser) • Controller (kontrol enheder)';
         }
       }
     }
