@@ -24,7 +24,7 @@ remote.hawkeye123.dk {
 
 # Remote Desktop Downloads - serve binære filer
 downloads.hawkeye123.dk {
-    root * /home/dennis/projekter/Remote Desktop/builds
+    root * /downloads
     file_server browse
     
     # CORS headers så GitHub Pages kan linke til downloads
