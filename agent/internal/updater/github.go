@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	GitHubAPIBase = "https://api.github.com"
-	RepoOwner     = "stangtennis"
-	RepoName      = "Remote"
+	// Use Caddy downloads server instead of GitHub API (repo is private)
+	DownloadsBaseURL = "https://downloads.hawkeye123.dk"
+	VersionCheckURL  = "https://downloads.hawkeye123.dk/version.json"
 )
 
 // ReleaseAsset represents a GitHub release asset
@@ -128,6 +128,14 @@ func (c *GitHubClient) fetchRelease(url string) (*Release, error) {
 	return &release, nil
 }
 
+// VersionInfo represents version information from Caddy server
+type VersionInfo struct {
+	AgentVersion      string `json:"agent_version"`
+	ControllerVersion string `json:"controller_version"`
+	AgentURL          string `json:"agent_url"`
+	ControllerURL     string `json:"controller_url"`
+}
+
 // CheckForUpdate checks if an update is available for the agent
 func (c *GitHubClient) CheckForUpdate(currentVersion string, channel string) (*UpdateInfo, error) {
 	current, err := ParseVersion(currentVersion)
@@ -135,17 +143,29 @@ func (c *GitHubClient) CheckForUpdate(currentVersion string, channel string) (*U
 		return nil, fmt.Errorf("failed to parse current version: %w", err)
 	}
 
-	var release *Release
-	if channel == "beta" {
-		release, err = c.GetLatestBetaRelease()
-	} else {
-		release, err = c.GetLatestRelease()
-	}
+	// Fetch version info from Caddy downloads server
+	req, err := http.NewRequest("GET", VersionCheckURL, nil)
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", c.userAgent)
 
-	remoteVersion, err := ParseVersion(release.TagName)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch version info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("version check returned status %d", resp.StatusCode)
+	}
+
+	var versionInfo VersionInfo
+	if err := json.NewDecoder(resp.Body).Decode(&versionInfo); err != nil {
+		return nil, fmt.Errorf("failed to parse version info: %w", err)
+	}
+
+	remoteVersion, err := ParseVersion(versionInfo.AgentVersion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse remote version: %w", err)
 	}
@@ -154,34 +174,12 @@ func (c *GitHubClient) CheckForUpdate(currentVersion string, channel string) (*U
 		return nil, nil
 	}
 
-	// Find the correct assets for agent
-	var exeAsset, sha256Asset *ReleaseAsset
-	exePattern := fmt.Sprintf("remote-agent-%s.exe", release.TagName)
-	sha256Pattern := fmt.Sprintf("remote-agent-%s.exe.sha256", release.TagName)
-
-	for i := range release.Assets {
-		asset := &release.Assets[i]
-		if strings.EqualFold(asset.Name, exePattern) {
-			exeAsset = asset
-		} else if strings.EqualFold(asset.Name, sha256Pattern) {
-			sha256Asset = asset
-		}
-	}
-
-	if exeAsset == nil {
-		return nil, fmt.Errorf("agent exe asset not found for %s", release.TagName)
-	}
-
 	info := &UpdateInfo{
 		Version:      remoteVersion,
-		TagName:      release.TagName,
-		ExeURL:       exeAsset.BrowserDownloadURL,
-		ExeSize:      exeAsset.Size,
-		IsPrerelease: release.Prerelease,
-	}
-
-	if sha256Asset != nil {
-		info.SHA256URL = sha256Asset.BrowserDownloadURL
+		TagName:      versionInfo.AgentVersion,
+		ExeURL:       versionInfo.AgentURL,
+		ExeSize:      0, // Size will be determined during download
+		IsPrerelease: false,
 	}
 
 	return info, nil
