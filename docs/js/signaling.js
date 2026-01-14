@@ -4,6 +4,7 @@
 let signalingChannel = null;
 let pollingInterval = null;
 let processedSignalIds = new Set();
+let pendingIceCandidates = []; // Buffer for ICE candidates received before remote description
 
 async function sendSignal(payload) {
   try {
@@ -195,6 +196,26 @@ async function handleSignal(signal) {
         const answer = new RTCSessionDescription(signal.payload);
         await peerConnection.setRemoteDescription(answer);
         console.log('✅ Remote description set (answer)');
+        
+        // Process any buffered ICE candidates now that remote description is set
+        if (pendingIceCandidates.length > 0) {
+          console.log(`🔄 Processing ${pendingIceCandidates.length} buffered ICE candidates`);
+          for (const candidate of pendingIceCandidates) {
+            try {
+              await peerConnection.addIceCandidate(
+                new RTCIceCandidate({
+                  candidate: candidate.candidate,
+                  sdpMid: candidate.sdpMid,
+                  sdpMLineIndex: candidate.sdpMLineIndex
+                })
+              );
+              console.log('✅ Buffered ICE candidate added');
+            } catch (err) {
+              console.warn('⚠️ Failed to add buffered ICE candidate:', err);
+            }
+          }
+          pendingIceCandidates = []; // Clear buffer
+        }
         break;
 
       case 'ice':
@@ -216,14 +237,21 @@ async function handleSignal(signal) {
             ? iceCandidate.candidate.substring(0, 50) + '...'
             : JSON.stringify(iceCandidate.candidate).substring(0, 50);
           console.log('📥 Received ICE candidate from agent:', candidateStr);
-          await peerConnection.addIceCandidate(
-            new RTCIceCandidate({
-              candidate: iceCandidate.candidate,
-              sdpMid: iceCandidate.sdpMid,
-              sdpMLineIndex: iceCandidate.sdpMLineIndex
-            })
-          );
-          console.log('✅ ICE candidate added successfully');
+          
+          // Check if remote description is set
+          if (!peerConnection.remoteDescription) {
+            console.log('⏸️ Buffering ICE candidate (remote description not set yet)');
+            pendingIceCandidates.push(iceCandidate);
+          } else {
+            await peerConnection.addIceCandidate(
+              new RTCIceCandidate({
+                candidate: iceCandidate.candidate,
+                sdpMid: iceCandidate.sdpMid,
+                sdpMLineIndex: iceCandidate.sdpMLineIndex
+              })
+            );
+            console.log('✅ ICE candidate added successfully');
+          }
         }
         break;
 
@@ -232,6 +260,27 @@ async function handleSignal(signal) {
         // Payload has {type, sdp} structure
         const offer = new RTCSessionDescription(signal.payload);
         await peerConnection.setRemoteDescription(offer);
+        console.log('✅ Remote description set from offer');
+        
+        // Process any buffered ICE candidates now that remote description is set
+        if (pendingIceCandidates.length > 0) {
+          console.log(`🔄 Processing ${pendingIceCandidates.length} buffered ICE candidates`);
+          for (const candidate of pendingIceCandidates) {
+            try {
+              await peerConnection.addIceCandidate(
+                new RTCIceCandidate({
+                  candidate: candidate.candidate,
+                  sdpMid: candidate.sdpMid,
+                  sdpMLineIndex: candidate.sdpMLineIndex
+                })
+              );
+              console.log('✅ Buffered ICE candidate added');
+            } catch (err) {
+              console.warn('⚠️ Failed to add buffered ICE candidate:', err);
+            }
+          }
+          pendingIceCandidates = []; // Clear buffer
+        }
         
         // Create and send answer
         const answerSdp = await peerConnection.createAnswer();
