@@ -267,12 +267,18 @@ func (m *Manager) handleWebSession(session Session) {
 	iceServers := []webrtc.ICEServer{
 		{URLs: []string{"stun:stun.l.google.com:19302"}},
 		{URLs: []string{"stun:stun1.l.google.com:19302"}},
-		// TURN server for relay when direct connection fails
-		{
-			URLs:       []string{"turn:188.228.14.94:3478", "turn:188.228.14.94:3478?transport=tcp"},
-			Username:   "remotedesktop",
-			Credential: "Hawkeye2025Turn!",
-		},
+	}
+
+	// Add TURN server if credentials are provided via env vars
+	turnServer := os.Getenv("TURN_SERVER")
+	turnUser := os.Getenv("TURN_USERNAME")
+	turnPass := os.Getenv("TURN_PASSWORD")
+	if turnServer != "" && turnUser != "" && turnPass != "" {
+		iceServers = append(iceServers, webrtc.ICEServer{
+			URLs:       []string{"turn:" + turnServer, "turn:" + turnServer + "?transport=tcp"},
+			Username:   turnUser,
+			Credential: turnPass,
+		})
 	}
 
 	if err := m.CreatePeerConnection(iceServers); err != nil {
@@ -448,12 +454,18 @@ func (m *Manager) handleSession(session Session) {
 	iceServers := []webrtc.ICEServer{
 		{URLs: []string{"stun:stun.l.google.com:19302"}},
 		{URLs: []string{"stun:stun1.l.google.com:19302"}},
-		// TURN server for relay when direct connection fails
-		{
-			URLs:       []string{"turn:188.228.14.94:3478", "turn:188.228.14.94:3478?transport=tcp"},
-			Username:   "remotedesktop",
-			Credential: "Hawkeye2025Turn!",
-		},
+	}
+
+	// Add TURN server if credentials are provided via env vars
+	turnServer := os.Getenv("TURN_SERVER")
+	turnUser := os.Getenv("TURN_USERNAME")
+	turnPass := os.Getenv("TURN_PASSWORD")
+	if turnServer != "" && turnUser != "" && turnPass != "" {
+		iceServers = append(iceServers, webrtc.ICEServer{
+			URLs:       []string{"turn:" + turnServer, "turn:" + turnServer + "?transport=tcp"},
+			Username:   turnUser,
+			Credential: turnPass,
+		})
 	}
 
 	if err := m.CreatePeerConnection(iceServers); err != nil {
