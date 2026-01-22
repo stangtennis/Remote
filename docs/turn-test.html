@@ -23,11 +23,8 @@
     <div id="results"></div>
     
     <script>
-        const TURN_CONFIG = {
-            urls: 'turn:188.228.14.94:3478',
-            username: 'remotedesktop',
-            credential: 'Hawkeye2025Turn!'
-        };
+        // TURN credentials should be fetched dynamically from backend
+        // This is a test page - credentials removed for security
         
         function log(message, type = 'info') {
             const results = document.getElementById('results');
@@ -38,17 +35,38 @@
             console.log(message);
         }
         
+        async function fetchTurnCredentials() {
+            try {
+                const response = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/turn-credentials`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    return data.iceServers;
+                } else {
+                    throw new Error('Failed to fetch TURN credentials');
+                }
+            } catch (error) {
+                log('❌ Error fetching TURN credentials: ' + error.message, 'error');
+                return [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ];
+            }
+        }
+        
         async function testTURN() {
             document.getElementById('results').innerHTML = '';
             log('🔄 Starting TURN server test...', 'info');
+            log('🔐 Fetching TURN credentials from backend...', 'info');
             
-            const config = {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    TURN_CONFIG,
-                    { urls: 'turn:188.228.14.94:3478?transport=tcp', username: 'remotedesktop', credential: 'Hawkeye2025Turn!' }
-                ]
-            };
+            const iceServers = await fetchTurnCredentials();
+            const config = { iceServers };
             
             log(`📋 Config: <pre>${JSON.stringify(config, null, 2)}</pre>`, 'info');
             
