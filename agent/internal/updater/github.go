@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	// Use Caddy downloads server instead of GitHub API (repo is private)
-	DownloadsBaseURL = "https://downloads.hawkeye123.dk"
-	VersionCheckURL  = "https://downloads.hawkeye123.dk/version.json"
+	// Use Caddy updates server (no auth required for auto-update)
+	UpdatesBaseURL  = "https://updates.hawkeye123.dk"
+	VersionCheckURL = "https://updates.hawkeye123.dk/version.json"
 )
 
 // ReleaseAsset represents a GitHub release asset
