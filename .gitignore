@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+LOCAL_SECRETS.env
+LOCAL_SECRETS.*
 
 # Supabase
 .supabase/
