@@ -215,3 +215,41 @@ find_tasks(filter_by="project", filter_value="proj-123")
 - **URL:** https://rzqefpdffjksygeqmlzj.supabase.co
 - **Tables:** projects, tasks, knowledge_sources, knowledge_items, settings
 - **Note:** Shared between Windows and Ubuntu Archon setups
+
+---
+
+## 3. INFO REPOSITORY RULE
+
+**When user says "gem info" or "save info" or similar:**
+
+This means save to the **info repository** on GitHub:
+- **Repository:** https://github.com/stangtennis/info (PRIVATE)
+- **Location:** `/tmp/info` (clone here)
+- **Current Projects:** Remote-Desktop/
+
+### Workflow:
+```bash
+# 1. Clone/update repo
+cd /tmp && rm -rf info && git clone https://github.com/stangtennis/info.git
+
+# 2. Make changes
+cd /tmp/info/Remote-Desktop
+# Edit files: README.md, CREDENTIALS.md, ARCHITECTURE.md, SETUP.md
+
+# 3. Commit and push
+cd /tmp/info
+git add -A
+git commit -m "Update documentation"
+git push
+```
+
+### What to Save:
+- **Project documentation** (README, architecture, setup guides)
+- **Credentials** (all passwords, API keys, tokens - safe in private repo)
+- **Configuration examples** (.env templates, config files)
+- **Cross-project knowledge** (for use with other AI assistants)
+
+### Important:
+- Repository is **PRIVATE** - safe to include all credentials
+- Use for sharing knowledge across projects and AI assistants
+- Keep documentation updated when project changes
