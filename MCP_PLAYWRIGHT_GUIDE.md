@@ -122,44 +122,83 @@ MCP server mcp-playwright not found
 
 Dette betyder at MCP serveren ikke er connected i denne Windsurf session, selvom den står i config.
 
-**Årsager:**
-1. Windsurf er ikke genstartet efter config ændring
-2. Docker kører ikke eller fejler
-3. MCP server fejler ved startup
-4. Forkert config fil bruges
+**VIGTIGT:** Hvis Docker kører OG config er korrekt, men Cascade stadig ikke kan se serveren, er det et **Windsurf MCP runtime wiring problem** - ikke et Docker problem.
 
-**Løsning:**
+**Årsager:**
+1. Windsurf MCP host har ikke registreret serveren i denne session
+2. MCP server fejler ved startup (tjek logs)
+3. Windsurf er ikke genstartet efter config ændring
+4. Docker kører ikke eller fejler
+5. Forkert config fil bruges
+
+**Løsning (Hurtigste Fix):**
+
+**Step 0: Tjek MCP Logs FØRST** ⚠️
+Dette er det vigtigste step!
+
+1. Åbn Command Palette (Ctrl+Shift+P)
+2. Søg efter: `MCP: Show Logs`
+3. Vælg `mcp-playwright` server
+4. Se om der er fejl ved startup eller loading
+
+**Typiske fejl i logs:**
+- `Error: Cannot connect to Docker daemon`
+- `Error: Image not found`
+- `Error: Container failed to start`
+- `Timeout waiting for server`
 
 **Step 1: Tjek Docker kører**
 ```bash
 docker ps
 docker info
+# Tjek om Playwright containers kører
+docker ps | grep playwright
 ```
 
-**Step 2: Test Playwright Docker image**
+**Step 2: Verificer config er korrekt**
+```bash
+cat ~/.codeium/windsurf/mcp_config.json
+# Tjek at "disabled" er false eller ikke sat
+```
+
+**Step 3: Genstart Windsurf HELT** 🔄
+Dette er den mest effektive løsning for runtime wiring problemer!
+
+```bash
+# Luk ALLE Windsurf vinduer og processer
+pkill -9 windsurf
+
+# Vent 5 sekunder
+sleep 5
+
+# Åbn Windsurf igen
+```
+
+**Step 4: Vent på MCP servers starter**
+- Vent 20-30 sekunder efter Windsurf åbner
+- Tjek status bar nederst: "MCP: mcp-playwright (connected)"
+- Hvis du ikke ser status, åbn Command Palette → "MCP: Show Status"
+
+**Step 5: Test forbindelse**
+Bed Cascade: "Kan du liste resources fra mcp-playwright serveren?"
+
+**Hvis det STADIG ikke virker:**
+
+**Step 6: Test Playwright Docker image manuelt**
 ```bash
 docker run -i --rm --init mcr.microsoft.com/playwright/mcp
 ```
 (Tryk Ctrl+C for at stoppe)
 
-**Step 3: Find og verificer config**
+Hvis denne kommando fejler, er problemet Docker/image - ikke Windsurf.
+
+**Step 7: Pull image igen**
 ```bash
-find /home/$USER -maxdepth 6 -type f -name mcp_config.json 2>/dev/null
-cat ~/.codeium/windsurf/mcp_config.json
+docker pull mcr.microsoft.com/playwright/mcp
 ```
 
-**Step 4: Luk ALLE Windsurf vinduer**
-```bash
-# Luk alle Windsurf processer
-pkill -9 windsurf
-```
-
-**Step 5: Åbn Windsurf igen**
-- Vent 20-30 sekunder efter start
-- Tjek status bar: "MCP: mcp-playwright (connected)"
-
-**Step 6: Test forbindelse**
-Bed Cascade: "Kan du liste resources fra mcp-playwright serveren?"
+**Step 8: Genstart Windsurf igen**
+Efter image pull, genstart Windsurf helt igen.
 
 ### Problem 3: MCP Playwright vises ikke i settings
 
