@@ -1,23 +1,28 @@
-# 🚀 ULTIMATE COMPLETE GUIDE
+# ULTIMATE COMPLETE GUIDE
 **Everything About Your Ubuntu + Archon + Windsurf Setup in ONE Document**
 
-Last Updated: 2025-12-18 | Server: 192.168.1.92 | User: dennis
+Last Updated: 2026-01-30 | Server: 192.168.1.92 | User: dennis
 
 ---
 
-## 🌐 QUICK ACCESS - ALL SERVICES
+## QUICK ACCESS - ALL SERVICES
 
 ### Public HTTPS (via Caddy)
 | Service | URL | Login |
 |---------|-----|-------|
-| **Supabase Studio** | https://supabase.hawkeye123.dk | `supabase` / `this_password_is_insecure_and_should_be_updated` |
+| **Supabase (Kong gateway)** | https://supabase.hawkeye123.dk | No login (RLS/auth protects data) |
+| **Remote Dashboard (redirect)** | https://remote.hawkeye123.dk | No login (redirect to GitHub Pages) |
+| **Login UI (redirect)** | https://login.hawkeye123.dk | No login (redirect to GitHub Pages) |
+| **Downloads (manual)** | https://downloads.hawkeye123.dk | Basic Auth (see local secrets) |
+| **Updates (auto-update)** | https://updates.hawkeye123.dk/version.json | No login (direct file URLs only; no browsing) |
+| **Files (Filebrowser UI)** | https://files.hawkeye123.dk | Filebrowser login (see local secrets) |
 
 ### Local Only (Internal Network)
 | Service | URL | Login |
 |---------|-----|-------|
 | **Caddy** | Automatisk HTTPS via Let's Encrypt | Ingen login nødvendig |
 | **Archon UI** | http://192.168.1.92:3737 | No login |
-| **Supabase Studio** | http://192.168.1.92:8888 | `supabase` / `this_password_is_insecure_and_should_be_updated` |
+| **Supabase Studio** | http://192.168.1.92:8888 | See local secrets (DO NOT commit passwords) |
 | **Portainer** | http://192.168.1.92:9000 | Your Portainer credentials |
 | **Ollama API** | http://192.168.1.92:11434 | No login |
 
@@ -29,19 +34,45 @@ Last Updated: 2025-12-18 | Server: 192.168.1.92 | User: dennis
 
 ---
 
-## 🔐 ALL CREDENTIALS (Master List)
+## ALL CREDENTIALS (Master List - GITIGNORED)
 
+**⚠️ SECURITY NOTE:** ULTIMATE_GUIDE.md is in `.gitignore` - will NOT be pushed to GitHub.
+All credentials are also stored in `LOCAL_SECRETS.env` (also gitignored).
+
+### Supabase
+| Item | Value |
+|------|-------|
+| **URL** | http://192.168.1.92:8888 |
+| **Anon Key** | eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE |
+| **Service Role Key** | eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q |
+| **Studio Username** | supabase |
+| **Studio Password** | this_password_is_insecure_and_should_be_updated |
+| **PostgreSQL User** | postgres |
+| **PostgreSQL Password** | postgres |
+
+### Network & Access
 | Service | Username | Password/Key |
 |---------|----------|--------------|
 | **Ubuntu SSH** | dennis | SSH key (no password) |
-| **Samba/Network Drives** | dennis | `Suzuki77wW!!` |
-| **Supabase Studio** | supabase | `this_password_is_insecure_and_should_be_updated` |
-| **PostgreSQL** | postgres | `postgres` |
-| **Portainer API Token** | - | `ptr_XxKkdO1CQy8QyF1FGx0lymIj3/sPl2iEthNBNltrMAY=` |
+| **Samba/Network Drives** | dennis | Suzuki77wW!! |
+| **Portainer API Token** | - | ptr_XxKkdO1CQy8QyF1FGx0lymIj3/sPl2iEthNBNltrMAY= |
+
+### Caddy & File Services
+| Service | Username | Password |
+|---------|----------|----------|
+| **Downloads Basic Auth** | ufitech | (bcrypt hash in Caddyfile) |
+| **Filebrowser Admin** | admin | sZGyxl71vpOVFUIX |
+
+### TURN Server (for WebRTC)
+| Item | Value |
+|------|-------|
+| **URL** | turn:188.228.14.94:3478 |
+| **Username** | remotedesktop |
+| **Credential** | Hawkeye2025Turn! |
 
 ---
 
-## 🌍 PUBLIC HTTPS ACCESS
+## PUBLIC HTTPS ACCESS
 
 ### Domain & SSL
 ```yaml
@@ -53,12 +84,21 @@ Managed by: Caddy
 
 ### Public Endpoints
 ```yaml
-# Only Supabase is exposed publicly (for Remote Desktop app)
-Supabase: https://supabase.hawkeye123.dk → http://192.168.1.92:8888
+# Public endpoints (needed for Remote Desktop)
+Supabase:  https://supabase.hawkeye123.dk  → http://192.168.1.92:8888
+Remote UI: https://remote.hawkeye123.dk    → https://stangtennis.github.io/Remote
+Login UI:  https://login.hawkeye123.dk     → https://stangtennis.github.io/Remote/login.html
 
-# These are LOCAL ONLY (not exposed to internet for security)
-Archon: http://192.168.1.92:3737 (local only)
-Portainer: http://192.168.1.92:9000 (local only)
+# File distribution
+Downloads (manual, auth): https://downloads.hawkeye123.dk
+Updates (auto-update):     https://updates.hawkeye123.dk (no browse, direct file URLs)
+
+# Files (Filebrowser)
+Files: https://files.hawkeye123.dk → Filebrowser container (local port 8090)
+
+# Admin tools remain local-only
+Archon:    http://192.168.1.92:3737
+Portainer: http://192.168.1.92:9000
 ```
 
 ### Why Only Supabase is Public?
@@ -68,7 +108,7 @@ Portainer: http://192.168.1.92:9000 (local only)
 
 ---
 
-## 🔧 CADDY
+## CADDY
 
 ### Access
 Caddy kører som Docker container og håndterer automatisk HTTPS via Let's Encrypt.
@@ -109,24 +149,24 @@ supabase.hawkeye123.dk {
     reverse_proxy 192.168.1.92:8888
 }
 
-# Archon UI
-archon.hawkeye123.dk {
-    reverse_proxy 192.168.1.92:3737
-}
-
-# Portainer
-portainer.hawkeye123.dk {
-    reverse_proxy 192.168.1.92:9000
-}
-
 # Remote Desktop Dashboard - redirect til GitHub Pages
 remote.hawkeye123.dk {
     redir https://stangtennis.github.io/Remote{uri} permanent
 }
 
-# Remote Desktop Downloads - serve binære filer
+# Remote Desktop Login - redirect til GitHub Pages login
+login.hawkeye123.dk {
+    redir https://stangtennis.github.io/Remote/login.html permanent
+}
+
+# Remote Desktop Downloads - manual downloads (protected)
 downloads.hawkeye123.dk {
     root * /downloads
+
+    basic_auth {
+        ufitech <BCRYPT_HASH_FROM_SERVER>
+    }
+
     file_server browse
     
     header {
@@ -134,16 +174,34 @@ downloads.hawkeye123.dk {
         Access-Control-Allow-Methods "GET, OPTIONS"
     }
 }
+
+# Remote Desktop Updates - auto-update endpoint
+# No browsing: only direct file URLs (prevents listing)
+updates.hawkeye123.dk {
+    root * /downloads
+    file_server
+
+    header {
+        Access-Control-Allow-Origin *
+        Access-Control-Allow-Methods "GET, OPTIONS"
+    }
+}
+
+# Filebrowser UI
+files.hawkeye123.dk {
+    reverse_proxy 192.168.1.92:8090
+}
 ```
 
 ### Subdomains
 - `supabase.hawkeye123.dk` - Supabase API (Kong Gateway)
-- `archon.hawkeye123.dk` - Archon UI
-- `portainer.hawkeye123.dk` - Portainer
 - `remote.hawkeye123.dk` - Redirect til GitHub Pages
-- `downloads.hawkeye123.dk` - Binary downloads (agent, controller)
+- `login.hawkeye123.dk` - Redirect til GitHub Pages login
+- `downloads.hawkeye123.dk` - Manual binary downloads (Basic Auth)
+- `updates.hawkeye123.dk` - Auto-update endpoint (no browse)
+- `files.hawkeye123.dk` - Filebrowser (bulk download / upload)
 
-### Opdater Downloads
+### Opdater Downloads / Updates
 ```bash
 # Kopier nye builds til downloads folder
 cp builds/remote-agent-vX.XX.X.exe ~/caddy/downloads/remote-agent.exe
@@ -151,63 +209,101 @@ cp builds/controller-vX.XX.X.exe ~/caddy/downloads/controller.exe
 cp builds/remote-agent-console-vX.XX.X.exe ~/caddy/downloads/remote-agent-console.exe
 ```
 
+`downloads.hawkeye123.dk` og `updates.hawkeye123.dk` server samme mappe (`~/caddy/downloads/`).
+Forskellen er:
+- `downloads` er til mennesker (Basic Auth + browse)
+- `updates` er til agent/controller auto-update (ingen browse)
+
 ### Remote Commands
 ```bash
 # Start Caddy
 ssh ubuntu "docker start caddy"
 
-# Check status
-ssh ubuntu "docker ps | grep caddy"
+# Restart Caddy
+ssh ubuntu "docker restart caddy"
 
 # View logs
 ssh ubuntu "docker logs caddy --tail 50"
-```
-## ⚡ SUPABASE EDGE FUNCTIONS
 
-### What Are Edge Functions?
-Serverless TypeScript/Deno functions that run on Supabase. Better security than direct database access.
-
-### Deployed Functions
-| Function | Endpoint | Purpose |
-|----------|----------|---------|
-| **device-register** | `/functions/v1/device-register` | Register new devices |
-| **session-token** | `/functions/v1/session-token` | Create sessions with PIN/TURN |
-| **session-cleanup** | `/functions/v1/session-cleanup` | Cleanup old sessions |
-| **file-transfer** | `/functions/v1/file-transfer` | Handle file transfers |
-
-### Function Location
-```bash
-# On Ubuntu server
-~/supabase-local/volumes/functions/
-
-# Source code (in Remote Desktop repo)
-f:\#Remote\supabase\functions\
-```
-
-### Test Edge Function
-```bash
-# Test device-register
-curl -X POST http://192.168.1.92:8888/functions/v1/device-register \
-  -H "Content-Type: application/json" \
-  -H "apikey: YOUR_ANON_KEY" \
-  -d '{"device_id":"test-123","platform":"windows","arch":"amd64"}'
-```
-
-### Deploy New Functions
-```bash
-# Copy functions to server
-scp -r f:\#Remote\supabase\functions\* dennis@192.168.1.92:~/supabase-local/volumes/functions/
-
-# Fix permissions
-ssh ubuntu "chmod -R 755 ~/supabase-local/volumes/functions/*"
-
-# Restart edge runtime
-ssh ubuntu "docker restart supabase-edge-functions"
+# Stop Caddy
+ssh ubuntu "docker stop caddy"
 ```
 
 ---
 
-## 🤖 ARCHON MCP SERVER
+## REMOTE DESKTOP PROJECT
+
+### Project Info
+```yaml
+Repository: https://github.com/stangtennis/Remote
+Agent Version: v2.64.0
+Controller Version: v2.63.9
+Last Updated: 2025-12-18
+```
+
+### Downloads
+```yaml
+Releases: https://github.com/stangtennis/Remote/releases
+Agent Installer: RemoteDesktopAgent-Setup-v2.64.0.exe
+Controller Installer: RemoteDesktopController-Setup-v2.63.9.exe
+```
+
+### Auto-Update (Agent + Controller)
+The project has an internal updater which checks a public `version.json` and downloads new `.exe` files.
+
+**Version check (public, no auth):**
+```text
+https://updates.hawkeye123.dk/version.json
+```
+
+**Manual downloads (requires auth):**
+```text
+https://downloads.hawkeye123.dk
+```
+
+**Security model:**
+- `updates` must not allow directory browsing (root `/` returns 404).
+- `downloads` is Basic Auth protected for humans.
+- Binaries are still publicly reachable by their exact URL on `updates`, so treat them as distributable artifacts.
+
+### Current Features
+- WebRTC video streaming (adaptive 2-30 FPS)
+- Bandwidth optimization (50-80% savings on static desktop)
+- Full mouse & keyboard control
+- File browser and transfer
+- Clipboard sync (text and images)
+- Fullscreen mode with auto-hide toolbar
+- Adaptive quality based on network/CPU
+
+### Performance
+| Scenario | Bandwidth |
+|----------|-----------|
+| Static desktop | ~0.5-2 Mbit/s |
+| Active use | ~10-25 Mbit/s |
+
+### Build Commands (from Ubuntu)
+```bash
+# Agent GUI
+cd ~/projekter/Remote\ Desktop/agent && \
+GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
+CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
+go build -ldflags '-s -w -H windowsgui' -o ../builds/remote-agent.exe ./cmd/remote-agent
+
+# Controller
+cd ~/projekter/Remote\ Desktop/controller && \
+GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
+CC=x86_64-w64-mingw32-gcc \
+go build -ldflags '-s -w -H windowsgui' -o ../builds/controller.exe .
+```
+
+### Planned Features
+- Hardware H.264 encoding (GPU-accelerated)
+- Multi-monitor support
+- Audio streaming
+
+---
+
+## ARCHON MCP SERVER
 
 ### What is Archon?
 Project management and knowledge base system with MCP (Model Context Protocol) integration for AI assistants like Windsurf.
@@ -285,27 +381,7 @@ ssh ubuntu "cd ~/projects/archon && docker compose restart"
 
 ---
 
-## 📊 REMOTE DESKTOP PROJECT
-
-### Project Info
-```yaml
-Repository: https://github.com/stangtennis/Remote
-Agent Version: v2.64.0
-Controller Version: v2.63.9
-Last Updated: 2025-12-18
-```
-
-### Downloads
-```yaml
-Releases: https://github.com/stangtennis/Remote/releases
-Agent Installer: RemoteDesktopAgent-Setup-v2.64.0.exe
-Controller Installer: RemoteDesktopController-Setup-v2.63.9.exe
-```
-
-### Current Features
-- ✅ WebRTC video streaming (adaptive 2-30 FPS)
-- ✅ Bandwidth optimization (50-80% savings on static desktop)
-- ✅ Full mouse & keyboard control
+## MONITORING STACK (Grafana + Prometheus + Loki)
 - ✅ File browser and transfer
 - ✅ Clipboard sync (text and images)
 - ✅ Fullscreen mode with auto-hide toolbar
@@ -339,12 +415,12 @@ go build -ldflags '-s -w -H windowsgui' -o ../builds/controller.exe .
 
 ---
 
-## 📊 MONITORING STACK (Grafana + Prometheus + Loki)
+## MONITORING STACK (Grafana + Prometheus + Loki)
 
 ### Access URLs
 | Service | URL | Login |
 |---------|-----|-------|
-| **Grafana** | http://192.168.1.92:3030 | `admin` / `Suzuki77wW!!` |
+| **Grafana** | http://192.168.1.92:3030 | (stored locally) |
 | **Prometheus** | http://192.168.1.92:9090 | No login |
 | **cAdvisor** | http://192.168.1.92:8080 | No login |
 | **Loki** | http://192.168.1.92:3100 | No login |
@@ -406,7 +482,7 @@ http://192.168.1.92:9090/targets
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Server Information](#server-information)
 2. [SSH Setup](#ssh-setup)
@@ -421,7 +497,7 @@ http://192.168.1.92:9090/targets
 
 ---
 
-## 🖥️ Server Information
+## Server Information
 
 ```yaml
 Server IP: 192.168.1.92
@@ -429,12 +505,12 @@ Hostname: dennis-Virtual-Machine
 OS: Ubuntu 22.04 LTS
 Username: dennis
 SSH: Passwordless (key-based)
-Samba Password: Suzuki77wW!!
+Samba Password: (stored locally)
 ```
 
 ---
 
-## 🔐 SSH Setup
+## SSH Setup
 
 ### Generate SSH Key (Windows)
 
@@ -501,7 +577,7 @@ ssh ubuntu "cd ~/projekter && ls -la"
 
 ---
 
-## 🗄️ Supabase Setup
+## Supabase Setup
 
 ### Install Supabase (Ubuntu)
 
@@ -532,19 +608,19 @@ Database Host: 192.168.1.92
 Database Port: 5432
 Database Name: postgres
 Database User: postgres
-Database Password: postgres
+Database Password: (stored locally)
 Studio Username: supabase
-Studio Password: this_password_is_insecure_and_should_be_updated
+Studio Password: (stored locally)
 ```
 
 ### Supabase Keys
 
 ```bash
 # Anon Key
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE
+(stored locally)
 
 # Service Role Key
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q
+(stored locally)
 ```
 
 ### Supabase Docker Commands
@@ -582,7 +658,7 @@ ssh ubuntu "cd ~/supabase-local && docker compose logs -f supabase-db"
 
 ---
 
-## 🏗️ Archon Setup
+## Archon Setup
 
 ### Clone Archon Repository (Ubuntu)
 
@@ -601,7 +677,7 @@ cd archon
 # Create .env file
 cat > ~/projects/archon/.env << 'EOF'
 SUPABASE_URL=http://192.168.1.92:8888
-SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q
+SUPABASE_SERVICE_KEY=(stored locally)
 ARCHON_SERVER_PORT=8181
 ARCHON_MCP_PORT=8051
 ARCHON_UI_PORT=3737
@@ -678,7 +754,7 @@ ssh ubuntu "wget -qO- http://localhost:8181/health"
 ```
 
 ---
-## 🤖 Ollama Setup
+## Ollama Setup
 
 ### Install Ollama (Ubuntu)
 
@@ -743,7 +819,7 @@ ssh ubuntu "sudo systemctl restart ollama"
 
 ---
 
-## 📁 Samba/Network Drives
+## Samba/Network Drives
 
 ### Install Samba (Ubuntu)
 
@@ -754,7 +830,7 @@ sudo apt install -y samba
 
 # Set Samba password
 sudo smbpasswd -a dennis
-# Password: Suzuki77wW!!
+# Password: (stored locally)
 
 # Enable user
 sudo smbpasswd -e dennis
@@ -812,10 +888,10 @@ sudo systemctl status smbd
 
 ```powershell
 # Map O: drive (home directory)
-net use O: \\192.168.1.92\home /user:dennis Suzuki77wW!! /persistent:yes
+net use O: \\192.168.1.92\home /user:dennis <SAMBA_PASSWORD> /persistent:yes
 
 # Map P: drive (projekter folder)
-net use P: \\192.168.1.92\projekter /user:dennis Suzuki77wW!! /persistent:yes
+net use P: \\192.168.1.92\projekter /user:dennis <SAMBA_PASSWORD> /persistent:yes
 
 # List mapped drives
 net use
@@ -832,7 +908,7 @@ net use P: /delete
 ```batch
 @echo off
 set USERNAME=dennis
-set PASSWORD=Suzuki77wW!!
+set PASSWORD=(stored locally)
 set SERVER=192.168.1.92
 
 ping -n 1 -w 1000 %SERVER% >nul 2>&1
@@ -854,7 +930,7 @@ pause
 
 ---
 
-## 💻 Windsurf Configuration
+## Windsurf Configuration
 
 ### Windsurf MCP Config
 
@@ -891,7 +967,7 @@ pause
       "env": {
         "PORT": "8100",
         "PORTAINER_URL": "http://192.168.1.92:9000",
-        "PORTAINER_API_KEY": "ptr_XxKkdO1CQy8QyF1FGx0lymIj3/sPl2iEthNBNltrMAY=",
+        "PORTAINER_API_KEY": "<PORTAINER_API_KEY>",
         "ENDPOINT_ID": "3"
       }
     }
@@ -922,7 +998,7 @@ list projects
 
 ---
 
-## 🐳 Docker Commands
+## Docker Commands
 
 ### Container Management
 
@@ -1010,7 +1086,7 @@ ssh ubuntu "docker system df"
 
 ---
 
-## 🗄️ Database Commands
+## Database Commands
 
 ### PostgreSQL Direct Access
 
@@ -1081,7 +1157,7 @@ ssh ubuntu "docker exec supabase-db pg_dump -U postgres postgres > ~/backups/sup
 
 ---
 
-## 📝 All Configuration Files
+## All Configuration Files
 
 ### 1. SSH Config (`C:\Users\server\.ssh\config`)
 
@@ -1108,7 +1184,7 @@ Host ubuntu
 
 ```bash
 SUPABASE_URL=http://192.168.1.92:8888
-SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q
+SUPABASE_SERVICE_KEY=(stored locally)
 ARCHON_SERVER_PORT=8181
 ARCHON_MCP_PORT=8051
 ARCHON_UI_PORT=3737
@@ -1162,7 +1238,7 @@ KONG_HTTPS_PORT=8443
 
 ---
 
-## 🔗 All URLs & Endpoints
+## All URLs & Endpoints
 
 ```yaml
 # Archon
@@ -1186,7 +1262,7 @@ Home: \\192.168.1.92\home (O:)
 
 ---
 
-## 🔐 All Credentials
+## All Credentials
 
 ```yaml
 # Ubuntu SSH
@@ -1195,25 +1271,25 @@ Auth: SSH key (C:\Users\server\.ssh\id_rsa)
 
 # Samba
 Username: dennis
-Password: Suzuki77wW!!
+Password: (stored locally)
 
 # Supabase Studio
 Username: supabase
-Password: this_password_is_insecure_and_should_be_updated
+Password: (stored locally)
 
 # PostgreSQL
 Username: postgres
-Password: postgres
+Password: (stored locally)
 Database: postgres
 
 # Portainer
 URL: http://192.168.1.92:9000
-API Token: ptr_XxKkdO1CQy8QyF1FGx0lymIj3/sPl2iEthNBNltrMAY=
+API Token: (stored locally)
 ```
 
 ---
 
-## 🚀 Quick Start Commands
+## Quick Start Commands
 
 ### Start Everything
 
@@ -1265,7 +1341,7 @@ curl http://localhost:11434/api/tags
 
 ---
 
-## 🆘 Troubleshooting Commands
+## Troubleshooting Commands
 
 ### SSH Issues
 
@@ -1337,7 +1413,7 @@ ssh ubuntu "sudo systemctl status smbd"
 
 ---
 
-## 📦 Setup on New Machine
+## Setup on New Machine
 
 ### 1. Copy SSH Key
 
@@ -1381,8 +1457,8 @@ Create `C:\Users\[NewUsername]\.codeium\windsurf\mcp_config.json`:
 ### 4. Map Network Drives
 
 ```powershell
-net use O: \\192.168.1.92\home /user:dennis Suzuki77wW!! /persistent:yes
-net use P: \\192.168.1.92\projekter /user:dennis Suzuki77wW!! /persistent:yes
+net use O: \\192.168.1.92\home /user:dennis <SAMBA_PASSWORD> /persistent:yes
+net use P: \\192.168.1.92\projekter /user:dennis <SAMBA_PASSWORD> /persistent:yes
 ```
 
 ### 5. Test Everything
@@ -1400,7 +1476,7 @@ Get-ChildItem P:\
 
 ---
 
-## 📚 Related Documentation
+## Related Documentation
 
 - `F:\Archon\UBUNTU_MASTER_REFERENCE.md` - Complete reference
 - `F:\Archon\UBUNTU_COMMANDS_REFERENCE.md` - All Ubuntu commands
@@ -1418,7 +1494,7 @@ Get-ChildItem P:\
 
 ---
 
-## 🌐 All Frontend URLs & Web Interfaces
+## All Frontend URLs & Web Interfaces
 
 ### Main Services
 
@@ -1477,12 +1553,12 @@ File Explorer paths:
 
 ---
 
-## 🗄️ Supabase Management (SQL Commands)
+## Supabase Management (SQL Commands)
 
 ### Access Supabase SQL Editor
 
 **Via Web UI**: http://192.168.1.92:8888
-1. Login with: supabase / this_password_is_insecure_and_should_be_updated
+1. Login with: (stored locally)
 2. Click "SQL Editor" in left sidebar
 3. Run any SQL command
 
@@ -1833,7 +1909,7 @@ ORDER BY t.created_at DESC;
 | **OS** | Ubuntu 22.04 LTS |
 | **Username** | dennis |
 | **SSH Access** | Passwordless (SSH key authentication) |
-| **Samba Password** | Suzuki77wW!! |
+| **Samba Password** | (stored locally) |
 
 ---
 
@@ -1908,8 +1984,8 @@ If you want to use the same SSH key on a new Windows machine:
 
 **Manual Command**:
 ```powershell
-net use O: \\192.168.1.92\home /user:dennis Suzuki77wW!! /persistent:yes
-net use P: \\192.168.1.92\projekter /user:dennis Suzuki77wW!! /persistent:yes
+net use O: \\192.168.1.92\home /user:dennis <SAMBA_PASSWORD> /persistent:yes
+net use P: \\192.168.1.92\projekter /user:dennis <SAMBA_PASSWORD> /persistent:yes
 ```
 
 **Batch File**: `C:\Users\server\reconnect-ubuntu-drives-with-credentials.bat`
@@ -1972,20 +2048,20 @@ sudo tail -f /var/log/samba/log.smbd
 | **Database Port** | 5432 |
 | **Database Name** | postgres |
 | **Database User** | postgres |
-| **Database Password** | postgres |
+| **Database Password** | (stored locally) |
 | **Studio Username** | supabase |
-| **Studio Password** | this_password_is_insecure_and_should_be_updated |
+| **Studio Password** | (stored locally) |
 
 ### Supabase Keys
 
 **Anon Key**:
 ```
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE
+<SUPABASE_ANON_KEY>
 ```
 
 **Service Role Key**:
 ```
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q
+<SUPABASE_SERVICE_ROLE_KEY>
 ```
 
 ### Supabase Location
@@ -2099,7 +2175,7 @@ ssh dennis@192.168.1.92 "docker exec -i supabase-db psql -U postgres -d postgres
 
 ```bash
 SUPABASE_URL=http://192.168.1.92:8888
-SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q
+SUPABASE_SERVICE_KEY=<SUPABASE_SERVICE_ROLE_KEY>
 ARCHON_SERVER_PORT=8181
 ARCHON_MCP_PORT=8051
 ARCHON_UI_PORT=3737
@@ -2267,7 +2343,7 @@ ssh dennis@192.168.1.92 "docker stats --no-stream"
 | Item | Value |
 |------|-------|
 | **Portainer UI** | http://192.168.1.92:9000 |
-| **API Token** | ptr_XxKkdO1CQy8QyF1FGx0lymIj3/sPl2iEthNBNltrMAY= |
+| **API Token** | (stored locally) |
 | **Endpoint ID** | 3 |
 
 ### Portainer Commands
@@ -2540,9 +2616,9 @@ ssh dennis@192.168.1.92 "sudo systemctl restart ollama"
 | Service | Username | Password/Key |
 |---------|----------|--------------|
 | **Ubuntu SSH** | dennis | (SSH key - no password) |
-| **Samba** | dennis | Suzuki77wW!! |
-| **Supabase Studio** | supabase | this_password_is_insecure_and_should_be_updated |
-| **PostgreSQL** | postgres | postgres |
+| **Samba** | dennis | (stored locally) |
+| **Supabase Studio** | supabase | (stored locally) |
+| **PostgreSQL** | postgres | (stored locally) |
 | **Portainer** | admin | (set during first login) |
 
 ---
@@ -2596,8 +2672,8 @@ Create/edit: `C:\Users\[YourUsername]\.codeium\windsurf\mcp_config.json`
 ### 3. Map Network Drives
 
 ```powershell
-net use O: \\192.168.1.92\home /user:dennis Suzuki77wW!! /persistent:yes
-net use P: \\192.168.1.92\projekter /user:dennis Suzuki77wW!! /persistent:yes
+net use O: \\192.168.1.92\home /user:dennis <SAMBA_PASSWORD> /persistent:yes
+net use P: \\192.168.1.92\projekter /user:dennis <SAMBA_PASSWORD> /persistent:yes
 ```
 
 ### 4. Test Connection
@@ -2716,10 +2792,10 @@ Content-Type: application/json
 ### Supabase Keys
 ```bash
 # Anon Key (public, safe to expose)
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE
+<SUPABASE_ANON_KEY>
 
 # Service Role Key (SECRET - never expose!)
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q
+<SUPABASE_SERVICE_ROLE_KEY>
 ```
 
 ### Archon API
@@ -2761,7 +2837,7 @@ MCP Endpoint: http://192.168.1.92:8051/mcp
 Base URL: http://192.168.1.92:9000/api
 
 # Headers
-X-API-Key: ptr_XxKkdO1CQy8QyF1FGx0lymIj3/sPl2iEthNBNltrMAY=
+X-API-Key: <PORTAINER_API_KEY>
 
 # Endpoints
 GET: /endpoints
@@ -2918,7 +2994,7 @@ gh release create v2.6.8 agent/remote-agent-v2.6.8.exe --title "v2.6.8" --notes 
 ### Supabase Configuration
 ```yaml
 URL: https://supabase.hawkeye123.dk
-Anon Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE
+Anon Key: <SUPABASE_ANON_KEY>
 ```
 
 ### Database Tables
