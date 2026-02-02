@@ -1,0 +1,482 @@
+/* Mobile Responsiveness */
+
+/* Breakpoints:
+   - Mobile: < 768px
+   - Tablet: 768px - 1024px
+   - Desktop: > 1024px
+*/
+
+/* Base mobile optimizations */
+@media (max-width: 768px) {
+  /* Typography */
+  body {
+    font-size: 14px;
+  }
+
+  h1 {
+    font-size: 1.75rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+  }
+
+  /* Login page */
+  .login-container {
+    padding: 1rem;
+  }
+
+  .login-card {
+    padding: 2rem 1.5rem;
+    max-width: 100%;
+  }
+
+  .login-logo {
+    width: 60px;
+    height: 60px;
+  }
+
+  .logo-icon {
+    font-size: 2rem;
+  }
+
+  /* Dashboard header */
+  .dashboard-header {
+    padding: 1rem;
+  }
+
+  .header-content {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .header-actions {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .header-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Dashboard grid - stack on mobile */
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .dashboard-left,
+  .dashboard-right {
+    width: 100%;
+  }
+
+  /* Remote preview */
+  .remote-preview-section {
+    min-height: 300px;
+  }
+
+  .preview-screen {
+    height: 300px;
+  }
+
+  /* Preview toolbar */
+  .preview-toolbar {
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .toolbar-left,
+  .toolbar-center,
+  .toolbar-right {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .toolbar-center {
+    order: -1;
+  }
+
+  /* Session tabs */
+  .session-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tabs-container {
+    min-width: min-content;
+  }
+
+  /* Stats grid */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+
+  .stat-card {
+    padding: 1rem;
+  }
+
+  .stat-number {
+    font-size: 1.5rem;
+  }
+
+  /* Devices list */
+  .devices-list {
+    gap: 0.75rem;
+  }
+
+  .device-card {
+    padding: 1rem;
+  }
+
+  .device-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .device-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .device-actions .btn {
+    width: 100%;
+  }
+
+  /* Admin panel */
+  .admin-container {
+    padding: 1rem;
+  }
+
+  .admin-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  /* Admin tabs */
+  .admin-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+
+  .admin-tab {
+    white-space: nowrap;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  /* Filter tabs */
+  .filter-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+  }
+
+  .filter-tab {
+    white-space: nowrap;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  /* User cards */
+  .user-card {
+    padding: 1rem;
+  }
+
+  .user-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .user-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .user-actions .btn {
+    width: 100%;
+  }
+
+  /* Downloads grid */
+  #downloadsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Modals */
+  .modal-content {
+    width: 95%;
+    max-width: 95%;
+    margin: 1rem;
+    padding: 1.5rem;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .modal-actions .btn {
+    width: 100%;
+  }
+
+  /* Forms */
+  .form-group {
+    margin-bottom: 1rem;
+  }
+
+  .input,
+  .btn {
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+
+  /* Agent page */
+  .agent-wrapper {
+    padding: 1rem;
+  }
+
+  .agent-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .device-info-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
+
+  .action-buttons .btn {
+    width: 100%;
+  }
+
+  /* Preview window */
+  .preview-window {
+    max-height: 300px;
+  }
+
+  /* Queue section */
+  .queue-section {
+    margin-bottom: 1rem;
+  }
+
+  .queue-item {
+    padding: 1rem;
+  }
+
+  .queue-item-header {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+
+  .queue-item-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .queue-item-actions .btn {
+    width: 100%;
+  }
+
+  /* Invite form */
+  .invite-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  /* Connection stats */
+  .stats-grid-mini {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  /* Touch improvements */
+  .btn,
+  .admin-tab,
+  .filter-tab,
+  .device-card,
+  .user-card {
+    min-height: 44px; /* iOS touch target size */
+  }
+
+  /* Hide less important elements on mobile */
+  .security-badges {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* Improve scrolling */
+  .devices-list,
+  .queue-list,
+  #usersList {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Tablet optimizations */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .admin-tabs {
+    flex-wrap: wrap;
+  }
+
+  #downloadsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .device-info-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Landscape mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+  .remote-preview-section {
+    min-height: 250px;
+  }
+
+  .preview-screen {
+    height: 250px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Small mobile (iPhone SE, etc.) */
+@media (max-width: 375px) {
+  .login-card {
+    padding: 1.5rem 1rem;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  .stat-card {
+    padding: 0.75rem;
+  }
+
+  .stat-number {
+    font-size: 1.25rem;
+  }
+
+  .device-card,
+  .user-card {
+    padding: 0.75rem;
+  }
+
+  .btn {
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  .admin-tab,
+  .filter-tab {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+  }
+}
+
+/* Prevent horizontal scroll */
+@media (max-width: 768px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  * {
+    max-width: 100%;
+  }
+}
+
+/* Safe area insets for notched devices */
+@supports (padding: env(safe-area-inset-top)) {
+  @media (max-width: 768px) {
+    .dashboard-header,
+    .admin-header,
+    .agent-header {
+      padding-top: calc(1rem + env(safe-area-inset-top));
+    }
+
+    .login-container {
+      padding-top: calc(1rem + env(safe-area-inset-top));
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    }
+  }
+}
+
+/* Hover states disabled on touch devices */
+@media (hover: none) {
+  .btn:hover,
+  .admin-tab:hover,
+  .filter-tab:hover,
+  .device-card:hover,
+  .user-card:hover {
+    transform: none;
+  }
+
+  /* But keep active states for touch feedback */
+  .btn:active {
+    transform: scale(0.98);
+  }
+}
+
+/* Print styles */
+@media print {
+  .animated-bg,
+  .header-actions,
+  .admin-tabs,
+  .filter-tabs,
+  .btn,
+  .modal {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+    color: black;
+  }
+
+  .glass-card,
+  .device-card,
+  .user-card {
+    background: white;
+    border: 1px solid #ccc;
+  }
+}
