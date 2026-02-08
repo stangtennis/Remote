@@ -454,6 +454,8 @@ function checkExtensionAvailable() {
 function startSessionPolling() {
   // Poll session_signaling for offers from dashboard/controller targeting our device.
   // This mirrors the native Go agent's fetchWebDashboardSessions() pattern.
+  console.log('[WebAgent] Starting session polling for device:', deviceId);
+  
   sessionPollInterval = setInterval(async () => {
     if (!deviceId || currentSession) return;
     if (!mediaStream) return; // Only accept sessions while sharing
@@ -468,13 +470,15 @@ function startSessionPolling() {
         .order('created_at', { ascending: false })
         .limit(10);
 
-      if (sigError) throw sigError;
+      if (sigError) {
+        console.error('[WebAgent] Error fetching signals:', sigError);
+        throw sigError;
+      }
       if (!signals || signals.length === 0) return;
 
       // For each offer, check if the session belongs to our device
       for (const sig of signals) {
         if (processedOfferIds.has(sig.id)) continue;
-        processedOfferIds.add(sig.id);
 
         // Look up the session in remote_sessions to verify it targets our device
         const { data: sessions, error: sessError } = await supabase
@@ -482,12 +486,22 @@ function startSessionPolling() {
           .select('id, status, device_id')
           .eq('id', sig.session_id)
           .eq('device_id', deviceId)
-          .in('status', ['pending', 'active', 'connecting'])
+          .in('status', ['pending', 'active'])
           .limit(1);
 
-        if (sessError || !sessions || sessions.length === 0) continue;
+        if (sessError) {
+          console.warn('[WebAgent] Session lookup error for', sig.session_id, sessError);
+          continue; // Don't mark as processed — retry next cycle
+        }
+        
+        if (!sessions || sessions.length === 0) {
+          // Mark as processed only if lookup succeeded but no match (not our device or wrong status)
+          processedOfferIds.add(sig.id);
+          continue;
+        }
 
-        debug('📞 Incoming offer from dashboard for session:', sig.session_id);
+        console.log('[WebAgent] 📞 Incoming offer from dashboard for session:', sig.session_id);
+        processedOfferIds.add(sig.id);
 
         // Auto-accept: set session active and start WebRTC
         currentSession = { id: sig.session_id, session_id: sig.session_id };
@@ -503,17 +517,18 @@ function startSessionPolling() {
         break; // Handle one offer at a time
       }
     } catch (error) {
-      console.error('Session poll error:', error);
+      console.error('[WebAgent] Session poll error:', error);
     }
   }, 1500);
 
-  debug('✅ Session polling started (listening for dashboard offers)');
+  console.log('[WebAgent] ✅ Session polling started (listening for dashboard offers)');
 }
 
 let processedOfferIds = new Set();
 
 async function handleIncomingOffer(sessionId, offerPayload) {
-  debug('🔧 Setting up WebRTC (answering dashboard offer)...');
+  console.log('[WebAgent] 🔧 Setting up WebRTC (answering dashboard offer)...');
+  console.log('[WebAgent] Offer payload keys:', Object.keys(offerPayload || {}));
 
   try {
     // Show connected UI, hide waiting card
@@ -605,7 +620,8 @@ async function endSession() {
 // ============================================================================
 
 async function startWebRTC(sessionId, offerPayload) {
-  debug('🔗 Starting WebRTC connection (answerer role)...');
+  console.log('[WebAgent] 🔗 Starting WebRTC connection (answerer role)...');
+  console.log('[WebAgent] Session ID:', sessionId);
 
   try {
     // Create peer connection
@@ -682,7 +698,9 @@ async function startWebRTC(sessionId, offerPayload) {
 
     // Set remote description (the dashboard's offer)
     const offerSDP = offerPayload.sdp || offerPayload.SDP;
+    console.log('[WebAgent] Offer SDP found:', !!offerSDP, 'payload keys:', Object.keys(offerPayload || {}));
     if (!offerSDP) {
+      console.error('[WebAgent] Full offer payload:', JSON.stringify(offerPayload));
       throw new Error('No SDP in offer payload');
     }
 
@@ -691,15 +709,15 @@ async function startWebRTC(sessionId, offerPayload) {
       sdp: offerSDP
     });
     await peerConnection.setRemoteDescription(offer);
-    debug('✅ Remote description set (dashboard offer)');
+    console.log('[WebAgent] ✅ Remote description set (dashboard offer)');
 
     // Create answer
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
-    debug('📤 Sending answer to dashboard');
+    console.log('[WebAgent] 📤 Sending answer to dashboard');
 
     // Send answer via session_signaling
-    await supabase
+    const { error: answerError } = await supabase
       .from('session_signaling')
       .insert({
         session_id: sessionId,
@@ -710,6 +728,12 @@ async function startWebRTC(sessionId, offerPayload) {
           sdp: answer.sdp
         }
       });
+    
+    if (answerError) {
+      console.error('[WebAgent] Failed to send answer:', answerError);
+      throw answerError;
+    }
+    console.log('[WebAgent] ✅ Answer sent successfully');
 
     // Mark answer as sent and flush buffered ICE candidates
     answerSent = true;
