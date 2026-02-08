@@ -249,6 +249,7 @@ async function registerDevice() {
   try {
     // Generate device ID
     const generatedDeviceId = await generateDeviceID();
+    console.log('[WebAgent] Registering device:', generatedDeviceId, 'name:', deviceName);
     
     // Check if device already exists
     const { data: existing, error: checkError } = await supabase
@@ -257,9 +258,13 @@ async function registerDevice() {
       .eq('device_id', generatedDeviceId)
       .maybeSingle(); // Use maybeSingle instead of single to handle 0 or 1 results
     
+    if (checkError) {
+      console.error('[WebAgent] Device check error:', checkError);
+    }
+    
     if (existing) {
       // Device exists - update it
-      debug('Device already exists, updating...');
+      console.log('[WebAgent] Device exists, updating...');
       const { data, error } = await supabase
         .from('remote_devices')
         .update({
@@ -272,10 +277,15 @@ async function registerDevice() {
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('[WebAgent] Device update error:', error);
+        throw error;
+      }
       deviceId = data.device_id;
+      console.log('[WebAgent] ✅ Device updated:', deviceId);
     } else {
       // Device doesn't exist - insert it
+      console.log('[WebAgent] Device not found, inserting new device...');
       const { data, error } = await supabase
         .from('remote_devices')
         .insert({
@@ -290,8 +300,12 @@ async function registerDevice() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('[WebAgent] Device insert error:', error);
+        throw error;
+      }
       deviceId = data.device_id;
+      console.log('[WebAgent] ✅ Device inserted:', deviceId);
     }
 
     // Update UI elements (with null checks for missing elements)
@@ -300,7 +314,7 @@ async function registerDevice() {
     if (deviceNameEl) deviceNameEl.textContent = deviceName;
     if (browserInfoEl) browserInfoEl.textContent = browserInfo;
 
-    debug('✅ Device registered:', deviceId);
+    console.log('[WebAgent] ✅ Device registered:', deviceId);
 
     // Start heartbeat
     startHeartbeat();
