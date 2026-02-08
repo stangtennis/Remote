@@ -1,9 +1,0 @@
-To remove "tails" from old serial numbers, in the registry in the branch HKEY_CURRENT_USER\Software\Smart Projects\IsoBuster delete:
-1) All entries starting with ID: ID, ID51, ID52, etc.
-2) Entries FF5 and RML5 and RMLD5
-
-Block app with firewall!
-
-email: welcome@gay.zone
-regid: G772853051PBPQPP
-key: ZZZJH000-001KHJT9-HM4AB0EA-TWY00S00-Y4000000-X1PE6000-Z0Z02098
