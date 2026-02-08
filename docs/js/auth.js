@@ -212,14 +212,14 @@ if (document.getElementById('logoutBtn')) {
   // Handle logout
   logoutBtn.addEventListener('click', async (e) => {
     e.preventDefault();
-    console.log('🚪 Logout button clicked');
+    debug('🚪 Logout button clicked');
     try {
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('Logout error:', error);
         showToast('Logout fejlede: ' + error.message, 'error');
       } else {
-        console.log('✅ Logged out successfully');
+        debug('✅ Logged out successfully');
         window.location.href = 'login.html?status=logout';
       }
     } catch (err) {

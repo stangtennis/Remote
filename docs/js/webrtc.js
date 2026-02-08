@@ -16,7 +16,7 @@ async function fetchTurnCredentials() {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      console.log('⚠️ No session, using STUN only');
+      debug('⚠️ No session, using STUN only');
       return;
     }
 
@@ -31,7 +31,7 @@ async function fetchTurnCredentials() {
     if (response.ok) {
       const data = await response.json();
       iceConfig = { iceServers: data.iceServers };
-      console.log(`✅ TURN credentials fetched (expires in ${data.ttl}s)`);
+      debug(`✅ TURN credentials fetched (expires in ${data.ttl}s)`);
     } else {
       console.warn('⚠️ Failed to fetch TURN credentials, using STUN only');
     }
@@ -42,7 +42,7 @@ async function fetchTurnCredentials() {
 
 // Clean up existing connection before creating new one
 function cleanupWebRTC() {
-  console.log('🧹 Cleaning up WebRTC connection...');
+  debug('🧹 Cleaning up WebRTC connection...');
   
   // Clean up input capture
   if (typeof cleanupInputCapture === 'function') {
@@ -75,7 +75,7 @@ function cleanupWebRTC() {
     frameTimeout = null;
   }
   
-  console.log('✅ WebRTC cleanup complete');
+  debug('✅ WebRTC cleanup complete');
 }
 
 // Expose cleanup globally
@@ -83,7 +83,7 @@ window.cleanupWebRTC = cleanupWebRTC;
 
 async function initWebRTC(session) {
   try {
-    console.log('🚀 initWebRTC called with session:', session);
+    debug('🚀 initWebRTC called with session:', session);
     
     // Clean up any existing connection first
     cleanupWebRTC();
@@ -108,47 +108,47 @@ async function initWebRTC(session) {
     };
     
     if (forceRelay) {
-      console.log('⚠️ RELAY-ONLY MODE ENABLED (for testing)');
+      debug('⚠️ RELAY-ONLY MODE ENABLED (for testing)');
     }
 
-    console.log('🔐 Dashboard TURN config:', JSON.stringify(configuration, null, 2));
+    debug('🔐 Dashboard TURN config:', JSON.stringify(configuration, null, 2));
 
     peerConnection = new RTCPeerConnection(configuration);
     window.peerConnection = peerConnection; // Expose globally for signaling module
-    console.log('✅ PeerConnection created');
+    debug('✅ PeerConnection created');
 
     // Set up event handlers
     setupPeerConnectionHandlers();
-    console.log('✅ Event handlers set up');
+    debug('✅ Event handlers set up');
 
     // Create data channel for control inputs
     dataChannel = peerConnection.createDataChannel('control', {
       ordered: true
     });
     setupDataChannelHandlers();
-    console.log('✅ Data channel created');
+    debug('✅ Data channel created');
 
     // Create offer
-    console.log('📝 Creating offer...');
+    debug('📝 Creating offer...');
     const offer = await peerConnection.createOffer({
       offerToReceiveVideo: true,
       offerToReceiveAudio: false
     });
-    console.log('✅ Offer created');
+    debug('✅ Offer created');
 
-    console.log('📝 Setting local description...');
+    debug('📝 Setting local description...');
     await peerConnection.setLocalDescription(offer);
-    console.log('✅ Local description set');
+    debug('✅ Local description set');
 
     // Send offer via signaling
-    console.log('📤 Sending offer to agent via signaling...');
+    debug('📤 Sending offer to agent via signaling...');
     await sendSignal({
       session_id: session.session_id,
       from: 'dashboard',
       type: 'offer',
       sdp: offer.sdp
     });
-    console.log('✅ WebRTC offer sent successfully!');
+    debug('✅ WebRTC offer sent successfully!');
 
   } catch (error) {
     console.error('❌ WebRTC initialization failed:', error);
@@ -174,7 +174,7 @@ function setupPeerConnectionHandlers() {
         candidateType = 'PRFLX (peer)';
       }
       
-      console.log(`📤 Sending ICE candidate [${candidateType}]:`, candidateStr.substring(0, 80) + '...');
+      debug(`📤 Sending ICE candidate [${candidateType}]:`, candidateStr.substring(0, 80) + '...');
       
       if (!window.currentSession) {
         console.error('⚠️ Cannot send ICE candidate: currentSession is null');
@@ -188,26 +188,26 @@ function setupPeerConnectionHandlers() {
         candidate: event.candidate
       });
     } else {
-      console.log('📤 ICE gathering complete (null candidate)');
+      debug('📤 ICE gathering complete (null candidate)');
     }
   };
 
   // ICE connection state handler
   peerConnection.oniceconnectionstatechange = () => {
-    console.log('ICE connection state:', peerConnection.iceConnectionState);
+    debug('ICE connection state:', peerConnection.iceConnectionState);
   };
 
   // ICE gathering state handler
   peerConnection.onicegatheringstatechange = () => {
-    console.log('ICE gathering state:', peerConnection.iceGatheringState);
+    debug('ICE gathering state:', peerConnection.iceGatheringState);
   };
 
   // Connection state handler
   peerConnection.onconnectionstatechange = () => {
     const state = peerConnection.connectionState;
-    console.log('❗ Connection state:', state);
-    console.log('❗ ICE state:', peerConnection.iceConnectionState);
-    console.log('❗ Signaling state:', peerConnection.signalingState);
+    debug('❗ Connection state:', state);
+    debug('❗ ICE state:', peerConnection.iceConnectionState);
+    debug('❗ Signaling state:', peerConnection.signalingState);
     
     const statusElement = document.getElementById('sessionStatus');
     const overlay = document.getElementById('viewerOverlay');
@@ -237,7 +237,7 @@ function setupPeerConnectionHandlers() {
         // Stop polling since we're connected
         if (window.stopPolling) {
           window.stopPolling();
-          console.log('🛑 Stopped signaling polling (connection established)');
+          debug('🛑 Stopped signaling polling (connection established)');
         }
         break;
       case 'disconnected':
@@ -261,7 +261,7 @@ function setupPeerConnectionHandlers() {
 
   // Track handler (remote video/canvas)
   peerConnection.ontrack = (event) => {
-    console.log('Remote track received:', event.track.kind);
+    debug('Remote track received:', event.track.kind);
     const remoteVideo = document.getElementById('remoteVideo');
     if (remoteVideo && event.streams[0]) {
       remoteVideo.srcObject = event.streams[0];
@@ -270,7 +270,7 @@ function setupPeerConnectionHandlers() {
 
   // ICE connection state handler
   peerConnection.oniceconnectionstatechange = () => {
-    console.log('ICE state:', peerConnection.iceConnectionState);
+    debug('ICE state:', peerConnection.iceConnectionState);
     
     if (peerConnection.iceConnectionState === 'connected') {
       updateConnectionType();
@@ -296,13 +296,13 @@ let screenHeight = 0;
 
 function setupDataChannelHandlers() {
   dataChannel.onopen = () => {
-    console.log('Data channel opened');
+    debug('Data channel opened');
     // Enable mouse/keyboard input
     setupInputCapture();
   };
 
   dataChannel.onclose = () => {
-    console.log('Data channel closed');
+    debug('Data channel closed');
     cleanupInputCapture();
   };
 
@@ -437,7 +437,7 @@ function setupDataChannelHandlers() {
       updateBandwidthDisplay(currentBandwidthMbps, framesReceived / elapsed);
       
       // Log to console
-      console.log(`📊 Bandwidth: ${currentBandwidthMbps.toFixed(2)} Mbit/s | FPS: ${(framesReceived / elapsed).toFixed(1)} | Dropped: ${framesDropped}`);
+      debug(`📊 Bandwidth: ${currentBandwidthMbps.toFixed(2)} Mbit/s | FPS: ${(framesReceived / elapsed).toFixed(1)} | Dropped: ${framesDropped}`);
     }
     
     // Reset counters
@@ -536,14 +536,14 @@ function setupInputCapture() {
   
   // Prevent duplicate event listeners (would cause double input!)
   if (inputListenersAttached) {
-    console.log('Input capture already enabled, skipping duplicate setup');
+    debug('Input capture already enabled, skipping duplicate setup');
     return;
   }
   inputListenersAttached = true;
   
   // Focus canvas for keyboard input
   target.focus();
-  console.log('🎯 Canvas focused for keyboard input');
+  debug('🎯 Canvas focused for keyboard input');
 
   // Prevent context menu
   const contextMenuHandler = (e) => {
@@ -678,7 +678,7 @@ function setupInputCapture() {
   target.addEventListener('keyup', keyUpHandler);
   inputEventHandlers.keyUp = keyUpHandler;
 
-  console.log('✅ Input capture enabled (duplicate prevention active)');
+  debug('✅ Input capture enabled (duplicate prevention active)');
 }
 
 // Clean up input capture when connection closes
@@ -709,7 +709,7 @@ function cleanupInputCapture() {
   
   inputListenersAttached = false;
   inputEventHandlers = {};
-  console.log('🧹 Input capture cleaned up');
+  debug('🧹 Input capture cleaned up');
 }
 
 function sendControlEvent(event) {
@@ -780,7 +780,7 @@ async function updateConnectionType() {
         }
       });
 
-      console.log(`🔗 Connection: local=${localType}, remote=${remoteType}`);
+      debug(`🔗 Connection: local=${localType}, remote=${remoteType}`);
 
       if (localType === 'relay' || remoteType === 'relay') {
         connectionType = 'TURN (Relayed)';
@@ -834,11 +834,11 @@ function displayVideoFrame(data) {
       // Skip 4-byte prefix
       jpegData = data.slice(4);
       isJpeg = true;
-      console.log('📷 Stripped 4-byte prefix from frame');
+      debug('📷 Stripped 4-byte prefix from frame');
     }
   }
   
-  console.log(`📷 Frame received: ${dataSize} bytes, isJPEG: ${isJpeg}, header: ${headerHex}`);
+  debug(`📷 Frame received: ${dataSize} bytes, isJPEG: ${isJpeg}, header: ${headerHex}`);
   
   if (dataSize < 100) {
     console.error('❌ Frame too small, likely corrupt:', dataSize);
@@ -865,7 +865,7 @@ function displayVideoFrame(data) {
     if (canvas.width !== img.width || canvas.height !== img.height) {
       canvas.width = img.width;
       canvas.height = img.height;
-      console.log(`📐 Canvas resized to ${img.width}x${img.height}`);
+      debug(`📐 Canvas resized to ${img.width}x${img.height}`);
     }
     
     // Draw image on canvas
@@ -985,7 +985,7 @@ function handleAgentMessage(msg) {
       if (msg.content) {
         // Write text to local clipboard
         navigator.clipboard.writeText(msg.content).then(() => {
-          console.log('📋 Clipboard received from agent (text:', msg.content.length, 'bytes)');
+          debug('📋 Clipboard received from agent (text:', msg.content.length, 'bytes)');
         }).catch(err => {
           console.warn('Failed to write clipboard:', err);
         });
@@ -1005,7 +1005,7 @@ function handleAgentMessage(msg) {
           navigator.clipboard.write([
             new ClipboardItem({ 'image/png': blob })
           ]).then(() => {
-            console.log('📋 Clipboard received from agent (image:', bytes.length, 'bytes)');
+            debug('📋 Clipboard received from agent (image:', bytes.length, 'bytes)');
           }).catch(err => {
             console.warn('Failed to write image clipboard:', err);
           });
@@ -1029,7 +1029,7 @@ async function sendClipboardToAgent() {
         type: 'clipboard_text',
         content: text
       });
-      console.log('📋 Clipboard sent to agent (text:', text.length, 'bytes)');
+      debug('📋 Clipboard sent to agent (text:', text.length, 'bytes)');
       return;
     }
   } catch (e) {
@@ -1048,7 +1048,7 @@ async function sendClipboardToAgent() {
           type: 'clipboard_image',
           content: base64
         });
-        console.log('📋 Clipboard sent to agent (image:', buffer.byteLength, 'bytes)');
+      debug('📋 Clipboard sent to agent (image:', buffer.byteLength, 'bytes');
         return;
       }
     }

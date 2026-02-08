@@ -6,7 +6,7 @@ let currentDevice = null;
 
 // Initialize app on dashboard load
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log('Dashboard initialized');
+  debug('Dashboard initialized');
   
   // Verify authentication
   const session = await checkAuth();
@@ -90,7 +90,7 @@ function setupEventListeners() {
           type: 'set_mode',
           mode: currentMode
         });
-        console.log(`🎬 Switched to ${modeNames[currentMode]} mode`);
+        debug(`🎬 Switched to ${modeNames[currentMode]} mode`);
         
         // Update button tooltip and text
         qualityToggleBtn.title = `Mode: ${modeNames[currentMode]} (click to change)`;
@@ -103,17 +103,7 @@ function setupEventListeners() {
 }
 
 function subscribeToRealtime() {
-  // Subscribe to device changes
-  supabase
-    .channel('devices')
-    .on('postgres_changes', 
-      { event: '*', schema: 'public', table: 'remote_devices' },
-      (payload) => {
-        console.log('Device changed:', payload);
-        loadDevices();
-      }
-    )
-    .subscribe();
+  // Device changes are handled by subscribeToDeviceUpdates() in devices.js
 
   // Subscribe to session signaling
   if (currentSession) {
@@ -144,7 +134,7 @@ async function startSession(device) {
     const controllerId = `dashboard-${session.user.id}-${Date.now()}`;
     
     // Use claim_device_connection to atomically take over any existing sessions
-    console.log('🔒 Claiming device connection (will kick any existing controllers)...');
+    debug('🔒 Claiming device connection (will kick any existing controllers)...');
     const { data: claimResult, error: claimError } = await supabase.rpc('claim_device_connection', {
       p_device_id: device.device_id,
       p_controller_id: controllerId,
@@ -160,9 +150,9 @@ async function startSession(device) {
         .eq('device_id', device.device_id)
         .in('status', ['pending', 'active']);
     } else {
-      console.log('✅ Device claimed:', claimResult);
+      debug('✅ Device claimed:', claimResult);
       if (claimResult.kicked_sessions > 0) {
-        console.log(`🔴 Kicked ${claimResult.kicked_sessions} existing session(s)`);
+        debug(`🔴 Kicked ${claimResult.kicked_sessions} existing session(s)`);
       }
     }
     
@@ -253,7 +243,7 @@ async function endSession() {
   const sessionId = currentSession.session_id;
   const deviceId = currentSession.device_id;
   
-  console.log('🔌 Ending session:', sessionId);
+  debug('🔌 Ending session:', sessionId);
 
   try {
     // Update session status in database
@@ -295,7 +285,7 @@ async function endSession() {
     window.currentSession = null;
     currentDevice = null;
     
-    console.log('✅ Session ended successfully');
+    debug('✅ Session ended successfully');
 
   } catch (error) {
     console.error('❌ Failed to end session:', error);
@@ -308,7 +298,7 @@ window.disconnectFromDevice = endSession;
 // Clean up session on page unload/refresh
 window.addEventListener('beforeunload', (e) => {
   if (currentSession) {
-    console.log('Page unloading - cleaning up session:', currentSession.session_id);
+    debug('Page unloading - cleaning up session:', currentSession.session_id);
     
     // Use navigator.sendBeacon for reliable session cleanup
     const payload = {
@@ -321,7 +311,7 @@ window.addEventListener('beforeunload', (e) => {
       .from('remote_sessions')
       .update(payload)
       .eq('id', currentSession.session_id)
-      .then(() => console.log('Session ended successfully'))
+      .then(() => debug('Session ended successfully'))
       .catch(err => console.error('Session end error:', err));
     
     // Clean up input capture
@@ -346,7 +336,7 @@ window.addEventListener('beforeunload', (e) => {
 // Also clean up when page is hidden (e.g., switching tabs)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && currentSession) {
-    console.log('Page hidden - keeping session alive but monitoring');
+    debug('Page hidden - keeping session alive but monitoring');
     // Don't end session immediately - user might come back
     // The 15-minute timeout will handle cleanup if they don't return
   }

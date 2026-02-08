@@ -8,7 +8,7 @@ let pendingIceCandidates = []; // Buffer for ICE candidates received before remo
 
 async function sendSignal(payload) {
   try {
-    console.log('📤 Attempting to send signal:', payload.type, 'for session:', payload.session_id);
+    debug('📤 Attempting to send signal:', payload.type, 'for session:', payload.session_id);
     
     // Prepare payload based on type
     let signalPayload;
@@ -39,7 +39,7 @@ async function sendSignal(payload) {
       throw error;
     }
 
-    console.log('✅ Signal sent successfully:', payload.type, data);
+    debug('✅ Signal sent successfully:', payload.type, data);
 
   } catch (error) {
     console.error('❌ Failed to send signal:', error);
@@ -70,20 +70,20 @@ function subscribeToSessionSignaling(sessionId) {
         filter: `session_id=eq.${sessionId}`
       },
       async (payload) => {
-        console.log('✅ Realtime signal received:', payload.new.msg_type);
+        debug('✅ Realtime signal received:', payload.new.msg_type);
         await handleSignal(payload.new);
       }
     )
     .subscribe();
 
-  console.log('Subscribed to signaling for session:', sessionId);
+  debug('Subscribed to signaling for session:', sessionId);
 
   // Start polling as fallback (in case Realtime is slow/broken)
   startPollingForSignals(sessionId);
 }
 
 async function startPollingForSignals(sessionId) {
-  console.log('🔄 Starting polling fallback for signals...');
+  debug('🔄 Starting polling fallback for signals...');
   
   // Poll every 500ms
   pollingInterval = setInterval(async () => {
@@ -104,7 +104,7 @@ async function startPollingForSignals(sessionId) {
       if (data && data.length > 0) {
         // Log ALL signal types received (for debugging)
         const signalTypes = data.map(s => `${s.msg_type}(${s.from_side})`).join(', ');
-        console.log(`🔍 Polled ${data.length} signals: ${signalTypes}`);
+        debug(`🔍 Polled ${data.length} signals: ${signalTypes}`);
         
         for (const signal of data) {
           // Skip already processed signals
@@ -113,7 +113,7 @@ async function startPollingForSignals(sessionId) {
           }
           processedSignalIds.add(signal.id);
           
-          console.log('📥 Polled NEW signal:', signal.msg_type, 'from:', signal.from_side, 'id:', signal.id);
+          debug('📥 Polled NEW signal:', signal.msg_type, 'from:', signal.from_side, 'id:', signal.id);
           await handleSignal(signal);
         }
       }
@@ -137,9 +137,9 @@ async function handleSignal(signal) {
 
   // Handle kick signals - another controller took over
   if (signal.msg_type === 'kick') {
-    console.log('🔴 KICKED - another controller took over this device');
-    console.log('   Kick reason:', signal.payload?.reason);
-    console.log('   New controller:', signal.payload?.new_controller_type);
+    debug('🔴 KICKED - another controller took over this device');
+    debug('   Kick reason:', signal.payload?.reason);
+    debug('   New controller:', signal.payload?.new_controller_type);
     
     // Clean up WebRTC connection
     if (typeof cleanupWebRTC === 'function') {
@@ -177,7 +177,7 @@ async function handleSignal(signal) {
   }
   processedSignalIds.add(signal.id);
 
-  console.log('🔵 Processing signal:', signal.msg_type, 'from', signal.from_side);
+  debug('🔵 Processing signal:', signal.msg_type, 'from', signal.from_side);
 
   const peerConnection = window.peerConnection;
   if (!peerConnection) {
@@ -190,12 +190,12 @@ async function handleSignal(signal) {
       case 'answer':
         // Only set answer if we're in have-local-offer state
         if (peerConnection.signalingState !== 'have-local-offer') {
-          console.log('⏭️ Skipping answer - already in state:', peerConnection.signalingState);
+          debug('⏭️ Skipping answer - already in state:', peerConnection.signalingState);
           return;
         }
         const answer = new RTCSessionDescription(signal.payload);
         await peerConnection.setRemoteDescription(answer);
-        console.log('✅ Remote description set (answer)');
+        debug('✅ Remote description set (answer)');
         break;
 
       case 'ice':
@@ -216,11 +216,11 @@ async function handleSignal(signal) {
           const candidateStr = typeof iceCandidate.candidate === 'string' 
             ? iceCandidate.candidate.substring(0, 50) + '...'
             : JSON.stringify(iceCandidate.candidate).substring(0, 50);
-          console.log('📥 Received ICE candidate from agent:', candidateStr);
+          debug('📥 Received ICE candidate from agent:', candidateStr);
           
           // Check if remote description is set
           if (!peerConnection.remoteDescription) {
-            console.log('⏸️ Buffering ICE candidate (remote description not set yet)');
+            debug('⏸️ Buffering ICE candidate (remote description not set yet)');
             pendingIceCandidates.push(iceCandidate);
           } else {
             await peerConnection.addIceCandidate(
@@ -230,7 +230,7 @@ async function handleSignal(signal) {
                 sdpMLineIndex: iceCandidate.sdpMLineIndex
               })
             );
-            console.log('✅ ICE candidate added successfully');
+            debug('✅ ICE candidate added successfully');
           }
         }
         break;
@@ -251,7 +251,7 @@ async function handleSignal(signal) {
           type: 'answer',
           sdp: answerSdp.sdp
         });
-        console.log('Answer sent in response to offer');
+        debug('Answer sent in response to offer');
         break;
 
       default:

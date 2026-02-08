@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fjernskrivebord - Log ind</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
-  <link rel="stylesheet" href="css/styles.css">
-  <link rel="stylesheet" href="css/loading-states.css">
-  <link rel="stylesheet" href="css/mobile.css">
-  <link rel="stylesheet" href="css/accessibility.css">
-  <link rel="stylesheet" href="css/empty-states.css">
-  <link rel="stylesheet" href="css/modern.css">
+  <link rel="stylesheet" href="css/styles.css?v=3">
+  <link rel="stylesheet" href="css/loading-states.css?v=3">
+  <link rel="stylesheet" href="css/mobile.css?v=3">
+  <link rel="stylesheet" href="css/accessibility.css?v=3">
+  <link rel="stylesheet" href="css/empty-states.css?v=3">
+  <link rel="stylesheet" href="css/modern.css?v=3">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body class="login-page">
@@ -64,6 +64,7 @@
         <div class="form-group">
           <label for="signupPassword">Adgangskode</label>
           <input type="password" id="signupPassword" placeholder="••••••••" required autocomplete="new-password" minlength="6">
+          <div id="pwStrength" class="pw-meter"></div>
         </div>
         <div class="form-group">
           <label for="signupPasswordConfirm">Bekræft adgangskode</label>
@@ -89,15 +90,16 @@
   </div>
 
   <!-- Error Boundary -->
-  <script src="js/error-boundary.js"></script>
+  <script src="js/error-boundary.js?v=3"></script>
   
   <!-- UI Helpers -->
-  <script src="js/ui-helpers.js"></script>
+  <script src="js/ui-helpers.js?v=3"></script>
   
   <!-- Supabase Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/config.js?v=4"></script>
-  <script src="js/auth.js?v=4"></script>
+  <script src="js/config.js?v=3"></script>
+  <script src="js/auth.js?v=3"></script>
+  <script>initPasswordStrength('signupPassword', 'pwStrength');</script>
   <script>
     // Handle URL parameters for status messages and redirects
     (function() {

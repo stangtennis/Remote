@@ -27,7 +27,7 @@ async function fetchTurnCredentials() {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      console.log('⚠️ No session, using STUN only');
+      debug('⚠️ No session, using STUN only');
       return;
     }
 
@@ -42,7 +42,7 @@ async function fetchTurnCredentials() {
     if (response.ok) {
       const data = await response.json();
       iceConfig = { iceServers: data.iceServers };
-      console.log(`✅ TURN credentials fetched (expires in ${data.ttl}s)`);
+      debug(`✅ TURN credentials fetched (expires in ${data.ttl}s)`);
     } else {
       console.warn('⚠️ Failed to fetch TURN credentials, using STUN only');
     }
@@ -73,7 +73,7 @@ async function login() {
     if (error) throw error;
 
     currentUser = data.user;
-    console.log('✅ Logged in as:', currentUser.email);
+    debug('✅ Logged in as:', currentUser.email);
 
     // Check if user is approved
     const { data: approval, error: approvalError } = await supabase
@@ -152,7 +152,7 @@ async function signup() {
 
     if (error) throw error;
 
-    console.log('✅ Account created:', email);
+    debug('✅ Account created:', email);
     showMessage('✅ Account created! Please wait for admin approval before logging in.', 'success');
     
     // Clear form and switch back to login after 3 seconds
@@ -221,7 +221,7 @@ async function logout() {
   currentUser = null;
   deviceId = null;
 
-  console.log('✅ Logged out');
+  debug('✅ Logged out');
 }
 
 // ============================================================================
@@ -259,7 +259,7 @@ async function registerDevice() {
     
     if (existing) {
       // Device exists - update it
-      console.log('Device already exists, updating...');
+      debug('Device already exists, updating...');
       const { data, error } = await supabase
         .from('remote_devices')
         .update({
@@ -298,7 +298,7 @@ async function registerDevice() {
     if (deviceNameEl) deviceNameEl.textContent = deviceName;
     if (browserInfoEl) browserInfoEl.textContent = browserInfo;
 
-    console.log('✅ Device registered:', deviceId);
+    debug('✅ Device registered:', deviceId);
 
     // Start heartbeat
     startHeartbeat();
@@ -342,7 +342,7 @@ function startHeartbeat() {
     }
   }, 30000); // Every 30 seconds
 
-  console.log('✅ Heartbeat started');
+  debug('✅ Heartbeat started');
 }
 
 // ============================================================================
@@ -351,7 +351,7 @@ function startHeartbeat() {
 
 async function startSharing() {
   try {
-    console.log('📹 Requesting screen capture...');
+    debug('📹 Requesting screen capture...');
 
     // Request screen capture permission
     mediaStream = await navigator.mediaDevices.getDisplayMedia({
@@ -365,7 +365,7 @@ async function startSharing() {
       audio: false
     });
 
-    console.log('✅ Screen capture started');
+    debug('✅ Screen capture started');
 
     // Show preview
     const preview = document.getElementById('preview');
@@ -379,7 +379,7 @@ async function startSharing() {
 
     // Listen for user stopping the share (via browser controls)
     mediaStream.getVideoTracks()[0].addEventListener('ended', () => {
-      console.log('User stopped sharing via browser');
+      debug('User stopped sharing via browser');
       stopSharing();
     });
 
@@ -397,7 +397,7 @@ async function startSharing() {
 }
 
 async function stopSharing() {
-  console.log('🛑 Stopping screen share...');
+  debug('🛑 Stopping screen share...');
 
   // Stop media stream
   if (mediaStream) {
@@ -428,7 +428,7 @@ async function stopSharing() {
   updateHeaderStatus('online', 'Connected');
   stopSessionTimer();
 
-  console.log('✅ Screen sharing stopped');
+  debug('✅ Screen sharing stopped');
 }
 
 function checkExtensionAvailable() {
@@ -436,7 +436,7 @@ function checkExtensionAvailable() {
   // This will be used for remote control in Phase 2
   window.addEventListener('message', (event) => {
     if (event.data.type === 'extension_ready') {
-      console.log('✅ Extension detected - remote control available');
+      debug('✅ Extension detected - remote control available');
       // Extension detected - could enable additional features here
     }
   });
@@ -464,7 +464,7 @@ function startSessionPolling() {
 
       if (data && data.length > 0) {
         currentSession = data[0];
-        console.log('📞 Incoming connection request');
+        debug('📞 Incoming connection request');
         showPinPrompt();
       }
     } catch (error) {
@@ -472,7 +472,7 @@ function startSessionPolling() {
     }
   }, 2000); // Check every 2 seconds
 
-  console.log('✅ Session polling started');
+  debug('✅ Session polling started');
 }
 
 function showPinPrompt() {
@@ -495,7 +495,7 @@ async function acceptSession() {
     return;
   }
 
-  console.log('✅ PIN accepted, starting session...');
+  debug('✅ PIN accepted, starting session...');
 
   try {
     // Update session status
@@ -528,14 +528,14 @@ async function acceptSession() {
 }
 
 function rejectSession() {
-  console.log('❌ Session rejected');
+  debug('❌ Session rejected');
 
   if (currentSession) {
     supabase
       .from('remote_sessions')
       .update({ status: 'rejected' })
       .eq('id', currentSession.id)
-      .then(() => console.log('Session marked as rejected'));
+      .then(() => debug('Session marked as rejected'));
   }
 
   currentSession = null;
@@ -546,7 +546,7 @@ function rejectSession() {
 }
 
 async function endSession() {
-  console.log('🛑 Ending session...');
+  debug('🛑 Ending session...');
 
   // Close data channel
   if (dataChannel) {
@@ -600,7 +600,7 @@ async function endSession() {
   updateHeaderStatus('online', 'Connected');
   stopSessionTimer();
 
-  console.log('✅ Session ended');
+  debug('✅ Session ended');
 }
 
 // ============================================================================
@@ -608,7 +608,7 @@ async function endSession() {
 // ============================================================================
 
 async function startWebRTC() {
-  console.log('🔗 Starting WebRTC connection...');
+  debug('🔗 Starting WebRTC connection...');
 
   try {
     // Create peer connection
@@ -621,22 +621,22 @@ async function startWebRTC() {
 
     mediaStream.getTracks().forEach(track => {
       peerConnection.addTrack(track, mediaStream);
-      console.log('Added track:', track.kind);
+      debug('Added track:', track.kind);
     });
 
     // Handle incoming data channels from dashboard (for receiving input)
     peerConnection.ondatachannel = (event) => {
-      console.log('📥 Received data channel:', event.channel.label);
+      debug('📥 Received data channel:', event.channel.label);
       dataChannel = event.channel;
-      dataChannel.onopen = () => console.log('✅ Data channel opened');
-      dataChannel.onclose = () => console.log('🔌 Data channel closed');
+      dataChannel.onopen = () => debug('✅ Data channel opened');
+      dataChannel.onclose = () => debug('🔌 Data channel closed');
       dataChannel.onmessage = handleRemoteInput;
     };
 
     // Handle ICE candidates
     peerConnection.onicecandidate = async (event) => {
       if (event.candidate) {
-        console.log('📤 Sending ICE candidate');
+        debug('📤 Sending ICE candidate');
         await supabase
           .from('session_signaling')
           .insert({
@@ -650,7 +650,7 @@ async function startWebRTC() {
 
     // Handle connection state changes
     peerConnection.onconnectionstatechange = () => {
-      console.log('Connection state:', peerConnection.connectionState);
+      debug('Connection state:', peerConnection.connectionState);
       const connStatusEl = document.getElementById('connectionStatus');
       if (connStatusEl) {
         connStatusEl.textContent = `Connection: ${peerConnection.connectionState}`;
@@ -675,7 +675,7 @@ async function startWebRTC() {
     });
 
     await peerConnection.setLocalDescription(offer);
-    console.log('📤 Sending offer');
+    debug('📤 Sending offer');
 
     // Send offer to dashboard
     await supabase
@@ -690,7 +690,7 @@ async function startWebRTC() {
     // Listen for answer and ICE candidates
     listenForSignaling();
 
-    console.log('✅ WebRTC connection initiated');
+    debug('✅ WebRTC connection initiated');
 
   } catch (error) {
     console.error('WebRTC setup failed:', error);
@@ -716,14 +716,14 @@ function listenForSignaling() {
     })
     .subscribe();
 
-  console.log('✅ Listening for signaling messages (realtime)');
+  debug('✅ Listening for signaling messages (realtime)');
   
   // Start polling fallback
   startSignalingPolling();
 }
 
 function startSignalingPolling() {
-  console.log('🔄 Starting signaling polling fallback...');
+  debug('🔄 Starting signaling polling fallback...');
   
   signalingPollingInterval = setInterval(async () => {
     if (!currentSession) return;
@@ -745,7 +745,7 @@ function startSignalingPolling() {
         for (const msg of data) {
           if (processedSignalIds.has(msg.id)) continue;
           processedSignalIds.add(msg.id);
-          console.log('📥 Polled signaling:', msg.msg_type);
+          debug('📥 Polled signaling:', msg.msg_type);
           await handleSignalingMessage(msg);
         }
       }
@@ -771,17 +771,17 @@ async function handleSignalingMessage(msg) {
   if (processedSignalIds.has(msg.id)) return;
   processedSignalIds.add(msg.id);
 
-  console.log('📥 Processing signaling:', msg.msg_type);
+  debug('📥 Processing signaling:', msg.msg_type);
 
   const data = msg.payload;
 
   try {
     if (msg.msg_type === 'answer') {
       await peerConnection.setRemoteDescription(new RTCSessionDescription(data));
-      console.log('✅ Answer received and set');
+      debug('✅ Answer received and set');
     } else if (msg.msg_type === 'ice') {
       await peerConnection.addIceCandidate(new RTCIceCandidate(data));
-      console.log('✅ ICE candidate added');
+      debug('✅ ICE candidate added');
     }
   } catch (error) {
     console.error('Signaling error:', error);
@@ -858,7 +858,7 @@ async function connectToHelper() {
       helperWs = new WebSocket(HELPER_URL);
 
       helperWs.onopen = () => {
-        console.log('✅ Connected to Input Helper');
+        debug('✅ Connected to Input Helper');
         helperConnected = true;
         updateHelperUI(true);
 
@@ -875,7 +875,7 @@ async function connectToHelper() {
       };
 
       helperWs.onclose = () => {
-        console.log('🔌 Input Helper disconnected');
+        debug('🔌 Input Helper disconnected');
         helperConnected = false;
         helperWs = null;
         updateHelperUI(false);
@@ -915,7 +915,7 @@ async function connectToHelper() {
 function handleHelperMessage(msg) {
   switch (msg.type) {
     case 'status':
-      console.log('📊 Helper status:', msg);
+      debug('📊 Helper status:', msg);
       break;
     case 'ack':
       if (!msg.ok && msg.error) {
@@ -955,7 +955,7 @@ function handleRemoteInput(event) {
   // Handle remote input commands - forward to local helper
   try {
     const input = JSON.parse(event.data);
-    console.log('🎮 Remote input:', input.type);
+    debug('🎮 Remote input:', input.type);
 
     // Forward to local helper if connected
     if (helperConnected) {
@@ -1046,14 +1046,14 @@ window.endSession = endSession;
 // Initialization
 // ============================================================================
 
-console.log('🌐 Web Agent loaded');
-console.log('Platform:', navigator.platform);
-console.log('Browser:', getBrowserInfo());
+debug('🌐 Web Agent loaded');
+debug('Platform:', navigator.platform);
+debug('Browser:', getBrowserInfo());
 
 // Check if already logged in
 supabase.auth.getSession().then(({ data: { session } }) => {
   if (session) {
-    console.log('Already logged in, initializing...');
+    debug('Already logged in, initializing...');
     currentUser = session.user;
     fetchTurnCredentials().then(() => registerDevice()).then(() => {
       document.getElementById('loginSection').style.display = 'none';

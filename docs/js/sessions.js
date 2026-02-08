@@ -19,13 +19,13 @@ const SessionManager = {
       });
     }
 
-    console.log('📑 Session Manager initialized');
+    debug('📑 Session Manager initialized');
   },
 
   // Create a new session for a device
   createSession(deviceId, deviceName) {
     if (this.sessions.has(deviceId)) {
-      console.log(`Session already exists for ${deviceName}, switching to it`);
+      debug(`Session already exists for ${deviceName}, switching to it`);
       this.switchToSession(deviceId);
       return this.sessions.get(deviceId);
     }
@@ -51,7 +51,7 @@ const SessionManager = {
     this.switchToSession(deviceId);
     this.updateUI();
 
-    console.log(`📑 Created session for ${deviceName} (${deviceId})`);
+    debug(`📑 Created session for ${deviceName} (${deviceId})`);
     return session;
   },
 
@@ -111,7 +111,7 @@ const SessionManager = {
       this.previewIdle.style.display = session.status === 'connected' ? 'none' : 'flex';
     }
 
-    console.log(`📑 Switched to session: ${session.deviceName}`);
+    debug(`📑 Switched to session: ${session.deviceName}`);
   },
 
   // Update session status
@@ -149,7 +149,7 @@ const SessionManager = {
       }
     }
 
-    console.log(`📑 Session ${session.deviceName} status: ${status}`);
+    debug(`📑 Session ${session.deviceName} status: ${status}`);
   },
 
   // Store frame for a session
@@ -227,7 +227,7 @@ const SessionManager = {
     }
 
     this.updateUI();
-    console.log(`📑 Closed session: ${session.deviceName}`);
+    debug(`📑 Closed session: ${session.deviceName}`);
   },
 
   // Get the active session
