@@ -626,6 +626,10 @@ async function startWebRTC(sessionId, offerPayload) {
   console.log('[WebAgent] Session ID:', sessionId);
 
   try {
+    // Refresh TURN credentials before creating peer connection
+    await fetchTurnCredentials();
+    console.log('[WebAgent] ICE config:', JSON.stringify(iceConfig.iceServers.map(s => s.urls)));
+
     // Create peer connection
     peerConnection = new RTCPeerConnection(iceConfig);
 
