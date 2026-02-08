@@ -1,1 +1,0 @@
-powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\cleanup-windows.ps1"
