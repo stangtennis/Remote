@@ -211,41 +211,18 @@
       </div>
     </div>
 
-    <!-- Connection Request Card -->
+    <!-- Waiting for Connection (shown while sharing, before dashboard connects) -->
     <div id="sessionSection" class="glass-card session-card" style="display: none;">
       <div class="card-header">
-        <div class="card-icon ring-animation">
-          <i class="fas fa-bell"></i>
+        <div class="card-icon pulse-icon">
+          <i class="fas fa-satellite-dish"></i>
         </div>
-        <h2>Indgående forbindelse</h2>
-        <p>Nogen vil se din skærm</p>
+        <h2>Venter på forbindelse</h2>
+        <p>Din skærm deles — åbn dashboardet og klik "Connect" på denne enhed</p>
       </div>
-
-      <div class="pin-entry">
-        <p class="pin-instruction">Indtast den 6-cifrede PIN for at acceptere</p>
-        <div class="pin-input-wrapper">
-          <input 
-            type="text" 
-            id="pinInput" 
-            class="pin-input" 
-            placeholder="• • • • • •" 
-            maxlength="6"
-            autocomplete="off"
-            inputmode="numeric"
-            pattern="[0-9]*"
-          >
-        </div>
-      </div>
-
-      <div class="session-actions">
-        <button class="btn btn-success btn-glow" onclick="acceptSession()">
-          <i class="fas fa-check-circle"></i>
-          <span>Acceptér</span>
-        </button>
-        <button class="btn btn-danger" onclick="rejectSession()">
-          <i class="fas fa-times-circle"></i>
-          <span>Afvis</span>
-        </button>
+      <div class="live-banner">
+        <span class="live-dot"></span>
+        <span>Skærmdeling aktiv — venter på seer</span>
       </div>
     </div>
 
