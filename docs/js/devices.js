@@ -72,7 +72,7 @@ async function loadDevices() {
   } catch (error) {
     console.error('Failed to load devices:', error);
     loadingDevices.style.display = 'none';
-    alert('Failed to load devices: ' + error.message);
+    showToast('Kunne ikke indlæse enheder: ' + error.message, 'error');
   }
 }
 
@@ -153,7 +153,7 @@ function createDeviceCard(device) {
 }
 
 async function claimDevice(device) {
-  if (!confirm(`Claim device "${device.device_name || device.device_id}"?\n\nThis will assign the device to your account.`)) {
+  if (!await showConfirm(`Tilknyt enhed "${device.device_name || device.device_id}"?\n\nDette vil tildele enheden til din konto.`, { title: 'Tilknyt enhed', confirmText: 'Tilknyt', type: 'info', icon: '🔗' })) {
     return;
   }
 
@@ -189,16 +189,16 @@ async function claimDevice(device) {
     // Reload devices
     await loadDevices();
 
-    alert('✅ Device claimed successfully!\n\nYou can now connect to this device.');
+    showToast('Enhed tilknyttet! Du kan nu oprette forbindelse.', 'success');
 
   } catch (error) {
     console.error('Failed to claim device:', error);
-    alert('Failed to claim device: ' + error.message);
+    showToast('Kunne ikke tilknytte enhed: ' + error.message, 'error');
   }
 }
 
 async function deleteDevice(device) {
-  if (!confirm(`Delete device "${device.device_name || device.device_id}"?\n\nThis cannot be undone.`)) {
+  if (!await showConfirm(`Slet enhed "${device.device_name || device.device_id}"?\n\nDette kan ikke fortrydes.`, { title: 'Slet enhed', confirmText: 'Slet', type: 'danger', icon: '🗑️' })) {
     return;
   }
 
@@ -217,7 +217,7 @@ async function deleteDevice(device) {
 
   } catch (error) {
     console.error('Failed to delete device:', error);
-    alert('Failed to delete device: ' + error.message);
+    showToast('Kunne ikke slette enhed: ' + error.message, 'error');
   }
 }
 

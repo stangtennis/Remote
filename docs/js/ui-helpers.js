@@ -383,37 +383,144 @@ function prefersReducedMotion() {
  * Toast Notifications
  */
 
-function showToast(message, type = 'info', duration = 3000) {
+// Toast container (created once, toasts stack inside it)
+let _toastContainer = null;
+function _getToastContainer() {
+  if (!_toastContainer || !document.body.contains(_toastContainer)) {
+    _toastContainer = document.createElement('div');
+    _toastContainer.id = 'toast-container';
+    _toastContainer.setAttribute('aria-live', 'polite');
+    _toastContainer.setAttribute('aria-relevant', 'additions');
+    document.body.appendChild(_toastContainer);
+  }
+  return _toastContainer;
+}
+
+function showToast(message, type = 'info', duration = 4000) {
+  const container = _getToastContainer();
+  
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
   toast.setAttribute('role', 'status');
-  toast.setAttribute('aria-live', 'polite');
   
-  const icon = {
-    success: '✓',
-    error: '⚠️',
-    info: 'ℹ️',
-    warning: '⚠️'
-  }[type] || 'ℹ️';
+  const icons = {
+    success: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="currentColor" opacity="0.15"/><path d="M6 10l3 3 5-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    error: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="currentColor" opacity="0.15"/><path d="M7 7l6 6M13 7l-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    warning: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="currentColor" opacity="0.15"/><path d="M10 6v5M10 13.5v.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    info: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="currentColor" opacity="0.15"/><path d="M10 9v5M10 6.5v.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+  };
   
   toast.innerHTML = `
-    <span class="toast-icon">${icon}</span>
+    <span class="toast-icon">${icons[type] || icons.info}</span>
     <span class="toast-message">${message}</span>
+    <button class="toast-close" aria-label="Luk">&times;</button>
   `;
   
-  document.body.appendChild(toast);
+  // Close button handler
+  toast.querySelector('.toast-close').addEventListener('click', () => dismissToast(toast));
+  
+  container.appendChild(toast);
   
   // Announce to screen readers
   announceToScreenReader(message);
   
   // Animate in
-  setTimeout(() => toast.classList.add('show'), 10);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => toast.classList.add('show'));
+  });
   
-  // Remove after duration
-  setTimeout(() => {
-    toast.classList.remove('show');
-    setTimeout(() => toast.remove(), 300);
-  }, duration);
+  // Auto-dismiss (0 = persistent)
+  if (duration > 0) {
+    toast._timeout = setTimeout(() => dismissToast(toast), duration);
+  }
+  
+  // Pause auto-dismiss on hover
+  toast.addEventListener('mouseenter', () => {
+    if (toast._timeout) clearTimeout(toast._timeout);
+  });
+  toast.addEventListener('mouseleave', () => {
+    if (duration > 0) {
+      toast._timeout = setTimeout(() => dismissToast(toast), 2000);
+    }
+  });
+  
+  return toast;
+}
+
+function dismissToast(toast) {
+  if (!toast || !toast.parentNode) return;
+  toast.classList.remove('show');
+  toast.classList.add('toast-exit');
+  setTimeout(() => toast.remove(), 300);
+}
+
+/**
+ * Confirm Modal (replaces native confirm())
+ * Returns a Promise<boolean>
+ */
+function showConfirm(message, options = {}) {
+  const {
+    title = 'Bekræft',
+    confirmText = 'Bekræft',
+    cancelText = 'Annuller',
+    type = 'warning',  // warning, danger, info
+    icon = null
+  } = options;
+  
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    
+    const defaultIcons = {
+      warning: '⚠️',
+      danger: '🗑️',
+      info: 'ℹ️'
+    };
+    const displayIcon = icon || defaultIcons[type] || '❓';
+    
+    const confirmBtnClass = type === 'danger' ? 'btn-danger' : 'btn-primary';
+    
+    overlay.innerHTML = `
+      <div class="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+        <div class="confirm-icon">${displayIcon}</div>
+        <h3 id="confirm-title" class="confirm-title">${title}</h3>
+        <p id="confirm-message" class="confirm-message">${message}</p>
+        <div class="confirm-actions">
+          <button class="btn btn-ghost confirm-cancel">${cancelText}</button>
+          <button class="btn ${confirmBtnClass} confirm-ok">${confirmText}</button>
+        </div>
+      </div>
+    `;
+    
+    const cleanup = (result) => {
+      overlay.classList.add('confirm-exit');
+      setTimeout(() => overlay.remove(), 200);
+      resolve(result);
+    };
+    
+    overlay.querySelector('.confirm-cancel').addEventListener('click', () => cleanup(false));
+    overlay.querySelector('.confirm-ok').addEventListener('click', () => cleanup(true));
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cleanup(false);
+    });
+    
+    document.body.appendChild(overlay);
+    
+    // Animate in
+    requestAnimationFrame(() => overlay.classList.add('show'));
+    
+    // Focus confirm button
+    overlay.querySelector('.confirm-ok').focus();
+    
+    // Escape to cancel
+    const escHandler = (e) => {
+      if (e.key === 'Escape') {
+        document.removeEventListener('keydown', escHandler);
+        cleanup(false);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
+  });
 }
 
 /**
@@ -493,6 +600,8 @@ window.UIHelpers = {
   fadeInStagger,
   prefersReducedMotion,
   showToast,
+  dismissToast,
+  showConfirm,
   showProgress,
   showIndeterminateProgress
 };

@@ -31,7 +31,7 @@ const SessionManager = {
     }
 
     if (this.sessions.size >= this.maxSessions) {
-      alert(`Maximum ${this.maxSessions} sessions allowed. Please close a session first.`);
+      showToast(`Maksimalt ${this.maxSessions} sessioner tilladt. Luk venligst en session først.`, 'warning');
       return null;
     }
 

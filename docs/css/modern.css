@@ -599,6 +599,225 @@ button:focus-visible,
   transform: translateX(-50%) translateY(0);
 }
 
+/* ===== Toast Notifications ===== */
+#toast-container {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  pointer-events: none;
+  max-width: 420px;
+  width: calc(100% - 2.5rem);
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.92);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
+  color: var(--text-primary, #f1f5f9);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  pointer-events: auto;
+  transform: translateX(120%);
+  opacity: 0;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease;
+  will-change: transform, opacity;
+}
+
+.toast.show {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toast.toast-exit {
+  transform: translateX(120%);
+  opacity: 0;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 1, 1), opacity 0.2s ease;
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+
+.toast-message {
+  flex: 1;
+  word-break: break-word;
+}
+
+.toast-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+  transition: color 0.2s;
+  border-radius: 4px;
+}
+
+.toast-close:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Toast type colors */
+.toast-success {
+  border-left: 3px solid #22c55e;
+}
+.toast-success .toast-icon { color: #22c55e; }
+
+.toast-error {
+  border-left: 3px solid #ef4444;
+}
+.toast-error .toast-icon { color: #ef4444; }
+
+.toast-warning {
+  border-left: 3px solid #f59e0b;
+}
+.toast-warning .toast-icon { color: #f59e0b; }
+
+.toast-info {
+  border-left: 3px solid #6366f1;
+}
+.toast-info .toast-icon { color: #6366f1; }
+
+/* ===== Confirm Modal ===== */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.confirm-overlay.show {
+  opacity: 1;
+}
+
+.confirm-overlay.confirm-exit {
+  opacity: 0;
+}
+
+.confirm-modal {
+  background: rgba(30, 41, 59, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 2rem;
+  max-width: 400px;
+  width: calc(100% - 2rem);
+  text-align: center;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+  transform: scale(0.9) translateY(20px);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.confirm-overlay.show .confirm-modal {
+  transform: scale(1) translateY(0);
+}
+
+.confirm-overlay.confirm-exit .confirm-modal {
+  transform: scale(0.9) translateY(20px);
+}
+
+.confirm-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.confirm-title {
+  color: var(--text-primary, #f1f5f9);
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+}
+
+.confirm-message {
+  color: var(--text-secondary, #94a3b8);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0 0 1.5rem 0;
+  white-space: pre-line;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.confirm-actions .btn {
+  min-width: 100px;
+  padding: 0.65rem 1.25rem;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary, #94a3b8);
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary, #f1f5f9);
+}
+
+/* Mobile toast adjustments */
+@media (max-width: 480px) {
+  #toast-container {
+    top: auto;
+    bottom: 1rem;
+    right: 0.75rem;
+    left: 0.75rem;
+    max-width: none;
+    width: auto;
+  }
+  
+  .toast {
+    transform: translateY(120%);
+  }
+  
+  .toast.show {
+    transform: translateY(0);
+  }
+  
+  .toast.toast-exit {
+    transform: translateY(120%);
+  }
+  
+  .confirm-modal {
+    margin: 1rem;
+  }
+}
+
 /* ===== Mobile Responsive Fixes ===== */
 @media (max-width: 768px) {
   .user-card,
