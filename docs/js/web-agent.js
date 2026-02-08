@@ -375,6 +375,7 @@ async function startSharing() {
     document.getElementById('startBtn').style.display = 'none';
     document.getElementById('stopBtn').style.display = 'inline-flex';
     document.getElementById('previewWindow').style.display = 'block';
+    document.getElementById('sessionSection').style.display = 'block';
     updateHeaderStatus('online', 'Sharing Screen');
 
     // Listen for user stopping the share (via browser controls)
@@ -425,8 +426,12 @@ async function stopSharing() {
   document.getElementById('stopBtn').style.display = 'none';
   document.getElementById('previewWindow').style.display = 'none';
   document.getElementById('connectedSection').style.display = 'none';
+  document.getElementById('sessionSection').style.display = 'none';
   updateHeaderStatus('online', 'Connected');
   stopSessionTimer();
+  
+  // Reset offer tracking so new sessions can be detected
+  processedOfferIds.clear();
 
   debug('✅ Screen sharing stopped');
 }
@@ -447,102 +452,88 @@ function checkExtensionAvailable() {
 // ============================================================================
 
 function startSessionPolling() {
+  // Poll session_signaling for offers from dashboard/controller targeting our device.
+  // This mirrors the native Go agent's fetchWebDashboardSessions() pattern.
   sessionPollInterval = setInterval(async () => {
-    if (!deviceId || currentSession || !mediaStream) return;
+    if (!deviceId || currentSession) return;
+    if (!mediaStream) return; // Only accept sessions while sharing
 
     try {
-      // Check for pending sessions
-      const { data, error } = await supabase
-        .from('remote_sessions')
+      // Look for offers in session_signaling from dashboard
+      const { data: signals, error: sigError } = await supabase
+        .from('session_signaling')
         .select('*')
-        .eq('device_id', deviceId)
-        .eq('status', 'pending')
+        .eq('msg_type', 'offer')
+        .in('from_side', ['dashboard', 'controller'])
         .order('created_at', { ascending: false })
-        .limit(1);
+        .limit(10);
 
-      if (error) throw error;
+      if (sigError) throw sigError;
+      if (!signals || signals.length === 0) return;
 
-      if (data && data.length > 0) {
-        currentSession = data[0];
-        debug('📞 Incoming connection request');
-        showPinPrompt();
+      // For each offer, check if the session belongs to our device
+      for (const sig of signals) {
+        if (processedOfferIds.has(sig.id)) continue;
+        processedOfferIds.add(sig.id);
+
+        // Look up the session in remote_sessions to verify it targets our device
+        const { data: sessions, error: sessError } = await supabase
+          .from('remote_sessions')
+          .select('id, status, device_id')
+          .eq('id', sig.session_id)
+          .eq('device_id', deviceId)
+          .in('status', ['pending', 'active', 'connecting'])
+          .limit(1);
+
+        if (sessError || !sessions || sessions.length === 0) continue;
+
+        debug('📞 Incoming offer from dashboard for session:', sig.session_id);
+
+        // Auto-accept: set session active and start WebRTC
+        currentSession = { id: sig.session_id, session_id: sig.session_id };
+
+        await supabase
+          .from('remote_sessions')
+          .update({ status: 'active' })
+          .eq('id', sig.session_id);
+
+        // Parse the offer SDP from the signaling payload
+        const offerPayload = sig.payload;
+        await handleIncomingOffer(sig.session_id, offerPayload);
+        break; // Handle one offer at a time
       }
     } catch (error) {
       console.error('Session poll error:', error);
     }
-  }, 2000); // Check every 2 seconds
+  }, 1500);
 
-  debug('✅ Session polling started');
+  debug('✅ Session polling started (listening for dashboard offers)');
 }
 
-function showPinPrompt() {
-  document.getElementById('deviceSection').style.display = 'none';
-  document.getElementById('sessionSection').style.display = 'block';
-  document.getElementById('pinInput').focus();
-}
+let processedOfferIds = new Set();
 
-async function acceptSession() {
-  const pin = document.getElementById('pinInput').value.trim();
-
-  if (!pin || pin.length !== 6) {
-    showToast('Indtast venligst den 6-cifrede PIN-kode', 'warning');
-    return;
-  }
-
-  if (pin !== currentSession.pin) {
-    showToast('Ugyldig PIN-kode. Prøv venligst igen.', 'error');
-    document.getElementById('pinInput').value = '';
-    return;
-  }
-
-  debug('✅ PIN accepted, starting session...');
+async function handleIncomingOffer(sessionId, offerPayload) {
+  debug('🔧 Setting up WebRTC (answering dashboard offer)...');
 
   try {
-    // Update session status
-    await supabase
-      .from('remote_sessions')
-      .update({
-        status: 'active'
-      })
-      .eq('id', currentSession.id);
-
-    // Hide PIN prompt
+    // Show connected UI, hide waiting card
+    document.getElementById('deviceSection').style.display = 'none';
     document.getElementById('sessionSection').style.display = 'none';
-
-    // Start WebRTC connection
-    await startWebRTC();
-
-    // Connect to local input helper (for remote control)
-    connectToHelper();
-
-    // Show connected section
     document.getElementById('connectedSection').style.display = 'block';
     updateHeaderStatus('online', 'Session Active');
     startSessionTimer();
 
+    // Start WebRTC as answerer
+    await startWebRTC(sessionId, offerPayload);
+
+    // Connect to local input helper (for remote control)
+    connectToHelper();
+
   } catch (error) {
-    console.error('Failed to accept session:', error);
+    console.error('Failed to handle incoming offer:', error);
     showToast('Kunne ikke starte session: ' + error.message, 'error');
-    rejectSession();
+    await endSession();
   }
-}
-
-function rejectSession() {
-  debug('❌ Session rejected');
-
-  if (currentSession) {
-    supabase
-      .from('remote_sessions')
-      .update({ status: 'rejected' })
-      .eq('id', currentSession.id)
-      .then(() => debug('Session marked as rejected'));
-  }
-
-  currentSession = null;
-  document.getElementById('sessionSection').style.display = 'none';
-  document.getElementById('deviceSection').style.display = 'block';
-  document.getElementById('pinInput').value = '';
-  updateHeaderStatus('online', 'Connected');
 }
 
 async function endSession() {
@@ -589,16 +580,22 @@ async function endSession() {
     currentSession = null;
   }
 
-  // Clear PIN input
-  const pinInput = document.getElementById('pinInput');
-  if (pinInput) pinInput.value = '';
-
   // Update UI
-  document.getElementById('sessionSection').style.display = 'none';
   document.getElementById('connectedSection').style.display = 'none';
-  document.getElementById('deviceSection').style.display = 'block';
-  updateHeaderStatus('online', 'Connected');
+  if (mediaStream) {
+    // Still sharing — show waiting card and device section
+    document.getElementById('deviceSection').style.display = 'block';
+    document.getElementById('sessionSection').style.display = 'block';
+    updateHeaderStatus('online', 'Sharing Screen');
+  } else {
+    document.getElementById('deviceSection').style.display = 'block';
+    document.getElementById('sessionSection').style.display = 'none';
+    updateHeaderStatus('online', 'Connected');
+  }
   stopSessionTimer();
+  
+  // Reset offer tracking so new sessions can be detected
+  processedOfferIds.clear();
 
   debug('✅ Session ended');
 }
@@ -607,8 +604,8 @@ async function endSession() {
 // WebRTC Connection
 // ============================================================================
 
-async function startWebRTC() {
-  debug('🔗 Starting WebRTC connection...');
+async function startWebRTC(sessionId, offerPayload) {
+  debug('🔗 Starting WebRTC connection (answerer role)...');
 
   try {
     // Create peer connection
@@ -624,6 +621,10 @@ async function startWebRTC() {
       debug('Added track:', track.kind);
     });
 
+    // Buffer ICE candidates until answer is sent
+    let answerSent = false;
+    let pendingCandidates = [];
+
     // Handle incoming data channels from dashboard (for receiving input)
     peerConnection.ondatachannel = (event) => {
       debug('📥 Received data channel:', event.channel.label);
@@ -633,17 +634,26 @@ async function startWebRTC() {
       dataChannel.onmessage = handleRemoteInput;
     };
 
-    // Handle ICE candidates
+    // Handle ICE candidates — buffer until answer is sent
     peerConnection.onicecandidate = async (event) => {
       if (event.candidate) {
+        if (!answerSent) {
+          debug('⏸️ Buffering ICE candidate (answer not sent yet)');
+          pendingCandidates.push(event.candidate);
+          return;
+        }
         debug('📤 Sending ICE candidate');
         await supabase
           .from('session_signaling')
           .insert({
-            session_id: currentSession.id,
+            session_id: sessionId,
             from_side: 'agent',
             msg_type: 'ice',
-            payload: event.candidate
+            payload: {
+              candidate: event.candidate.candidate,
+              sdpMid: event.candidate.sdpMid || '0',
+              sdpMLineIndex: event.candidate.sdpMLineIndex || 0
+            }
           });
       }
     };
@@ -651,14 +661,16 @@ async function startWebRTC() {
     // Handle connection state changes
     peerConnection.onconnectionstatechange = () => {
       debug('Connection state:', peerConnection.connectionState);
-      const connStatusEl = document.getElementById('connectionStatus');
-      if (connStatusEl) {
-        connStatusEl.textContent = `Connection: ${peerConnection.connectionState}`;
-      }
-      // Update connection quality indicator
       const qualityEl = document.getElementById('connectionQuality');
       if (qualityEl) {
-        qualityEl.textContent = peerConnection.connectionState === 'connected' ? 'Excellent' : peerConnection.connectionState;
+        const stateMap = { connected: 'Fremragende', connecting: 'Forbinder...', disconnected: 'Afbrudt', failed: 'Fejlet' };
+        qualityEl.textContent = stateMap[peerConnection.connectionState] || peerConnection.connectionState;
+      }
+
+      if (peerConnection.connectionState === 'connected') {
+        debug('✅ WebRTC CONNECTED!');
+        // Stop signaling polling once connected
+        stopSignalingPolling();
       }
 
       if (peerConnection.connectionState === 'disconnected' ||
@@ -668,29 +680,62 @@ async function startWebRTC() {
       }
     };
 
-    // Create offer
-    const offer = await peerConnection.createOffer({
-      offerToReceiveVideo: false,
-      offerToReceiveAudio: false
+    // Set remote description (the dashboard's offer)
+    const offerSDP = offerPayload.sdp || offerPayload.SDP;
+    if (!offerSDP) {
+      throw new Error('No SDP in offer payload');
+    }
+
+    const offer = new RTCSessionDescription({
+      type: 'offer',
+      sdp: offerSDP
     });
+    await peerConnection.setRemoteDescription(offer);
+    debug('✅ Remote description set (dashboard offer)');
 
-    await peerConnection.setLocalDescription(offer);
-    debug('📤 Sending offer');
+    // Create answer
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    debug('📤 Sending answer to dashboard');
 
-    // Send offer to dashboard
+    // Send answer via session_signaling
     await supabase
       .from('session_signaling')
       .insert({
-        session_id: currentSession.id,
+        session_id: sessionId,
         from_side: 'agent',
-        msg_type: 'offer',
-        payload: offer
+        msg_type: 'answer',
+        payload: {
+          type: 'answer',
+          sdp: answer.sdp
+        }
       });
 
-    // Listen for answer and ICE candidates
+    // Mark answer as sent and flush buffered ICE candidates
+    answerSent = true;
+    if (pendingCandidates.length > 0) {
+      debug(`📤 Flushing ${pendingCandidates.length} buffered ICE candidates`);
+      for (const candidate of pendingCandidates) {
+        await supabase
+          .from('session_signaling')
+          .insert({
+            session_id: sessionId,
+            from_side: 'agent',
+            msg_type: 'ice',
+            payload: {
+              candidate: candidate.candidate,
+              sdpMid: candidate.sdpMid || '0',
+              sdpMLineIndex: candidate.sdpMLineIndex || 0
+            }
+          });
+      }
+      pendingCandidates = [];
+    }
+
+    // Listen for ICE candidates from dashboard
     listenForSignaling();
 
-    debug('✅ WebRTC connection initiated');
+    debug('✅ WebRTC answer sent, waiting for ICE exchange');
 
   } catch (error) {
     console.error('WebRTC setup failed:', error);
@@ -702,14 +747,16 @@ let signalingPollingInterval = null;
 let processedSignalIds = new Set();
 
 function listenForSignaling() {
+  const sessionId = currentSession.session_id || currentSession.id;
+  
   // Subscribe to signaling messages via Realtime
   signalingChannel = supabase
-    .channel(`session_${currentSession.id}`)
+    .channel(`session_${sessionId}`)
     .on('postgres_changes', {
       event: 'INSERT',
       schema: 'public',
       table: 'session_signaling',
-      filter: `session_id=eq.${currentSession.id}`
+      filter: `session_id=eq.${sessionId}`
     }, async (payload) => {
       const msg = payload.new;
       await handleSignalingMessage(msg);
@@ -728,11 +775,13 @@ function startSignalingPolling() {
   signalingPollingInterval = setInterval(async () => {
     if (!currentSession) return;
     
+    const sessionId = currentSession.session_id || currentSession.id;
+    
     try {
       const { data, error } = await supabase
         .from('session_signaling')
         .select('*')
-        .eq('session_id', currentSession.id)
+        .eq('session_id', sessionId)
         .in('from_side', ['dashboard', 'controller'])
         .order('created_at', { ascending: true });
 
@@ -771,17 +820,28 @@ async function handleSignalingMessage(msg) {
   if (processedSignalIds.has(msg.id)) return;
   processedSignalIds.add(msg.id);
 
-  debug('📥 Processing signaling:', msg.msg_type);
+  // Skip offers — we already handled the initial offer in handleIncomingOffer
+  if (msg.msg_type === 'offer') return;
 
   const data = msg.payload;
 
   try {
-    if (msg.msg_type === 'answer') {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(data));
-      debug('✅ Answer received and set');
-    } else if (msg.msg_type === 'ice') {
-      await peerConnection.addIceCandidate(new RTCIceCandidate(data));
-      debug('✅ ICE candidate added');
+    if (msg.msg_type === 'ice') {
+      // Handle both formats: flat { candidate, sdpMid, sdpMLineIndex } and nested { candidate: {...} }
+      let iceData = data;
+      if (data.candidate && typeof data.candidate === 'object') {
+        iceData = data.candidate;
+      }
+      
+      if (iceData && iceData.candidate) {
+        debug('📥 ICE candidate from dashboard');
+        await peerConnection.addIceCandidate(new RTCIceCandidate({
+          candidate: iceData.candidate,
+          sdpMid: iceData.sdpMid,
+          sdpMLineIndex: iceData.sdpMLineIndex
+        }));
+        debug('✅ ICE candidate added');
+      }
     }
   } catch (error) {
     console.error('Signaling error:', error);
@@ -1038,8 +1098,6 @@ window.showSignup = showSignup;
 window.showLogin = showLogin;
 window.startSharing = startSharing;
 window.stopSharing = stopSharing;
-window.acceptSession = acceptSession;
-window.rejectSession = rejectSession;
 window.endSession = endSession;
 
 // ============================================================================

@@ -196,6 +196,21 @@ async function handleSignal(signal) {
         const answer = new RTCSessionDescription(signal.payload);
         await peerConnection.setRemoteDescription(answer);
         debug('✅ Remote description set (answer)');
+        
+        // Flush any buffered ICE candidates now that remote description is set
+        if (pendingIceCandidates.length > 0) {
+          debug(`📥 Flushing ${pendingIceCandidates.length} buffered ICE candidates`);
+          for (const buffered of pendingIceCandidates) {
+            await peerConnection.addIceCandidate(
+              new RTCIceCandidate({
+                candidate: buffered.candidate,
+                sdpMid: buffered.sdpMid,
+                sdpMLineIndex: buffered.sdpMLineIndex
+              })
+            );
+          }
+          pendingIceCandidates = [];
+        }
         break;
 
       case 'ice':
