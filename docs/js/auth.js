@@ -217,7 +217,7 @@ if (document.getElementById('logoutBtn')) {
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('Logout error:', error);
-        alert('Logout failed: ' + error.message);
+        showToast('Logout fejlede: ' + error.message, 'error');
       } else {
         console.log('✅ Logged out successfully');
         window.location.href = 'login.html?status=logout';

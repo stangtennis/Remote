@@ -279,8 +279,8 @@
         .single();
       
       if (!approval || !['admin', 'super_admin'].includes(approval.role)) {
-        alert('⛔ Access denied. Admin privileges required.');
-        window.location.href = 'index.html';
+        showToast('⛔ Adgang nægtet. Admin-rettigheder kræves.', 'error');
+        setTimeout(() => window.location.href = 'index.html', 1500);
         return;
       }
       
@@ -325,7 +325,7 @@
       const role = document.getElementById('inviteRole').value;
       
       if (!email) {
-        alert('Please enter an email address');
+        showToast('Indtast venligst en e-mailadresse', 'warning');
         return;
       }
       
@@ -339,13 +339,14 @@
         
         const inviteUrl = window.location.origin + '/Remote/index.html?invite=' + data;
         
-        alert('✅ Invitation sent!\\n\\nShare this link with the user:\\n' + inviteUrl);
+        showToast('Invitation sendt! Link kopieret til udklipsholder.', 'success', 5000);
+        navigator.clipboard.writeText(inviteUrl).catch(() => {});
         document.getElementById('inviteEmail').value = '';
         loadInvitations();
         
       } catch (error) {
         console.error('Error sending invitation:', error);
-        alert('Failed to send invitation: ' + error.message);
+        showToast('Kunne ikke sende invitation: ' + error.message, 'error');
       }
     }
     
@@ -443,7 +444,7 @@
       const reason = document.getElementById('transferReason').value;
       
       if (!deviceId || !toUserId) {
-        alert('Please select both a device and a user');
+        showToast('Vælg venligst både en enhed og en bruger', 'warning');
         return;
       }
       
@@ -456,7 +457,7 @@
         
         if (error) throw error;
         
-        alert('✅ Device transferred successfully!');
+        showToast('Enhed overført!', 'success');
         document.getElementById('transferDevice').value = '';
         document.getElementById('transferToUser').value = '';
         document.getElementById('transferReason').value = '';
@@ -464,7 +465,7 @@
         
       } catch (error) {
         console.error('Error transferring device:', error);
-        alert('Failed to transfer device: ' + error.message);
+        showToast('Kunne ikke overføre enhed: ' + error.message, 'error');
       }
     }
 
@@ -483,7 +484,7 @@
         displayUsers();
       } catch (error) {
         console.error('Error loading users:', error);
-        alert('Failed to load users: ' + error.message);
+        showToast('Kunne ikke indlæse brugere: ' + error.message, 'error');
       }
     }
 
@@ -570,7 +571,7 @@
     };
 
     window.approveUser = async function(userId, email) {
-      if (!confirm(`Approve user: ${email}?\n\nA welcome email will be sent to the user.`)) return;
+      if (!await showConfirm(`Godkend bruger: ${email}?\n\nEn velkomst-e-mail vil blive sendt.`, { title: 'Godkend bruger', confirmText: 'Godkend', type: 'info', icon: '✅' })) return;
 
       try {
         // Call the approve_user function
@@ -602,11 +603,11 @@
           console.warn('⚠️ Could not send welcome email:', emailError);
         }
 
-        alert(`✅ User approved: ${email}${emailSent ? '\n\n📧 Welcome email sent!' : '\n\n⚠️ Email not configured'}`);
+        showToast(`Bruger godkendt: ${email}${emailSent ? ' — Velkomst-e-mail sendt!' : ''}`, 'success', 5000);
         await loadUsers();
       } catch (error) {
         console.error('Error approving user:', error);
-        alert('Failed to approve user: ' + error.message);
+        showToast('Kunne ikke godkende bruger: ' + error.message, 'error');
       }
     };
 
@@ -616,7 +617,7 @@
     };
 
     window.makeAdmin = async function(userId, email) {
-      if (!confirm(`👑 Make ${email} an admin?\n\nThis user will be able to:\n• Approve new users\n• Manage devices\n• Make other users admin`)) return;
+      if (!await showConfirm(`Gør ${email} til admin?\n\nBrugeren vil kunne:\n• Godkende nye brugere\n• Administrere enheder\n• Gøre andre til admin`, { title: 'Giv admin-rettigheder', confirmText: 'Gør til admin', type: 'warning', icon: '👑' })) return;
 
       try {
         const { data, error } = await supabase
@@ -626,11 +627,11 @@
 
         if (error) throw error;
 
-        alert(`✅ ${email} is now an admin!`);
+        showToast(`${email} er nu admin!`, 'success');
         await loadUsers();
       } catch (error) {
         console.error('Error making admin:', error);
-        alert('Failed to make admin: ' + error.message);
+        showToast('Kunne ikke give admin-rettigheder: ' + error.message, 'error');
       }
     };
 
@@ -638,11 +639,11 @@
       // Get current user to prevent self-demotion
       const { data: { session } } = await supabase.auth.getSession();
       if (session.user.id === userId) {
-        alert('⚠️ You cannot remove your own admin privileges!');
+        showToast('Du kan ikke fjerne dine egne admin-rettigheder!', 'warning');
         return;
       }
 
-      if (!confirm(`❌ Remove admin privileges from ${email}?\n\nThis user will no longer be able to access the admin panel.`)) return;
+      if (!await showConfirm(`Fjern admin-rettigheder fra ${email}?\n\nBrugeren vil ikke længere have adgang til admin-panelet.`, { title: 'Fjern admin', confirmText: 'Fjern', type: 'danger', icon: '❌' })) return;
 
       try {
         const { data, error } = await supabase
@@ -652,11 +653,11 @@
 
         if (error) throw error;
 
-        alert(`✅ Admin privileges removed from ${email}`);
+        showToast(`Admin-rettigheder fjernet fra ${email}`, 'success');
         await loadUsers();
       } catch (error) {
         console.error('Error revoking admin:', error);
-        alert('Failed to revoke admin: ' + error.message);
+        showToast('Kunne ikke fjerne admin-rettigheder: ' + error.message, 'error');
       }
     };
 
@@ -705,7 +706,7 @@
         displayDevices();
       } catch (error) {
         console.error('Error loading devices:', error);
-        alert('Failed to load devices: ' + error.message);
+        showToast('Kunne ikke indlæse enheder: ' + error.message, 'error');
       }
     }
 
@@ -809,7 +810,7 @@
       const approveDevice = document.getElementById('approveDevice').checked;
 
       if (!userId) {
-        alert('Please select a user');
+        showToast('Vælg venligst en bruger', 'warning');
         return;
       }
 
@@ -823,17 +824,17 @@
 
         if (error) throw error;
 
-        alert('✅ Device assigned successfully!');
+        showToast('Enhed tildelt!', 'success');
         closeAssignModal();
         await loadDevices();
       } catch (error) {
         console.error('Error assigning device:', error);
-        alert('Failed to assign device: ' + error.message);
+        showToast('Kunne ikke tildele enhed: ' + error.message, 'error');
       }
     };
 
     window.revokeAssignment = async function(deviceId, userId) {
-      if (!confirm('Revoke this device assignment?')) return;
+      if (!await showConfirm('Fjern denne enhedstildeling?', { title: 'Fjern tildeling', confirmText: 'Fjern', type: 'danger' })) return;
 
       try {
         const { data, error } = await supabase.rpc('revoke_device_assignment', {
@@ -843,11 +844,11 @@
 
         if (error) throw error;
 
-        alert('✅ Assignment revoked');
+        showToast('Tildeling fjernet', 'success');
         await loadDevices();
       } catch (error) {
         console.error('Error revoking assignment:', error);
-        alert('Failed to revoke assignment: ' + error.message);
+        showToast('Kunne ikke fjerne tildeling: ' + error.message, 'error');
       }
     };
 

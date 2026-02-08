@@ -389,9 +389,9 @@ async function startSharing() {
   } catch (error) {
     console.error('Screen capture failed:', error);
     if (error.name === 'NotAllowedError') {
-      alert('❌ Screen sharing permission denied.\n\nPlease allow screen sharing to use the web agent.');
+      showToast('Skærmdeling blev afvist. Tillad venligst skærmdeling for at bruge web-agenten.', 'error', 6000);
     } else {
-      alert('Failed to start screen sharing: ' + error.message);
+      showToast('Kunne ikke starte skærmdeling: ' + error.message, 'error');
     }
   }
 }
@@ -485,12 +485,12 @@ async function acceptSession() {
   const pin = document.getElementById('pinInput').value.trim();
 
   if (!pin || pin.length !== 6) {
-    alert('Please enter the 6-digit PIN');
+    showToast('Indtast venligst den 6-cifrede PIN-kode', 'warning');
     return;
   }
 
   if (pin !== currentSession.pin) {
-    alert('❌ Invalid PIN. Please check and try again.');
+    showToast('Ugyldig PIN-kode. Prøv venligst igen.', 'error');
     document.getElementById('pinInput').value = '';
     return;
   }
@@ -522,7 +522,7 @@ async function acceptSession() {
 
   } catch (error) {
     console.error('Failed to accept session:', error);
-    alert('Failed to start session: ' + error.message);
+    showToast('Kunne ikke starte session: ' + error.message, 'error');
     rejectSession();
   }
 }

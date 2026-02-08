@@ -167,7 +167,7 @@ async function handleSignal(signal) {
       window.SessionManager.closeSession(window.currentSession.device_id);
     }
     
-    alert('Du blev afkoblet - en anden controller har overtaget forbindelsen.');
+    showToast('Du blev afkoblet — en anden controller har overtaget forbindelsen.', 'warning', 6000);
     return;
   }
 

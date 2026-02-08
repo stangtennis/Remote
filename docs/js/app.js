@@ -243,7 +243,7 @@ async function startSession(device) {
     if (window.SessionManager) {
       window.SessionManager.closeSession(device.device_id);
     }
-    alert('Failed to start session: ' + error.message);
+    showToast('Kunne ikke starte session: ' + error.message, 'error');
   }
 }
 
