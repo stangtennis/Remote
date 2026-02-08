@@ -265,7 +265,8 @@ async function registerDevice() {
         .update({
           device_name: deviceName,
           last_seen: new Date().toISOString(),
-          is_online: true
+          is_online: true,
+          approved: true
         })
         .eq('device_id', generatedDeviceId)
         .select()
@@ -283,7 +284,8 @@ async function registerDevice() {
           platform: 'web',
           owner_id: currentUser.id,
           last_seen: new Date().toISOString(),
-          is_online: true
+          is_online: true,
+          approved: true
         })
         .select()
         .single();
