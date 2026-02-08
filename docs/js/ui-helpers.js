@@ -550,6 +550,87 @@ function showIndeterminateProgress(elementId) {
 }
 
 /**
+ * Dark / Light Theme Toggle
+ */
+
+function initThemeToggle() {
+  // Restore saved preference or default to dark
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+
+  // Find or create toggle button in header
+  const header = document.querySelector('.header-actions');
+  if (!header) return;
+
+  const btn = document.createElement('button');
+  btn.className = 'theme-toggle';
+  btn.title = 'Skift tema';
+  btn.setAttribute('aria-label', 'Skift mellem lyst og mørkt tema');
+  updateThemeIcon(btn);
+
+  btn.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    updateThemeIcon(btn);
+  });
+
+  header.insertBefore(btn, header.firstChild);
+}
+
+function updateThemeIcon(btn) {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  btn.textContent = isLight ? '🌙' : '☀️';
+}
+
+/**
+ * Password Strength Indicator
+ */
+
+function getPasswordStrength(password) {
+  let score = 0;
+  if (password.length >= 6) score++;
+  if (password.length >= 10) score++;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
+  if (/\d/.test(password)) score++;
+  if (/[^a-zA-Z0-9]/.test(password)) score++;
+
+  const levels = [
+    { label: 'Meget svag', color: '#ef4444', width: 20 },
+    { label: 'Svag', color: '#f97316', width: 40 },
+    { label: 'Middel', color: '#eab308', width: 60 },
+    { label: 'Stærk', color: '#22c55e', width: 80 },
+    { label: 'Meget stærk', color: '#10b981', width: 100 }
+  ];
+  return levels[Math.min(score, levels.length - 1)];
+}
+
+function initPasswordStrength(inputId, meterId) {
+  const input = document.getElementById(inputId);
+  const meter = document.getElementById(meterId);
+  if (!input || !meter) return;
+
+  meter.innerHTML = '<div class="pw-bar"><div class="pw-fill"></div></div><span class="pw-label"></span>';
+  meter.style.display = 'none';
+
+  input.addEventListener('input', () => {
+    const val = input.value;
+    if (!val) { meter.style.display = 'none'; return; }
+    meter.style.display = 'flex';
+    const s = getPasswordStrength(val);
+    const fill = meter.querySelector('.pw-fill');
+    const label = meter.querySelector('.pw-label');
+    fill.style.width = s.width + '%';
+    fill.style.background = s.color;
+    label.textContent = s.label;
+    label.style.color = s.color;
+  });
+}
+
+/**
  * Initialize UI Helpers
  */
 
@@ -574,10 +655,12 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     initSkipLink();
     createLiveRegion();
+    initThemeToggle();
   });
 } else {
   initSkipLink();
   createLiveRegion();
+  initThemeToggle();
 }
 
 // Export functions for use in other scripts
@@ -603,7 +686,9 @@ window.UIHelpers = {
   dismissToast,
   showConfirm,
   showProgress,
-  showIndeterminateProgress
+  showIndeterminateProgress,
+  initPasswordStrength,
+  initThemeToggle
 };
 
 console.log('✅ UI Helpers initialized');

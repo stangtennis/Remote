@@ -87,66 +87,73 @@ function createDeviceCard(device) {
     ? new Date(device.last_seen).toLocaleString()
     : 'Never';
 
-  card.innerHTML = `
-    <div class="device-header">
-      <div class="device-name">${device.device_name || device.device_id}</div>
-      <span class="status-badge ${statusClass}">${statusText}</span>
-    </div>
-    <div class="device-info">
-      <div>🆔 ${device.device_id}</div>
-      <div>💻 ${device.platform || 'Unknown'} (${device.arch || 'Unknown'})</div>
-      <div>🖥️ ${device.cpu_count || '?'} CPUs</div>
-      <div>📅 Last seen: ${lastSeen}</div>
-    </div>
-    ${device.is_online ? `
-      <div class="device-actions">
-        <button class="btn btn-primary connect-btn" data-device-id="${device.device_id}">
-          Connect
-        </button>
-        <button class="btn btn-danger delete-btn" data-device-id="${device.device_id}">
-          Delete
-        </button>
-      </div>
-    ` : `
-      <div class="device-actions">
-        <button class="btn btn-danger delete-btn" data-device-id="${device.device_id}">
-          Delete
-        </button>
-      </div>
-    `}
-    ${!device.owner_id ? `
-      <div class="device-actions">
-        <span class="status-badge pending">Unassigned</span>
-        <button class="btn btn-primary claim-btn" data-device-id="${device.device_id}">
-          🔗 Claim Device
-        </button>
-      </div>
-    ` : ''}
-  `;
+  // Build DOM safely (no innerHTML with user data)
+  const header = document.createElement('div');
+  header.className = 'device-header';
+  const nameEl = document.createElement('div');
+  nameEl.className = 'device-name';
+  nameEl.textContent = device.device_name || device.device_id;
+  const badge = document.createElement('span');
+  badge.className = `status-badge ${statusClass}`;
+  badge.textContent = statusText;
+  header.append(nameEl, badge);
 
-  // Add click handlers
-  const connectBtn = card.querySelector('.connect-btn');
-  if (connectBtn) {
+  const info = document.createElement('div');
+  info.className = 'device-info';
+  const infoLines = [
+    `🆔 ${device.device_id}`,
+    `💻 ${device.platform || 'Unknown'} (${device.arch || 'Unknown'})`,
+    `🖥️ ${device.cpu_count || '?'} CPUs`,
+    `📅 Last seen: ${lastSeen}`
+  ];
+  infoLines.forEach(text => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    info.appendChild(div);
+  });
+
+  card.append(header, info);
+
+  // Action buttons
+  const actions = document.createElement('div');
+  actions.className = 'device-actions';
+
+  if (device.is_online) {
+    const connectBtn = document.createElement('button');
+    connectBtn.className = 'btn btn-primary connect-btn';
+    connectBtn.textContent = 'Connect';
     connectBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       startSession(device);
     });
+    actions.appendChild(connectBtn);
   }
 
-  const claimBtn = card.querySelector('.claim-btn');
-  if (claimBtn) {
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'btn btn-danger delete-btn';
+  deleteBtn.textContent = 'Delete';
+  deleteBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await deleteDevice(device);
+  });
+  actions.appendChild(deleteBtn);
+  card.appendChild(actions);
+
+  if (!device.owner_id) {
+    const claimActions = document.createElement('div');
+    claimActions.className = 'device-actions';
+    const unassigned = document.createElement('span');
+    unassigned.className = 'status-badge pending';
+    unassigned.textContent = 'Unassigned';
+    const claimBtn = document.createElement('button');
+    claimBtn.className = 'btn btn-primary claim-btn';
+    claimBtn.textContent = '🔗 Claim Device';
     claimBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       await claimDevice(device);
     });
-  }
-
-  const deleteBtn = card.querySelector('.delete-btn');
-  if (deleteBtn) {
-    deleteBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      await deleteDevice(device);
-    });
+    claimActions.append(unassigned, claimBtn);
+    card.appendChild(claimActions);
   }
 
   return card;
@@ -210,7 +217,7 @@ async function deleteDevice(device) {
 
     if (error) throw error;
 
-    console.log('Device deleted:', device.device_id);
+    debug('Device deleted:', device.device_id);
     
     // Reload devices (or it will auto-reload via realtime subscription)
     await loadDevices();
@@ -239,13 +246,13 @@ function subscribeToDeviceUpdates() {
       schema: 'public',
       table: 'remote_devices'
     }, (payload) => {
-      console.log('Device update:', payload);
+      debug('Device update:', payload);
       // Debounced reload to prevent flickering
       debouncedReload();
     })
     .subscribe();
 
-  console.log('📡 Subscribed to device updates');
+  debug('📡 Subscribed to device updates');
 }
 
 // Export
