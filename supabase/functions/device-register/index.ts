@@ -67,12 +67,27 @@ serve(async (req) => {
         )
       }
 
-      // Device approved, return API key
+      // Device approved — only return API key if device proves identity
+      const deviceKey = req.headers.get('x-device-key')
+      if (deviceKey && deviceKey === existingDevice.api_key) {
+        return new Response(
+          JSON.stringify({
+            status: 'approved',
+            device_id: existingDevice.device_id,
+            api_key: existingDevice.api_key,
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          }
+        )
+      }
+
+      // No valid key presented — confirm approval without leaking the key
       return new Response(
         JSON.stringify({
           status: 'approved',
           device_id: existingDevice.device_id,
-          api_key: existingDevice.api_key,
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

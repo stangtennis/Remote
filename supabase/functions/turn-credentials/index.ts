@@ -10,9 +10,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// TURN server configuration - read from environment
-const TURN_SERVER = Deno.env.get('TURN_SERVER') || 'turn:188.228.14.94:3478'
-const TURN_SECRET = Deno.env.get('TURN_SECRET') || 'Hawkeye2025Turn!'
+// TURN server configuration - read from environment (no hardcoded fallbacks)
+const TURN_SERVER = Deno.env.get('TURN_SERVER') || ''
+const TURN_SECRET = Deno.env.get('TURN_SECRET') || ''
 const TURN_TTL = parseInt(Deno.env.get('TURN_TTL') || '3600') // 1 hour default
 
 serve(async (req) => {
@@ -44,6 +44,24 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'Invalid or expired token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // If TURN server is not configured, return STUN-only
+    if (!TURN_SERVER || !TURN_SECRET) {
+      return new Response(
+        JSON.stringify({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+          ],
+          ttl: TURN_TTL,
+          expires: Math.floor(Date.now() / 1000) + TURN_TTL
+        }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
       )
     }
 
