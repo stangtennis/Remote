@@ -244,7 +244,7 @@ func (m *Manager) HandleMessage(data []byte) {
 		log.Printf("❌ File transfer error: %s", msg.Error)
 		m.mu.Lock()
 		if m.activeJob != nil && m.onError != nil {
-			m.onError(m.activeJob, fmt.Errorf(msg.Error))
+			m.onError(m.activeJob, fmt.Errorf("%s", msg.Error))
 		}
 		m.activeJob = nil
 		m.startNextJob()

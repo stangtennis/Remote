@@ -611,7 +611,7 @@ func ParseDirListingResponse(data []byte) ([]FileInfo, error) {
 	}
 
 	if response.Error != "" {
-		return nil, fmt.Errorf(response.Error)
+		return nil, fmt.Errorf("%s", response.Error)
 	}
 
 	return response.Files, nil
