@@ -2,9 +2,9 @@
 
 A **professional remote desktop solution** built with **Supabase**, **WebRTC**, and **Go** - like TeamViewer, but self-hosted!
 
-## ✅ Status: **FULLY FUNCTIONAL** (Updated 2025-12-18)
+## ✅ Status: **FULLY FUNCTIONAL** (Updated 2026-02-14)
 
-### 🎮 Controller Application v2.63.9 ✨ **WORKING!**
+### 🎮 Controller Application v2.65.0 ✨ **WORKING!**
 - ✅ **Standalone Windows EXE** - Native controller app (like TeamViewer)
 - ✅ **Auto Admin Elevation** - UAC prompt on startup
 - ✅ **Real Supabase Auth** - Login with email/password
@@ -21,7 +21,7 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 - 🏷️ **GitHub Releases** - Automated via GitHub Actions
 
 ### 🖥️ Agent Options
-- ✅ **Windows Native Agent** (v2.64.0) - **FULLY WORKING!**
+- ✅ **Windows Native Agent** (v2.65.0) - **FULLY WORKING!**
   - Auto admin elevation (UAC prompt if needed)
   - Adaptive FPS streaming (2-30 FPS based on activity)
   - **Bandwidth optimization** - Frame skipping on static desktop (50-80% savings)
@@ -34,12 +34,13 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
   - Self-hosted TURN server for NAT traversal
   - File transfer support (browse remote drives)
   - Clipboard sync (text and images)
+- ✅ **Web Agent** - Browser-based screen sharing agent at `/agent.html`
 - ✅ **Web Dashboard** - Browser-based control interface
 - ✅ **Browser Extension** - Remote control for web agent
 - 🚧 **Electron Agent** - Cross-platform desktop (prototype)
 
 ### 🔧 Device Management
-- ✅ **Anonymous Registration** - Agents auto-register without login
+- ✅ **Authenticated Registration** - Agents register via secure edge function
 - ✅ **Controller Approval** - Approve devices directly in controller app
 - ✅ **Admin Assignment** - Assign devices to users via admin panel
 - ✅ **User-Based Access** - Users see only assigned devices
@@ -76,7 +77,7 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 
 ## 📋 Implementation Status
 
-### ✅ Completed Features (v2.64.0 - 2025-12-18)
+### ✅ Completed Features (v2.65.0 - 2026-02-14)
 
 #### Core Functionality
 - [x] **Infrastructure** - Supabase backend, database, Edge Functions
@@ -89,7 +90,13 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 - [x] **Automated Releases** - GitHub Actions CI/CD
 - [x] **Session Cleanup** - Automatic via pg_cron
 
-#### New in v2.64.0 (2025-12-18) 🎉
+#### New in v2.65.0 (2026-02-14) 🔒
+- [x] **Security Hardening** - RLS on all tables, auth on edge functions, origin-restricted WebSocket
+- [x] **Web Agent** - Browser-based screen sharing via WebRTC
+- [x] **Build Fixes** - All cross-compile errors resolved
+- [x] **Self-hosted Supabase** - Runs locally in Docker, not cloud
+
+#### v2.64.0 (2025-12-18) 🎉
 - [x] **Bandwidth Optimization** - Frame skipping on static desktop (50-80% savings)
 - [x] **Fullscreen Overlay Toolbar** - Auto-hide toolbar in fullscreen mode
 - [x] **File Browser** - Browse remote drives and transfer files
@@ -145,15 +152,16 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 - **👤 Supabase Auth** - Email verification required
 - **👥 User Approval** - Admin must approve all new users
 - **🔐 Admin Panel** - Centralized user management
-- **🛡️ RLS Policies** - Database-level security with approval checks
-- **🎟️ Short-lived Tokens** - JWT expiration (5-15 minutes)
+- **🛡️ RLS Policies** - Enabled on all tables (devices, sessions, signaling)
+- **🔑 Edge Function Auth** - Device registration requires API key verification
 - **⏱️ Rate Limiting** - 100 requests/min per user/device
 
 ### Connection Security
 - **🔐 WebRTC Encryption** - P2P encryption (DTLS-SRTP)
 - **🔑 Device Approval** - Two-factor: user approval + device approval
-- **📌 PIN Codes** - Random PIN for each session
+- **🌐 Origin Restrictions** - WebSocket input-helper only accepts known origins
 - **🚫 Automatic Timeout** - Sessions expire after inactivity
+- **🔒 Session Takeover RPCs** - Only authenticated users can call
 
 ### Monitoring & Audit
 - **📝 Audit Logs** - Session history and device tracking
@@ -164,71 +172,64 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 
 | Service | Cost | Notes |
 |---------|------|-------|
-| Supabase Free Tier | $0/mo | Good for testing/personal use |
-| Supabase Pro | $25/mo | Production (500GB bandwidth) |
+| Supabase (self-hosted) | $0/mo | Runs in Docker on local server |
 | TURN (Self-hosted) | ~$5/mo | Coturn on VPS |
-| GitHub Pages | Free | Static hosting |
-| **Total** | **~$30/mo** | Production setup |
+| GitHub Pages | Free | Static hosting for dashboard |
+| Caddy Reverse Proxy | $0/mo | Runs on same server |
+| **Total** | **~$5/mo** | Self-hosted setup |
 
-**Free Alternative**: Use Supabase free tier + free TURN services for personal use.
+**Note**: Supabase runs self-hosted in Docker, not on Supabase cloud.
 
 ## 📚 Documentation
 
-### 🎮 Controller Application (NEW!)
-- **[controller/README.md](./controller/README.md)** - Main documentation
+### Setup & Configuration
+- **[CONFIGURATION.md](./CONFIGURATION.md)** - Environment variables and setup
+- **[AGENTS.md](./AGENTS.md)** - Contributor guide (repo layout, build, test)
+- **[ULTIMATE_GUIDE.md](./ULTIMATE_GUIDE.md)** - Comprehensive project guide
+
+### Component Docs
+- **[agent/README.md](./agent/README.md)** - Agent documentation
+- **[agent/CONSOLE_MODE.md](./agent/CONSOLE_MODE.md)** - Debug/console mode
+- **[controller/README.md](./controller/README.md)** - Controller documentation
 - **[controller/QUICKSTART.md](./controller/QUICKSTART.md)** - Quick start guide
 - **[controller/CHANGELOG.md](./controller/CHANGELOG.md)** - Version history
-- **[controller/TESTING.md](./controller/TESTING.md)** - Testing guide
-- **[CONTROLLER_APP_PLAN.md](./CONTROLLER_APP_PLAN.md)** - Complete implementation plan
+- **[docs/README.md](./docs/README.md)** - Dashboard/web agent docs
+- **[extension/README.md](./extension/README.md)** - Browser extension
+- **[supabase/README-MIGRATIONS.md](./supabase/README-MIGRATIONS.md)** - Database migrations
 
-### Project Status & Planning
-- **[PROJECT_STATUS.md](./PROJECT_STATUS.md)** - Current status & forward roadmap
-- **[BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)** - Git workflow and branches
-
-### Setup & Deployment
-- **[RELEASE.md](./RELEASE.md)** - Automated release process
-- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Detailed deployment guide
-
-### User Guides
-- **[USER_APPROVAL_GUIDE.md](./USER_APPROVAL_GUIDE.md)** - User approval system
-- **[QUICKSTART-EXTENSION.md](./QUICKSTART-EXTENSION.md)** - Browser extension setup
-- **[CONSOLE_MODE.md](./agent/CONSOLE_MODE.md)** - Debug/console mode
-
-### Implementation Plans
-- **[WEB_AGENT_IMPLEMENTATION_PLAN.md](./WEB_AGENT_IMPLEMENTATION_PLAN.md)** - Web agent design
-- **[WEB_AGENT_CONTROL_SOLUTION.md](./WEB_AGENT_CONTROL_SOLUTION.md)** - Control solution
-- **[ANDROID_IMPLEMENTATION_PLAN.md](./ANDROID_IMPLEMENTATION_PLAN.md)** - Android agent
-
-### Troubleshooting & Optimization
-- **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** - Testing and troubleshooting
-- **[OPTIMIZATION.md](./OPTIMIZATION.md)** - Performance tuning (H.264/VP8)
+### Infrastructure
+- **[caddy/README.md](./caddy/README.md)** - Caddy reverse proxy setup
+- **[docs/INPUT_HELPER_PROTOCOL.md](./docs/INPUT_HELPER_PROTOCOL.md)** - Input helper WebSocket protocol
 
 ### Release History
-- **[CHANGELOG.md](./CHANGELOG.md)** - Version history
 - **[GitHub Releases](https://github.com/stangtennis/Remote/releases)** - All release notes and downloads
 
-## 🔨 Build & Release (Linux Host)
+## 🔨 Build & Release (Linux → Windows Cross-Compile)
 
-- **Prereqs:** Go 1.25.x and MinGW for Windows CGO, or Docker (recommended). Repo root: `/home/dennis/projekter/Remote Desktop`.
-- **Preferred (GitHub Actions):**
-  1. `git tag v2.5.0`
-  2. `git push origin v2.5.0`
-  3. Workflows (`.github/workflows/release*.yml`) run on `windows-latest` with Go 1.25, build both EXEs, and attach them to the release.
-- **Local cross-build via Docker (Linux → Windows):**
-  ```
-  docker run --rm -v "$PWD":/app -w /app golang:1.25 bash -lc '
-    set -euo pipefail
-    apt-get update -qq
-    apt-get install -y -qq --no-install-recommends mingw-w64 > /dev/null
-    export GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc
-    mkdir -p /app/build
-    cd agent && go build -ldflags "-s -w" -o /app/build/remote-agent.exe ./cmd/remote-agent
-    cd /app/controller && go build -ldflags "-s -w -H windowsgui" -o /app/build/controller.exe .
-  '
-  ```
-  Outputs: `build/remote-agent.exe`, `build/controller.exe`.
-- **Flags:** `-ldflags "-s -w"` strips debug info; controller adds `-H windowsgui` to hide console. `CGO_ENABLED=1` is required for robotgo on the agent.
-- **Releases:** Download from https://github.com/stangtennis/Remote/releases
+**Prereqs:** Go 1.25+, MinGW cross-compiler (`x86_64-w64-mingw32-gcc`).
+
+```bash
+# Agent (GUI - no console window)
+cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
+  CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
+  go build -ldflags '-s -w -H windowsgui' -o ../builds/remote-agent.exe ./cmd/remote-agent
+
+# Agent (Console - with logging output)
+cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
+  CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
+  go build -ldflags '-s -w' -o ../builds/remote-agent-console.exe ./cmd/remote-agent
+
+# Controller
+cd controller && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
+  CC=x86_64-w64-mingw32-gcc \
+  go build -ldflags '-s -w -H windowsgui' -o ../builds/controller.exe .
+```
+
+**Version:** Update version in `agent/internal/tray/tray.go` and `controller/main.go` before building.
+
+**Dashboard:** Push to `main` branch → GitHub Pages auto-deploys.
+
+**Downloads:** Copy built EXEs to Caddy downloads server for auto-update.
 
 ## 🤝 Contributing
 
