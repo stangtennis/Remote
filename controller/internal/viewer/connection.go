@@ -9,6 +9,7 @@ import (
 	"image/jpeg"
 	"log"
 	"math"
+	"os"
 	"time"
 
 	"fyne.io/fyne/v2"
