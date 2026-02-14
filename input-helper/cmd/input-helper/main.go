@@ -17,10 +17,31 @@ const (
 	Port    = 9877
 )
 
+// Allowed origins for WebSocket connections
+var allowedOrigins = map[string]bool{
+	"https://stangtennis.github.io": true,
+	"http://localhost":              true,
+	"http://127.0.0.1":              true,
+}
+
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		// Allow connections from any origin (localhost only anyway)
-		return true
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return false
+		}
+		// Check exact match or match with port variants
+		if allowedOrigins[origin] {
+			return true
+		}
+		// Allow localhost with any port
+		for allowed := range allowedOrigins {
+			if len(origin) > len(allowed) && origin[:len(allowed)] == allowed && origin[len(allowed)] == ':' {
+				return true
+			}
+		}
+		log.Printf("⚠️ Rejected WebSocket from origin: %s", origin)
+		return false
 	},
 }
 
@@ -238,9 +259,15 @@ func (h *InputHelper) handleEvent(conn *websocket.Conn, session *Session, event 
 }
 
 func (h *InputHelper) handleAuth(session *Session, event *InputEvent) *Response {
-	// For now, accept any token (in production, validate against Supabase)
+	// Validate required fields and minimum token length
 	if event.Token == "" || event.DeviceID == "" {
 		return &Response{Type: "ack", OK: false, Error: "missing token or device_id"}
+	}
+	if len(event.Token) < 8 {
+		return &Response{Type: "ack", OK: false, Error: "invalid token"}
+	}
+	if event.SessionID == "" {
+		return &Response{Type: "ack", OK: false, Error: "missing session_id"}
 	}
 
 	session.mu.Lock()
