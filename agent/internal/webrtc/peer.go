@@ -998,14 +998,19 @@ func (m *Manager) determineMode(motionPct float64, timeSinceInput time.Duration,
 		return m.modeState.current
 	}
 
-	// Mode 1: Idle Tiles (default for low motion + no recent input)
-	if motionPct < 0.3 && timeSinceInput > 1*time.Second {
-		return ModeIdleTiles
+	// When H.264 is active, stay in H.264 mode (encoder handles static screens with tiny P-frames)
+	// Only fall back if conditions are bad (high CPU/RTT/loss)
+	if m.useH264 {
+		if avgCPU < 75 && avgRTT < 200*time.Millisecond && lossPct < 3 {
+			return ModeActiveH264
+		}
+		// Bad conditions - fall back to tiles
+		return ModeActiveTiles
 	}
 
-	// Mode 3: Active H.264 (only if conditions are good and H.264 enabled)
-	if m.useH264 && avgCPU < 75 && avgRTT < 200*time.Millisecond && lossPct < 3 {
-		return ModeActiveH264
+	// Mode 1: Idle Tiles (default for low motion + no recent input) - only for JPEG mode
+	if motionPct < 0.3 && timeSinceInput > 1*time.Second {
+		return ModeIdleTiles
 	}
 
 	// Mode 2: Active Tiles (default for active use)
