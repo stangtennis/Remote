@@ -1513,6 +1513,11 @@ func installAsProgram() error {
 		return fmt.Errorf("kunne ikke sætte autostart: %w", err)
 	}
 
+	// Create Start Menu shortcut
+	if smErr := createAgentStartMenuShortcut(targetExe); smErr != nil {
+		log.Printf("⚠️ Start Menu genvej fejlede: %v", smErr)
+	}
+
 	// Start the agent now from Program Files
 	log.Printf("🚀 Starter agent fra: %s", targetExe)
 	cmd := exec.Command(targetExe)
@@ -1538,6 +1543,9 @@ func uninstallProgram() error {
 	// Remove autostart registry entry
 	removeAutostartRegistry()
 
+	// Remove shortcuts
+	removeAgentShortcuts()
+
 	// Remove install directory
 	if err := os.RemoveAll(programInstallDir); err != nil {
 		return fmt.Errorf("kunne ikke fjerne mappe: %w", err)
@@ -1545,6 +1553,48 @@ func uninstallProgram() error {
 
 	log.Println("✅ Program afinstalleret")
 	return nil
+}
+
+// createAgentShortcut creates a Windows .lnk shortcut file using PowerShell
+func createAgentShortcut(shortcutPath, targetExe, description string) error {
+	psScript := fmt.Sprintf(`
+$ws = New-Object -ComObject WScript.Shell
+$s = $ws.CreateShortcut('%s')
+$s.TargetPath = '%s'
+$s.WorkingDirectory = '%s'
+$s.Description = '%s'
+$s.Save()
+`, shortcutPath, targetExe, filepath.Dir(targetExe), description)
+
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", psScript)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("powershell shortcut failed: %w (%s)", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+// createAgentStartMenuShortcut creates a Start Menu shortcut for the agent
+func createAgentStartMenuShortcut(targetExe string) error {
+	startMenuDir := filepath.Join(os.Getenv("ProgramData"), "Microsoft", "Windows", "Start Menu", "Programs")
+	if _, err := os.Stat(startMenuDir); os.IsNotExist(err) {
+		startMenuDir = filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs")
+	}
+	shortcutPath := filepath.Join(startMenuDir, "Remote Desktop Agent.lnk")
+	log.Printf("📌 Opretter Start Menu genvej: %s", shortcutPath)
+	return createAgentShortcut(shortcutPath, targetExe, "Remote Desktop Agent")
+}
+
+// removeAgentShortcuts removes Start Menu shortcuts for the agent
+func removeAgentShortcuts() {
+	startMenuAll := filepath.Join(os.Getenv("ProgramData"), "Microsoft", "Windows", "Start Menu", "Programs", "Remote Desktop Agent.lnk")
+	if err := os.Remove(startMenuAll); err == nil {
+		log.Printf("🗑️ Start Menu genvej fjernet (alle brugere)")
+	}
+	startMenuUser := filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Remote Desktop Agent.lnk")
+	if err := os.Remove(startMenuUser); err == nil {
+		log.Printf("🗑️ Start Menu genvej fjernet (bruger)")
+	}
 }
 
 // copyFile copies a file from src to dst

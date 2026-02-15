@@ -30,7 +30,7 @@ import (
 
 // Version information - update before each release
 var (
-	Version     = "v2.68.4"
+	Version     = "v2.68.5"
 	BuildDate   = "2026-02-15"
 	VersionInfo = Version + " (built " + BuildDate + ")"
 )
@@ -1511,6 +1511,9 @@ func uninstallControllerProgram() error {
 	// Remove autostart registry entry
 	removeControllerAutostart()
 
+	// Remove Start Menu and Desktop shortcuts
+	removeShortcuts()
+
 	// Remove install directory
 	if err := os.RemoveAll(controllerInstallDir); err != nil {
 		return fmt.Errorf("kunne ikke fjerne mappe: %w", err)
@@ -1561,6 +1564,67 @@ func copyFileSimple(src, dst string) error {
 	return err
 }
 
+// createShortcut creates a Windows .lnk shortcut file using PowerShell
+func createShortcut(shortcutPath, targetExe, description string) error {
+	// Use PowerShell COM object to create .lnk file
+	psScript := fmt.Sprintf(`
+$ws = New-Object -ComObject WScript.Shell
+$s = $ws.CreateShortcut('%s')
+$s.TargetPath = '%s'
+$s.WorkingDirectory = '%s'
+$s.Description = '%s'
+$s.Save()
+`, shortcutPath, targetExe, filepath.Dir(targetExe), description)
+
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", psScript)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("powershell shortcut failed: %w (%s)", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+// createStartMenuShortcut creates a Start Menu shortcut for the controller
+func createStartMenuShortcut(targetExe string) error {
+	// Use ProgramData Start Menu (all users) if admin, otherwise per-user
+	startMenuDir := filepath.Join(os.Getenv("ProgramData"), "Microsoft", "Windows", "Start Menu", "Programs")
+	if _, err := os.Stat(startMenuDir); os.IsNotExist(err) {
+		// Fallback to per-user
+		startMenuDir = filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs")
+	}
+
+	shortcutPath := filepath.Join(startMenuDir, "Remote Desktop Controller.lnk")
+	log.Printf("📌 Opretter Start Menu genvej: %s", shortcutPath)
+	return createShortcut(shortcutPath, targetExe, "Remote Desktop Controller")
+}
+
+// createDesktopShortcut creates a Desktop shortcut for the controller
+func createDesktopShortcut(targetExe string) error {
+	desktopDir := filepath.Join(os.Getenv("USERPROFILE"), "Desktop")
+	shortcutPath := filepath.Join(desktopDir, "Remote Desktop Controller.lnk")
+	log.Printf("🖥️ Opretter Desktop genvej: %s", shortcutPath)
+	return createShortcut(shortcutPath, targetExe, "Remote Desktop Controller")
+}
+
+// removeShortcuts removes Start Menu and Desktop shortcuts
+func removeShortcuts() {
+	// Start Menu (all users)
+	startMenuAll := filepath.Join(os.Getenv("ProgramData"), "Microsoft", "Windows", "Start Menu", "Programs", "Remote Desktop Controller.lnk")
+	if err := os.Remove(startMenuAll); err == nil {
+		log.Printf("🗑️ Start Menu genvej fjernet (alle brugere)")
+	}
+	// Start Menu (per-user)
+	startMenuUser := filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Remote Desktop Controller.lnk")
+	if err := os.Remove(startMenuUser); err == nil {
+		log.Printf("🗑️ Start Menu genvej fjernet (bruger)")
+	}
+	// Desktop
+	desktopShortcut := filepath.Join(os.Getenv("USERPROFILE"), "Desktop", "Remote Desktop Controller.lnk")
+	if err := os.Remove(desktopShortcut); err == nil {
+		log.Printf("🗑️ Desktop genvej fjernet")
+	}
+}
+
 // showInstallDialog shows the install/uninstall dialog for the controller
 func showInstallDialog(window fyne.Window) {
 	installed := isInstalledAsProgram()
@@ -1571,7 +1635,7 @@ func showInstallDialog(window fyne.Window) {
 			"Controller er installeret i:\n"+controllerInstallDir+"\n\n"+
 				"Dette vil:\n"+
 				"• Stoppe kørende controller\n"+
-				"• Fjerne autostart\n"+
+				"• Fjerne autostart og genveje\n"+
 				"• Slette installationen\n\n"+
 				"Fortsæt?",
 			func(ok bool) {
@@ -1596,24 +1660,37 @@ func showInstallDialog(window fyne.Window) {
 							dialog.ShowError(fmt.Errorf("Kunne ikke afinstallere: %v", err), window)
 						} else {
 							dialog.ShowInformation("Afinstallation færdig",
-								"✅ Controller afinstalleret.\n\nAutostart er fjernet.", window)
+								"✅ Controller afinstalleret.\n\nAutostart og genveje er fjernet.", window)
 						}
 					})
 				}()
 			}, window)
 	} else {
-		// Show install option
-		dialog.ShowConfirm("Installer Controller",
-			"Dette vil:\n\n"+
-				"• Kopiere controller til Program Files\n"+
-				"• Sætte autostart ved Windows login\n"+
-				"• Stoppe evt. kørende gammel version\n\n"+
-				"Installationsmappe:\n"+controllerInstallDir+"\n\n"+
-				"Fortsæt?",
+		// Show install option with desktop shortcut checkbox
+		desktopCheck := widget.NewCheck("Opret genvej på skrivebordet", nil)
+		desktopCheck.SetChecked(true)
+
+		content := container.NewVBox(
+			widget.NewLabelWithStyle("Installer Controller", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+			widget.NewSeparator(),
+			widget.NewLabel("Dette vil:"),
+			widget.NewLabel("  • Kopiere controller til Program Files"),
+			widget.NewLabel("  • Oprette Start Menu genvej"),
+			widget.NewLabel("  • Sætte autostart ved Windows login"),
+			widget.NewLabel("  • Stoppe evt. kørende gammel version"),
+			widget.NewSeparator(),
+			desktopCheck,
+			widget.NewSeparator(),
+			widget.NewLabel("Installationsmappe:"),
+			widget.NewLabel(controllerInstallDir),
+		)
+
+		d := dialog.NewCustomConfirm("Installer Controller", "Installer", "Annuller", content,
 			func(ok bool) {
 				if !ok {
 					return
 				}
+				createDesktop := desktopCheck.Checked
 				if !isAdmin() {
 					dialog.ShowConfirm("Administrator kræves",
 						"Installation kræver Administrator rettigheder.\n\nGenstart som Administrator?",
@@ -1627,12 +1704,26 @@ func showInstallDialog(window fyne.Window) {
 				}
 				go func() {
 					err := installControllerAsProgram()
+					if err == nil {
+						targetExe := filepath.Join(controllerInstallDir, controllerExeName)
+						// Always create Start Menu shortcut
+						if smErr := createStartMenuShortcut(targetExe); smErr != nil {
+							log.Printf("⚠️ Start Menu genvej fejlede: %v", smErr)
+						}
+						// Optionally create Desktop shortcut
+						if createDesktop {
+							if dErr := createDesktopShortcut(targetExe); dErr != nil {
+								log.Printf("⚠️ Desktop genvej fejlede: %v", dErr)
+							}
+						}
+					}
 					fyne.Do(func() {
 						if err != nil {
 							dialog.ShowError(fmt.Errorf("Kunne ikke installere: %v", err), window)
 						} else {
 							d := dialog.NewInformation("Installation færdig",
 								"✅ Controller installeret og startet!\n\n"+
+									"• Start Menu genvej oprettet\n"+
 									"• Starter automatisk ved Windows login\n"+
 									"• Installeret i: "+controllerInstallDir+"\n\n"+
 									"Dette vindue lukkes nu.", window)
@@ -1644,5 +1735,7 @@ func showInstallDialog(window fyne.Window) {
 					})
 				}()
 			}, window)
+		d.Resize(fyne.NewSize(400, 350))
+		d.Show()
 	}
 }
