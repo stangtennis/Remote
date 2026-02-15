@@ -1369,6 +1369,169 @@ func startAgent() error {
 	return nil
 }
 
+// Program installation paths
+const (
+	programInstallDir  = `C:\Program Files\RemoteDesktopAgent`
+	programExeName     = "remote-agent.exe"
+	registryRunKey     = `SOFTWARE\Microsoft\Windows\CurrentVersion\Run`
+	registryValueName  = "RemoteDesktopAgent"
+)
+
+// isProgramInstalled checks if the agent is installed as a program
+func isProgramInstalled() bool {
+	exePath := filepath.Join(programInstallDir, programExeName)
+	_, err := os.Stat(exePath)
+	return err == nil
+}
+
+// isProgramAutostart checks if autostart registry entry exists
+func isProgramAutostart() bool {
+	key, err := openRegistryKey(registryRunKey)
+	if err != nil {
+		return false
+	}
+	defer key.Close()
+
+	_, _, err = key.GetStringValue(registryValueName)
+	return err == nil
+}
+
+// installAsProgram copies the exe to Program Files and sets up autostart
+func installAsProgram() error {
+	if !isAdmin() {
+		return fmt.Errorf("administrator rettigheder kræves")
+	}
+
+	// Create install directory
+	if err := os.MkdirAll(programInstallDir, 0755); err != nil {
+		return fmt.Errorf("kunne ikke oprette mappe: %w", err)
+	}
+
+	// Get current exe path
+	currentExe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("kunne ikke finde exe: %w", err)
+	}
+
+	targetExe := filepath.Join(programInstallDir, programExeName)
+
+	// Copy exe to Program Files
+	srcFile, err := os.Open(currentExe)
+	if err != nil {
+		return fmt.Errorf("kunne ikke åbne kilde: %w", err)
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(targetExe)
+	if err != nil {
+		return fmt.Errorf("kunne ikke oprette destination: %w", err)
+	}
+
+	if _, err := dstFile.ReadFrom(srcFile); err != nil {
+		dstFile.Close()
+		return fmt.Errorf("kunne ikke kopiere: %w", err)
+	}
+	dstFile.Close()
+
+	// Copy .env file if it exists next to current exe
+	envSrc := filepath.Join(filepath.Dir(currentExe), ".env")
+	if _, err := os.Stat(envSrc); err == nil {
+		envDst := filepath.Join(programInstallDir, ".env")
+		copyFile(envSrc, envDst)
+	}
+
+	// Copy credentials if they exist
+	credsSrc := filepath.Join(filepath.Dir(currentExe), "credentials.json")
+	if _, err := os.Stat(credsSrc); err == nil {
+		credsDst := filepath.Join(programInstallDir, "credentials.json")
+		copyFile(credsSrc, credsDst)
+	}
+
+	// Add autostart registry entry
+	if err := setAutostartRegistry(targetExe); err != nil {
+		return fmt.Errorf("kunne ikke sætte autostart: %w", err)
+	}
+
+	log.Printf("✅ Program installeret: %s", targetExe)
+	return nil
+}
+
+// uninstallProgram removes the program installation and autostart
+func uninstallProgram() error {
+	if !isAdmin() {
+		return fmt.Errorf("administrator rettigheder kræves")
+	}
+
+	// Remove autostart registry entry
+	removeAutostartRegistry()
+
+	// Remove install directory
+	if err := os.RemoveAll(programInstallDir); err != nil {
+		return fmt.Errorf("kunne ikke fjerne mappe: %w", err)
+	}
+
+	log.Println("✅ Program afinstalleret")
+	return nil
+}
+
+// copyFile copies a file from src to dst
+func copyFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	_, err = dstFile.ReadFrom(srcFile)
+	return err
+}
+
+// setAutostartRegistry adds the agent to Windows autostart via registry
+func setAutostartRegistry(exePath string) error {
+	// Use reg.exe to add the key (simpler than importing registry package)
+	cmd := exec.Command("reg", "add",
+		`HKLM\`+registryRunKey,
+		"/v", registryValueName,
+		"/t", "REG_SZ",
+		"/d", `"`+exePath+`"`,
+		"/f")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("reg add failed: %w", err)
+	}
+	return nil
+}
+
+// removeAutostartRegistry removes the agent from Windows autostart
+func removeAutostartRegistry() {
+	cmd := exec.Command("reg", "delete",
+		`HKLM\`+registryRunKey,
+		"/v", registryValueName,
+		"/f")
+	cmd.Run() // Ignore errors
+}
+
+// openRegistryKey opens a registry key for reading
+func openRegistryKey(keyPath string) (*registryKey, error) {
+	cmd := exec.Command("reg", "query", `HKLM\`+keyPath, "/v", registryValueName)
+	if err := cmd.Run(); err != nil {
+		return nil, err
+	}
+	return &registryKey{}, nil
+}
+
+type registryKey struct{}
+
+func (k *registryKey) Close() error { return nil }
+func (k *registryKey) GetStringValue(name string) (string, uint32, error) {
+	return "", 0, nil
+}
+
 func stopAgent() {
 	if dev != nil {
 		dev.SetOffline()
