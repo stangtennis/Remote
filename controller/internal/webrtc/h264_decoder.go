@@ -105,22 +105,18 @@ func (d *H264Decoder) start() error {
 		ffmpegPath = findFFmpeg()
 	}
 
-	// FFmpeg command: read H.264 Annex-B from stdin, output raw NV12 to stdout
-	// Using hardware acceleration (DXVA2) on Windows for fast decoding
-	// NV12 is the native GPU format - much faster than MJPEG re-encoding!
-	// -hwaccel dxva2: use DirectX Video Acceleration (GPU decode)
-	// -hwaccel_output_format nv12: keep frames in GPU-native format
+	// FFmpeg command: read H.264 Annex-B from stdin, output MJPEG to stdout
+	// MJPEG output is self-framing (JPEG markers FFD8/FFD9) so we don't need
+	// to know resolution upfront — eliminates the resolution-parsing dependency.
 	// -flags low_delay: minimize decoding latency
 	// -fflags nobuffer+discardcorrupt: disable buffering, discard corrupt frames
 	// -probesize 32: minimal probing for faster start
 	// -analyzeduration 0: skip analysis for faster start
 	// -vsync 0: no frame sync, output as fast as possible
-	// -f rawvideo -pix_fmt nv12: output raw NV12 frames (Y plane + interleaved UV)
+	// -q:v 3: MJPEG quality (2-5, lower=better)
 	d.cmd = exec.Command(ffmpegPath,
 		"-hide_banner",
 		"-loglevel", "info",
-		"-hwaccel", "dxva2",
-		"-hwaccel_output_format", "nv12",
 		"-flags", "low_delay",
 		"-fflags", "nobuffer+discardcorrupt",
 		"-probesize", "32",
@@ -128,8 +124,8 @@ func (d *H264Decoder) start() error {
 		"-f", "h264",
 		"-i", "pipe:0",
 		"-vsync", "0",
-		"-f", "rawvideo",
-		"-pix_fmt", "nv12",
+		"-q:v", "3",
+		"-f", "mjpeg",
 		"pipe:1",
 	)
 	configureFFmpegCmd(d.cmd)
@@ -222,7 +218,8 @@ func (d *H264Decoder) parseResolution(line string) {
 	}
 }
 
-// readFrames reads raw NV12 frames from FFmpeg stdout and converts to JPEG
+// readFrames reads MJPEG frames from FFmpeg stdout
+// MJPEG is self-framing: each JPEG starts with FFD8 and ends with FFD9
 func (d *H264Decoder) readFrames() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -230,7 +227,8 @@ func (d *H264Decoder) readFrames() {
 		}
 	}()
 
-	var frameBuf bytes.Buffer
+	var buf bytes.Buffer
+	readBuf := make([]byte, 65536) // 64KB read chunks
 	frameCount := 0
 	lastLogTime := time.Now()
 	var lastFPS float64
@@ -242,63 +240,81 @@ func (d *H264Decoder) readFrames() {
 		default:
 		}
 
-		// Get current resolution
-		d.mu.Lock()
-		width := d.width
-		height := d.height
-		d.mu.Unlock()
+		// Read data from FFmpeg stdout
+		n, err := d.stdout.Read(readBuf)
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("⚠️ FFmpeg stdout read error: %v", err)
+			}
+			return
+		}
+		buf.Write(readBuf[:n])
 
-		// If we don't have resolution yet, read small chunks and wait
-		if width == 0 || height == 0 {
-			buf := make([]byte, 4096)
-			n, err := d.stdout.Read(buf)
-			if err != nil {
-				if err != io.EOF {
-					log.Printf("⚠️ FFmpeg stdout read error: %v", err)
+		// Extract complete JPEG frames (FFD8...FFD9)
+		for {
+			data := buf.Bytes()
+			if len(data) < 2 {
+				break
+			}
+
+			// Find JPEG start marker (FFD8)
+			startIdx := -1
+			for i := 0; i < len(data)-1; i++ {
+				if data[i] == 0xFF && data[i+1] == 0xD8 {
+					startIdx = i
+					break
 				}
-				return
 			}
-			frameBuf.Write(buf[:n])
-			continue
-		}
-
-		// Calculate NV12 frame size: Y plane (width*height) + UV plane (width*height/2)
-		frameSize := width*height + width*height/2
-
-		// Read until we have a complete frame
-		for frameBuf.Len() < frameSize {
-			buf := make([]byte, 65536) // 64KB chunks
-			n, err := d.stdout.Read(buf)
-			if err != nil {
-				if err != io.EOF {
-					log.Printf("⚠️ FFmpeg stdout read error: %v", err)
+			if startIdx < 0 {
+				// No start marker found, discard all but last byte
+				if buf.Len() > 1 {
+					buf.Next(buf.Len() - 1)
 				}
-				return
+				break
 			}
-			frameBuf.Write(buf[:n])
-		}
 
-		// Extract one frame
-		frameData := frameBuf.Next(frameSize)
-		frameCount++
-
-		// Log FPS periodically
-		now := time.Now()
-		elapsed := now.Sub(lastLogTime).Seconds()
-		if elapsed >= 1.0 {
-			fps := float64(frameCount) / elapsed
-			if fps != lastFPS {
-				log.Printf("🎬 H.264 NV12 frames: %d (%.1f fps, %dx%d)", frameCount, fps, width, height)
-				lastFPS = fps
+			// Discard data before start marker
+			if startIdx > 0 {
+				buf.Next(startIdx)
+				data = buf.Bytes()
 			}
-			lastLogTime = now
-			frameCount = 0
-		}
 
-		// Convert NV12 to JPEG (fast, in-memory)
-		jpegData := nv12ToJPEG(frameData, width, height)
-		if jpegData != nil && d.onFrame != nil {
-			d.onFrame(jpegData)
+			// Find JPEG end marker (FFD9) after start
+			endIdx := -1
+			for i := 2; i < len(data)-1; i++ {
+				if data[i] == 0xFF && data[i+1] == 0xD9 {
+					endIdx = i + 2 // Include the FFD9 marker
+					break
+				}
+			}
+			if endIdx < 0 {
+				break // Incomplete frame, wait for more data
+			}
+
+			// Extract complete JPEG frame
+			jpegData := make([]byte, endIdx)
+			copy(jpegData, data[:endIdx])
+			buf.Next(endIdx)
+
+			frameCount++
+
+			// Log FPS periodically
+			now := time.Now()
+			elapsed := now.Sub(lastLogTime).Seconds()
+			if elapsed >= 1.0 {
+				fps := float64(frameCount) / elapsed
+				if fps != lastFPS {
+					log.Printf("🎬 H.264 decoded: %d frames (%.1f fps, %d bytes/frame)", frameCount, fps, len(jpegData))
+					lastFPS = fps
+				}
+				lastLogTime = now
+				frameCount = 0
+			}
+
+			// Forward JPEG frame to callback
+			if d.onFrame != nil {
+				d.onFrame(jpegData)
+			}
 		}
 	}
 }
