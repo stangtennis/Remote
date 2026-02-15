@@ -21,6 +21,7 @@ import (
 	"github.com/stangtennis/remote-agent/internal/auth"
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/tray"
+	"github.com/stangtennis/remote-agent/internal/updater"
 )
 
 // Custom dark theme
@@ -691,13 +692,138 @@ func (g *AgentGUI) doUninstallProgram() {
 }
 
 func (g *AgentGUI) doCheckUpdates() {
-	dialog.ShowInformation("Tjek opdateringer",
-		"Nuværende version: "+tray.Version+"\n\n"+
-			"For at opdatere:\n"+
-			"1. Download seneste fra GitHub Releases\n"+
-			"2. Stop servicen (hvis den kører)\n"+
-			"3. Erstat denne exe\n"+
-			"4. Start servicen igen", g.window)
+	// Create updater
+	u, err := updater.NewUpdater(tray.Version)
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("Kunne ikke initialisere opdatering: %v", err), g.window)
+		return
+	}
+
+	// Status label
+	statusLabel := widget.NewLabel("Klar til at tjekke for opdateringer")
+	statusLabel.Wrapping = fyne.TextWrapWord
+
+	// Progress bar (hidden initially)
+	progressBar := widget.NewProgressBar()
+	progressBar.Hide()
+
+	// Version info
+	currentVersionLabel := widget.NewLabel(fmt.Sprintf("Nuværende version: %s", tray.Version))
+
+	// Buttons
+	var checkBtn, downloadBtn, installBtn *widget.Button
+
+	checkBtn = widget.NewButton("🔍 Tjek for opdateringer", func() {
+		checkBtn.Disable()
+		statusLabel.SetText("Tjekker for opdateringer...")
+
+		go func() {
+			err := u.CheckForUpdate()
+			fyne.Do(func() {
+				checkBtn.Enable()
+				if err != nil {
+					statusLabel.SetText(fmt.Sprintf("❌ Fejl: %v", err))
+					return
+				}
+
+				info := u.GetAvailableUpdate()
+				if info == nil {
+					statusLabel.SetText("✅ Du har den nyeste version!")
+				} else {
+					statusLabel.SetText(fmt.Sprintf("🆕 Ny version tilgængelig: %s", info.TagName))
+					downloadBtn.Show()
+				}
+			})
+		}()
+	})
+	checkBtn.Importance = widget.HighImportance
+
+	// Download button (hidden initially)
+	downloadBtn = widget.NewButton("📥 Download opdatering", func() {
+		downloadBtn.Disable()
+		progressBar.Show()
+		progressBar.SetValue(0)
+		statusLabel.SetText("Downloader...")
+
+		u.SetProgressCallback(func(p updater.DownloadProgress) {
+			fyne.Do(func() {
+				progressBar.SetValue(p.Percent / 100)
+				statusLabel.SetText(fmt.Sprintf("Downloader... %.0f%%", p.Percent))
+			})
+		})
+
+		go func() {
+			err := u.DownloadUpdate()
+			fyne.Do(func() {
+				progressBar.Hide()
+				if err != nil {
+					statusLabel.SetText(fmt.Sprintf("❌ Download fejlede: %v", err))
+					downloadBtn.Enable()
+					return
+				}
+
+				statusLabel.SetText("✅ Download færdig! Klar til installation.")
+				downloadBtn.Hide()
+				installBtn.Show()
+			})
+		}()
+	})
+	downloadBtn.Importance = widget.HighImportance
+	downloadBtn.Hide()
+
+	// Install button (hidden initially)
+	installBtn = widget.NewButton("🚀 Installer og genstart", func() {
+		dialog.ShowConfirm("Installer opdatering",
+			"Agenten vil lukke og genstarte med den nye version.\n\nFortsæt?",
+			func(confirmed bool) {
+				if !confirmed {
+					return
+				}
+
+				statusLabel.SetText("Installerer...")
+				installBtn.Disable()
+
+				go func() {
+					// Stop agent if running
+					stopAgent()
+
+					err := u.InstallUpdate()
+					if err != nil {
+						fyne.Do(func() {
+							statusLabel.SetText(fmt.Sprintf("❌ Installation fejlede: %v", err))
+							installBtn.Enable()
+						})
+						return
+					}
+
+					// Exit app - updater will restart it
+					fyne.Do(func() {
+						g.app.Quit()
+					})
+				}()
+			}, g.window)
+	})
+	installBtn.Importance = widget.DangerImportance
+	installBtn.Hide()
+
+	// Layout
+	content := container.NewVBox(
+		widget.NewLabelWithStyle("🔄 Opdateringer", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewSeparator(),
+		currentVersionLabel,
+		widget.NewSeparator(),
+		statusLabel,
+		progressBar,
+		widget.NewSeparator(),
+		checkBtn,
+		downloadBtn,
+		installBtn,
+	)
+
+	scrollContent := container.NewScroll(content)
+	scrollContent.SetMinSize(fyne.NewSize(400, 300))
+
+	dialog.ShowCustom("Opdateringer", "Luk", scrollContent, g.window)
 }
 
 func (g *AgentGUI) doLogout() {
