@@ -292,9 +292,13 @@ func main() {
 		return
 	}
 
-	// Check if running as admin - if not, relaunch with UAC prompt
+	// Check if running from Program Files install directory (autostart mode)
 	isService, _ := svc.IsWindowsService()
-	if !isService && !isAdmin() {
+	runningFromProgramFiles := isRunningFromProgramFiles()
+
+	// If running from Program Files, don't require admin (autostart runs as normal user)
+	// Otherwise, request admin elevation
+	if !isService && !runningFromProgramFiles && !isAdmin() {
 		fmt.Println("🔒 Administrator rettigheder kræves. Anmoder om elevation...")
 		relaunchAsAdmin()
 		return // Exit this instance, the elevated one will take over
@@ -379,6 +383,22 @@ func main() {
 		}()
 		log.Println("🔧 Kører som Windows Service")
 		runService()
+		return
+	}
+
+	// If running from Program Files and logged in, auto-start as background agent with tray
+	if runningFromProgramFiles && auth.IsLoggedIn() && !*silentFlag && !*consoleFlag {
+		if err := setupLogging(); err != nil {
+			fmt.Printf("Kunne ikke opsætte logging: %v\n", err)
+			os.Exit(1)
+		}
+		defer func() {
+			if logFile != nil {
+				logFile.Close()
+			}
+		}()
+		log.Println("🔧 Kører fra Program Files - auto-start med system tray")
+		runInteractive()
 		return
 	}
 
@@ -1440,16 +1460,18 @@ func installAsProgram() error {
 		copyFile(envSrc, envDst)
 	}
 
-	// Copy credentials if they exist
-	credsSrc := filepath.Join(filepath.Dir(currentExe), "credentials.json")
-	if _, err := os.Stat(credsSrc); err == nil {
-		credsDst := filepath.Join(programInstallDir, "credentials.json")
-		copyFile(credsSrc, credsDst)
-	}
-
-	// Add autostart registry entry
+	// Add autostart registry entry (runs in background with tray icon)
 	if err := setAutostartRegistry(targetExe); err != nil {
 		return fmt.Errorf("kunne ikke sætte autostart: %w", err)
+	}
+
+	// Start the agent now from Program Files
+	log.Printf("🚀 Starter agent fra: %s", targetExe)
+	cmd := exec.Command(targetExe)
+	cmd.Dir = programInstallDir
+	if err := cmd.Start(); err != nil {
+		log.Printf("⚠️ Kunne ikke starte agent: %v", err)
+		// Not fatal - it will start on next login
 	}
 
 	log.Printf("✅ Program installeret: %s", targetExe)
@@ -1530,6 +1552,16 @@ type registryKey struct{}
 func (k *registryKey) Close() error { return nil }
 func (k *registryKey) GetStringValue(name string) (string, uint32, error) {
 	return "", 0, nil
+}
+
+// isRunningFromProgramFiles checks if the current exe is in the Program Files install dir
+func isRunningFromProgramFiles() bool {
+	exePath, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	exeDir := filepath.Dir(exePath)
+	return strings.EqualFold(exeDir, programInstallDir)
 }
 
 func stopAgent() {

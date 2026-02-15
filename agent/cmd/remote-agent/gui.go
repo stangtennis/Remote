@@ -636,10 +636,12 @@ func (g *AgentGUI) doInstallProgram() {
 						dialog.ShowError(fmt.Errorf("Kunne ikke installere: %v", err), g.window)
 					} else {
 						dialog.ShowInformation("Installation færdig",
-							"✅ Program installeret!\n\n"+
-								"• Placering: C:\\Program Files\\RemoteDesktopAgent\n"+
+							"✅ Program installeret og startet!\n\n"+
+								"• Agenten kører nu i baggrunden\n"+
+								"• Se system tray ikonet (ved uret)\n"+
 								"• Starter automatisk ved Windows login\n"+
-								"• Kører som din bruger (med skrivebords-adgang)", g.window)
+								"• Placering: C:\\Program Files\\RemoteDesktopAgent\n\n"+
+								"Du kan lukke dette vindue.", g.window)
 					}
 
 					g.refreshStatus()
