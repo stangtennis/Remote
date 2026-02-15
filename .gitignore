@@ -76,3 +76,8 @@ ULTIMATE_GUIDE.md
 ULTIMATE_GUIDE.md
 dele filer/
 slet.txt/
+test-support-queue.js
+test-results/
+node_modules/
+package.json
+package-lock.json
