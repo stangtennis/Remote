@@ -159,9 +159,6 @@ func (s *SignalingClient) SendOffer(sessionID, offer string) error {
 	}
 
 	jsonData, err := json.Marshal(payload)
-	if err == nil {
-		log.Printf("🔍 DEBUG: Sending offer, length: %d, first 100 chars: %.100s", len(offer), offer)
-	}
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}

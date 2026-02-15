@@ -24,6 +24,28 @@ import (
 	xclipboard "golang.design/x/clipboard"
 )
 
+// getICEServers returns the ICE server configuration with STUN and optional TURN
+func getICEServers() []webrtc.ICEServer {
+	iceServers := []webrtc.ICEServer{
+		{URLs: []string{"stun:stun.l.google.com:19302"}},
+		{URLs: []string{"stun:stun1.l.google.com:19302"}},
+	}
+
+	turnServer := os.Getenv("TURN_SERVER")
+	turnUser := os.Getenv("TURN_USERNAME")
+	turnPass := os.Getenv("TURN_PASSWORD")
+	if turnServer != "" && turnUser != "" && turnPass != "" {
+		iceServers = append(iceServers, webrtc.ICEServer{
+			URLs:       []string{"turn:" + turnServer, "turn:" + turnServer + "?transport=tcp"},
+			Username:   turnUser,
+			Credential: turnPass,
+		})
+		log.Printf("🔒 TURN server configured: %s", turnServer)
+	}
+
+	return iceServers
+}
+
 // ConnectWebRTC initiates a WebRTC connection to the remote device
 func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) error {
 	log.Printf("🔗 Initiating WebRTC connection to device: %s", v.deviceID)
@@ -105,24 +127,7 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 	})
 
 	// Create peer connection with STUN and TURN servers
-	iceServers := []webrtc.ICEServer{
-		{URLs: []string{"stun:stun.l.google.com:19302"}},
-		{URLs: []string{"stun:stun1.l.google.com:19302"}},
-	}
-
-	// Add TURN server if credentials are provided via env vars
-	turnServer := os.Getenv("TURN_SERVER")
-	turnUser := os.Getenv("TURN_USERNAME")
-	turnPass := os.Getenv("TURN_PASSWORD")
-	if turnServer != "" && turnUser != "" && turnPass != "" {
-		iceServers = append(iceServers, webrtc.ICEServer{
-			URLs:       []string{"turn:" + turnServer, "turn:" + turnServer + "?transport=tcp"},
-			Username:   turnUser,
-			Credential: turnPass,
-		})
-	}
-
-	if err := client.CreatePeerConnection(iceServers); err != nil {
+	if err := client.CreatePeerConnection(getICEServers()); err != nil {
 		return fmt.Errorf("failed to create peer connection: %w", err)
 	}
 

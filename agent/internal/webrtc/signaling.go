@@ -19,6 +19,28 @@ func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
 
+// getICEServers returns the ICE server configuration with STUN and optional TURN
+func getICEServers() []webrtc.ICEServer {
+	iceServers := []webrtc.ICEServer{
+		{URLs: []string{"stun:stun.l.google.com:19302"}},
+		{URLs: []string{"stun:stun1.l.google.com:19302"}},
+	}
+
+	turnServer := os.Getenv("TURN_SERVER")
+	turnUser := os.Getenv("TURN_USERNAME")
+	turnPass := os.Getenv("TURN_PASSWORD")
+	if turnServer != "" && turnUser != "" && turnPass != "" {
+		iceServers = append(iceServers, webrtc.ICEServer{
+			URLs:       []string{"turn:" + turnServer, "turn:" + turnServer + "?transport=tcp"},
+			Username:   turnUser,
+			Credential: turnPass,
+		})
+		log.Printf("🔒 TURN server configured: %s", turnServer)
+	}
+
+	return iceServers
+}
+
 type Session struct {
 	ID         string                 `json:"session_id"`
 	Token      string                 `json:"token"`
@@ -264,25 +286,7 @@ func (m *Manager) handleWebSession(session Session) {
 	m.pendingCandidates = nil
 	m.answerSent = false
 
-	// Use STUN and TURN servers for NAT traversal
-	iceServers := []webrtc.ICEServer{
-		{URLs: []string{"stun:stun.l.google.com:19302"}},
-		{URLs: []string{"stun:stun1.l.google.com:19302"}},
-	}
-
-	// Add TURN server if credentials are provided via env vars
-	turnServer := os.Getenv("TURN_SERVER")
-	turnUser := os.Getenv("TURN_USERNAME")
-	turnPass := os.Getenv("TURN_PASSWORD")
-	if turnServer != "" && turnUser != "" && turnPass != "" {
-		iceServers = append(iceServers, webrtc.ICEServer{
-			URLs:       []string{"turn:" + turnServer, "turn:" + turnServer + "?transport=tcp"},
-			Username:   turnUser,
-			Credential: turnPass,
-		})
-	}
-
-	if err := m.CreatePeerConnection(iceServers); err != nil {
+	if err := m.CreatePeerConnection(getICEServers()); err != nil {
 		log.Printf("Failed to create peer connection: %v", err)
 		return
 	}
@@ -451,34 +455,12 @@ func (m *Manager) handleSession(session Session) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Use STUN and TURN servers for NAT traversal
-	iceServers := []webrtc.ICEServer{
-		{URLs: []string{"stun:stun.l.google.com:19302"}},
-		{URLs: []string{"stun:stun1.l.google.com:19302"}},
-	}
-
-	// Add TURN server if credentials are provided via env vars
-	turnServer := os.Getenv("TURN_SERVER")
-	turnUser := os.Getenv("TURN_USERNAME")
-	turnPass := os.Getenv("TURN_PASSWORD")
-	if turnServer != "" && turnUser != "" && turnPass != "" {
-		iceServers = append(iceServers, webrtc.ICEServer{
-			URLs:       []string{"turn:" + turnServer, "turn:" + turnServer + "?transport=tcp"},
-			Username:   turnUser,
-			Credential: turnPass,
-		})
-	}
-
-	if err := m.CreatePeerConnection(iceServers); err != nil {
+	if err := m.CreatePeerConnection(getICEServers()); err != nil {
 		log.Printf("Failed to create peer connection: %v", err)
 		return
 	}
 
 	// Extract offer from session
-	log.Printf("🔍 DEBUG: session.Offer length: %d", len(session.Offer))
-	if len(session.Offer) > 0 {
-		log.Printf("🔍 DEBUG: First 100 chars of offer: %.100s", session.Offer)
-	}
 	if session.Offer == "" {
 		log.Println("❌ No offer found in session")
 		return
