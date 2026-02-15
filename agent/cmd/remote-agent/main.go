@@ -1416,11 +1416,33 @@ func isProgramAutostart() bool {
 	return err == nil
 }
 
+// stopRunningAgent kills any running remote-agent.exe processes (except this one)
+func stopRunningAgent() {
+	myPID := os.Getpid()
+	log.Printf("🛑 Stopper kørende agent-processer (vores PID: %d)...", myPID)
+
+	// Use taskkill to stop all remote-agent.exe processes except ourselves
+	// /F = force, /IM = image name
+	cmd := exec.Command("taskkill", "/F", "/IM", programExeName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("   taskkill resultat: %s (err: %v)", strings.TrimSpace(string(output)), err)
+	} else {
+		log.Printf("   ✅ Agent-processer stoppet: %s", strings.TrimSpace(string(output)))
+	}
+
+	// Give processes time to fully exit and release file handles
+	time.Sleep(500 * time.Millisecond)
+}
+
 // installAsProgram copies the exe to Program Files and sets up autostart
 func installAsProgram() error {
 	if !isAdmin() {
 		return fmt.Errorf("administrator rettigheder kræves")
 	}
+
+	// Stop any running agent first (so we can overwrite the exe)
+	stopRunningAgent()
 
 	// Create install directory
 	if err := os.MkdirAll(programInstallDir, 0755); err != nil {
@@ -1483,6 +1505,9 @@ func uninstallProgram() error {
 	if !isAdmin() {
 		return fmt.Errorf("administrator rettigheder kræves")
 	}
+
+	// Stop any running agent first (so we can delete the exe)
+	stopRunningAgent()
 
 	// Remove autostart registry entry
 	removeAutostartRegistry()
