@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
+	"unsafe"
 
 	"github.com/getlantern/systray"
 	"github.com/stangtennis/remote-agent/internal/device"
@@ -14,7 +16,7 @@ import (
 
 // Version information - update before each release
 var (
-	Version       = "v2.67.2"
+	Version       = "v2.68.0"
 	BuildDate     = "2026-02-15"
 	VersionString = Version + " (built " + BuildDate + ")"
 )
@@ -304,43 +306,117 @@ func getIcon() []byte {
 	}
 }
 
-// checkForUpdates tjekker for tilgængelige opdateringer
+// checkForUpdates tjekker for tilgængelige opdateringer og viser resultat
 func checkForUpdates() {
 	log.Println("🔍 Tjekker for opdateringer...")
 
 	u, err := updater.NewUpdater(Version)
 	if err != nil {
 		log.Printf("❌ Kunne ikke initialisere opdatering: %v", err)
+		showMessageBox("Fejl", fmt.Sprintf("Kunne ikke tjekke for opdateringer:\n%v", err), mbIconError)
 		return
 	}
 
+	// Fetch full version info to show both agent and controller versions
+	versionInfo, err := u.FetchVersionInfo()
+	if err != nil {
+		log.Printf("❌ Kunne ikke hente versions-info: %v", err)
+		showMessageBox("Fejl", fmt.Sprintf("Kunne ikke hente versions-info:\n%v", err), mbIconError)
+		return
+	}
+
+	// Compare versions
+	currentAgent, _ := updater.ParseVersion(Version)
+	remoteAgent, _ := updater.ParseVersion(versionInfo.AgentVersion)
+
+	agentStatus := "✅ Opdateret"
+	if remoteAgent.IsNewerThan(currentAgent) {
+		agentStatus = "🆕 NY VERSION"
+	}
+
+	// Build version display message
+	msg := fmt.Sprintf(
+		"═══ Versioner ═══\n\n"+
+			"Agent (denne):\n"+
+			"  Installeret:  %s\n"+
+			"  Tilgængelig:  %s  %s\n\n"+
+			"Controller:\n"+
+			"  Tilgængelig:  %s\n\n"+
+			"═════════════════",
+		Version,
+		versionInfo.AgentVersion, agentStatus,
+		versionInfo.ControllerVersion,
+	)
+
+	if remoteAgent.IsNewerThan(currentAgent) {
+		// Update available - ask to download
+		msg += "\n\nVil du downloade og installere den nye version?"
+		result := showYesNoBox("Opdatering tilgængelig", msg)
+		if result {
+			log.Printf("📥 Bruger valgte at opdatere til %s", versionInfo.AgentVersion)
+			doDownloadAndInstall(u)
+		}
+	} else {
+		showMessageBox("Opdateringer", msg, mbIconInfo)
+	}
+}
+
+// doDownloadAndInstall downloads and installs the update
+func doDownloadAndInstall(u *updater.Updater) {
+	log.Println("🔍 Tjekker for opdatering...")
 	if err := u.CheckForUpdate(); err != nil {
-		log.Printf("❌ Opdateringstjek fejlede: %v", err)
+		log.Printf("❌ Tjek fejlede: %v", err)
+		showMessageBox("Fejl", fmt.Sprintf("Opdateringstjek fejlede:\n%v", err), mbIconError)
 		return
 	}
 
 	info := u.GetAvailableUpdate()
 	if info == nil {
-		log.Println("✅ Agent er opdateret")
+		showMessageBox("Opdateringer", "Ingen opdatering tilgængelig.", mbIconInfo)
 		return
 	}
 
-	log.Printf("🆕 Ny version tilgængelig: %s (nuværende: %s)", info.TagName, Version)
-	log.Println("📥 Downloader opdatering...")
-
+	log.Printf("📥 Downloader %s...", info.TagName)
 	if err := u.DownloadUpdate(); err != nil {
 		log.Printf("❌ Download fejlede: %v", err)
+		showMessageBox("Fejl", fmt.Sprintf("Download fejlede:\n%v", err), mbIconError)
 		return
 	}
 
-	log.Println("✅ Opdatering downloadet! Installerer...")
-
-	// Installer opdatering - ny exe håndterer udskiftningen
+	log.Println("✅ Download færdig, installerer...")
 	if err := u.InstallUpdate(); err != nil {
 		log.Printf("❌ Installation fejlede: %v", err)
+		showMessageBox("Fejl", fmt.Sprintf("Installation fejlede:\n%v", err), mbIconError)
 		return
 	}
 
 	log.Println("🚀 Opdatering installeret, genstarter...")
 	systray.Quit()
+}
+
+// Windows MessageBox constants and helpers for tray (no Fyne available)
+const (
+	mbOK        = 0x00000000
+	mbYesNo     = 0x00000004
+	mbIconInfo  = 0x00000040
+	mbIconError = 0x00000010
+	mbIDYes     = 6
+)
+
+var (
+	trayUser32      = syscall.NewLazyDLL("user32.dll")
+	trayMessageBoxW = trayUser32.NewProc("MessageBoxW")
+)
+
+func showMessageBox(title, text string, flags uintptr) {
+	titlePtr, _ := syscall.UTF16PtrFromString(title)
+	textPtr, _ := syscall.UTF16PtrFromString(text)
+	trayMessageBoxW.Call(0, uintptr(unsafe.Pointer(textPtr)), uintptr(unsafe.Pointer(titlePtr)), flags)
+}
+
+func showYesNoBox(title, text string) bool {
+	titlePtr, _ := syscall.UTF16PtrFromString(title)
+	textPtr, _ := syscall.UTF16PtrFromString(text)
+	ret, _, _ := trayMessageBoxW.Call(0, uintptr(unsafe.Pointer(textPtr)), uintptr(unsafe.Pointer(titlePtr)), uintptr(mbYesNo|mbIconInfo))
+	return ret == mbIDYes
 }

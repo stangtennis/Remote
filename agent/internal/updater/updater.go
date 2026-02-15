@@ -325,6 +325,11 @@ func (u *Updater) HasPendingUpdate() bool {
 	return true
 }
 
+// FetchVersionInfo fetches version info from the update server
+func (u *Updater) FetchVersionInfo() (*VersionInfo, error) {
+	return u.github.FetchVersionInfo()
+}
+
 // IgnoreUpdate ignores the current available update
 func (u *Updater) IgnoreUpdate() {
 	if u.availableUpdate != nil {
