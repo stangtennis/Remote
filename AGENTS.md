@@ -60,6 +60,46 @@ cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CX
 cd controller && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -ldflags '-s -w -H windowsgui' -o ../builds/controller-vX.XX.X.exe .
 ```
 
+## Current version
+- **Agent:** v2.68.6 (`agent/internal/tray/tray.go`)
+- **Controller:** v2.68.6 (`controller/main.go`)
+- **Update server:** `https://updates.hawkeye123.dk/version.json`
+- **Downloads:** `https://downloads.hawkeye123.dk/`
+
+## Recent changes (v2.68.x)
+- **v2.68.6:** Fix H264 mode dropping to idle tiles (2 FPS freeze on button clicks).
+- **v2.68.5:** Start Menu + Desktop shortcuts for controller and agent install.
+- **v2.68.4:** Fix taskkill killing own process during install/uninstall.
+- **v2.68.3:** Add "Install as Program" to controller (Program Files, autostart, shortcuts).
+- **v2.68.2:** Auto-stop tray before install/uninstall + dashboard black screen fix (0xFE chunk format).
+
+## Deployment workflow
+After building, deploy to the Ubuntu server:
+```bash
+# Copy to Caddy downloads
+cp builds/remote-agent-vX.XX.X.exe ~/caddy/downloads/remote-agent.exe
+cp builds/controller-vX.XX.X.exe ~/caddy/downloads/controller.exe
+
+# Update version.json
+cat > ~/caddy/downloads/version.json << 'EOF'
+{
+  "agent_version": "vX.XX.X",
+  "controller_version": "vX.XX.X",
+  "agent_url": "https://updates.hawkeye123.dk/remote-agent.exe",
+  "controller_url": "https://updates.hawkeye123.dk/controller.exe"
+}
+EOF
+```
+
+## Key architecture notes
+- **Agent streaming modes:** `ModeIdleTiles` (2 FPS), `ModeActiveTiles` (20 FPS JPEG), `ModeActiveH264` (25 FPS H.264 via RTP video track). Mode switching in `determineMode()` in `agent/internal/webrtc/peer.go`.
+- **H.264 pipeline (agent):** OpenH264 encoder → RTP video track → WebRTC.
+- **H.264 pipeline (controller):** RTP track → SampleBuilder → FFmpeg subprocess (DXVA2 hw accel) → NV12 → JPEG → Fyne canvas.
+- **Chunked JPEG (dashboard):** Agent sends `0xFE` magic (5-byte header with frame ID) or `0xFF` magic (3-byte header). Dashboard `webrtc.js` handles both.
+- **Controller install:** Copies to `C:\Program Files\RemoteDesktopController`, sets autostart via registry, creates Start Menu shortcut, optional Desktop shortcut.
+- **Agent install:** Copies to `C:\Program Files\RemoteDesktopAgent`, sets autostart via registry, creates Start Menu shortcut.
+- **Process management:** `stopRunningAgent()`/`stopRunningController()` use `tasklist` + `taskkill /PID` to kill other instances while preserving the current GUI process.
+
 ## Branches and releases
 - Branches: `main` (stable), `agent` (agent work), `dashboard` (web UI), `controller` (controller app).
 - Releases: GitHub Actions build artifacts on tag/branch (controller and agent). Tag and push per release notes; download binaries from Actions or Releases.
@@ -75,6 +115,7 @@ cd controller && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-g
 - Agent: use `run-agent-once.bat` or service logs to inspect startup, registration, and WebRTC connection flow.
 - Controller: run from source to see console output; check Supabase auth settings if login fails.
 - Dashboard: check browser devtools console; Supabase realtime/signaling errors often surface there.
+- H.264: Check agent logs for "H.264 encode fejl" or "Video track write fejl". Controller logs show "RTP packets received" and "H.264 decoded frame" counts.
 
 ## Security
 - Treat Supabase keys and TURN credentials as secrets; use `.env` locally and GitHub Actions secrets in CI.
