@@ -70,6 +70,7 @@ function cleanupWebRTC() {
   // Reset frame state
   frameChunks = [];
   expectedChunks = 0;
+  currentFrameId = -1;
   if (frameTimeout) {
     clearTimeout(frameTimeout);
     frameTimeout = null;
@@ -284,6 +285,7 @@ let expectedChunks = 0;
 let frameTimeout = null;
 let framesReceived = 0;
 let framesDropped = 0;
+let currentFrameId = -1;
 
 // Bandwidth tracking
 let bytesReceived = 0;
@@ -341,7 +343,8 @@ function setupDataChannelHandlers() {
       
       // Frame type detection
       const FRAME_TYPE_REGION = 0x02;  // Dirty region update
-      const CHUNK_MAGIC = 0xFF;        // Chunked frame marker
+      const CHUNK_MAGIC_OLD = 0xFF;    // Old chunked frame marker (3-byte header)
+      const CHUNK_MAGIC_NEW = 0xFE;    // New chunked frame marker (5-byte header with frame ID)
       
       // Check for dirty region (type 0x02)
       if (data.length > 9 && data[0] === FRAME_TYPE_REGION) {
@@ -354,8 +357,63 @@ function setupDataChannelHandlers() {
         displayDirtyRegion(jpegData.buffer, x, y, w, h);
         framesReceived++;
       }
-      // Check for chunked frame (0xFF followed by chunk index, not 0xD8)
-      else if (data.length > 3 && data[0] === CHUNK_MAGIC && data[1] !== 0xD8) {
+      // Check for NEW chunked frame format: [0xFE, frame_id_hi, frame_id_lo, chunk_index, total_chunks, ...data]
+      else if (data.length > 5 && data[0] === CHUNK_MAGIC_NEW) {
+        const frameId = (data[1] << 8) | data[2];
+        const chunkIndex = data[3];
+        const totalChunks = data[4];
+        const chunkData = data.slice(5);
+        
+        // If frame ID changed, start a new frame (drop incomplete previous)
+        if (currentFrameId !== frameId) {
+          if (frameChunks.length > 0 && expectedChunks > 0) {
+            framesDropped++;
+          }
+          frameChunks = new Array(totalChunks);
+          expectedChunks = totalChunks;
+          currentFrameId = frameId;
+          
+          if (frameTimeout) clearTimeout(frameTimeout);
+          frameTimeout = setTimeout(() => {
+            if (expectedChunks > 0 && currentFrameId === frameId) {
+              framesDropped++;
+              frameChunks = [];
+              expectedChunks = 0;
+            }
+          }, 500);
+        }
+        
+        // Store this chunk
+        if (expectedChunks > 0 && chunkIndex < expectedChunks) {
+          frameChunks[chunkIndex] = chunkData;
+          
+          const receivedCount = frameChunks.filter(c => c).length;
+          if (receivedCount === expectedChunks) {
+            if (frameTimeout) {
+              clearTimeout(frameTimeout);
+              frameTimeout = null;
+            }
+            
+            // Reassemble frame
+            const totalLength = frameChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            const completeFrame = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of frameChunks) {
+              completeFrame.set(chunk, offset);
+              offset += chunk.length;
+            }
+            
+            // Display the complete reassembled frame (full JPEG)
+            displayVideoFrame(completeFrame.buffer);
+            framesReceived++;
+            
+            frameChunks = [];
+            expectedChunks = 0;
+          }
+        }
+      }
+      // Check for OLD chunked frame format: [0xFF, chunk_index, total_chunks, ...data]
+      else if (data.length > 3 && data[0] === CHUNK_MAGIC_OLD && data[1] !== 0xD8) {
         const chunkIndex = data[1];
         const totalChunks = data[2];
         const chunkData = data.slice(3);
