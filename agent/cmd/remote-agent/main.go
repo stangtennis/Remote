@@ -1421,18 +1421,44 @@ func stopRunningAgent() {
 	myPID := os.Getpid()
 	log.Printf("🛑 Stopper kørende agent-processer (vores PID: %d)...", myPID)
 
-	// Use taskkill to stop all remote-agent.exe processes except ourselves
-	// /F = force, /IM = image name
-	cmd := exec.Command("taskkill", "/F", "/IM", programExeName)
+	// Use tasklist to find all remote-agent.exe PIDs, then kill each except ours
+	cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("IMAGENAME eq %s", programExeName), "/FO", "CSV", "/NH")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("   taskkill resultat: %s (err: %v)", strings.TrimSpace(string(output)), err)
-	} else {
-		log.Printf("   ✅ Agent-processer stoppet: %s", strings.TrimSpace(string(output)))
+		log.Printf("   tasklist fejl: %v", err)
+		return
 	}
 
-	// Give processes time to fully exit and release file handles
-	time.Sleep(500 * time.Millisecond)
+	killed := 0
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.Contains(line, "No tasks") || strings.Contains(line, "INFO:") {
+			continue
+		}
+		// CSV format: "remote-agent.exe","1234","Console","1","12,345 K"
+		parts := strings.Split(line, ",")
+		if len(parts) < 2 {
+			continue
+		}
+		pidStr := strings.Trim(parts[1], "\" ")
+		pid := 0
+		fmt.Sscanf(pidStr, "%d", &pid)
+		if pid == 0 || pid == myPID {
+			continue
+		}
+		log.Printf("   Dræber PID %d...", pid)
+		killCmd := exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", pid))
+		killCmd.Run()
+		killed++
+	}
+
+	if killed > 0 {
+		log.Printf("   ✅ %d agent-proces(ser) stoppet", killed)
+		// Give processes time to fully exit and release file handles
+		time.Sleep(500 * time.Millisecond)
+	} else {
+		log.Printf("   Ingen andre agent-processer fundet")
+	}
 }
 
 // installAsProgram copies the exe to Program Files and sets up autostart
