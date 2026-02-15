@@ -743,6 +743,27 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 				log.Printf("🎬 H.264 samples: %d (data size: %d bytes)", sampleCount, len(sample.Data))
 			}
 
+			// Restart decoder if it was stopped (e.g. after switching back from tiles)
+			if c.h264Decoder == nil {
+				log.Println("🎬 H.264 decoder was stopped - restarting for new data...")
+				var decErr error
+				decFrameCount := 0
+				c.h264Decoder, decErr = NewH264Decoder(func(jpegData []byte) {
+					decFrameCount++
+					if decFrameCount%30 == 1 {
+						log.Printf("🎬 H.264 decoded frame #%d (%d bytes)", decFrameCount, len(jpegData))
+					}
+					if c.onFrame != nil {
+						c.onFrame(jpegData)
+					}
+				})
+				if decErr != nil {
+					log.Printf("❌ Failed to restart H.264 decoder: %v", decErr)
+					continue
+				}
+				log.Println("✅ H.264 decoder restarted successfully")
+			}
+
 			// Ensure Annex-B format and send to decoder
 			annexB := EnsureAnnexB(sample.Data)
 			if err := c.h264Decoder.DecodeAnnexB(annexB); err != nil {
