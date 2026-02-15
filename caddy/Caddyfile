@@ -17,24 +17,17 @@ login.hawkeye123.dk {
     redir https://stangtennis.github.io/Remote/login.html permanent
 }
 
-# Remote Desktop Downloads - serve binære filer (EKSTERN)
+# Remote Desktop Downloads - JWT-authenticated via download-proxy (EKSTERN)
 downloads.hawkeye123.dk {
-    root * /downloads
-    file_server browse
-    
-    # CORS headers så GitHub Pages kan linke til downloads
-    header {
-        Access-Control-Allow-Origin *
-        Access-Control-Allow-Methods "GET, OPTIONS"
-    }
+    reverse_proxy 192.168.1.92:8099
 }
 
 # Auto-update endpoint - åben for agent/controller (EKSTERN)
-# Ingen browse - kun direkte download af specifikke filer
+# Ingen browse, ingen auth - agent/controller skal kunne hente opdateringer
 updates.hawkeye123.dk {
     root * /downloads
     file_server
-    
+
     # CORS headers for auto-update
     header {
         Access-Control-Allow-Origin *
@@ -47,8 +40,6 @@ files.hawkeye123.dk {
     reverse_proxy 192.168.1.92:8090 {
         header_up Host {host}
         header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
     }
 }
 

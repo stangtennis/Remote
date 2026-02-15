@@ -106,7 +106,7 @@ function showEmptyDevices(elementId) {
       <h3>Ingen enheder endnu</h3>
       <p>Download og kør agenten på en computer for at komme i gang</p>
       <div class="empty-state-actions">
-        <a href="https://downloads.hawkeye123.dk/remote-agent.exe" 
+        <a href="#" onclick="signedDownload('remote-agent.exe'); return false;" 
            class="btn btn-primary">
           🖥️ Hent Windows Agent
         </a>
