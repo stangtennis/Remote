@@ -61,12 +61,13 @@ cd controller && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-g
 ```
 
 ## Current version
-- **Agent:** v2.68.6 (`agent/internal/tray/tray.go`)
-- **Controller:** v2.68.6 (`controller/main.go`)
+- **Agent:** v2.68.7 (`agent/internal/tray/tray.go`)
+- **Controller:** v2.68.7 (`controller/main.go`)
 - **Update server:** `https://updates.hawkeye123.dk/version.json`
 - **Downloads:** `https://downloads.hawkeye123.dk/`
 
 ## Recent changes (v2.68.x)
+- **v2.68.7:** Fix H264 controller decode: FFmpeg NV12→MJPEG output + decoder restart + remove DXVA2.
 - **v2.68.6:** Fix H264 mode dropping to idle tiles (2 FPS freeze on button clicks).
 - **v2.68.5:** Start Menu + Desktop shortcuts for controller and agent install.
 - **v2.68.4:** Fix taskkill killing own process during install/uninstall.
@@ -94,7 +95,7 @@ EOF
 ## Key architecture notes
 - **Agent streaming modes:** `ModeIdleTiles` (2 FPS), `ModeActiveTiles` (20 FPS JPEG), `ModeActiveH264` (25 FPS H.264 via RTP video track). Mode switching in `determineMode()` in `agent/internal/webrtc/peer.go`.
 - **H.264 pipeline (agent):** OpenH264 encoder → RTP video track → WebRTC.
-- **H.264 pipeline (controller):** RTP track → SampleBuilder → FFmpeg subprocess (DXVA2 hw accel) → NV12 → JPEG → Fyne canvas.
+- **H.264 pipeline (controller):** RTP track → SampleBuilder → EnsureAnnexB → FFmpeg subprocess (`-f mjpeg` output) → JPEG frames (FFD8/FFD9 markers) → Fyne canvas. Decoder auto-restarts if stopped (mode switch). No DXVA2 dependency.
 - **Chunked JPEG (dashboard):** Agent sends `0xFE` magic (5-byte header with frame ID) or `0xFF` magic (3-byte header). Dashboard `webrtc.js` handles both.
 - **Controller install:** Copies to `C:\Program Files\RemoteDesktopController`, sets autostart via registry, creates Start Menu shortcut, optional Desktop shortcut.
 - **Agent install:** Copies to `C:\Program Files\RemoteDesktopAgent`, sets autostart via registry, creates Start Menu shortcut.
