@@ -172,8 +172,9 @@ func (e *OpenH264Encoder) Encode(frame *image.RGBA, forceKeyframe bool) (output 
 		return nil, nil
 	}
 
-	// Collect NAL units as Annex-B (00 00 00 01 + NAL...).
-	// OpenH264 provides per-NAL lengths; the raw buffer does not guarantee start codes.
+	// Collect NAL units from OpenH264 output.
+	// PBsBuf already contains Annex-B formatted data (with 00 00 00 01 start codes).
+	// We just copy the raw buffer directly - do NOT add extra start codes.
 	for iLayer := 0; iLayer < int(encInfo.ILayerNum); iLayer++ {
 		pLayerBsInfo := &encInfo.SLayerInfo[iLayer]
 		nalLens := unsafe.Slice(pLayerBsInfo.PNalLengthInByte, pLayerBsInfo.INalCount)
@@ -182,17 +183,11 @@ func (e *OpenH264Encoder) Encode(frame *image.RGBA, forceKeyframe bool) (output 
 		for _, l := range nalLens {
 			totalLen += l
 		}
-		buf := unsafe.Slice(pLayerBsInfo.PBsBuf, totalLen)
-
-		offset := int32(0)
-		for _, l := range nalLens {
-			if l <= 0 || offset+l > totalLen {
-				break
-			}
-			output = append(output, 0, 0, 0, 1)
-			output = append(output, buf[offset:offset+l]...)
-			offset += l
+		if totalLen <= 0 {
+			continue
 		}
+		buf := unsafe.Slice(pLayerBsInfo.PBsBuf, totalLen)
+		output = append(output, buf...)
 	}
 
 	return output, nil
