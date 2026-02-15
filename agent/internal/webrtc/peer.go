@@ -196,7 +196,7 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 		isSession0:          isSession0,
 		currentDesktop:      currentDesktopType,
 		videoEncoder:        videoEncoder,
-		useH264:             videoEncoder.GetEncoderName() == "openh264", // Auto-enable when OpenH264 is available
+		useH264:             false, // Start with JPEG tiles; enable H.264 via set_mode when ready
 		cpuMonitor:          cpuMon,
 		inputFrameTrigger:   make(chan struct{}, 1), // Buffered to avoid blocking
 		modeState: &ModeState{
