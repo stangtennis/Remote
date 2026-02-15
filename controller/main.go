@@ -24,8 +24,8 @@ import (
 
 // Version information - update before each release
 var (
-	Version     = "v2.65.0"
-	BuildDate   = "2026-02-14"
+	Version     = "v2.66.0"
+	BuildDate   = "2026-02-15"
 	VersionInfo = Version + " (built " + BuildDate + ")"
 )
 
