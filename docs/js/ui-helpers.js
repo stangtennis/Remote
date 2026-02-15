@@ -135,21 +135,6 @@ function showEmptyUsers(elementId) {
   element.setAttribute('aria-busy', 'false');
 }
 
-// Show empty state for queue
-function showEmptyQueue(elementId) {
-  const element = document.getElementById(elementId);
-  if (!element) return;
-  
-  element.innerHTML = `
-    <div class="empty-state" role="status">
-      <div class="empty-state-icon">✨</div>
-      <h3>Ingen ventende anmodninger</h3>
-      <p>Supportkøen er tom</p>
-    </div>
-  `;
-  element.setAttribute('aria-busy', 'false');
-}
-
 // Show empty state for invitations
 function showEmptyInvitations(elementId) {
   const element = document.getElementById(elementId);
@@ -673,7 +658,6 @@ window.UIHelpers = {
   setButtonLoading,
   showEmptyDevices,
   showEmptyUsers,
-  showEmptyQueue,
   showEmptyInvitations,
   showEmptyState,
   announceToScreenReader,
