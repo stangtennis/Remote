@@ -24,7 +24,7 @@ import (
 
 // Version information - update before each release
 var (
-	Version     = "v2.67.2"
+	Version     = "v2.68.0"
 	BuildDate   = "2026-02-15"
 	VersionInfo = Version + " (built " + BuildDate + ")"
 )
@@ -1055,7 +1055,7 @@ func stopDeviceRefreshTicker() {
 	}
 }
 
-// showUpdateDialog shows the update check dialog
+// showUpdateDialog shows the update check dialog with version comparison
 func showUpdateDialog(window fyne.Window) {
 	// Create updater
 	u, err := updater.NewUpdater(Version, "controller")
@@ -1064,53 +1064,110 @@ func showUpdateDialog(window fyne.Window) {
 		return
 	}
 
+	// Version list labels (will be populated after check)
+	controllerInstalledLabel := widget.NewLabel(fmt.Sprintf("  Installeret:  %s", Version))
+	controllerAvailableLabel := widget.NewLabel("  Tilgængelig:  Tjekker...")
+	controllerStatusLabel := widget.NewLabel("")
+	agentAvailableLabel := widget.NewLabel("  Tilgængelig:  Tjekker...")
+
 	// Status label
-	statusLabel := widget.NewLabel("Klar til at tjekke for opdateringer")
+	statusLabel := widget.NewLabel("Henter versions-info...")
 	statusLabel.Wrapping = fyne.TextWrapWord
 
 	// Progress bar (hidden initially)
 	progressBar := widget.NewProgressBar()
 	progressBar.Hide()
 
-	// Version info
-	currentVersionLabel := widget.NewLabel(fmt.Sprintf("Nuværende version: %s", Version))
-
-	// Channel selector
-	channelSelect := widget.NewSelect([]string{"stable", "beta"}, func(value string) {
-		u.SetChannel(value)
-	})
-	channelSelect.SetSelected(u.GetChannel())
-
-	// Check button
+	// Buttons
 	var checkBtn, downloadBtn, installBtn *widget.Button
 
-	checkBtn = widget.NewButton("🔍 Tjek for opdateringer", func() {
+	checkBtn = widget.NewButton("🔍 Tjek igen", func() {})
+	checkBtn.Hide()
+
+	downloadBtn = widget.NewButton("📥 Download opdatering", func() {})
+	downloadBtn.Importance = widget.HighImportance
+	downloadBtn.Hide()
+
+	installBtn = widget.NewButton("🚀 Installer og genstart", func() {})
+	installBtn.Importance = widget.DangerImportance
+	installBtn.Hide()
+
+	// Fetch version info immediately
+	go func() {
+		versionInfo, err := u.FetchVersionInfo()
+		fyne.Do(func() {
+			if err != nil {
+				statusLabel.SetText(fmt.Sprintf("❌ Kunne ikke hente versions-info: %v", err))
+				controllerAvailableLabel.SetText("  Tilgængelig:  Fejl")
+				agentAvailableLabel.SetText("  Tilgængelig:  Fejl")
+				checkBtn.Show()
+				return
+			}
+
+			// Update version labels
+			controllerAvailableLabel.SetText(fmt.Sprintf("  Tilgængelig:  %s", versionInfo.ControllerVersion))
+			agentAvailableLabel.SetText(fmt.Sprintf("  Tilgængelig:  %s", versionInfo.AgentVersion))
+
+			// Compare controller versions
+			currentCtrl, _ := updater.ParseVersion(Version)
+			remoteCtrl, _ := updater.ParseVersion(versionInfo.ControllerVersion)
+
+			if remoteCtrl.IsNewerThan(currentCtrl) {
+				controllerStatusLabel.SetText("  🆕 NY VERSION TILGÆNGELIG")
+				statusLabel.SetText(fmt.Sprintf("Ny controller version: %s → %s", Version, versionInfo.ControllerVersion))
+				downloadBtn.Show()
+			} else {
+				controllerStatusLabel.SetText("  ✅ Opdateret")
+				statusLabel.SetText("✅ Du har den nyeste version!")
+			}
+			checkBtn.Show()
+		})
+	}()
+
+	// Wire up check button
+	checkBtn.OnTapped = func() {
 		checkBtn.Disable()
 		statusLabel.SetText("Tjekker for opdateringer...")
+		controllerAvailableLabel.SetText("  Tilgængelig:  Tjekker...")
+		controllerStatusLabel.SetText("")
+		agentAvailableLabel.SetText("  Tilgængelig:  Tjekker...")
+		downloadBtn.Hide()
 
 		go func() {
-			err := u.CheckForUpdate()
+			versionInfo, err := u.FetchVersionInfo()
+			if err != nil {
+				fyne.Do(func() {
+					checkBtn.Enable()
+					statusLabel.SetText(fmt.Sprintf("❌ Fejl: %v", err))
+				})
+				return
+			}
+
+			// Also run the actual update check
+			_ = u.CheckForUpdate()
+
 			fyne.Do(func() {
 				checkBtn.Enable()
-				if err != nil {
-					statusLabel.SetText(fmt.Sprintf("❌ Fejl: %v", err))
-					return
-				}
+				controllerAvailableLabel.SetText(fmt.Sprintf("  Tilgængelig:  %s", versionInfo.ControllerVersion))
+				agentAvailableLabel.SetText(fmt.Sprintf("  Tilgængelig:  %s", versionInfo.AgentVersion))
 
-				info := u.GetAvailableUpdate()
-				if info == nil {
-					statusLabel.SetText("✅ Du har den nyeste version!")
-				} else {
-					statusLabel.SetText(fmt.Sprintf("🆕 Ny version tilgængelig: %s", info.TagName))
+				currentCtrl, _ := updater.ParseVersion(Version)
+				remoteCtrl, _ := updater.ParseVersion(versionInfo.ControllerVersion)
+
+				if remoteCtrl.IsNewerThan(currentCtrl) {
+					controllerStatusLabel.SetText("  🆕 NY VERSION TILGÆNGELIG")
+					statusLabel.SetText(fmt.Sprintf("Ny controller version: %s → %s", Version, versionInfo.ControllerVersion))
 					downloadBtn.Show()
+				} else {
+					controllerStatusLabel.SetText("  ✅ Opdateret")
+					statusLabel.SetText("✅ Du har den nyeste version!")
 				}
 			})
 		}()
-	})
-	checkBtn.Importance = widget.HighImportance
+	}
 
-	// Download button (hidden initially)
-	downloadBtn = widget.NewButton("📥 Download opdatering", func() {
+	// Wire up download button
+	downloadBtn.OnTapped = func() {
 		downloadBtn.Disable()
 		progressBar.Show()
 		progressBar.SetValue(0)
@@ -1124,6 +1181,11 @@ func showUpdateDialog(window fyne.Window) {
 		})
 
 		go func() {
+			// Ensure update check has run
+			if u.GetAvailableUpdate() == nil {
+				u.CheckForUpdate()
+			}
+
 			err := u.DownloadUpdate()
 			fyne.Do(func() {
 				progressBar.Hide()
@@ -1138,12 +1200,10 @@ func showUpdateDialog(window fyne.Window) {
 				installBtn.Show()
 			})
 		}()
-	})
-	downloadBtn.Importance = widget.HighImportance
-	downloadBtn.Hide()
+	}
 
-	// Install button (hidden initially)
-	installBtn = widget.NewButton("🚀 Installer og genstart", func() {
+	// Wire up install button
+	installBtn.OnTapped = func() {
 		dialog.ShowConfirm("Installer opdatering",
 			"Applikationen vil lukke og genstarte med den nye version.\n\nFortsæt?",
 			func(confirmed bool) {
@@ -1164,22 +1224,28 @@ func showUpdateDialog(window fyne.Window) {
 						return
 					}
 
-					// Exit app - updater will restart it
 					fyne.Do(func() {
 						myApp.Quit()
 					})
 				}()
 			}, window)
-	})
-	installBtn.Importance = widget.DangerImportance
-	installBtn.Hide()
+	}
 
-	// Layout
+	// Layout - version comparison list
 	content := container.NewVBox(
 		widget.NewLabelWithStyle("🔄 Opdateringer", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		widget.NewSeparator(),
-		currentVersionLabel,
-		container.NewHBox(widget.NewLabel("Kanal:"), channelSelect),
+
+		widget.NewLabelWithStyle("Controller (denne app):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		controllerInstalledLabel,
+		controllerAvailableLabel,
+		controllerStatusLabel,
+
+		widget.NewSeparator(),
+
+		widget.NewLabelWithStyle("Agent:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		agentAvailableLabel,
+
 		widget.NewSeparator(),
 		statusLabel,
 		progressBar,
@@ -1190,7 +1256,7 @@ func showUpdateDialog(window fyne.Window) {
 	)
 
 	scrollContent := container.NewScroll(content)
-	scrollContent.SetMinSize(fyne.NewSize(400, 350))
+	scrollContent.SetMinSize(fyne.NewSize(420, 400))
 
 	dialog.ShowCustom("Opdateringer", "Luk", scrollContent, window)
 }

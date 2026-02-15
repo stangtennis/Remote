@@ -190,6 +190,33 @@ func (c *GitHubClient) CheckForUpdate(currentVersion string, channel string) (*U
 	return info, nil
 }
 
+// FetchVersionInfo fetches version info from the update server
+// Returns the full VersionInfo so callers can display both agent and controller versions
+func (c *GitHubClient) FetchVersionInfo() (*VersionInfo, error) {
+	req, err := http.NewRequest("GET", VersionCheckURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", c.userAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch version info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("version check returned status %d", resp.StatusCode)
+	}
+
+	var versionInfo VersionInfo
+	if err := json.NewDecoder(resp.Body).Decode(&versionInfo); err != nil {
+		return nil, fmt.Errorf("failed to parse version info: %w", err)
+	}
+
+	return &versionInfo, nil
+}
+
 // DownloadSHA256 downloads and parses a SHA256 checksum file
 func (c *GitHubClient) DownloadSHA256(url string) (string, error) {
 	req, err := http.NewRequest("GET", url, nil)

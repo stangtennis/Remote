@@ -281,6 +281,11 @@ func (u *Updater) InstallUpdate() error {
 	return nil
 }
 
+// FetchVersionInfo fetches version info from the update server
+func (u *Updater) FetchVersionInfo() (*VersionInfo, error) {
+	return u.github.FetchVersionInfo()
+}
+
 // IgnoreUpdate ignores the current available update
 func (u *Updater) IgnoreUpdate() error {
 	if u.availableUpdate == nil {
