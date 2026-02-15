@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fjernskrivebord - Kontrolpanel</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
-  <link rel="stylesheet" href="css/styles.css?v=5">
-  <link rel="stylesheet" href="css/loading-states.css?v=5">
-  <link rel="stylesheet" href="css/mobile.css?v=5">
-  <link rel="stylesheet" href="css/accessibility.css?v=5">
-  <link rel="stylesheet" href="css/empty-states.css?v=5">
-  <link rel="stylesheet" href="css/modern.css?v=5">
+  <link rel="stylesheet" href="css/styles.css?v=6">
+  <link rel="stylesheet" href="css/loading-states.css?v=6">
+  <link rel="stylesheet" href="css/mobile.css?v=6">
+  <link rel="stylesheet" href="css/accessibility.css?v=6">
+  <link rel="stylesheet" href="css/empty-states.css?v=6">
+  <link rel="stylesheet" href="css/modern.css?v=6">
   <script>if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');</script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
@@ -146,7 +146,7 @@
             <h2>📥 Downloads</h2>
           </div>
           <div id="downloadsGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-            <a href="https://downloads.hawkeye123.dk/remote-agent.exe" 
+            <a href="#" onclick="signedDownload('remote-agent.exe'); return false;" 
                class="btn btn-primary" 
                style="text-decoration: none; text-align: center;">
               🖥️ Windows Agent
@@ -182,7 +182,7 @@
             <p>📱 Ingen enheder registreret endnu</p>
             <p class="muted">Download og kør agenten på en computer for at komme i gang</p>
             <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="https://downloads.hawkeye123.dk/remote-agent.exe" 
+              <a href="#" onclick="signedDownload('remote-agent.exe'); return false;" 
                  class="btn btn-primary" style="text-decoration: none;">🖥️ Hent Windows Agent</a>
               <a href="agent.html" 
                  class="btn btn-primary" style="text-decoration: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">🌐 Web Agent</a>
@@ -283,21 +283,38 @@
     </div>
   </div>
 
+  <!-- Signed Download Helper -->
+  <script>
+    async function signedDownload(filename) {
+      try {
+        const { data: { session } } = await window.supabase.auth.getSession();
+        if (!session) {
+          alert('Du skal være logget ind for at downloade.');
+          return;
+        }
+        window.location.href = 'https://downloads.hawkeye123.dk/' + filename + '?token=' + session.access_token;
+      } catch (e) {
+        console.error('Download fejl:', e);
+        alert('Kunne ikke starte download. Prøv at genindlæse siden.');
+      }
+    }
+  </script>
+
   <!-- Scripts -->
   <!-- Error Boundary -->
-  <script src="js/error-boundary.js?v=5"></script>
+  <script src="js/error-boundary.js?v=6"></script>
   
   <!-- UI Helpers -->
-  <script src="js/ui-helpers.js?v=5"></script>
+  <script src="js/ui-helpers.js?v=6"></script>
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/config.js?v=5"></script>
-  <script src="js/auth.js?v=5"></script>
-  <script src="js/app.js?v=5"></script>
-  <script src="js/devices.js?v=5"></script>
-  <script src="js/sessions.js?v=5"></script>
-  <script src="js/webrtc.js?v=5"></script>
-  <script src="js/signaling.js?v=5"></script>
+  <script src="js/config.js?v=6"></script>
+  <script src="js/auth.js?v=6"></script>
+  <script src="js/app.js?v=6"></script>
+  <script src="js/devices.js?v=6"></script>
+  <script src="js/sessions.js?v=6"></script>
+  <script src="js/webrtc.js?v=6"></script>
+  <script src="js/signaling.js?v=6"></script>
   
   <!-- Fullscreen Preview Script -->
   <script>

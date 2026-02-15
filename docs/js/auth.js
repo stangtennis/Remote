@@ -196,7 +196,8 @@ if (document.getElementById('logoutBtn')) {
       const downloadsDescription = document.getElementById('downloadsDescription');
       if (downloadsGrid && isAdmin) {
         const controllerLink = document.createElement('a');
-        controllerLink.href = 'https://downloads.hawkeye123.dk/controller.exe';
+        controllerLink.href = '#';
+        controllerLink.onclick = function() { signedDownload('controller.exe'); return false; };
         controllerLink.className = 'btn btn-secondary';
         controllerLink.style.cssText = 'text-decoration: none; text-align: center;';
         controllerLink.innerHTML = '🎮 Controller';
