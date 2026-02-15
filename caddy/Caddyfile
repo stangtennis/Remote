@@ -1,28 +1,23 @@
 # Caddy reverse proxy for hawkeye123.dk
 # Automatisk HTTPS via Let's Encrypt - ingen manuel konfiguration!
 
-# Supabase - Kong API Gateway
+# Supabase - Kong API Gateway (EKSTERN)
 supabase.hawkeye123.dk {
     reverse_proxy 192.168.1.92:8888
     # Kong håndterer selv CORS - ingen ekstra headers nødvendige
 }
 
-# Archon UI
-archon.hawkeye123.dk {
-    reverse_proxy 192.168.1.92:3737
-}
-
-# Portainer
-portainer.hawkeye123.dk {
-    reverse_proxy 192.168.1.92:9000
-}
-
-# Remote Desktop Dashboard - redirect til GitHub Pages
+# Remote Desktop Dashboard - redirect til GitHub Pages (EKSTERN)
 remote.hawkeye123.dk {
     redir https://stangtennis.github.io/Remote{uri} permanent
 }
 
-# Remote Desktop Downloads - serve binære filer
+# Remote Desktop Login - redirect til GitHub Pages login (EKSTERN)
+login.hawkeye123.dk {
+    redir https://stangtennis.github.io/Remote/login.html permanent
+}
+
+# Remote Desktop Downloads - serve binære filer (EKSTERN)
 downloads.hawkeye123.dk {
     root * /downloads
     file_server browse
@@ -34,7 +29,30 @@ downloads.hawkeye123.dk {
     }
 }
 
-# Archon MCP endpoint (hvis nødvendigt)
-# mcp.hawkeye123.dk {
-#     reverse_proxy 192.168.1.92:8051
-# }
+# Auto-update endpoint - åben for agent/controller (EKSTERN)
+# Ingen browse - kun direkte download af specifikke filer
+updates.hawkeye123.dk {
+    root * /downloads
+    file_server
+    
+    # CORS headers for auto-update
+    header {
+        Access-Control-Allow-Origin *
+        Access-Control-Allow-Methods "GET, OPTIONS"
+    }
+}
+
+# Filebrowser - Modern file manager (EKSTERN)
+files.hawkeye123.dk {
+    reverse_proxy 192.168.1.92:8090 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# LOKALE SERVICES - kun tilgængelige på 192.168.1.x netværk
+# Tilgå via http://192.168.1.92:PORT
+# Archon UI - http://192.168.1.92:3737
+# Portainer - http://192.168.1.92:9000
