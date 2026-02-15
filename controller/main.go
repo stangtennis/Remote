@@ -2,9 +2,15 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
+	"syscall"
 	"time"
+	"unsafe"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -24,7 +30,7 @@ import (
 
 // Version information - update before each release
 var (
-	Version     = "v2.68.2"
+	Version     = "v2.68.3"
 	BuildDate   = "2026-02-15"
 	VersionInfo = Version + " (built " + BuildDate + ")"
 )
@@ -309,6 +315,16 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	})
 	updateButton.Importance = widget.LowImportance
 
+	// Install button - dynamic text based on install state
+	installBtnText := "📦 Installer"
+	if isInstalledAsProgram() {
+		installBtnText = "📦 Afinstaller"
+	}
+	installButton := widget.NewButton(installBtnText, func() {
+		showInstallDialog(window)
+	})
+	installButton.Importance = widget.LowImportance
+
 	loginForm = container.NewVBox(
 		widget.NewSeparator(),
 		widget.NewLabel("Login to Remote Desktop"),
@@ -324,7 +340,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	loggedInContainer = container.NewVBox(
 		widget.NewSeparator(),
 		statusLabel,
-		container.NewGridWithColumns(3, logoutButton, restartButton, updateButton),
+		container.NewGridWithColumns(4, logoutButton, restartButton, updateButton, installButton),
 		widget.NewSeparator(),
 	)
 	loggedInContainer.Hide() // Hidden by default
@@ -1354,4 +1370,248 @@ func runUpdateMode(oldExePath string) {
 	
 	// Clean up - delete ourselves (the temp downloaded exe)
 	// This won't work on Windows while running, but that's OK
+}
+
+// ==================== PROGRAM INSTALLATION ====================
+
+const (
+	controllerInstallDir  = `C:\Program Files\RemoteDesktopController`
+	controllerExeName     = "controller.exe"
+	controllerRegRunKey   = `SOFTWARE\Microsoft\Windows\CurrentVersion\Run`
+	controllerRegValue    = "RemoteDesktopController"
+)
+
+// isAdmin checks if the current process has administrator privileges
+func isAdmin() bool {
+	_, err := os.Open("\\\\.\\PHYSICALDRIVE0")
+	return err == nil
+}
+
+// runAsAdmin restarts the current process with elevated privileges
+func runAsAdmin() {
+	exe, _ := os.Executable()
+	verb := "runas"
+	cwd, _ := os.Getwd()
+
+	verbPtr, _ := syscall.UTF16PtrFromString(verb)
+	exePtr, _ := syscall.UTF16PtrFromString(exe)
+	cwdPtr, _ := syscall.UTF16PtrFromString(cwd)
+	argPtr, _ := syscall.UTF16PtrFromString(strings.Join(os.Args[1:], " "))
+
+	shell32 := syscall.NewLazyDLL("shell32.dll")
+	shellExecute := shell32.NewProc("ShellExecuteW")
+	shellExecute.Call(0, uintptr(unsafe.Pointer(verbPtr)), uintptr(unsafe.Pointer(exePtr)),
+		uintptr(unsafe.Pointer(argPtr)), uintptr(unsafe.Pointer(cwdPtr)), 1)
+}
+
+// isInstalledAsProgram checks if the controller is installed in Program Files
+func isInstalledAsProgram() bool {
+	targetExe := filepath.Join(controllerInstallDir, controllerExeName)
+	_, err := os.Stat(targetExe)
+	return err == nil
+}
+
+// stopRunningController kills any running controller.exe processes
+func stopRunningController() {
+	log.Printf("🛑 Stopper kørende controller-processer...")
+	cmd := exec.Command("taskkill", "/F", "/IM", controllerExeName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("   taskkill resultat: %s (err: %v)", strings.TrimSpace(string(output)), err)
+	} else {
+		log.Printf("   ✅ Controller-processer stoppet: %s", strings.TrimSpace(string(output)))
+	}
+	time.Sleep(500 * time.Millisecond)
+}
+
+// installControllerAsProgram copies the exe to Program Files and sets up autostart
+func installControllerAsProgram() error {
+	if !isAdmin() {
+		return fmt.Errorf("administrator rettigheder kræves")
+	}
+
+	// Stop any running controller first
+	stopRunningController()
+
+	// Create install directory
+	if err := os.MkdirAll(controllerInstallDir, 0755); err != nil {
+		return fmt.Errorf("kunne ikke oprette mappe: %w", err)
+	}
+
+	// Get current exe path
+	currentExe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("kunne ikke finde exe: %w", err)
+	}
+
+	targetExe := filepath.Join(controllerInstallDir, controllerExeName)
+
+	// Copy exe to Program Files
+	if err := copyFileSimple(currentExe, targetExe); err != nil {
+		return fmt.Errorf("kunne ikke kopiere: %w", err)
+	}
+
+	// Add autostart registry entry
+	if err := setControllerAutostart(targetExe); err != nil {
+		return fmt.Errorf("kunne ikke sætte autostart: %w", err)
+	}
+
+	// Start the controller from Program Files
+	log.Printf("🚀 Starter controller fra: %s", targetExe)
+	cmd := exec.Command(targetExe)
+	cmd.Dir = controllerInstallDir
+	if err := cmd.Start(); err != nil {
+		log.Printf("⚠️ Kunne ikke starte controller: %v", err)
+	}
+
+	log.Printf("✅ Controller installeret: %s", targetExe)
+	return nil
+}
+
+// uninstallControllerProgram removes the controller installation and autostart
+func uninstallControllerProgram() error {
+	if !isAdmin() {
+		return fmt.Errorf("administrator rettigheder kræves")
+	}
+
+	// Stop any running controller first
+	stopRunningController()
+
+	// Remove autostart registry entry
+	removeControllerAutostart()
+
+	// Remove install directory
+	if err := os.RemoveAll(controllerInstallDir); err != nil {
+		return fmt.Errorf("kunne ikke fjerne mappe: %w", err)
+	}
+
+	log.Println("✅ Controller afinstalleret")
+	return nil
+}
+
+// setControllerAutostart adds the controller to Windows autostart via registry
+func setControllerAutostart(exePath string) error {
+	cmd := exec.Command("reg", "add",
+		`HKCU\`+controllerRegRunKey,
+		"/v", controllerRegValue,
+		"/t", "REG_SZ",
+		"/d", `"`+exePath+`"`,
+		"/f")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("reg add failed: %w", err)
+	}
+	return nil
+}
+
+// removeControllerAutostart removes the controller from Windows autostart
+func removeControllerAutostart() {
+	cmd := exec.Command("reg", "delete",
+		`HKCU\`+controllerRegRunKey,
+		"/v", controllerRegValue,
+		"/f")
+	cmd.Run() // Ignore errors
+}
+
+// copyFileSimple copies a file from src to dst
+func copyFileSimple(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	return err
+}
+
+// showInstallDialog shows the install/uninstall dialog for the controller
+func showInstallDialog(window fyne.Window) {
+	installed := isInstalledAsProgram()
+
+	if installed {
+		// Show uninstall option
+		dialog.ShowConfirm("Afinstaller Controller",
+			"Controller er installeret i:\n"+controllerInstallDir+"\n\n"+
+				"Dette vil:\n"+
+				"• Stoppe kørende controller\n"+
+				"• Fjerne autostart\n"+
+				"• Slette installationen\n\n"+
+				"Fortsæt?",
+			func(ok bool) {
+				if !ok {
+					return
+				}
+				if !isAdmin() {
+					dialog.ShowConfirm("Administrator kræves",
+						"Afinstallation kræver Administrator rettigheder.\n\nGenstart som Administrator?",
+						func(ok bool) {
+							if ok {
+								runAsAdmin()
+								myApp.Quit()
+							}
+						}, window)
+					return
+				}
+				go func() {
+					err := uninstallControllerProgram()
+					fyne.Do(func() {
+						if err != nil {
+							dialog.ShowError(fmt.Errorf("Kunne ikke afinstallere: %v", err), window)
+						} else {
+							dialog.ShowInformation("Afinstallation færdig",
+								"✅ Controller afinstalleret.\n\nAutostart er fjernet.", window)
+						}
+					})
+				}()
+			}, window)
+	} else {
+		// Show install option
+		dialog.ShowConfirm("Installer Controller",
+			"Dette vil:\n\n"+
+				"• Kopiere controller til Program Files\n"+
+				"• Sætte autostart ved Windows login\n"+
+				"• Stoppe evt. kørende gammel version\n\n"+
+				"Installationsmappe:\n"+controllerInstallDir+"\n\n"+
+				"Fortsæt?",
+			func(ok bool) {
+				if !ok {
+					return
+				}
+				if !isAdmin() {
+					dialog.ShowConfirm("Administrator kræves",
+						"Installation kræver Administrator rettigheder.\n\nGenstart som Administrator?",
+						func(ok bool) {
+							if ok {
+								runAsAdmin()
+								myApp.Quit()
+							}
+						}, window)
+					return
+				}
+				go func() {
+					err := installControllerAsProgram()
+					fyne.Do(func() {
+						if err != nil {
+							dialog.ShowError(fmt.Errorf("Kunne ikke installere: %v", err), window)
+						} else {
+							d := dialog.NewInformation("Installation færdig",
+								"✅ Controller installeret og startet!\n\n"+
+									"• Starter automatisk ved Windows login\n"+
+									"• Installeret i: "+controllerInstallDir+"\n\n"+
+									"Dette vindue lukkes nu.", window)
+							d.SetOnClosed(func() {
+								myApp.Quit()
+							})
+							d.Show()
+						}
+					})
+				}()
+			}, window)
+	}
 }
