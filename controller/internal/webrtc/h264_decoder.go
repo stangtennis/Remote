@@ -98,8 +98,12 @@ func (d *H264Decoder) start() error {
 		return nil
 	}
 
-	// Find FFmpeg executable
-	ffmpegPath := findFFmpeg()
+	// Find FFmpeg executable (auto-downloads if missing)
+	ffmpegPath, err := EnsureFFmpeg()
+	if err != nil {
+		// EnsureFFmpeg failed, try findFFmpeg as last resort
+		ffmpegPath = findFFmpeg()
+	}
 
 	// FFmpeg command: read H.264 Annex-B from stdin, output raw NV12 to stdout
 	// Using hardware acceleration (DXVA2) on Windows for fast decoding
@@ -130,7 +134,6 @@ func (d *H264Decoder) start() error {
 	)
 	configureFFmpegCmd(d.cmd)
 
-	var err error
 	d.stdin, err = d.cmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("failed to get stdin pipe: %w", err)

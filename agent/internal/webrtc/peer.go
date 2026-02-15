@@ -196,7 +196,7 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 		isSession0:          isSession0,
 		currentDesktop:      currentDesktopType,
 		videoEncoder:        videoEncoder,
-		useH264:             false, // Disabled by default, enable via signaling
+		useH264:             videoEncoder.GetEncoderName() == "openh264", // Auto-enable when OpenH264 is available
 		cpuMonitor:          cpuMon,
 		inputFrameTrigger:   make(chan struct{}, 1), // Buffered to avoid blocking
 		modeState: &ModeState{
@@ -1131,6 +1131,15 @@ func (m *Manager) startScreenStreaming() {
 
 	ticker := time.NewTicker(frameInterval)
 	defer ticker.Stop()
+
+	// Auto-start video track if H.264 is enabled
+	if m.useH264 && m.videoTrack != nil {
+		m.videoTrack.Start()
+		if m.videoEncoder != nil {
+			m.videoEncoder.ForceKeyframe()
+		}
+		log.Println("🎬 H.264 auto-enabled (OpenH264 encoder available)")
+	}
 
 	// Start stats collection goroutine
 	go m.collectStats()
