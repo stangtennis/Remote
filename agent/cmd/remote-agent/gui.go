@@ -229,8 +229,10 @@ func (g *AgentGUI) updateStatusLabels() {
 		g.serviceLabel.SetText("Service: ✅ Kører")
 	} else if g.serviceInstalled {
 		g.serviceLabel.SetText("Service: ⏸️ Stoppet")
+	} else if isProgramInstalled() {
+		g.serviceLabel.SetText("Program: ✅ Installeret (autostart)")
 	} else {
-		g.serviceLabel.SetText("Service: ❌ Ikke installeret")
+		g.serviceLabel.SetText("Tilstand: ❌ Ikke installeret")
 	}
 }
 
@@ -243,11 +245,22 @@ func (g *AgentGUI) updateActionButtons() {
 		loginBtn.Importance = widget.HighImportance
 		g.actionButtons.Add(loginBtn)
 	} else {
+		// Check program installation status
+		programInstalled := isProgramInstalled()
+
 		// Service management buttons
 		if !g.serviceInstalled {
-			installBtn := widget.NewButton("📦  Installer som Service", g.doInstall)
-			installBtn.Importance = widget.HighImportance
-			g.actionButtons.Add(installBtn)
+			installServiceBtn := widget.NewButton("📦  Installer som Service (anbefalet)", g.doInstall)
+			installServiceBtn.Importance = widget.HighImportance
+			g.actionButtons.Add(installServiceBtn)
+
+			if !programInstalled {
+				installProgramBtn := widget.NewButton("💻  Installer som Program (autostart)", g.doInstallProgram)
+				g.actionButtons.Add(installProgramBtn)
+			} else {
+				uninstallProgramBtn := widget.NewButton("🗑️  Afinstaller Program", g.doUninstallProgram)
+				g.actionButtons.Add(uninstallProgramBtn)
+			}
 
 			runOnceBtn := widget.NewButton("▶️  Kør én gang (denne session)", g.doRunOnce)
 			g.actionButtons.Add(runOnceBtn)
@@ -583,6 +596,98 @@ func (g *AgentGUI) doRunOnce() {
 		"✅ Agent kører nu!\n\n"+
 		"Du kan minimere dette vindue.\n"+
 		"Klik 'Stop Agent' for at stoppe.", g.window)
+}
+
+func (g *AgentGUI) doInstallProgram() {
+	if !isAdmin() {
+		dialog.ShowConfirm("Administrator kræves",
+			"Installation som program kræver Administrator rettigheder.\n\nGenstart som Administrator?",
+			func(ok bool) {
+				if ok {
+					runAsAdmin()
+					g.app.Quit()
+				}
+			}, g.window)
+		return
+	}
+
+	dialog.ShowConfirm("Installer som Program",
+		"Dette vil:\n\n"+
+			"• Kopiere agenten til Program Files\n"+
+			"• Sætte autostart ved Windows login\n"+
+			"• Agenten kører som din bruger (ikke service)\n\n"+
+			"Bemærk: Service-mode anbefales for login-skærm support.\n\n"+
+			"Fortsæt?",
+		func(ok bool) {
+			if !ok {
+				return
+			}
+
+			progress := dialog.NewCustomWithoutButtons("Installerer program...", widget.NewProgressBarInfinite(), g.window)
+			progress.Show()
+
+			go func() {
+				err := installAsProgram()
+				fyne.Do(func() {
+					progress.Hide()
+
+					if err != nil {
+						dialog.ShowError(fmt.Errorf("Kunne ikke installere: %v", err), g.window)
+					} else {
+						dialog.ShowInformation("Installation færdig",
+							"✅ Program installeret!\n\n"+
+								"• Placering: C:\\Program Files\\RemoteDesktopAgent\n"+
+								"• Starter automatisk ved Windows login\n"+
+								"• Kører som din bruger (med skrivebords-adgang)", g.window)
+					}
+
+					g.refreshStatus()
+					g.updateStatusLabels()
+					g.updateActionButtons()
+				})
+			}()
+		}, g.window)
+}
+
+func (g *AgentGUI) doUninstallProgram() {
+	dialog.ShowConfirm("Afinstaller Program", "Er du sikker på at du vil afinstallere programmet?\n\nDette fjerner autostart og sletter installationen.", func(ok bool) {
+		if !ok {
+			return
+		}
+
+		if !isAdmin() {
+			dialog.ShowConfirm("Administrator kræves",
+				"Afinstallation kræver Administrator rettigheder.\n\nGenstart som Administrator?",
+				func(ok bool) {
+					if ok {
+						runAsAdmin()
+						g.app.Quit()
+					}
+				}, g.window)
+			return
+		}
+
+		progress := dialog.NewCustomWithoutButtons("Afinstallerer...", widget.NewProgressBarInfinite(), g.window)
+		progress.Show()
+
+		go func() {
+			err := uninstallProgram()
+			fyne.Do(func() {
+				progress.Hide()
+
+				if err != nil {
+					dialog.ShowError(fmt.Errorf("Kunne ikke afinstallere: %v", err), g.window)
+				} else {
+					dialog.ShowInformation("Afinstallation færdig",
+						"✅ Program afinstalleret.\n\nAutostart er fjernet.", g.window)
+				}
+
+				g.refreshStatus()
+				g.updateStatusLabels()
+				g.updateActionButtons()
+			})
+		}()
+	}, g.window)
 }
 
 func (g *AgentGUI) doCheckUpdates() {
