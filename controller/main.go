@@ -30,7 +30,7 @@ import (
 
 // Version information - update before each release
 var (
-	Version     = "v2.68.3"
+	Version     = "v2.68.4"
 	BuildDate   = "2026-02-15"
 	VersionInfo = Version + " (built " + BuildDate + ")"
 )
@@ -1411,17 +1411,48 @@ func isInstalledAsProgram() bool {
 	return err == nil
 }
 
-// stopRunningController kills any running controller.exe processes
+// stopRunningController kills any running controller.exe processes (except this one)
 func stopRunningController() {
-	log.Printf("🛑 Stopper kørende controller-processer...")
-	cmd := exec.Command("taskkill", "/F", "/IM", controllerExeName)
+	myPID := os.Getpid()
+	log.Printf("🛑 Stopper kørende controller-processer (vores PID: %d)...", myPID)
+
+	// Use tasklist to find all controller.exe PIDs, then kill each except ours
+	cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("IMAGENAME eq %s", controllerExeName), "/FO", "CSV", "/NH")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("   taskkill resultat: %s (err: %v)", strings.TrimSpace(string(output)), err)
-	} else {
-		log.Printf("   ✅ Controller-processer stoppet: %s", strings.TrimSpace(string(output)))
+		log.Printf("   tasklist fejl: %v", err)
+		return
 	}
-	time.Sleep(500 * time.Millisecond)
+
+	killed := 0
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.Contains(line, "No tasks") || strings.Contains(line, "INFO:") {
+			continue
+		}
+		// CSV format: "controller.exe","1234","Console","1","12,345 K"
+		parts := strings.Split(line, ",")
+		if len(parts) < 2 {
+			continue
+		}
+		pidStr := strings.Trim(parts[1], "\" ")
+		pid := 0
+		fmt.Sscanf(pidStr, "%d", &pid)
+		if pid == 0 || pid == myPID {
+			continue
+		}
+		log.Printf("   Dræber PID %d...", pid)
+		killCmd := exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", pid))
+		killCmd.Run()
+		killed++
+	}
+
+	if killed > 0 {
+		log.Printf("   ✅ %d controller-proces(ser) stoppet", killed)
+		time.Sleep(500 * time.Millisecond)
+	} else {
+		log.Printf("   Ingen andre controller-processer fundet")
+	}
 }
 
 // installControllerAsProgram copies the exe to Program Files and sets up autostart
