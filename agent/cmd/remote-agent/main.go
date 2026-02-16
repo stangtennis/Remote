@@ -1617,9 +1617,9 @@ func copyFile(src, dst string) error {
 
 // setAutostartRegistry adds the agent to Windows autostart via registry
 func setAutostartRegistry(exePath string) error {
-	// Use reg.exe to add the key (simpler than importing registry package)
+	// Use HKCU for user autostart (HKLM requires SYSTEM and only works for services)
 	cmd := exec.Command("reg", "add",
-		`HKLM\`+registryRunKey,
+		`HKCU\`+registryRunKey,
 		"/v", registryValueName,
 		"/t", "REG_SZ",
 		"/d", `"`+exePath+`"`,
@@ -1632,8 +1632,9 @@ func setAutostartRegistry(exePath string) error {
 
 // removeAutostartRegistry removes the agent from Windows autostart
 func removeAutostartRegistry() {
+	// Remove from HKCU (user autostart)
 	cmd := exec.Command("reg", "delete",
-		`HKLM\`+registryRunKey,
+		`HKCU\`+registryRunKey,
 		"/v", registryValueName,
 		"/f")
 	cmd.Run() // Ignore errors
@@ -1641,7 +1642,8 @@ func removeAutostartRegistry() {
 
 // openRegistryKey opens a registry key for reading
 func openRegistryKey(keyPath string) (*registryKey, error) {
-	cmd := exec.Command("reg", "query", `HKLM\`+keyPath, "/v", registryValueName)
+	// Check HKCU for user autostart (not HKLM which is for system/services)
+	cmd := exec.Command("reg", "query", `HKCU\`+keyPath, "/v", registryValueName)
 	if err := cmd.Run(); err != nil {
 		return nil, err
 	}
