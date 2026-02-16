@@ -1694,6 +1694,16 @@ func runUpdateMode(oldExePath string) {
 
 	logMsg("Update mode started")
 	logMsg(fmt.Sprintf("Old exe: %s", oldExePath))
+	
+	// Check if old exe is running from Program Files install directory
+	// If yes, also update the installed exe so updates persist across reboots
+	installedExe := filepath.Join(programInstallDir, programExeName)
+	updateInstalledCopy := false
+	if isProgramInstalled() && !strings.EqualFold(oldExePath, installedExe) {
+		logMsg(fmt.Sprintf("Detected Program Files installation at: %s", installedExe))
+		logMsg("Will also update installed copy to persist across reboots")
+		updateInstalledCopy = true
+	}
 
 	currentExe, err := os.Executable()
 	if err != nil {
@@ -1753,6 +1763,37 @@ func runUpdateMode(oldExePath string) {
 		return
 	}
 	logMsg("Copy complete")
+
+	// If agent is installed in Program Files, also update that copy
+	if updateInstalledCopy {
+		logMsg("Updating installed copy in Program Files...")
+		
+		// Stop any running instance from Program Files first
+		stopRunningAgent()
+		time.Sleep(500 * time.Millisecond)
+		
+		// Copy new exe to Program Files
+		srcFile2, err := os.Open(currentExe)
+		if err != nil {
+			logMsg(fmt.Sprintf("WARNING: Failed to open source for installed copy: %v", err))
+		} else {
+			dstFile2, err := os.Create(installedExe)
+			if err != nil {
+				srcFile2.Close()
+				logMsg(fmt.Sprintf("WARNING: Failed to create installed copy: %v", err))
+			} else {
+				_, err = dstFile2.ReadFrom(srcFile2)
+				srcFile2.Close()
+				dstFile2.Close()
+				
+				if err != nil {
+					logMsg(fmt.Sprintf("WARNING: Failed to copy to installed location: %v", err))
+				} else {
+					logMsg("✅ Installed copy updated successfully")
+				}
+			}
+		}
+	}
 
 	// Start the copied exe (now at original location)
 	logMsg("Starting agent from original location...")
