@@ -16,7 +16,7 @@ import (
 
 // Version information - update before each release
 var (
-	Version       = "v2.68.8"
+	Version       = "v2.68.9"
 	BuildDate     = "2026-02-15"
 	VersionString = Version + " (built " + BuildDate + ")"
 )
@@ -41,7 +41,7 @@ func (t *TrayApp) onReady() {
 	// Set up the system tray icon and menu
 	systray.SetIcon(getIcon())
 	systray.SetTitle("Remote")
-	systray.SetTooltip(fmt.Sprintf("Remote Desktop Agent\nEnhed: %s", t.device.Name))
+	systray.SetTooltip(fmt.Sprintf("Remote Desktop Agent %s\nEnhed: %s", Version, t.device.Name))
 
 	// Add menu items
 	mDeviceName := systray.AddMenuItem(fmt.Sprintf("Enhed: %s", t.device.Name), "")
