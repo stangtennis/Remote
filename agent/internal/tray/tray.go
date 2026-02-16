@@ -16,7 +16,7 @@ import (
 
 // Version information - update before each release
 var (
-	Version       = "v2.68.10"
+	Version       = "v2.68.11"
 	BuildDate     = "2026-02-15"
 	VersionString = Version + " (built " + BuildDate + ")"
 )
@@ -87,14 +87,13 @@ func (t *TrayApp) onReady() {
 }
 
 func openConsole() {
-	// Get the executable directory
-	exePath, err := os.Executable()
-	if err != nil {
-		log.Printf("Kunne ikke finde exe sti: %v", err)
+	// Get log path from APPDATA (where logging package stores logs)
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		log.Printf("APPDATA environment variable not set")
 		return
 	}
-	exeDir := filepath.Dir(exePath)
-	logPath := filepath.Join(exeDir, "agent.log")
+	logPath := filepath.Join(appData, "RemoteAgent", "logs", "agent.log")
 
 	// Check if log file exists
 	if _, err := os.Stat(logPath); os.IsNotExist(err) {
@@ -118,14 +117,13 @@ func openConsole() {
 }
 
 func openLogFile() {
-	// Get the executable directory
-	exePath, err := os.Executable()
-	if err != nil {
-		log.Printf("Kunne ikke finde exe sti: %v", err)
+	// Get log path from APPDATA (where logging package stores logs)
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		log.Printf("APPDATA environment variable not set")
 		return
 	}
-	exeDir := filepath.Dir(exePath)
-	logPath := filepath.Join(exeDir, "agent.log")
+	logPath := filepath.Join(appData, "RemoteAgent", "logs", "agent.log")
 
 	// Check if log file exists
 	if _, err := os.Stat(logPath); os.IsNotExist(err) {
