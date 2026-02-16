@@ -1371,6 +1371,10 @@ func (m *Manager) startScreenStreaming() {
 					} else {
 						frameCount++
 						bytesSent += int64(len(nalUnits))
+						// Log every 100th frame to track H.264 streaming
+						if frameCount%100 == 0 {
+							log.Printf("🎬 H.264: %d frames sendt, %d bytes total", frameCount, bytesSent)
+						}
 					}
 				}
 			}()
