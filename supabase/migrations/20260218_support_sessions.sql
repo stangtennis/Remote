@@ -46,7 +46,20 @@ CREATE POLICY "Admins can update support sessions"
 -- Service role can do anything (for Edge Functions and cleanup)
 -- (service_role bypasses RLS by default, no policy needed)
 
--- 4. Add 'support' to session_signaling from_side constraint
+-- 4. Drop FK on session_signaling so support_sessions can also use it
+ALTER TABLE session_signaling
+  DROP CONSTRAINT IF EXISTS session_signaling_session_id_fkey;
+
+-- 5. Add RLS policies for support session signaling
+CREATE POLICY "Users can read support signaling" ON session_signaling
+  FOR SELECT TO authenticated
+  USING (session_id IN (SELECT id FROM support_sessions WHERE created_by = auth.uid()));
+
+CREATE POLICY "Users can insert support signaling" ON session_signaling
+  FOR INSERT TO authenticated
+  WITH CHECK (session_id IN (SELECT id FROM support_sessions WHERE created_by = auth.uid()));
+
+-- 6. Add 'support' to session_signaling from_side constraint
 ALTER TABLE session_signaling
   DROP CONSTRAINT IF EXISTS session_signaling_from_side_check;
 
