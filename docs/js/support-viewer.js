@@ -476,11 +476,14 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     toggleSupportFullscreen();
   }
-  if (e.key === 'Escape' && supportFullscreen) {
+  // When in fullscreen (native or CSS), Escape should only exit fullscreen, not close modal
+  if (e.key === 'Escape' && (supportFullscreen || document.fullscreenElement)) {
     e.preventDefault();
-    toggleSupportFullscreen();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    if (supportFullscreen) toggleSupportFullscreen();
   }
-});
+}, true); // capture phase to intercept before modal close handlers
 
 // Show toolbar on hover over video
 document.addEventListener('DOMContentLoaded', () => {
