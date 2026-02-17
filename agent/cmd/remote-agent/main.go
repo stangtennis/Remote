@@ -1329,6 +1329,11 @@ func startAgent() error {
 	deviceID, _ := device.GetOrCreateDeviceID()
 	log.Printf("🔑 Device ID: %s", deviceID)
 
+	authConfig := auth.AuthConfig{
+		SupabaseURL: cfg.SupabaseURL,
+		AnonKey:     cfg.SupabaseAnonKey,
+	}
+
 	// Check and refresh credentials if needed (important for service mode)
 	if !auth.IsLoggedIn() {
 		log.Println("⚠️  No valid credentials found")
@@ -1336,10 +1341,6 @@ func startAgent() error {
 		creds, err := auth.LoadCredentials()
 		if err == nil && creds.RefreshToken != "" {
 			log.Println("🔄 Attempting to refresh token...")
-			authConfig := auth.AuthConfig{
-				SupabaseURL: cfg.SupabaseURL,
-				AnonKey:     cfg.SupabaseAnonKey,
-			}
 			result, err := auth.RefreshToken(authConfig, creds.RefreshToken)
 			if err == nil && result.Success {
 				log.Printf("✅ Token refreshed for: %s", result.Email)
@@ -1356,8 +1357,16 @@ func startAgent() error {
 		log.Printf("✅ Using saved credentials for: %s", currentUser.Email)
 	}
 
+	// Create TokenProvider for authenticated API calls
+	creds, err := auth.LoadCredentials()
+	if err != nil {
+		return fmt.Errorf("failed to load credentials for token provider: %w", err)
+	}
+	tokenProvider := auth.NewTokenProvider(authConfig, creds)
+	log.Println("🔐 TokenProvider oprettet (authenticated API kald)")
+
 	// Initialize device
-	dev, err = device.New(cfg)
+	dev, err = device.New(cfg, tokenProvider)
 	if err != nil {
 		return fmt.Errorf("failed to initialize device: %w", err)
 	}
@@ -1377,7 +1386,7 @@ func startAgent() error {
 	go dev.StartPresence()
 
 	// Initialize WebRTC manager
-	rtc, err = webrtc.New(cfg, dev)
+	rtc, err = webrtc.New(cfg, dev, tokenProvider)
 	if err != nil {
 		return fmt.Errorf("failed to initialize WebRTC: %w", err)
 	}

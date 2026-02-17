@@ -158,8 +158,9 @@ func (m *Manager) fetchWebDashboardSessions() ([]Session, error) {
 		return nil, err
 	}
 
-	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
-	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+	if err := m.setAuthHeaders(req); err != nil {
+		return nil, err
+	}
 
 	q := req.URL.Query()
 	q.Add("msg_type", "eq.offer")
@@ -224,8 +225,10 @@ func (m *Manager) checkSessionDevice(sessionID string) (bool, string) {
 		return false, ""
 	}
 
-	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
-	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+	if err := m.setAuthHeaders(req); err != nil {
+		log.Printf("⚠️ checkSessionDevice auth error: %v", err)
+		return false, ""
+	}
 
 	q := req.URL.Query()
 	q.Add("id", "eq."+sessionID) // Use 'id' not 'session_id'
@@ -344,10 +347,16 @@ func (m *Manager) sendAnswerToSignaling(sessionID, sdp string) {
 	}
 
 	jsonData, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("❌ Failed to create answer request: %v", err)
+		return
+	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
-	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+	if err := m.setAuthHeaders(req); err != nil {
+		log.Printf("❌ Failed to set auth headers for answer: %v", err)
+		return
+	}
 	req.Header.Set("Prefer", "return=minimal")
 
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -386,8 +395,9 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 		return nil, err
 	}
 
-	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
-	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+	if err := m.setAuthHeaders(req); err != nil {
+		return nil, err
+	}
 
 	q := req.URL.Query()
 	q.Add("device_id", "eq."+m.device.ID)
@@ -689,8 +699,9 @@ func (m *Manager) fetchSignalingMessages(sessionID, fromSide string) ([]SignalMe
 		return nil, err
 	}
 
-	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
-	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+	if err := m.setAuthHeaders(req); err != nil {
+		return nil, err
+	}
 
 	q := req.URL.Query()
 	q.Add("session_id", "eq."+sessionID)
@@ -768,10 +779,16 @@ func (m *Manager) sendAnswer(sessionID, sdp string) {
 	jsonData, _ := json.Marshal(payload)
 
 	// Create PATCH request with session_id filter
-	req, _ := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("❌ Failed to create answer request: %v", err)
+		return
+	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
-	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+	if err := m.setAuthHeaders(req); err != nil {
+		log.Printf("❌ Failed to set auth headers for answer: %v", err)
+		return
+	}
 	req.Header.Set("Prefer", "return=minimal")
 
 	// Add query parameter to target specific session
@@ -819,8 +836,10 @@ func (m *Manager) updateSessionStatus(status string) {
 		return
 	}
 
-	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
-	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+	if err := m.setAuthHeaders(req); err != nil {
+		log.Printf("Failed to set auth headers for session update: %v", err)
+		return
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Prefer", "return=minimal")
 
@@ -881,10 +900,16 @@ func (m *Manager) sendICECandidate(candidate *webrtc.ICECandidate) {
 	}
 
 	jsonData, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("❌ Failed to create ICE candidate request: %v", err)
+		return
+	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
-	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+	if err := m.setAuthHeaders(req); err != nil {
+		log.Printf("❌ Failed to set auth headers for ICE candidate: %v", err)
+		return
+	}
 	req.Header.Set("Prefer", "return=minimal")
 
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -943,8 +968,9 @@ func (m *Manager) fetchKickSignals(sessionID string) ([]SignalMessage, error) {
 		return nil, err
 	}
 
-	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
-	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+	if err := m.setAuthHeaders(req); err != nil {
+		return nil, err
+	}
 
 	q := req.URL.Query()
 	q.Add("session_id", "eq."+sessionID)
@@ -988,8 +1014,9 @@ func (m *Manager) checkIfKicked() bool {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
-	req.Header.Set("Authorization", "Bearer "+m.cfg.SupabaseAnonKey)
+	if err := m.setAuthHeaders(req); err != nil {
+		return false
+	}
 
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Do(req)
