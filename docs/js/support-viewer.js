@@ -7,6 +7,7 @@ let supportPollingInterval = null;
 let supportProcessedIds = new Set();
 let supportPendingIce = [];
 let currentSupportSession = null;
+let supportInPreview = false;
 
 // ============================================================================
 // Session Creation
@@ -58,7 +59,9 @@ function showSupportModal() {
 function closeSupportModal() {
   const modal = document.getElementById('supportModal');
   if (modal) modal.style.display = 'none';
-  cleanupSupportViewer();
+  if (!supportInPreview) {
+    cleanupSupportViewer();
+  }
 }
 
 function showSupportStep(step) {
@@ -207,12 +210,14 @@ async function connectToSupport(sessionId) {
     debug('Support viewer: creating peer connection');
     supportViewerPC = new RTCPeerConnection(configuration);
 
-    // Handle remote video track
+    // Handle remote video track - pipe to both modal video and main preview
     supportViewerPC.ontrack = (event) => {
       debug('Support viewer: received remote track', event.track.kind);
-      const video = document.getElementById('supportVideo');
-      if (video && event.streams[0]) {
-        video.srcObject = event.streams[0];
+      const supportVideo = document.getElementById('supportVideo');
+      const previewVideo = document.getElementById('previewVideo');
+      if (event.streams[0]) {
+        if (supportVideo) supportVideo.srcObject = event.streams[0];
+        if (previewVideo) previewVideo.srcObject = event.streams[0];
       }
     };
 
@@ -247,10 +252,14 @@ async function connectToSupport(sessionId) {
             clearInterval(supportPollingInterval);
             supportPollingInterval = null;
           }
+          // Show in main preview area
+          showSupportInPreview();
           break;
         case 'disconnected':
         case 'failed':
           if (statusEl) statusEl.textContent = 'Afbrudt';
+          // Auto-cleanup from preview
+          cleanupSupportViewer();
           break;
       }
     };
@@ -507,10 +516,105 @@ function updateSupportResolution() {
 requestAnimationFrame(updateSupportResolution);
 
 // ============================================================================
+// Main Preview Integration
+// ============================================================================
+
+function showSupportInPreview() {
+  supportInPreview = true;
+
+  // Create session tab
+  SessionManager.createSession('quick-support', '🆘 Quick Support');
+  SessionManager.updateSessionStatus('quick-support', 'connected');
+
+  // Show video element, hide canvas (support uses WebRTC video track, not canvas)
+  const previewVideo = document.getElementById('previewVideo');
+  const previewCanvas = document.getElementById('previewCanvas');
+  if (previewVideo) previewVideo.style.display = 'block';
+  if (previewCanvas) previewCanvas.style.display = 'none';
+
+  // Update device name in toolbar
+  const connectedDeviceName = document.getElementById('connectedDeviceName');
+  if (connectedDeviceName) connectedDeviceName.textContent = '🆘 Quick Support';
+
+  // Hide toolbar center buttons (view-only, no remote control)
+  const toolbarCenter = document.querySelector('.toolbar-center');
+  if (toolbarCenter) toolbarCenter.style.display = 'none';
+
+  // Change disconnect button
+  const disconnectBtn = document.getElementById('disconnectBtn');
+  if (disconnectBtn) {
+    disconnectBtn.textContent = 'Afslut Support';
+    disconnectBtn.onclick = endSupportSession;
+  }
+
+  // Override tab close button for quick-support
+  const tab = document.querySelector('[data-session-id="quick-support"]');
+  if (tab) {
+    const closeBtn = tab.querySelector('.tab-close');
+    if (closeBtn) {
+      closeBtn.onclick = (e) => {
+        e.stopPropagation();
+        endSupportSession();
+      };
+    }
+  }
+
+  // Close the modal (just hide, don't cleanup - supportInPreview flag prevents it)
+  closeSupportModal();
+}
+
+function removeSupportFromPreview() {
+  if (!supportInPreview) return;
+  supportInPreview = false;
+
+  // Clear preview video
+  const previewVideo = document.getElementById('previewVideo');
+  const previewCanvas = document.getElementById('previewCanvas');
+  if (previewVideo) {
+    previewVideo.srcObject = null;
+    previewVideo.style.display = '';
+  }
+  if (previewCanvas) previewCanvas.style.display = '';
+
+  // Remove quick-support session from SessionManager
+  // (avoid closeSession which calls disconnectFromDevice)
+  const tab = document.querySelector('[data-session-id="quick-support"]');
+  if (tab) tab.remove();
+  SessionManager.sessions.delete('quick-support');
+
+  if (SessionManager.activeSessionId === 'quick-support') {
+    const remaining = Array.from(SessionManager.sessions.keys());
+    if (remaining.length > 0) {
+      SessionManager.switchToSession(remaining[0]);
+    } else {
+      SessionManager.activeSessionId = null;
+      const previewIdle = document.getElementById('previewIdle');
+      if (previewIdle) previewIdle.style.display = 'flex';
+      const previewToolbar = document.getElementById('previewToolbar');
+      if (previewToolbar) previewToolbar.style.display = 'none';
+    }
+  }
+  SessionManager.updateUI();
+
+  // Restore toolbar center buttons
+  const toolbarCenter = document.querySelector('.toolbar-center');
+  if (toolbarCenter) toolbarCenter.style.display = '';
+
+  // Restore disconnect button
+  const disconnectBtn = document.getElementById('disconnectBtn');
+  if (disconnectBtn) {
+    disconnectBtn.textContent = 'Afbryd';
+    disconnectBtn.onclick = null;
+  }
+}
+
+// ============================================================================
 // Cleanup
 // ============================================================================
 
 function cleanupSupportViewer() {
+  removeSupportFromPreview();
+
   if (supportPollingInterval) {
     clearInterval(supportPollingInterval);
     supportPollingInterval = null;
@@ -541,8 +645,9 @@ function endSupportSession() {
       payload: { reason: 'viewer_closed' },
     });
   }
-  cleanupSupportViewer();
-  closeSupportModal();
+  cleanupSupportViewer(); // includes removeSupportFromPreview
+  const modal = document.getElementById('supportModal');
+  if (modal) modal.style.display = 'none';
 }
 
 // ============================================================================
