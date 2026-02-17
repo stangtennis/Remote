@@ -388,6 +388,122 @@ async function handleSupportViewerSignal(signal) {
 }
 
 // ============================================================================
+// Fullscreen
+// ============================================================================
+
+let supportFullscreen = false;
+
+function toggleSupportFullscreen() {
+  const modal = document.getElementById('supportModal');
+  const content = modal?.querySelector('.modal-content');
+  const container = document.getElementById('supportVideoContainer');
+  const video = document.getElementById('supportVideo');
+  if (!modal || !content || !container) return;
+
+  supportFullscreen = !supportFullscreen;
+
+  if (supportFullscreen) {
+    // Try native fullscreen on video container first
+    if (container.requestFullscreen) {
+      container.requestFullscreen().catch(() => {
+        // Fallback: expand modal to fill screen
+        applyFullscreenStyle(modal, content, container, video);
+      });
+    } else {
+      applyFullscreenStyle(modal, content, container, video);
+    }
+  } else {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+    removeFullscreenStyle(modal, content, container, video);
+  }
+}
+
+function applyFullscreenStyle(modal, content, container, video) {
+  content.style.maxWidth = '100vw';
+  content.style.width = '100vw';
+  content.style.height = '100vh';
+  content.style.margin = '0';
+  content.style.borderRadius = '0';
+  content.style.padding = '0';
+  container.style.borderRadius = '0';
+  container.style.marginBottom = '0';
+  container.style.height = 'calc(100vh - 40px)';
+  video.style.height = '100%';
+  video.style.objectFit = 'contain';
+  // Toolbar overlay
+  modal.dataset.fullscreen = 'true';
+}
+
+function removeFullscreenStyle(modal, content, container, video) {
+  content.style.maxWidth = '';
+  content.style.width = '';
+  content.style.height = '';
+  content.style.margin = '';
+  content.style.borderRadius = '';
+  content.style.padding = '';
+  container.style.borderRadius = '';
+  container.style.marginBottom = '';
+  container.style.height = '';
+  video.style.height = '';
+  video.style.objectFit = '';
+  modal.dataset.fullscreen = 'false';
+}
+
+// Exit fullscreen when native fullscreen ends (Escape key)
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && supportFullscreen) {
+    supportFullscreen = false;
+    const modal = document.getElementById('supportModal');
+    const content = modal?.querySelector('.modal-content');
+    const container = document.getElementById('supportVideoContainer');
+    const video = document.getElementById('supportVideo');
+    if (modal && content && container && video) {
+      removeFullscreenStyle(modal, content, container, video);
+    }
+  }
+});
+
+// Keyboard shortcut: F for fullscreen, Escape to exit
+document.addEventListener('keydown', (e) => {
+  const modal = document.getElementById('supportModal');
+  if (!modal || modal.style.display === 'none') return;
+  const viewerStep = document.getElementById('supportStep_viewer');
+  if (!viewerStep || viewerStep.style.display === 'none') return;
+
+  if (e.key === 'f' || e.key === 'F') {
+    e.preventDefault();
+    toggleSupportFullscreen();
+  }
+  if (e.key === 'Escape' && supportFullscreen) {
+    e.preventDefault();
+    toggleSupportFullscreen();
+  }
+});
+
+// Show toolbar on hover over video
+document.addEventListener('DOMContentLoaded', () => {
+  const container = document.getElementById('supportVideoContainer');
+  const toolbar = document.getElementById('supportVideoToolbar');
+  if (container && toolbar) {
+    container.addEventListener('mouseenter', () => toolbar.style.opacity = '1');
+    container.addEventListener('mouseleave', () => toolbar.style.opacity = '0');
+  }
+});
+
+// Update resolution display
+function updateSupportResolution() {
+  const video = document.getElementById('supportVideo');
+  const resEl = document.getElementById('supportViewerRes');
+  if (video && resEl && video.videoWidth > 0) {
+    resEl.textContent = `${video.videoWidth}×${video.videoHeight}`;
+  }
+  requestAnimationFrame(updateSupportResolution);
+}
+requestAnimationFrame(updateSupportResolution);
+
+// ============================================================================
 // Cleanup
 // ============================================================================
 
@@ -454,3 +570,4 @@ window.closeSupportModal = closeSupportModal;
 window.onCreateSupportSession = onCreateSupportSession;
 window.copySupportLink = copySupportLink;
 window.endSupportSession = endSupportSession;
+window.toggleSupportFullscreen = toggleSupportFullscreen;

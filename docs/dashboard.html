@@ -297,12 +297,19 @@
 
       <!-- Step: Viewer -->
       <div id="supportStep_viewer" class="support-step" style="display: none;">
-        <div style="position: relative; background: #000; border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 1rem;">
-          <video id="supportVideo" autoplay playsinline style="width: 100%; display: block;"></video>
+        <div id="supportVideoContainer" style="position: relative; background: #000; border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 1rem;">
+          <video id="supportVideo" autoplay playsinline style="width: 100%; display: block; cursor: pointer;" ondblclick="toggleSupportFullscreen()"></video>
+          <div id="supportVideoToolbar" style="position: absolute; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; background: linear-gradient(transparent, rgba(0,0,0,0.85)); opacity: 0; transition: opacity 0.2s;">
+            <span id="supportViewerRes" style="color: #aaa; font-size: 0.75rem;"></span>
+            <button onclick="toggleSupportFullscreen()" style="background: none; border: none; color: #fff; cursor: pointer; font-size: 1.1rem; padding: 0.25rem;" title="Fuldskærm (F)">⛶</button>
+          </div>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <span id="supportViewerStatus" style="color: var(--text-muted); font-size: 0.9rem;">Forbinder...</span>
-          <button class="btn btn-danger btn-sm" onclick="endSupportSession()">Afslut</button>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <button class="btn btn-secondary btn-sm" onclick="toggleSupportFullscreen()" title="Fuldskærm">⛶ Fuldskærm</button>
+            <button class="btn btn-danger btn-sm" onclick="endSupportSession()">Afslut</button>
+          </div>
         </div>
       </div>
     </div>
@@ -371,7 +378,7 @@
   <script src="js/sessions.js?v=6"></script>
   <script src="js/webrtc.js?v=6"></script>
   <script src="js/signaling.js?v=6"></script>
-  <script src="js/support-viewer.js?v=1"></script>
+  <script src="js/support-viewer.js?v=2"></script>
   
   <!-- Fullscreen Preview Script -->
   <script>
