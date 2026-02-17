@@ -30,8 +30,8 @@ import (
 
 // Version information - update before each release
 var (
-	Version     = "v2.68.7"
-	BuildDate   = "2026-02-15"
+	Version     = "v2.69.0"
+	BuildDate   = "2026-02-17"
 	VersionInfo = Version + " (built " + BuildDate + ")"
 )
 
@@ -325,6 +325,63 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	})
 	installButton.Importance = widget.LowImportance
 
+	// Quick Support button
+	quickSupportButton := widget.NewButton("🆘 Quick Support", func() {
+		if currentUser == nil || supabaseClient == nil {
+			dialog.ShowInformation("Ikke logget ind", "Du skal være logget ind for at bruge Quick Support.", window)
+			return
+		}
+		go func() {
+			session, err := supabaseClient.CreateSupportSession()
+			if err != nil {
+				logger.Error("Failed to create support session: %v", err)
+				fyne.Do(func() {
+					dialog.ShowError(fmt.Errorf("Kunne ikke oprette support session: %v", err), window)
+				})
+				return
+			}
+
+			fyne.Do(func() {
+				// Show dialog with PIN and link
+				pinLabel := widget.NewLabel(fmt.Sprintf("PIN: %s", session.PIN))
+				pinLabel.TextStyle = fyne.TextStyle{Bold: true, Monospace: true}
+
+				linkEntry := widget.NewEntry()
+				linkEntry.SetText(session.ShareURL)
+				linkEntry.Disable()
+
+				copyBtn := widget.NewButton("📋 Kopier link", func() {
+					window.Clipboard().SetContent(session.ShareURL)
+					dialog.ShowInformation("Kopieret", "Link kopieret til udklipsholder!", window)
+				})
+
+				openDashboardBtn := widget.NewButton("🌐 Åbn i dashboard", func() {
+					dashURL := fmt.Sprintf("https://stangtennis.github.io/Remote/dashboard.html?support=%s", session.SessionID)
+					openBrowser(dashURL)
+				})
+				openDashboardBtn.Importance = widget.HighImportance
+
+				content := container.NewVBox(
+					widget.NewLabelWithStyle("🆘 Quick Support Session", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+					widget.NewSeparator(),
+					widget.NewLabel("Del denne PIN eller link med personen:"),
+					pinLabel,
+					widget.NewSeparator(),
+					widget.NewLabel("Delelink:"),
+					linkEntry,
+					container.NewGridWithColumns(2, copyBtn, openDashboardBtn),
+					widget.NewSeparator(),
+					widget.NewLabel(fmt.Sprintf("Udløber: %s", session.ExpiresAt)),
+				)
+
+				scrollContent := container.NewScroll(content)
+				scrollContent.SetMinSize(fyne.NewSize(400, 300))
+				dialog.ShowCustom("Quick Support", "Luk", scrollContent, window)
+			})
+		}()
+	})
+	quickSupportButton.Importance = widget.WarningImportance
+
 	loginForm = container.NewVBox(
 		widget.NewSeparator(),
 		widget.NewLabel("Login to Remote Desktop"),
@@ -340,7 +397,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	loggedInContainer = container.NewVBox(
 		widget.NewSeparator(),
 		statusLabel,
-		container.NewGridWithColumns(4, logoutButton, restartButton, updateButton, installButton),
+		container.NewGridWithColumns(5, logoutButton, restartButton, updateButton, installButton, quickSupportButton),
 		widget.NewSeparator(),
 	)
 	loggedInContainer.Hide() // Hidden by default
@@ -989,6 +1046,20 @@ func restartApplication() {
 		// Exit current instance immediately
 		myApp.Quit()
 	}()
+}
+
+// openBrowser opens a URL in the default browser
+func openBrowser(url string) {
+	logger.Info("Opening browser: %s", url)
+	var cmd *exec.Cmd
+	if os.PathSeparator == '\\' { // Windows
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	} else {
+		cmd = exec.Command("xdg-open", url)
+	}
+	if err := cmd.Start(); err != nil {
+		logger.Error("Failed to open browser: %v", err)
+	}
 }
 
 // Device refresh ticker for automatic status updates

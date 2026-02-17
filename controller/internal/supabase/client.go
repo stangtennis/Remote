@@ -455,6 +455,58 @@ func (c *Client) DeleteDevice(deviceID string) error {
 	return nil
 }
 
+// SupportSession represents a Quick Support session response
+type SupportSession struct {
+	SessionID string `json:"session_id"`
+	PIN       string `json:"pin"`
+	Token     string `json:"token"`
+	ShareURL  string `json:"share_url"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+// CreateSupportSession calls the create-support-session Edge Function
+func (c *Client) CreateSupportSession() (*SupportSession, error) {
+	logger.Debug("[CreateSupportSession] Creating support session")
+
+	if c.AuthToken == "" {
+		return nil, fmt.Errorf("not authenticated")
+	}
+
+	url := fmt.Sprintf("%s/functions/v1/create-support-session", c.URL)
+
+	req, err := http.NewRequest("POST", url, bytes.NewBufferString("{}"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to create support session: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	var session SupportSession
+	if err := json.Unmarshal(body, &session); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	logger.Info("[CreateSupportSession] Session created: PIN=%s, URL=%s", session.PIN, session.ShareURL)
+	return &session, nil
+}
+
 // CheckApproval checks if the user is approved
 func (c *Client) CheckApproval(userID string) (bool, error) {
 	logger.Debug("[CheckApproval] Checking approval for user: %s", userID)

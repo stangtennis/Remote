@@ -186,9 +186,14 @@ if (document.getElementById('logoutBtn')) {
       
       const isAdmin = approval && (approval.role === 'admin' || approval.role === 'super_admin');
       
-      // Show admin link if user is admin
+      // Show admin link and Quick Support button if user is admin
       if (adminLink && isAdmin) {
         adminLink.style.display = 'inline-flex';
+      }
+
+      const quickSupportBtn = document.getElementById('quickSupportBtn');
+      if (quickSupportBtn && isAdmin) {
+        quickSupportBtn.style.display = 'inline-flex';
       }
       
       // Add controller download for admins
