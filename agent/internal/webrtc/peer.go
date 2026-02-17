@@ -699,7 +699,11 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 			}
 		}
 		if bitrate, ok := event["bitrate"].(float64); ok && bitrate > 0 {
-			m.SetVideoBitrate(int(bitrate))
+			kbps := int(bitrate)
+			if kbps > 50000 {
+				kbps = 50000
+			}
+			m.SetVideoBitrate(kbps)
 		}
 		return
 	}
@@ -712,6 +716,10 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 			return
 		}
 		index := int(indexF)
+		if index < 0 || index > 15 {
+			log.Printf("⚠️ switch_monitor: invalid index %d (must be 0-15)", index)
+			return
+		}
 		log.Printf("🖥️ Switching to monitor %d...", index)
 
 		if m.screenCapturer != nil {
@@ -952,16 +960,36 @@ func (m *Manager) handleClipboardImage(contentB64 string) {
 // handleSetStreamParams handles stream parameter updates from controller
 func (m *Manager) handleSetStreamParams(event map[string]interface{}) {
 	if maxQuality, ok := event["max_quality"].(float64); ok {
-		m.streamMaxQuality = int(maxQuality)
+		q := int(maxQuality)
+		if q < 10 {
+			q = 10
+		} else if q > 100 {
+			q = 100
+		}
+		m.streamMaxQuality = q
 	}
 	if maxFPS, ok := event["max_fps"].(float64); ok {
-		m.streamMaxFPS = int(maxFPS)
+		fps := int(maxFPS)
+		if fps < 1 {
+			fps = 1
+		} else if fps > 60 {
+			fps = 60
+		}
+		m.streamMaxFPS = fps
 	}
 	if maxScale, ok := event["max_scale"].(float64); ok {
-		m.streamMaxScale = maxScale
+		if maxScale >= 0.25 && maxScale <= 1.0 {
+			m.streamMaxScale = maxScale
+		}
 	}
 	if h264Kbps, ok := event["h264_bitrate_kbps"].(float64); ok {
-		m.streamH264Kbps = int(h264Kbps)
+		kbps := int(h264Kbps)
+		if kbps < 100 {
+			kbps = 100
+		} else if kbps > 50000 {
+			kbps = 50000
+		}
+		m.streamH264Kbps = kbps
 	}
 	log.Printf("📊 Stream params updated: Q=%d%% FPS=%d Scale=%.0f%% H264=%dkbps",
 		m.streamMaxQuality, m.streamMaxFPS, m.streamMaxScale*100, m.streamH264Kbps)
@@ -1822,6 +1850,14 @@ func (m *Manager) Close() {
 func (m *Manager) handleDirListRequest(path string) {
 	log.Printf("📂 Directory listing requested: %s", path)
 
+	// Sanitize path - reject traversal attempts
+	cleanPath := filepath.Clean(path)
+	if strings.Contains(cleanPath, "..") {
+		log.Printf("⚠️ Path traversal rejected: %s", path)
+		return
+	}
+	path = cleanPath
+
 	type FileInfo struct {
 		Name    string `json:"name"`
 		Path    string `json:"path"`
@@ -1889,6 +1925,14 @@ func (m *Manager) handleDrivesListRequest() {
 // handleFileRequest handles file download requests from controller
 func (m *Manager) handleFileRequest(remotePath string) {
 	log.Printf("📥 File request: %s", remotePath)
+
+	// Sanitize path - reject traversal attempts
+	cleanPath := filepath.Clean(remotePath)
+	if strings.Contains(cleanPath, "..") {
+		log.Printf("⚠️ Path traversal rejected: %s", remotePath)
+		return
+	}
+	remotePath = cleanPath
 
 	// Read file
 	data, err := os.ReadFile(remotePath)
