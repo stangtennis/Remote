@@ -1,6 +1,7 @@
 package webrtc
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/interceptor"
@@ -72,8 +75,13 @@ type Manager struct {
 	clipboardMonitor    *clipboard.Monitor
 	clipboardReceiver   *clipboard.Receiver
 	sessionID           string
-	isStreaming         bool
+	isStreaming         atomic.Bool
 	isSession0          bool // Running in Session 0 (before user login)
+
+	// Concurrency control
+	mu         sync.Mutex             // Protects peerConnection, dataChannel, controlChannel
+	connCtx    context.Context        // Lifecycle context for current connection (streaming + grace period)
+	connCancel context.CancelFunc     // Cancel function for connCtx
 	currentDesktop      desktop.DesktopType
 	pendingCandidates   []*webrtc.ICECandidate // Buffer ICE candidates until answer is sent
 	answerSent          bool                   // Flag to track if answer has been sent
@@ -388,21 +396,34 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 		switch state {
 		case webrtc.PeerConnectionStateConnected:
 			log.Println("✅ WebRTC CONNECTED! Starting screen streaming...")
-			m.isStreaming = true
+			// Cancel any previous streaming/grace period goroutines
+			if m.connCancel != nil {
+				m.connCancel()
+			}
+			m.connCtx, m.connCancel = context.WithCancel(context.Background())
+			m.isStreaming.Store(true)
 			// Hide local cursor during remote session
 			if m.mouseController != nil {
 				m.mouseController.HideCursor()
 			}
-			go m.startScreenStreaming()
+			go m.startScreenStreaming(m.connCtx)
 		case webrtc.PeerConnectionStateDisconnected:
 			log.Println("⚠️  WebRTC DISCONNECTED - waiting for ICE recovery...")
-			m.isStreaming = false // Stop sending frames during recovery
-			go m.handleDisconnectGracePeriod()
+			m.isStreaming.Store(false) // Stop sending frames during recovery
+			// Cancel previous streaming, start grace period with new context
+			if m.connCancel != nil {
+				m.connCancel()
+			}
+			m.connCtx, m.connCancel = context.WithCancel(context.Background())
+			go m.handleDisconnectGracePeriod(m.connCtx)
 		case webrtc.PeerConnectionStateFailed:
 			log.Println("❌ WebRTC CONNECTION FAILED")
 			// Restore local cursor
 			if m.mouseController != nil {
 				m.mouseController.ShowCursor()
+			}
+			if m.connCancel != nil {
+				m.connCancel()
 			}
 			m.cleanupConnection("Failed")
 		case webrtc.PeerConnectionStateClosed:
@@ -410,6 +431,9 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 			// Restore local cursor
 			if m.mouseController != nil {
 				m.mouseController.ShowCursor()
+			}
+			if m.connCancel != nil {
+				m.connCancel()
 			}
 			m.cleanupConnection("Closed")
 		}
@@ -1109,7 +1133,7 @@ func (m *Manager) switchMode(newMode StreamMode, fps *int, quality *int, scale *
 	ticker.Reset(*frameInterval)
 }
 
-func (m *Manager) startScreenStreaming() {
+func (m *Manager) startScreenStreaming(ctx context.Context) {
 	log.Println("🎥 Starting adaptive screen streaming...")
 
 	// If screen capturer not initialized, try to initialize now
@@ -1202,11 +1226,14 @@ func (m *Manager) startScreenStreaming() {
 	}
 
 	// Start stats collection goroutine
-	go m.collectStats()
+	go m.collectStats(ctx)
 
-	for m.isStreaming {
-		// Wait for either ticker or input-triggered frame request
+	for m.isStreaming.Load() {
+		// Wait for either ticker, input-triggered frame request, or context cancellation
 		select {
+		case <-ctx.Done():
+			log.Println("🛑 Streaming stopped (context cancelled)")
+			return
 		case <-ticker.C:
 			// Normal frame interval
 		case <-m.inputFrameTrigger:
@@ -1690,25 +1717,36 @@ func (m *Manager) sendMonitorList() {
 
 // handleDisconnectGracePeriod waits up to 8 seconds for ICE to self-recover
 // before cleaning up the connection. Checks every 500ms.
-func (m *Manager) handleDisconnectGracePeriod() {
+// The context is cancelled when a new connection state change supersedes this grace period.
+func (m *Manager) handleDisconnectGracePeriod(ctx context.Context) {
 	const gracePeriod = 8 * time.Second
 	const checkInterval = 500 * time.Millisecond
 	deadline := time.Now().Add(gracePeriod)
 
 	for time.Now().Before(deadline) {
-		time.Sleep(checkInterval)
+		select {
+		case <-ctx.Done():
+			log.Println("🔌 Grace period cancelled (new state change)")
+			return
+		case <-time.After(checkInterval):
+		}
 
-		if m.peerConnection == nil {
+		m.mu.Lock()
+		pc := m.peerConnection
+		m.mu.Unlock()
+
+		if pc == nil {
 			log.Println("🔌 PeerConnection is nil during grace period - cleaning up")
 			break
 		}
 
-		state := m.peerConnection.ConnectionState()
+		state := pc.ConnectionState()
 		switch state {
 		case webrtc.PeerConnectionStateConnected:
-			log.Println("✅ ICE recovered! Resuming streaming...")
-			m.isStreaming = true
-			go m.startScreenStreaming()
+			// NOTE: The OnConnectionStateChange handler will also fire for Connected,
+			// which cancels this context and starts fresh streaming. We just return here
+			// to avoid duplicate streaming goroutines.
+			log.Println("✅ ICE recovered during grace period (handler will start streaming)")
 			return
 		case webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateClosed:
 			log.Printf("❌ Connection state became %s during grace period", state.String())
@@ -1732,23 +1770,27 @@ func (m *Manager) cleanupConnection(reason string) {
 	log.Printf("🧹 Cleaning up connection (reason: %s)", reason)
 
 	// Stop streaming
-	m.isStreaming = false
+	m.isStreaming.Store(false)
 
 	// Update session status to ended
 	if m.sessionID != "" {
 		m.updateSessionStatus("ended")
 	}
 
-	// Close data channel
+	// Close data channel and peer connection under mutex
+	m.mu.Lock()
 	if m.dataChannel != nil {
 		m.dataChannel.Close()
 		m.dataChannel = nil
 	}
 
-	// Close peer connection
-	if m.peerConnection != nil {
-		m.peerConnection.Close()
-		m.peerConnection = nil
+	pc := m.peerConnection
+	m.peerConnection = nil
+	m.mu.Unlock()
+
+	// Close peer connection outside mutex to avoid deadlock with pion callbacks
+	if pc != nil {
+		pc.Close()
 	}
 
 	// Reset session ID for next connection
@@ -1758,14 +1800,21 @@ func (m *Manager) cleanupConnection(reason string) {
 }
 
 func (m *Manager) Close() {
-	m.isStreaming = false
+	m.isStreaming.Store(false)
 
+	if m.connCancel != nil {
+		m.connCancel()
+	}
+
+	m.mu.Lock()
 	if m.dataChannel != nil {
 		m.dataChannel.Close()
 	}
+	pc := m.peerConnection
+	m.mu.Unlock()
 
-	if m.peerConnection != nil {
-		m.peerConnection.Close()
+	if pc != nil {
+		pc.Close()
 	}
 }
 
@@ -1880,18 +1929,26 @@ func (m *Manager) sendResponse(data map[string]interface{}) {
 }
 
 // collectStats collects WebRTC stats for adaptive streaming
-func (m *Manager) collectStats() {
+func (m *Manager) collectStats(ctx context.Context) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
-	for m.isStreaming {
-		<-ticker.C
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 
-		if m.peerConnection == nil {
+		m.mu.Lock()
+		pc := m.peerConnection
+		m.mu.Unlock()
+
+		if pc == nil {
 			continue
 		}
 
-		stats := m.peerConnection.GetStats()
+		stats := pc.GetStats()
 		for _, stat := range stats {
 			// Look for data channel stats
 			if dcStats, ok := stat.(webrtc.DataChannelStats); ok {

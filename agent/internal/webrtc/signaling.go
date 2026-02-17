@@ -274,9 +274,12 @@ func (m *Manager) handleWebSession(session Session) {
 	log.Println("🔧 Setting up WebRTC connection (web dashboard)...")
 
 	// Cleanup previous connection if it's a different session
-	if m.peerConnection != nil || m.isStreaming {
+	if m.peerConnection != nil || m.isStreaming.Load() {
 		log.Println("🔄 New connection requested - disconnecting previous session...")
-		m.isStreaming = false
+		m.isStreaming.Store(false)
+		if m.connCancel != nil {
+			m.connCancel()
+		}
 		m.cleanupConnection("New connection from dashboard")
 		time.Sleep(200 * time.Millisecond) // Give time for cleanup
 		log.Println("✅ Previous session disconnected, ready for new connection")
