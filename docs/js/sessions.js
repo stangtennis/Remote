@@ -11,7 +11,7 @@ const SessionManager = {
     this.tabsContainer = document.getElementById('tabsContainer');
     this.tabAddBtn = document.getElementById('tabAddBtn');
     this.previewIdle = document.getElementById('previewIdle');
-    
+
     // Tab add button scrolls to devices
     if (this.tabAddBtn) {
       this.tabAddBtn.addEventListener('click', () => {
@@ -36,14 +36,43 @@ const SessionManager = {
     }
 
     const session = {
+      // Identity
       id: deviceId,
       deviceName: deviceName,
       status: 'connecting', // connecting, connected, disconnected
+      createdAt: Date.now(),
+      // WebRTC
       peerConnection: null,
       dataChannel: null,
+      // Session + signaling
+      sessionData: null,           // fra session-token API
+      signalingChannel: null,      // Supabase realtime channel
+      pollingInterval: null,       // setInterval ID
+      processedSignalIds: new Set(),
+      pendingIceCandidates: [],
+      // Frame display
       lastFrame: null,
       frameCount: 0,
-      createdAt: Date.now()
+      // Frame reassembly (per-session)
+      frameChunks: [],
+      expectedChunks: 0,
+      currentFrameId: -1,
+      frameTimeout: null,
+      screenWidth: 0,
+      screenHeight: 0,
+      // Bandwidth/stats
+      bytesReceived: 0,
+      framesReceived: 0,
+      framesDropped: 0,
+      lastBandwidthCheck: Date.now(),
+      currentBandwidthMbps: 0,
+      bandwidthInterval: null,
+      statsInterval: null,
+      // Auto-reconnect state
+      reconnectState: 'idle',       // 'idle' | 'reconnecting' | 'gave_up'
+      reconnectAttempt: 0,
+      reconnectTimer: null,
+      reconnectStartedAt: null,
     };
 
     this.sessions.set(deviceId, session);
@@ -76,7 +105,10 @@ const SessionManager = {
     // Close button
     tab.querySelector('.tab-close').addEventListener('click', (e) => {
       e.stopPropagation();
-      this.closeSession(session.id);
+      // Use endSession for full cleanup (signaling, DB, WebRTC)
+      if (window.endSession) {
+        window.endSession(session.id);
+      }
     });
 
     this.tabsContainer.appendChild(tab);
@@ -95,15 +127,41 @@ const SessionManager = {
       tab.classList.toggle('active', tab.dataset.sessionId === deviceId);
     });
 
-    // Show the session's last frame if available
-    if (session.lastFrame) {
-      this.displayFrame(session.lastFrame);
+    // Swap global refs so legacy code and input handlers work
+    window.currentSession = session.sessionData;
+    window.peerConnection = session.peerConnection;
+    window.dataChannel = session.dataChannel;
+
+    // Handle display based on session type
+    const previewVideo = document.getElementById('previewVideo');
+    const previewCanvas = document.getElementById('previewCanvas');
+
+    if (deviceId === 'quick-support') {
+      if (previewVideo) previewVideo.style.display = 'block';
+      if (previewCanvas) previewCanvas.style.display = 'none';
+    } else {
+      if (previewVideo) previewVideo.style.display = '';
+      if (previewCanvas) previewCanvas.style.display = '';
+      // Restore last frame for this session
+      if (session.lastFrame) {
+        this.displayFrame(session.lastFrame);
+      }
     }
 
     // Update toolbar with session info
     const connectedDeviceName = document.getElementById('connectedDeviceName');
     if (connectedDeviceName) {
       connectedDeviceName.textContent = session.deviceName;
+    }
+
+    // Update bandwidth display for this session
+    const statsEl = document.getElementById('bandwidthStats');
+    if (statsEl) {
+      if (session.currentBandwidthMbps > 0) {
+        statsEl.textContent = `${session.currentBandwidthMbps.toFixed(1)} Mbit/s`;
+      } else {
+        statsEl.textContent = '';
+      }
     }
 
     // Show/hide idle state
@@ -181,23 +239,10 @@ const SessionManager = {
     img.src = 'data:image/jpeg;base64,' + frameData;
   },
 
-  // Close a session
+  // Close a session (tab + switching only — full cleanup done by endSession in app.js)
   closeSession(deviceId) {
     const session = this.sessions.get(deviceId);
     if (!session) return;
-
-    // Close WebRTC connection
-    if (session.peerConnection) {
-      session.peerConnection.close();
-    }
-    if (session.dataChannel) {
-      session.dataChannel.close();
-    }
-
-    // Call the global disconnect if this is the active session
-    if (deviceId === this.activeSessionId && window.disconnectFromDevice) {
-      window.disconnectFromDevice();
-    }
 
     // Remove tab
     const tab = this.tabsContainer.querySelector(`[data-session-id="${deviceId}"]`);
@@ -215,6 +260,9 @@ const SessionManager = {
         this.switchToSession(remainingSessions[0]);
       } else {
         this.activeSessionId = null;
+        window.currentSession = null;
+        window.peerConnection = null;
+        window.dataChannel = null;
         // Show idle state
         if (this.previewIdle) {
           this.previewIdle.style.display = 'flex';
@@ -238,6 +286,16 @@ const SessionManager = {
   // Check if a device has an active session
   hasSession(deviceId) {
     return this.sessions.has(deviceId);
+  },
+
+  // Lookup session by signaling session_id
+  getSessionBySessionId(sessionId) {
+    for (const session of this.sessions.values()) {
+      if (session.sessionData && session.sessionData.session_id === sessionId) {
+        return session;
+      }
+    }
+    return null;
   },
 
   // Update UI elements

@@ -43,18 +43,24 @@ Function .onInit
     ; Check if already installed
     ReadRegStr $0 HKLM "Software\RemoteDesktopController" "Version"
     StrCmp $0 "" done
-    
+
+    ; In silent mode, skip the dialog and go straight to upgrade
+    IfSilent upgrade
+
     ; Show upgrade message
     MessageBox MB_YESNO|MB_ICONQUESTION "Remote Desktop Controller v$0 er allerede installeret.$\n$\nVil du opgradere til v${VERSION}?" IDYES upgrade IDNO abort
-    
+
     abort:
         Abort
-    
+
     upgrade:
-        ; Close running controller
+        ; Graceful shutdown first (without /F)
+        nsExec::ExecToLog 'taskkill /IM controller.exe'
+        Sleep 3000
+        ; Force kill if still running
         nsExec::ExecToLog 'taskkill /F /IM controller.exe'
         Sleep 1000
-    
+
     done:
 FunctionEnd
 
@@ -65,7 +71,9 @@ Section "Install"
     ; Overwrite files without asking (upgrade mode)
     SetOverwrite on
     
-    ; Stop controller if running
+    ; Stop controller if running (graceful first, then force)
+    nsExec::ExecToLog 'taskkill /IM controller.exe'
+    Sleep 2000
     nsExec::ExecToLog 'taskkill /F /IM controller.exe'
     Sleep 500
     
@@ -102,6 +110,12 @@ SectionEnd
 
 ; Uninstaller Section
 Section "Uninstall"
+    ; Stop controller if running
+    nsExec::ExecToLog 'taskkill /IM controller.exe'
+    Sleep 2000
+    nsExec::ExecToLog 'taskkill /F /IM controller.exe'
+    Sleep 500
+
     ; Remove files
     Delete "$INSTDIR\controller.exe"
     Delete "$INSTDIR\ffmpeg.exe"

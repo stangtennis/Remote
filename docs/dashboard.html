@@ -91,6 +91,18 @@
                 <p>Opretter sikker forbindelse...</p>
                 <span class="connecting-device" id="connectingDeviceName"></span>
               </div>
+
+              <!-- Reconnecting State -->
+              <div class="preview-reconnecting" id="previewReconnecting" style="display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.75); z-index: 20; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 1rem;">
+                <div class="connecting-animation">
+                  <div class="connecting-ring"></div>
+                  <div class="connecting-ring"></div>
+                  <div class="connecting-ring"></div>
+                </div>
+                <p style="color: #fff; font-size: 1.1rem; margin: 0;">Forbindelsen tabt. Genopretter...</p>
+                <p id="reconnectStatus" style="color: #aaa; font-size: 0.9rem; margin: 0;">Forsøg 1/8</p>
+                <button id="cancelReconnectBtn" class="btn btn-secondary btn-sm" style="margin-top: 0.5rem;">Afbryd</button>
+              </div>
             </div>
             
             <!-- Preview Toolbar -->
@@ -104,6 +116,10 @@
                 <button class="toolbar-btn" title="Filøverførsel">📁</button>
                 <button class="toolbar-btn" title="Skærmbillede">📸</button>
                 <button class="toolbar-btn" id="qualityToggleBtn" title="Skift H264/JPEG tilstand">🎚️</button>
+                <span id="monitorSelectContainer" style="display: none; align-items: center; gap: 4px;">
+                  <label for="monitorSelect" style="font-size: 0.8rem; color: #aaa;">🖥️</label>
+                  <select id="monitorSelect" style="background: var(--surface, #1a1a2e); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: 4px; padding: 2px 6px; font-size: 0.8rem; cursor: pointer;"></select>
+                </span>
               </div>
               <div class="toolbar-right">
                 <span class="connection-stats">
@@ -373,11 +389,11 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js?v=6"></script>
   <script src="js/auth.js?v=6"></script>
-  <script src="js/app.js?v=6"></script>
-  <script src="js/devices.js?v=6"></script>
-  <script src="js/sessions.js?v=6"></script>
-  <script src="js/webrtc.js?v=6"></script>
-  <script src="js/signaling.js?v=6"></script>
+  <script src="js/app.js?v=8"></script>
+  <script src="js/devices.js?v=7"></script>
+  <script src="js/sessions.js?v=8"></script>
+  <script src="js/webrtc.js?v=8"></script>
+  <script src="js/signaling.js?v=7"></script>
   <script src="js/support-viewer.js?v=3"></script>
   
   <!-- Fullscreen Preview Script -->
@@ -432,6 +448,32 @@
         }
         toggleFullscreen();
       });
+
+      // Monitor selector change event
+      const monitorSelect = document.getElementById('monitorSelect');
+      if (monitorSelect) {
+        monitorSelect.addEventListener('change', function() {
+          const index = parseInt(this.value);
+          if (typeof window.sendControlEvent === 'function') {
+            window.sendControlEvent({
+              type: 'switch_monitor',
+              index: index
+            });
+            debug('🖥️ Requested switch to monitor ' + index);
+          }
+        });
+      }
+
+      // Cancel reconnect button
+      const cancelReconnectBtn = document.getElementById('cancelReconnectBtn');
+      if (cancelReconnectBtn) {
+        cancelReconnectBtn.addEventListener('click', function() {
+          const activeId = window.SessionManager?.activeSessionId;
+          if (activeId && typeof window.cancelReconnect === 'function') {
+            window.cancelReconnect(activeId);
+          }
+        });
+      }
     })();
   </script>
 </body>

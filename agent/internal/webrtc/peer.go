@@ -395,12 +395,9 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 			}
 			go m.startScreenStreaming()
 		case webrtc.PeerConnectionStateDisconnected:
-			log.Println("⚠️  WebRTC DISCONNECTED")
-			// Restore local cursor
-			if m.mouseController != nil {
-				m.mouseController.ShowCursor()
-			}
-			m.cleanupConnection("Disconnected")
+			log.Println("⚠️  WebRTC DISCONNECTED - waiting for ICE recovery...")
+			m.isStreaming = false // Stop sending frames during recovery
+			go m.handleDisconnectGracePeriod()
 		case webrtc.PeerConnectionStateFailed:
 			log.Println("❌ WebRTC CONNECTION FAILED")
 			// Restore local cursor
@@ -679,6 +676,61 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 		}
 		if bitrate, ok := event["bitrate"].(float64); ok && bitrate > 0 {
 			m.SetVideoBitrate(int(bitrate))
+		}
+		return
+	}
+
+	// Handle switch_monitor
+	if msgType, ok := event["type"].(string); ok && msgType == "switch_monitor" {
+		indexF, ok := event["index"].(float64)
+		if !ok {
+			log.Println("⚠️ switch_monitor: missing index")
+			return
+		}
+		index := int(indexF)
+		log.Printf("🖥️ Switching to monitor %d...", index)
+
+		if m.screenCapturer != nil {
+			if err := m.screenCapturer.SwitchDisplay(index); err != nil {
+				log.Printf("❌ Failed to switch display: %v", err)
+				return
+			}
+
+			// Update mouse controller with new resolution + offset
+			width, height := m.screenCapturer.GetResolution()
+			monitors := screen.EnumerateDisplays()
+			var offsetX, offsetY int
+			for _, mon := range monitors {
+				if mon.Index == index {
+					offsetX = mon.OffsetX
+					offsetY = mon.OffsetY
+					break
+				}
+			}
+
+			if m.mouseController != nil {
+				m.mouseController.SetResolution(width, height)
+				m.mouseController.SetMonitorOffset(offsetX, offsetY)
+			}
+
+			// Reset dirty region detector
+			if m.dirtyDetector != nil {
+				m.dirtyDetector = nil // Will be recreated on next frame
+			}
+
+			// Send confirmation
+			confirmation := map[string]interface{}{
+				"type":   "monitor_switched",
+				"index":  index,
+				"width":  width,
+				"height": height,
+			}
+			if data, err := json.Marshal(confirmation); err == nil {
+				if m.dataChannel != nil && m.dataChannel.ReadyState() == webrtc.DataChannelStateOpen {
+					m.dataChannel.Send(data)
+				}
+			}
+			log.Printf("✅ Switched to monitor %d: %dx%d (offset: %d,%d)", index, width, height, offsetX, offsetY)
 		}
 		return
 	}
@@ -1092,6 +1144,9 @@ func (m *Manager) startScreenStreaming() {
 	if m.dirtyDetector == nil {
 		m.dirtyDetector = screen.NewDirtyRegionDetector(128, 128)
 	}
+
+	// Send monitor list to dashboard
+	m.sendMonitorList()
 
 	// Adaptive streaming parameters
 	fps := 20     // Current FPS (12-30)
@@ -1582,6 +1637,95 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 	}
 
 	return nil
+}
+
+// sendMonitorList sends the list of connected monitors to the dashboard
+func (m *Manager) sendMonitorList() {
+	monitors := screen.EnumerateDisplays()
+	if len(monitors) == 0 {
+		return
+	}
+
+	activeIndex := 0
+	if m.screenCapturer != nil {
+		activeIndex = m.screenCapturer.GetDisplayIndex()
+	}
+
+	type monitorMsg struct {
+		Index   int    `json:"index"`
+		Name    string `json:"name"`
+		Width   int    `json:"width"`
+		Height  int    `json:"height"`
+		Primary bool   `json:"primary"`
+		OffsetX int    `json:"offsetX"`
+		OffsetY int    `json:"offsetY"`
+	}
+
+	var monList []monitorMsg
+	for _, mon := range monitors {
+		monList = append(monList, monitorMsg{
+			Index:   mon.Index,
+			Name:    mon.Name,
+			Width:   mon.Width,
+			Height:  mon.Height,
+			Primary: mon.Primary,
+			OffsetX: mon.OffsetX,
+			OffsetY: mon.OffsetY,
+		})
+	}
+
+	msg := map[string]interface{}{
+		"type":     "monitor_list",
+		"monitors": monList,
+		"active":   activeIndex,
+	}
+
+	if data, err := json.Marshal(msg); err == nil {
+		if m.dataChannel != nil && m.dataChannel.ReadyState() == webrtc.DataChannelStateOpen {
+			m.dataChannel.Send(data)
+			log.Printf("📺 Sent monitor list: %d monitors (active: %d)", len(monitors), activeIndex)
+		}
+	}
+}
+
+// handleDisconnectGracePeriod waits up to 8 seconds for ICE to self-recover
+// before cleaning up the connection. Checks every 500ms.
+func (m *Manager) handleDisconnectGracePeriod() {
+	const gracePeriod = 8 * time.Second
+	const checkInterval = 500 * time.Millisecond
+	deadline := time.Now().Add(gracePeriod)
+
+	for time.Now().Before(deadline) {
+		time.Sleep(checkInterval)
+
+		if m.peerConnection == nil {
+			log.Println("🔌 PeerConnection is nil during grace period - cleaning up")
+			break
+		}
+
+		state := m.peerConnection.ConnectionState()
+		switch state {
+		case webrtc.PeerConnectionStateConnected:
+			log.Println("✅ ICE recovered! Resuming streaming...")
+			m.isStreaming = true
+			go m.startScreenStreaming()
+			return
+		case webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateClosed:
+			log.Printf("❌ Connection state became %s during grace period", state.String())
+			if m.mouseController != nil {
+				m.mouseController.ShowCursor()
+			}
+			m.cleanupConnection(state.String())
+			return
+		}
+		// Still disconnected - keep waiting
+	}
+
+	log.Println("⏰ Grace period expired (8s) - cleaning up connection")
+	if m.mouseController != nil {
+		m.mouseController.ShowCursor()
+	}
+	m.cleanupConnection("Disconnected (grace period expired)")
 }
 
 func (m *Manager) cleanupConnection(reason string) {

@@ -1,15 +1,11 @@
 // Signaling Module
 // Handles WebRTC signaling via Supabase Realtime
-
-let signalingChannel = null;
-let pollingInterval = null;
-let processedSignalIds = new Set();
-let pendingIceCandidates = []; // Buffer for ICE candidates received before remote description
+// All state is per-session via ctx (session object from SessionManager)
 
 async function sendSignal(payload) {
   try {
     debug('📤 Attempting to send signal:', payload.type, 'for session:', payload.session_id);
-    
+
     // Prepare payload based on type
     let signalPayload;
     if (payload.type === 'ice') {
@@ -22,7 +18,7 @@ async function sendSignal(payload) {
         sdp: payload.sdp
       };
     }
-    
+
     // Insert signaling message into database
     const { data, error } = await supabase
       .from('session_signaling')
@@ -48,19 +44,20 @@ async function sendSignal(payload) {
   }
 }
 
-function subscribeToSessionSignaling(sessionId) {
-  if (signalingChannel) {
-    supabase.removeChannel(signalingChannel);
+function subscribeToSessionSignaling(sessionId, ctx) {
+  // Clean up any previous channel on this ctx
+  if (ctx.signalingChannel) {
+    supabase.removeChannel(ctx.signalingChannel);
   }
 
-  // Clear previous polling
-  if (pollingInterval) {
-    clearInterval(pollingInterval);
+  // Clear previous polling on this ctx
+  if (ctx.pollingInterval) {
+    clearInterval(ctx.pollingInterval);
   }
-  processedSignalIds.clear();
+  ctx.processedSignalIds.clear();
 
   // Subscribe to signaling messages for this session (Realtime)
-  signalingChannel = supabase
+  ctx.signalingChannel = supabase
     .channel(`session:${sessionId}`)
     .on('postgres_changes',
       {
@@ -71,7 +68,7 @@ function subscribeToSessionSignaling(sessionId) {
       },
       async (payload) => {
         debug('✅ Realtime signal received:', payload.new.msg_type);
-        await handleSignal(payload.new);
+        await handleSignal(payload.new, ctx);
       }
     )
     .subscribe();
@@ -79,14 +76,14 @@ function subscribeToSessionSignaling(sessionId) {
   debug('Subscribed to signaling for session:', sessionId);
 
   // Start polling as fallback (in case Realtime is slow/broken)
-  startPollingForSignals(sessionId);
+  startPollingForSignals(sessionId, ctx);
 }
 
-async function startPollingForSignals(sessionId) {
+async function startPollingForSignals(sessionId, ctx) {
   debug('🔄 Starting polling fallback for signals...');
-  
+
   // Poll every 500ms
-  pollingInterval = setInterval(async () => {
+  ctx.pollingInterval = setInterval(async () => {
     try {
       const { data, error } = await supabase
         .from('session_signaling')
@@ -105,16 +102,16 @@ async function startPollingForSignals(sessionId) {
         // Log ALL signal types received (for debugging)
         const signalTypes = data.map(s => `${s.msg_type}(${s.from_side})`).join(', ');
         debug(`🔍 Polled ${data.length} signals: ${signalTypes}`);
-        
+
         for (const signal of data) {
           // Skip already processed signals
-          if (processedSignalIds.has(signal.id)) {
+          if (ctx.processedSignalIds.has(signal.id)) {
             continue;
           }
-          processedSignalIds.add(signal.id);
-          
+          ctx.processedSignalIds.add(signal.id);
+
           debug('📥 Polled NEW signal:', signal.msg_type, 'from:', signal.from_side, 'id:', signal.id);
-          await handleSignal(signal);
+          await handleSignal(signal, ctx);
         }
       }
     } catch (err) {
@@ -123,65 +120,54 @@ async function startPollingForSignals(sessionId) {
   }, 500);
 }
 
-function stopPolling() {
-  if (pollingInterval) {
-    clearInterval(pollingInterval);
-    pollingInterval = null;
+// Stop polling for a specific session
+function stopSessionPolling(ctx) {
+  if (ctx.pollingInterval) {
+    clearInterval(ctx.pollingInterval);
+    ctx.pollingInterval = null;
   }
-  processedSignalIds.clear();
+  ctx.processedSignalIds.clear();
 }
 
-async function handleSignal(signal) {
+// Stop all session polling (convenience for beforeunload etc.)
+function stopPolling() {
+  if (window.SessionManager) {
+    for (const session of window.SessionManager.sessions.values()) {
+      stopSessionPolling(session);
+    }
+  }
+}
+
+async function handleSignal(signal, ctx) {
   // Ignore our own signals
   if (signal.from_side === 'dashboard') return;
 
   // Handle kick signals - another controller took over
   if (signal.msg_type === 'kick') {
-    debug('🔴 KICKED - another controller took over this device');
+    debug('🔴 KICKED - another controller took over device:', ctx.id);
     debug('   Kick reason:', signal.payload?.reason);
     debug('   New controller:', signal.payload?.new_controller_type);
-    
-    // Clean up WebRTC connection
-    if (typeof cleanupWebRTC === 'function') {
-      cleanupWebRTC();
-    }
-    
-    // Stop polling
-    stopPolling();
-    
-    // Show user message
-    const statusEl = document.getElementById('sessionStatus');
-    if (statusEl) {
-      statusEl.textContent = 'Disconnected - another controller connected';
-      statusEl.className = 'status-badge disconnected';
-    }
-    
-    // Update preview UI
-    const previewConnecting = document.getElementById('previewConnecting');
-    const previewIdle = document.getElementById('previewIdle');
-    if (previewConnecting) previewConnecting.style.display = 'none';
-    if (previewIdle) previewIdle.style.display = 'flex';
-    
-    // Notify SessionManager if available
-    if (window.SessionManager && window.currentSession) {
-      window.SessionManager.closeSession(window.currentSession.device_id);
-    }
-    
+
     showToast('Du blev afkoblet — en anden controller har overtaget forbindelsen.', 'warning', 6000);
+
+    // End this specific session
+    if (window.endSession) {
+      window.endSession(ctx.id);
+    }
     return;
   }
 
   // Skip already processed signals (prevents duplicates from realtime + polling)
-  if (processedSignalIds.has(signal.id)) {
+  if (ctx.processedSignalIds.has(signal.id)) {
     return;
   }
-  processedSignalIds.add(signal.id);
+  ctx.processedSignalIds.add(signal.id);
 
-  debug('🔵 Processing signal:', signal.msg_type, 'from', signal.from_side);
+  debug('🔵 Processing signal:', signal.msg_type, 'from', signal.from_side, 'for device:', ctx.id);
 
-  const peerConnection = window.peerConnection;
+  const peerConnection = ctx.peerConnection;
   if (!peerConnection) {
-    console.warn('No peer connection available');
+    console.warn('No peer connection available for session:', ctx.id);
     return;
   }
 
@@ -196,11 +182,11 @@ async function handleSignal(signal) {
         const answer = new RTCSessionDescription(signal.payload);
         await peerConnection.setRemoteDescription(answer);
         debug('✅ Remote description set (answer)');
-        
+
         // Flush any buffered ICE candidates now that remote description is set
-        if (pendingIceCandidates.length > 0) {
-          debug(`📥 Flushing ${pendingIceCandidates.length} buffered ICE candidates`);
-          for (const buffered of pendingIceCandidates) {
+        if (ctx.pendingIceCandidates.length > 0) {
+          debug(`📥 Flushing ${ctx.pendingIceCandidates.length} buffered ICE candidates`);
+          for (const buffered of ctx.pendingIceCandidates) {
             await peerConnection.addIceCandidate(
               new RTCIceCandidate({
                 candidate: buffered.candidate,
@@ -209,34 +195,29 @@ async function handleSignal(signal) {
               })
             );
           }
-          pendingIceCandidates = [];
+          ctx.pendingIceCandidates = [];
         }
         break;
 
       case 'ice':
         // Agent sent ICE candidate
-        // Handle both formats:
-        // Old: payload = { candidate: { candidate: "...", sdpMid, sdpMLineIndex } }
-        // New: payload = { candidate: "...", sdpMid: "0", sdpMLineIndex: 0 }
         let iceCandidate;
         if (signal.payload.candidate && typeof signal.payload.candidate === 'object') {
-          // Old nested format
           iceCandidate = signal.payload.candidate;
         } else {
-          // New flat format
           iceCandidate = signal.payload;
         }
-        
+
         if (iceCandidate && iceCandidate.candidate) {
-          const candidateStr = typeof iceCandidate.candidate === 'string' 
+          const candidateStr = typeof iceCandidate.candidate === 'string'
             ? iceCandidate.candidate.substring(0, 50) + '...'
             : JSON.stringify(iceCandidate.candidate).substring(0, 50);
           debug('📥 Received ICE candidate from agent:', candidateStr);
-          
+
           // Check if remote description is set
           if (!peerConnection.remoteDescription) {
             debug('⏸️ Buffering ICE candidate (remote description not set yet)');
-            pendingIceCandidates.push(iceCandidate);
+            ctx.pendingIceCandidates.push(iceCandidate);
           } else {
             await peerConnection.addIceCandidate(
               new RTCIceCandidate({
@@ -252,16 +233,15 @@ async function handleSignal(signal) {
 
       case 'offer':
         // Agent sent offer (reconnection scenario)
-        // Payload has {type, sdp} structure
         const offer = new RTCSessionDescription(signal.payload);
         await peerConnection.setRemoteDescription(offer);
-        
+
         // Create and send answer
         const answerSdp = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answerSdp);
-        
+
         await sendSignal({
-          session_id: window.currentSession.session_id,
+          session_id: ctx.sessionData.session_id,
           from: 'dashboard',
           type: 'answer',
           sdp: answerSdp.sdp
@@ -281,3 +261,4 @@ async function handleSignal(signal) {
 window.sendSignal = sendSignal;
 window.subscribeToSessionSignaling = subscribeToSessionSignaling;
 window.stopPolling = stopPolling;
+window.stopSessionPolling = stopSessionPolling;

@@ -42,19 +42,26 @@ Function .onInit
     ; Check if already installed
     ReadRegStr $0 HKLM "Software\RemoteDesktopAgent" "Version"
     StrCmp $0 "" done
-    
+
+    ; In silent mode, skip the dialog and go straight to upgrade
+    IfSilent upgrade
+
     ; Show upgrade message
     MessageBox MB_YESNO|MB_ICONQUESTION "Remote Desktop Agent v$0 er allerede installeret.$\n$\nVil du opgradere til v${VERSION}?" IDYES upgrade IDNO abort
-    
+
     abort:
         Abort
-    
+
     upgrade:
-        ; Close running agent
+        ; Graceful shutdown first (without /F)
+        nsExec::ExecToLog 'taskkill /IM remote-agent.exe'
+        nsExec::ExecToLog 'taskkill /IM remote-agent-console.exe'
+        Sleep 3000
+        ; Force kill if still running
         nsExec::ExecToLog 'taskkill /F /IM remote-agent.exe'
         nsExec::ExecToLog 'taskkill /F /IM remote-agent-console.exe'
         Sleep 1000
-    
+
     done:
 FunctionEnd
 
@@ -65,7 +72,10 @@ Section "Install"
     ; Overwrite files without asking (upgrade mode)
     SetOverwrite on
     
-    ; Stop existing agent if running
+    ; Stop existing agent if running (graceful first, then force)
+    nsExec::ExecToLog 'taskkill /IM remote-agent.exe'
+    nsExec::ExecToLog 'taskkill /IM remote-agent-console.exe'
+    Sleep 2000
     nsExec::ExecToLog 'taskkill /F /IM remote-agent.exe'
     nsExec::ExecToLog 'taskkill /F /IM remote-agent-console.exe'
     Sleep 500
