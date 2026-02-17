@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/pion/interceptor"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
+	"github.com/stangtennis/remote-agent/internal/auth"
 	"github.com/stangtennis/remote-agent/internal/clipboard"
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/desktop"
@@ -62,6 +64,7 @@ type ModeState struct {
 type Manager struct {
 	cfg                 *config.Config
 	device              *device.Device
+	tokenProvider       *auth.TokenProvider
 	peerConnection      *webrtc.PeerConnection
 	dataChannel         *webrtc.DataChannel
 	controlChannel      *webrtc.DataChannel // Separate channel for input (low latency)
@@ -125,7 +128,18 @@ type Manager struct {
 	rttAvg []time.Duration
 }
 
-func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
+// setAuthHeaders sets apikey and Authorization headers using authenticated JWT token.
+func (m *Manager) setAuthHeaders(req *http.Request) error {
+	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
+	token, err := m.tokenProvider.GetToken()
+	if err != nil {
+		return fmt.Errorf("failed to get auth token: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	return nil
+}
+
+func New(cfg *config.Config, dev *device.Device, tokenProvider *auth.TokenProvider) (*Manager, error) {
 	// Check if we're in Session 0 (login screen / no user desktop)
 	isSession0 := false
 	currentDesktopType := desktop.DesktopDefault
@@ -197,6 +211,7 @@ func New(cfg *config.Config, dev *device.Device) (*Manager, error) {
 	mgr := &Manager{
 		cfg:                 cfg,
 		device:              dev,
+		tokenProvider:       tokenProvider,
 		screenCapturer:      capturer,
 		mouseController:     input.NewMouseController(width, height),
 		keyController:       input.NewKeyboardController(),

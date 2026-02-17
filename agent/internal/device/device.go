@@ -10,15 +10,16 @@ import (
 )
 
 type Device struct {
-	ID       string
-	Name     string
-	Platform string
-	Arch     string
-	CPUCount int
-	RAMBytes int64
-	APIKey   string
-	cfg      *config.Config
-	userID   string
+	ID            string
+	Name          string
+	Platform      string
+	Arch          string
+	CPUCount      int
+	RAMBytes      int64
+	APIKey        string
+	cfg           *config.Config
+	tokenProvider *auth.TokenProvider
+	userID        string
 }
 
 type RegisterResponse struct {
@@ -28,7 +29,7 @@ type RegisterResponse struct {
 	Message  string `json:"message"`
 }
 
-func New(cfg *config.Config) (*Device, error) {
+func New(cfg *config.Config, tokenProvider *auth.TokenProvider) (*Device, error) {
 	// Get or create persistent device ID
 	deviceID, err := GetOrCreateDeviceID()
 	if err != nil {
@@ -36,11 +37,12 @@ func New(cfg *config.Config) (*Device, error) {
 	}
 
 	dev := &Device{
-		ID:       deviceID,
-		Platform: runtime.GOOS,
-		Arch:     runtime.GOARCH,
-		CPUCount: runtime.NumCPU(),
-		cfg:      cfg,
+		ID:            deviceID,
+		Platform:      runtime.GOOS,
+		Arch:          runtime.GOARCH,
+		CPUCount:      runtime.NumCPU(),
+		cfg:           cfg,
+		tokenProvider: tokenProvider,
 	}
 
 	// Get device name
@@ -62,7 +64,12 @@ func New(cfg *config.Config) (*Device, error) {
 }
 
 func (d *Device) Register() error {
-	// Get current user credentials
+	// Get fresh token from provider
+	token, err := d.tokenProvider.GetToken()
+	if err != nil {
+		return fmt.Errorf("failed to get auth token: %w", err)
+	}
+
 	creds, err := auth.GetCurrentUser()
 	if err != nil {
 		return fmt.Errorf("not logged in: %w", err)
@@ -72,7 +79,7 @@ func (d *Device) Register() error {
 	regConfig := RegistrationConfig{
 		SupabaseURL: d.cfg.SupabaseURL,
 		AnonKey:     d.cfg.SupabaseAnonKey,
-		AccessToken: creds.AccessToken,
+		AccessToken: token,
 		UserID:      creds.UserID,
 	}
 
@@ -101,12 +108,20 @@ func (d *Device) SetOffline() error {
 	// Update device status to offline in database
 	fmt.Println("📴 Setting device offline...")
 
-	config := RegistrationConfig{
-		SupabaseURL: d.cfg.SupabaseURL,
-		AnonKey:     d.cfg.SupabaseAnonKey,
+	token, err := d.tokenProvider.GetToken()
+	if err != nil {
+		fmt.Printf("⚠️  Failed to get auth token for offline: %v\n", err)
+		// Fall back to unauthenticated call as last resort
+		token = ""
 	}
 
-	if err := SetOffline(config, d.ID); err != nil {
+	regCfg := RegistrationConfig{
+		SupabaseURL: d.cfg.SupabaseURL,
+		AnonKey:     d.cfg.SupabaseAnonKey,
+		AccessToken: token,
+	}
+
+	if err := SetOffline(regCfg, d.ID); err != nil {
 		fmt.Printf("⚠️  Failed to set offline status: %v\n", err)
 		return err
 	}

@@ -131,7 +131,7 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 	return fmt.Errorf("registration failed: %s (status: %d)", string(body), resp.StatusCode)
 }
 
-// UpdateHeartbeat updates the device heartbeat
+// UpdateHeartbeat updates the device heartbeat using authenticated token
 func UpdateHeartbeat(config RegistrationConfig, deviceID string) error {
 	url := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, deviceID)
 
@@ -153,6 +153,9 @@ func UpdateHeartbeat(config RegistrationConfig, deviceID string) error {
 
 	req.Header.Set("apikey", config.AnonKey)
 	req.Header.Set("Content-Type", "application/json")
+	if config.AccessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+config.AccessToken)
+	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
@@ -169,19 +172,7 @@ func UpdateHeartbeat(config RegistrationConfig, deviceID string) error {
 	return nil
 }
 
-// StartHeartbeat starts sending periodic heartbeats
-func StartHeartbeat(config RegistrationConfig, deviceID string, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		if err := UpdateHeartbeat(config, deviceID); err != nil {
-			fmt.Printf("⚠️  Heartbeat failed: %v\n", err)
-		}
-	}
-}
-
-// SetOffline marks the device as offline in the database
+// SetOffline marks the device as offline in the database using authenticated token
 func SetOffline(config RegistrationConfig, deviceID string) error {
 	url := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, deviceID)
 
@@ -202,6 +193,9 @@ func SetOffline(config RegistrationConfig, deviceID string) error {
 
 	req.Header.Set("apikey", config.AnonKey)
 	req.Header.Set("Content-Type", "application/json")
+	if config.AccessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+config.AccessToken)
+	}
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
