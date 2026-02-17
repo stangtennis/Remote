@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick Support - Del din skærm</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
+  <link rel="stylesheet" href="css/styles.css?v=6">
+  <link rel="stylesheet" href="css/modern.css?v=6">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body.support-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .support-container {
+      max-width: 560px;
+      width: 100%;
+    }
+
+    .support-card {
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .support-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .support-card h1 {
+      font-size: 1.6rem;
+      margin: 0 0 0.5rem;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .support-card p {
+      color: var(--text-muted);
+      margin: 0 0 1.5rem;
+    }
+
+    .pin-form {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .pin-form input {
+      width: 180px;
+      padding: 0.85rem 1rem;
+      background: var(--background);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 1.25rem;
+      text-align: center;
+      letter-spacing: 0.3em;
+    }
+
+    .pin-form input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px var(--primary-light);
+    }
+
+    #shareBtn {
+      font-size: 1.1rem;
+      padding: 0.9rem 2rem;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    #shareBtn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .status-msg {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.9rem;
+      display: none;
+    }
+
+    .status-msg.info {
+      background: rgba(14, 165, 233, 0.1);
+      border: 1px solid rgba(14, 165, 233, 0.25);
+      color: #38bdf8;
+    }
+
+    .status-msg.success {
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      color: #4ade80;
+    }
+
+    .status-msg.error {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      color: #f87171;
+    }
+
+    .status-msg.visible {
+      display: block;
+    }
+
+    .preview-section {
+      margin-top: 1.5rem;
+      display: none;
+    }
+
+    .preview-section.visible {
+      display: block;
+    }
+
+    .preview-section video {
+      width: 100%;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: #000;
+    }
+
+    .session-info {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .stop-btn {
+      margin-top: 1rem;
+      display: none;
+    }
+
+    .stop-btn.visible {
+      display: inline-flex;
+    }
+
+    .connecting-spinner {
+      display: none;
+      margin: 1rem auto;
+    }
+
+    .connecting-spinner.visible {
+      display: block;
+    }
+
+    .connecting-spinner .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .step-indicator {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .step {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background 0.3s;
+    }
+
+    .step.active {
+      background: var(--primary);
+    }
+
+    .step.done {
+      background: #4ade80;
+    }
+  </style>
+</head>
+<body class="support-page">
+  <!-- Animated Background -->
+  <div class="animated-bg">
+    <div class="gradient-orb orb-1"></div>
+    <div class="gradient-orb orb-2"></div>
+    <div class="gradient-orb orb-3"></div>
+  </div>
+
+  <div class="support-container">
+    <div class="glass-card support-card">
+      <div class="support-icon">🖥️</div>
+      <h1>Quick Support</h1>
+      <p id="supportDesc">Del din skærm med en supportmedarbejder</p>
+
+      <!-- Step indicators -->
+      <div class="step-indicator">
+        <div class="step active" id="step1"></div>
+        <div class="step" id="step2"></div>
+        <div class="step" id="step3"></div>
+      </div>
+
+      <!-- PIN entry (shown if no token in URL) -->
+      <div id="pinSection">
+        <div class="pin-form">
+          <input type="text" id="pinInput" placeholder="000000" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autocomplete="off">
+          <button id="pinBtn" class="btn btn-primary" onclick="validatePin()">OK</button>
+        </div>
+      </div>
+
+      <!-- Share button -->
+      <button id="shareBtn" class="btn btn-primary" style="display: none;" onclick="startSharing()">
+        <i class="fa-solid fa-display"></i> Del din skærm
+      </button>
+
+      <!-- Connecting spinner -->
+      <div id="connectingSpinner" class="connecting-spinner">
+        <div class="spinner"></div>
+        <p style="margin-top: 0.5rem; color: var(--text-muted);">Opretter forbindelse...</p>
+      </div>
+
+      <!-- Status message -->
+      <div id="statusMsg" class="status-msg"></div>
+
+      <!-- Preview -->
+      <div id="previewSection" class="preview-section">
+        <video id="localPreview" autoplay playsinline muted></video>
+      </div>
+
+      <!-- Session info -->
+      <div id="sessionInfo" class="session-info" style="display: none;">
+        <span id="connectionState">Venter...</span>
+        <span id="sharingDuration"></span>
+      </div>
+
+      <!-- Stop button -->
+      <button id="stopBtn" class="btn btn-danger stop-btn" onclick="stopSharing()">
+        <i class="fa-solid fa-stop"></i> Stop deling
+      </button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js?v=6"></script>
+  <script src="js/support.js?v=1"></script>
+</body>
+</html>

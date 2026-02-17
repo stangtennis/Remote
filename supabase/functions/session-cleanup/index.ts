@@ -21,6 +21,7 @@ serve(async (req) => {
     const now = new Date()
     const oneMinuteAgo = new Date(now.getTime() - 60 * 1000)
     const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000)
+    const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000)
     const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
 
     console.log('🧹 Starting session cleanup...')
@@ -83,11 +84,44 @@ serve(async (req) => {
       console.log(`✅ Marked ${offlineDevices?.length || 0} devices as offline`)
     }
 
+    // 5. Expire old pending/active support sessions (older than 30 minutes)
+    const { data: expiredSupportSessions, error: supportExpireError } = await supabase
+      .from('support_sessions')
+      .update({
+        status: 'expired',
+        ended_at: now.toISOString()
+      })
+      .in('status', ['pending', 'active'])
+      .lt('created_at', thirtyMinutesAgo.toISOString())
+      .select('id')
+
+    if (supportExpireError) {
+      console.error('Error expiring support sessions:', supportExpireError)
+    } else {
+      console.log(`✅ Expired ${expiredSupportSessions?.length || 0} old support sessions`)
+    }
+
+    // 6. Delete old support sessions (older than 24 hours)
+    const { data: deletedSupportSessions, error: supportDeleteError } = await supabase
+      .from('support_sessions')
+      .delete()
+      .in('status', ['expired', 'ended'])
+      .lt('created_at', twentyFourHoursAgo.toISOString())
+      .select('id')
+
+    if (supportDeleteError) {
+      console.error('Error deleting old support sessions:', supportDeleteError)
+    } else {
+      console.log(`✅ Deleted ${deletedSupportSessions?.length || 0} old support sessions`)
+    }
+
     const summary = {
       timestamp: now.toISOString(),
       signaling_cleaned: true,
       sessions_expired: expiredSessions?.length || 0,
       sessions_deleted: deletedSessions?.length || 0,
+      support_sessions_expired: expiredSupportSessions?.length || 0,
+      support_sessions_deleted: deletedSupportSessions?.length || 0,
       devices_offline: offlineDevices?.length || 0
     }
 

@@ -26,6 +26,7 @@
     <div class="header-content">
       <h1>🖥️ Fjernskrivebord</h1>
       <div class="header-actions">
+        <button id="quickSupportBtn" class="btn btn-secondary" style="margin-right: 10px; display: none;" onclick="showSupportModal()">🆘 Quick Support</button>
         <a href="admin.html" id="adminLink" class="btn btn-secondary" style="margin-right: 10px; display: none;">🔐 Adminpanel</a>
         <span id="userEmail" class="user-info"></span>
         <button id="logoutBtn" class="btn btn-secondary">Log ud</button>
@@ -256,6 +257,61 @@
     </section>
   </main>
 
+  <!-- Quick Support Modal -->
+  <div id="supportModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 600px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0;">🆘 Quick Support</h3>
+        <button class="btn btn-icon" onclick="closeSupportModal()" title="Luk">&times;</button>
+      </div>
+
+      <!-- Step: Create -->
+      <div id="supportStep_create" class="support-step">
+        <p>Opret en support session og del linket med den person der har brug for hjælp.</p>
+        <button id="supportCreateBtn" class="btn btn-primary" onclick="onCreateSupportSession()" style="width: 100%;">
+          Opret support session
+        </button>
+      </div>
+
+      <!-- Step: Share -->
+      <div id="supportStep_share" class="support-step" style="display: none;">
+        <div style="text-align: center; margin-bottom: 1rem;">
+          <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.25rem;">PIN kode</div>
+          <div id="supportPin" style="font-size: 2.5rem; font-weight: bold; letter-spacing: 0.3em; font-family: monospace;"></div>
+        </div>
+        <div style="margin-bottom: 1rem;">
+          <label style="font-size: 0.85rem; color: #888; display: block; margin-bottom: 0.25rem;">Delelink</label>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" id="supportLink" readonly style="flex: 1; padding: 0.6rem; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-size: 0.85rem;">
+            <button id="supportCopyBtn" class="btn btn-secondary" onclick="copySupportLink()">Kopier</button>
+          </div>
+        </div>
+        <div id="supportExpiry" style="font-size: 0.8rem; color: #888; text-align: center; margin-bottom: 1rem;"></div>
+        <div id="supportShareStatus" style="text-align: center; color: var(--text-muted); padding: 1rem 0;">
+          Venter på at personen deler sin skærm...
+        </div>
+        <div style="text-align: center;">
+          <div class="spinner" style="width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto;"></div>
+        </div>
+      </div>
+
+      <!-- Step: Viewer -->
+      <div id="supportStep_viewer" class="support-step" style="display: none;">
+        <div style="position: relative; background: #000; border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 1rem;">
+          <video id="supportVideo" autoplay playsinline style="width: 100%; display: block;"></video>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span id="supportViewerStatus" style="color: var(--text-muted); font-size: 0.9rem;">Forbinder...</span>
+          <button class="btn btn-danger btn-sm" onclick="endSupportSession()">Afslut</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+
   <!-- PIN Modal -->
   <div id="pinModal" class="modal" style="display: none;">
     <div class="modal-content">
@@ -315,6 +371,7 @@
   <script src="js/sessions.js?v=6"></script>
   <script src="js/webrtc.js?v=6"></script>
   <script src="js/signaling.js?v=6"></script>
+  <script src="js/support-viewer.js?v=1"></script>
   
   <!-- Fullscreen Preview Script -->
   <script>
