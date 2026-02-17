@@ -1,7 +1,8 @@
 -- Tighten RLS: Switch agent from anon to authenticated JWT tokens
--- Date: 2026-02-17
--- Description: Remove broad anon policies, add owner-scoped authenticated policies.
+-- Date: 2026-02-17 (updated 2026-02-18)
+-- Description: Remove ALL broad anon/public policies, add owner-scoped authenticated policies.
 --              Keep anon access only for Quick Support guest signaling.
+--              Signaling policies check both webrtc_sessions AND remote_sessions.
 
 -- ============================================================================
 -- Helper: Create a reusable function for "user has access to device" check
@@ -29,50 +30,43 @@ REVOKE EXECUTE ON FUNCTION public.user_has_device_access FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.user_has_device_access TO authenticated;
 
 -- ============================================================================
--- 1. REMOTE_DEVICES: Replace anon with authenticated owner-scoped policies
+-- 1. REMOTE_DEVICES: Drop ALL broad policies, keep authenticated owner-scoped
 -- ============================================================================
+
+-- Drop broad public policies (CRITICAL: these allow unrestricted access)
+DROP POLICY IF EXISTS "allow_select_devices" ON remote_devices;
+DROP POLICY IF EXISTS "allow_update_devices" ON remote_devices;
+DROP POLICY IF EXISTS "allow_delete_devices" ON remote_devices;
+DROP POLICY IF EXISTS "allow_insert_devices" ON remote_devices;
 
 -- Drop broad anon policies
 DROP POLICY IF EXISTS "Agents can view devices" ON remote_devices;
+DROP POLICY IF EXISTS "Agents can update devices" ON remote_devices;
 DROP POLICY IF EXISTS "Agents can update device status" ON remote_devices;
+DROP POLICY IF EXISTS "Agents can update own device" ON remote_devices;
 DROP POLICY IF EXISTS "Devices can register themselves" ON remote_devices;
 DROP POLICY IF EXISTS "Devices can update their status" ON remote_devices;
 
--- Authenticated users can view their own devices
-DROP POLICY IF EXISTS "auth_select_own_devices" ON remote_devices;
-CREATE POLICY "auth_select_own_devices"
-ON remote_devices FOR SELECT
-TO authenticated
-USING (owner_id = auth.uid());
-
--- Authenticated users can update their own devices (heartbeat, status)
-DROP POLICY IF EXISTS "auth_update_own_devices" ON remote_devices;
-CREATE POLICY "auth_update_own_devices"
-ON remote_devices FOR UPDATE
-TO authenticated
-USING (owner_id = auth.uid())
-WITH CHECK (owner_id = auth.uid());
-
--- Authenticated users can register (insert) devices they own
-DROP POLICY IF EXISTS "auth_insert_own_devices" ON remote_devices;
-CREATE POLICY "auth_insert_own_devices"
-ON remote_devices FOR INSERT
-TO authenticated
-WITH CHECK (owner_id = auth.uid());
-
--- Keep existing admin/assignment policies (from 20260108_reenable_rls_devices.sql):
--- "Users can view their assigned devices" and "Admins can manage all devices"
--- These are already correct and cover controller access.
+-- Keep existing authenticated policies (from earlier migrations):
+-- "Users can view own devices" (SELECT, owner_id = auth.uid() AND is_user_approved)
+-- "Users can update own devices" (UPDATE, owner_id = auth.uid() AND is_user_approved)
+-- "Users can insert own devices" (INSERT, authenticated)
+-- "Users can delete own devices" (DELETE, owner_id = auth.uid() AND is_user_approved)
+-- "Users can view their assigned devices" (SELECT, device_assignments + admin check)
+-- "Admins can manage all devices" (ALL, admin/super_admin)
 
 -- ============================================================================
 -- 2. WEBRTC_SESSIONS: Replace anon with authenticated policies
 --    Access: device owner + assigned users + admins (via helper function)
 -- ============================================================================
 
--- Drop broad anon/authenticated policies
+-- Drop any old policies
 DROP POLICY IF EXISTS "Agents can view device sessions" ON webrtc_sessions;
 DROP POLICY IF EXISTS "Agents can update device sessions" ON webrtc_sessions;
 DROP POLICY IF EXISTS "Users can manage own sessions" ON webrtc_sessions;
+DROP POLICY IF EXISTS "allow_select_webrtc" ON webrtc_sessions;
+DROP POLICY IF EXISTS "allow_insert_webrtc" ON webrtc_sessions;
+DROP POLICY IF EXISTS "allow_update_webrtc" ON webrtc_sessions;
 
 -- Authenticated: SELECT sessions
 DROP POLICY IF EXISTS "auth_select_webrtc_sessions" ON webrtc_sessions;
@@ -109,6 +103,10 @@ USING (public.user_has_device_access(device_id));
 
 -- Drop broad anon policies
 DROP POLICY IF EXISTS "Agents can update sessions" ON remote_sessions;
+DROP POLICY IF EXISTS "Agents can view sessions" ON remote_sessions;
+DROP POLICY IF EXISTS "Agents can view device sessions" ON remote_sessions;
+DROP POLICY IF EXISTS "Agents can update device sessions" ON remote_sessions;
+DROP POLICY IF EXISTS "Users can create sessions" ON remote_sessions;
 
 -- Authenticated: SELECT sessions (device access or session creator)
 DROP POLICY IF EXISTS "auth_select_remote_sessions" ON remote_sessions;
@@ -143,30 +141,40 @@ WITH CHECK (
 
 -- ============================================================================
 -- 4. SESSION_SIGNALING: Replace broad anon with scoped policies
+--    Check BOTH webrtc_sessions (agent signaling) AND remote_sessions (dashboard)
 --    Keep anon for Quick Support only.
+--    Note: webrtc_sessions.session_id is TEXT, session_signaling.session_id is UUID
 -- ============================================================================
 
--- Drop broad anon policies and old support policies (superseded by new ones below)
+-- Drop ALL old broad policies
 DROP POLICY IF EXISTS "Agents can insert signaling" ON session_signaling;
 DROP POLICY IF EXISTS "Agents can read signaling" ON session_signaling;
+DROP POLICY IF EXISTS "Agents can view signaling" ON session_signaling;
 DROP POLICY IF EXISTS "Agents can delete signaling" ON session_signaling;
 DROP POLICY IF EXISTS "Users can read support signaling" ON session_signaling;
 DROP POLICY IF EXISTS "Users can insert support signaling" ON session_signaling;
+DROP POLICY IF EXISTS "Users can insert signaling" ON session_signaling;
+DROP POLICY IF EXISTS "Users can view own signaling" ON session_signaling;
+DROP POLICY IF EXISTS "Session participants can signal" ON session_signaling;
 
 -- Authenticated: SELECT signaling
--- (covers agent polling, dashboard reading, and support sessions)
 DROP POLICY IF EXISTS "auth_select_signaling" ON session_signaling;
 CREATE POLICY "auth_select_signaling"
 ON session_signaling FOR SELECT
 TO authenticated
 USING (
-    -- Session belongs to a device the user has access to (via remote_sessions)
+    -- WebRTC sessions (agent signaling) - cast text→uuid
     session_id IN (
+        SELECT session_id::uuid FROM webrtc_sessions
+        WHERE public.user_has_device_access(device_id)
+    )
+    -- Remote sessions (dashboard)
+    OR session_id IN (
         SELECT id FROM remote_sessions
         WHERE public.user_has_device_access(device_id)
         OR created_by = auth.uid()
     )
-    -- Or it's a support session created by this user
+    -- Support sessions created by this user
     OR session_id IN (
         SELECT id FROM support_sessions WHERE created_by = auth.uid()
     )
@@ -179,6 +187,10 @@ ON session_signaling FOR INSERT
 TO authenticated
 WITH CHECK (
     session_id IN (
+        SELECT session_id::uuid FROM webrtc_sessions
+        WHERE public.user_has_device_access(device_id)
+    )
+    OR session_id IN (
         SELECT id FROM remote_sessions
         WHERE public.user_has_device_access(device_id)
         OR created_by = auth.uid()
@@ -195,6 +207,10 @@ ON session_signaling FOR DELETE
 TO authenticated
 USING (
     session_id IN (
+        SELECT session_id::uuid FROM webrtc_sessions
+        WHERE public.user_has_device_access(device_id)
+    )
+    OR session_id IN (
         SELECT id FROM remote_sessions
         WHERE public.user_has_device_access(device_id)
         OR created_by = auth.uid()
@@ -256,4 +272,4 @@ COMMENT ON TABLE public.remote_sessions IS
     'RLS: Authenticated via user_has_device_access(). No anon access.';
 
 COMMENT ON TABLE public.session_signaling IS
-    'RLS: Authenticated for regular sessions. Anon for Quick Support only.';
+    'RLS: Authenticated for webrtc+remote+support sessions. Anon for Quick Support only.';
