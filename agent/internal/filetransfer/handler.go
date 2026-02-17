@@ -30,6 +30,42 @@ type activeTransfer struct {
 	File     *os.File
 }
 
+// sanitizePath validates and cleans a file path received from network input.
+// It rejects paths containing ".." traversal sequences.
+func sanitizePath(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("empty path")
+	}
+	cleaned := filepath.Clean(path)
+	if strings.Contains(cleaned, "..") {
+		return "", fmt.Errorf("path traversal not allowed: %s", path)
+	}
+	return cleaned, nil
+}
+
+// isProtectedPath checks if a path is a critical system directory that should not be deleted or overwritten.
+func isProtectedPath(path string) bool {
+	p := strings.ToLower(filepath.Clean(path))
+	// Block drive roots (C:\, D:\, etc.)
+	if len(p) <= 3 {
+		return true
+	}
+	protected := []string{
+		`c:\windows`,
+		`c:\program files`,
+		`c:\program files (x86)`,
+		`c:\programdata`,
+		`c:\users`,
+		`c:\system volume information`,
+	}
+	for _, pp := range protected {
+		if p == pp {
+			return true
+		}
+	}
+	return false
+}
+
 // NewHandler creates a new file transfer handler
 func NewHandler(downloadDir string) *Handler {
 	// Create download directory if it doesn't exist
@@ -100,26 +136,63 @@ func (h *Handler) handleTotalCMDMessage(op string, message map[string]interface{
 	switch op {
 	case "list":
 		path, _ := message["path"].(string)
+		// List allows empty path (defaults to home dir)
+		if path != "" {
+			var err error
+			path, err = sanitizePath(path)
+			if err != nil {
+				return h.sendTotalCMDError(err.Error())
+			}
+		}
 		return h.handleListOp(path)
 	case "drives":
 		log.Println("📁 Handling drives request...")
 		return h.handleDrivesOp()
 	case "get":
 		path, _ := message["path"].(string)
+		path, err := sanitizePath(path)
+		if err != nil {
+			return h.sendTotalCMDError(err.Error())
+		}
 		fid, _ := message["fid"].(float64)
 		offset, _ := message["off"].(float64)
+		if fid < 0 || fid > 65535 {
+			return h.sendTotalCMDError("invalid fid")
+		}
+		if offset < 0 {
+			return h.sendTotalCMDError("invalid offset")
+		}
 		return h.handleGetOp(path, uint16(fid), int64(offset))
 	case "put":
 		return h.handlePutOp(message)
 	case "mkdir":
 		path, _ := message["path"].(string)
+		path, err := sanitizePath(path)
+		if err != nil {
+			return h.sendTotalCMDError(err.Error())
+		}
 		return h.handleMkdirOp(path)
 	case "rm":
 		path, _ := message["path"].(string)
+		path, err := sanitizePath(path)
+		if err != nil {
+			return h.sendTotalCMDError(err.Error())
+		}
+		if isProtectedPath(path) {
+			return h.sendTotalCMDError("cannot delete protected system path")
+		}
 		return h.handleRmOp(path)
 	case "mv":
 		path, _ := message["path"].(string)
 		target, _ := message["target"].(string)
+		path, err := sanitizePath(path)
+		if err != nil {
+			return h.sendTotalCMDError(err.Error())
+		}
+		target, err = sanitizePath(target)
+		if err != nil {
+			return h.sendTotalCMDError(err.Error())
+		}
 		return h.handleMvOp(path, target)
 	}
 	return nil
@@ -269,7 +342,11 @@ func (h *Handler) handleGetOp(path string, fid uint16, offset int64) error {
 
 // handlePutOp receives a file chunk from the controller
 func (h *Handler) handlePutOp(message map[string]interface{}) error {
-	path, _ := message["path"].(string)
+	rawPath, _ := message["path"].(string)
+	path, err := sanitizePath(rawPath)
+	if err != nil {
+		return h.sendTotalCMDError(err.Error())
+	}
 	fid, _ := message["fid"].(float64)
 	chunk, _ := message["c"].(float64)
 	total, _ := message["t"].(float64)
@@ -423,6 +500,12 @@ func (h *Handler) handleTransferStart(message map[string]interface{}) error {
 	id, _ := message["id"].(string)
 	filename, _ := message["filename"].(string)
 	size, _ := message["size"].(float64)
+
+	// Sanitize filename - strip directory components to prevent path traversal
+	filename = filepath.Base(filename)
+	if filename == "." || filename == ".." || filename == "" {
+		return fmt.Errorf("invalid filename")
+	}
 
 	log.Printf("📥 Receiving file: %s (%d bytes)", filename, int64(size))
 
@@ -735,10 +818,11 @@ func (h *Handler) handleListDirectory(message map[string]interface{}) error {
 
 // handleRequestFile sends a file to the controller
 func (h *Handler) handleRequestFile(message map[string]interface{}) error {
-	path, _ := message["path"].(string)
-	
-	if path == "" {
-		return fmt.Errorf("no path specified")
+	rawPath, _ := message["path"].(string)
+
+	path, err := sanitizePath(rawPath)
+	if err != nil {
+		return err
 	}
 
 	log.Printf("📤 File requested: %s", path)
@@ -747,16 +831,18 @@ func (h *Handler) handleRequestFile(message map[string]interface{}) error {
 
 // handleCreateDirectory creates a new directory
 func (h *Handler) handleCreateDirectory(message map[string]interface{}) error {
-	path, _ := message["path"].(string)
+	rawPath, _ := message["path"].(string)
 	requestID, _ := message["request_id"].(string)
 
-	if path == "" {
-		return fmt.Errorf("no path specified")
+	path, err := sanitizePath(rawPath)
+	if err != nil {
+		h.sendOperationResult(requestID, "create_directory", rawPath, false, err.Error())
+		return err
 	}
 
 	log.Printf("📁 Creating directory: %s", path)
 
-	err := os.MkdirAll(path, 0755)
+	err = os.MkdirAll(path, 0755)
 	
 	response := map[string]interface{}{
 		"type":       "operation_result",
@@ -775,11 +861,17 @@ func (h *Handler) handleCreateDirectory(message map[string]interface{}) error {
 
 // handleDeleteItem deletes a file or directory
 func (h *Handler) handleDeleteItem(message map[string]interface{}) error {
-	path, _ := message["path"].(string)
+	rawPath, _ := message["path"].(string)
 	requestID, _ := message["request_id"].(string)
 
-	if path == "" {
-		return fmt.Errorf("no path specified")
+	path, err := sanitizePath(rawPath)
+	if err != nil {
+		h.sendOperationResult(requestID, "delete", rawPath, false, err.Error())
+		return err
+	}
+	if isProtectedPath(path) {
+		h.sendOperationResult(requestID, "delete", path, false, "cannot delete protected system path")
+		return fmt.Errorf("cannot delete protected path: %s", path)
 	}
 
 	log.Printf("🗑️ Deleting: %s", path)
@@ -809,17 +901,24 @@ func (h *Handler) handleDeleteItem(message map[string]interface{}) error {
 
 // handleRenameItem renames a file or directory
 func (h *Handler) handleRenameItem(message map[string]interface{}) error {
-	oldPath, _ := message["old_path"].(string)
-	newPath, _ := message["new_path"].(string)
+	rawOld, _ := message["old_path"].(string)
+	rawNew, _ := message["new_path"].(string)
 	requestID, _ := message["request_id"].(string)
 
-	if oldPath == "" || newPath == "" {
-		return fmt.Errorf("paths not specified")
+	oldPath, err := sanitizePath(rawOld)
+	if err != nil {
+		h.sendOperationResult(requestID, "rename", rawOld, false, err.Error())
+		return err
+	}
+	newPath, err := sanitizePath(rawNew)
+	if err != nil {
+		h.sendOperationResult(requestID, "rename", rawNew, false, err.Error())
+		return err
 	}
 
 	log.Printf("✏️ Renaming: %s -> %s", oldPath, newPath)
 
-	err := os.Rename(oldPath, newPath)
+	err = os.Rename(oldPath, newPath)
 
 	success := err == nil
 	errMsg := ""
