@@ -264,6 +264,43 @@ func (c *Capturer) IsGDIMode() bool {
 	return c.useGDI
 }
 
+// SwitchDisplay switches to a different monitor for capture
+// Tears down the existing capturer and recreates it for the target output
+func (c *Capturer) SwitchDisplay(displayIndex int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	log.Printf("🖥️ Switching to display %d...", displayIndex)
+
+	// Close existing capturer
+	if c.dxgiCapturer != nil {
+		c.dxgiCapturer.Close()
+		c.dxgiCapturer = nil
+	}
+
+	// Create new DXGI capturer for the target output
+	dxgi, err := NewDXGICapturerForOutput(displayIndex)
+	if err != nil {
+		return fmt.Errorf("failed to switch to display %d: %w", displayIndex, err)
+	}
+
+	c.dxgiCapturer = dxgi
+	c.bounds = dxgi.GetBounds()
+	c.displayIndex = displayIndex
+	c.useGDI = false
+	c.lastHash = nil // Reset change detection
+
+	log.Printf("✅ Switched to display %d: %dx%d", displayIndex, c.bounds.Dx(), c.bounds.Dy())
+	return nil
+}
+
+// GetDisplayIndex returns the current display index
+func (c *Capturer) GetDisplayIndex() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.displayIndex
+}
+
 // CaptureJPEGScaled captures and scales the screen to target width
 // scale should be 0.5-1.0 (e.g., 0.75 = 75% of original size)
 func (c *Capturer) CaptureJPEGScaled(quality int, scale float64) ([]byte, int, int, error) {

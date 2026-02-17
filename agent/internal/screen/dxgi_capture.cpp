@@ -127,6 +127,141 @@ DXGICapture* InitDXGI() {
     return cap;
 }
 
+// Monitor info structure for enumeration
+typedef struct {
+    int index;
+    int width;
+    int height;
+    int offsetX;
+    int offsetY;
+    int isPrimary;
+    char name[64];
+} MonitorInfoC;
+
+// Enumerate all DXGI outputs (monitors)
+int EnumDXGIOutputs(MonitorInfoC* infos, int maxCount) {
+    HRESULT hr;
+
+    // Create a temporary D3D11 device
+    ID3D11Device* device = nullptr;
+    ID3D11DeviceContext* context = nullptr;
+    D3D_FEATURE_LEVEL featureLevel;
+
+    hr = D3D11CreateDevice(
+        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0,
+        nullptr, 0, D3D11_SDK_VERSION,
+        &device, &featureLevel, &context
+    );
+    if (FAILED(hr)) return 0;
+
+    IDXGIDevice* dxgiDevice = nullptr;
+    hr = device->QueryInterface(__uuidof(IDXGIDevice), (void**)&dxgiDevice);
+    if (FAILED(hr)) { device->Release(); context->Release(); return 0; }
+
+    IDXGIAdapter* adapter = nullptr;
+    hr = dxgiDevice->GetAdapter(&adapter);
+    dxgiDevice->Release();
+    if (FAILED(hr)) { device->Release(); context->Release(); return 0; }
+
+    int count = 0;
+    IDXGIOutput* output = nullptr;
+    for (int i = 0; adapter->EnumOutputs(i, &output) != DXGI_ERROR_NOT_FOUND && count < maxCount; i++) {
+        DXGI_OUTPUT_DESC desc;
+        output->GetDesc(&desc);
+
+        infos[count].index = i;
+        infos[count].width = desc.DesktopCoordinates.right - desc.DesktopCoordinates.left;
+        infos[count].height = desc.DesktopCoordinates.bottom - desc.DesktopCoordinates.top;
+        infos[count].offsetX = desc.DesktopCoordinates.left;
+        infos[count].offsetY = desc.DesktopCoordinates.top;
+        // Primary monitor is the one at 0,0
+        infos[count].isPrimary = (desc.DesktopCoordinates.left == 0 && desc.DesktopCoordinates.top == 0) ? 1 : 0;
+        // Convert wide name to ASCII
+        for (int j = 0; j < 63 && desc.DeviceName[j]; j++) {
+            infos[count].name[j] = (char)desc.DeviceName[j];
+            infos[count].name[j+1] = 0;
+        }
+
+        count++;
+        output->Release();
+    }
+
+    adapter->Release();
+    device->Release();
+    context->Release();
+    return count;
+}
+
+// Initialize DXGI for a specific output index
+DXGICapture* InitDXGIForOutput(int outputIndex) {
+    HRESULT hr;
+
+    ID3D11Device* device = nullptr;
+    ID3D11DeviceContext* context = nullptr;
+    D3D_FEATURE_LEVEL featureLevel;
+
+    hr = D3D11CreateDevice(
+        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0,
+        nullptr, 0, D3D11_SDK_VERSION,
+        &device, &featureLevel, &context
+    );
+    if (FAILED(hr)) return nullptr;
+
+    IDXGIDevice* dxgiDevice = nullptr;
+    hr = device->QueryInterface(__uuidof(IDXGIDevice), (void**)&dxgiDevice);
+    if (FAILED(hr)) { device->Release(); context->Release(); return nullptr; }
+
+    IDXGIAdapter* dxgiAdapter = nullptr;
+    hr = dxgiDevice->GetAdapter(&dxgiAdapter);
+    dxgiDevice->Release();
+    if (FAILED(hr)) { device->Release(); context->Release(); return nullptr; }
+
+    IDXGIOutput* dxgiOutput = nullptr;
+    hr = dxgiAdapter->EnumOutputs(outputIndex, &dxgiOutput);
+    dxgiAdapter->Release();
+    if (FAILED(hr)) { device->Release(); context->Release(); return nullptr; }
+
+    IDXGIOutput1* dxgiOutput1 = nullptr;
+    hr = dxgiOutput->QueryInterface(__uuidof(IDXGIOutput1), (void**)&dxgiOutput1);
+    dxgiOutput->Release();
+    if (FAILED(hr)) { device->Release(); context->Release(); return nullptr; }
+
+    IDXGIOutputDuplication* duplication = nullptr;
+    hr = dxgiOutput1->DuplicateOutput(device, &duplication);
+    dxgiOutput1->Release();
+    if (FAILED(hr)) { device->Release(); context->Release(); return nullptr; }
+
+    DXGI_OUTDUPL_DESC dupDesc;
+    duplication->GetDesc(&dupDesc);
+
+    int width = dupDesc.ModeDesc.Width;
+    int height = dupDesc.ModeDesc.Height;
+
+    D3D11_TEXTURE2D_DESC stagingDesc = {};
+    stagingDesc.Width = width;
+    stagingDesc.Height = height;
+    stagingDesc.MipLevels = 1;
+    stagingDesc.ArraySize = 1;
+    stagingDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    stagingDesc.SampleDesc.Count = 1;
+    stagingDesc.Usage = D3D11_USAGE_STAGING;
+    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+
+    ID3D11Texture2D* staging = nullptr;
+    hr = device->CreateTexture2D(&stagingDesc, nullptr, &staging);
+    if (FAILED(hr)) { duplication->Release(); device->Release(); context->Release(); return nullptr; }
+
+    DXGICapture* cap = (DXGICapture*)malloc(sizeof(DXGICapture));
+    cap->device = device;
+    cap->context = context;
+    cap->duplication = duplication;
+    cap->staging = staging;
+    cap->width = width;
+    cap->height = height;
+
+    return cap;
+}
+
 int CaptureDXGI(DXGICapture* cap, unsigned char* buffer, int bufferSize) {
     if (!cap || !buffer) {
         return -1;

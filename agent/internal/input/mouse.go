@@ -23,6 +23,8 @@ const (
 type MouseController struct {
 	screenWidth  int
 	screenHeight int
+	offsetX      int // Monitor X offset in virtual desktop
+	offsetY      int // Monitor Y offset in virtual desktop
 	cursorHidden bool
 }
 
@@ -31,6 +33,18 @@ func NewMouseController(width, height int) *MouseController {
 		screenWidth:  width,
 		screenHeight: height,
 	}
+}
+
+// SetMonitorOffset sets the virtual desktop offset for multi-monitor support
+func (m *MouseController) SetMonitorOffset(offsetX, offsetY int) {
+	m.offsetX = offsetX
+	m.offsetY = offsetY
+}
+
+// SetResolution updates the screen dimensions (for monitor switching)
+func (m *MouseController) SetResolution(width, height int) {
+	m.screenWidth = width
+	m.screenHeight = height
 }
 
 func (m *MouseController) Move(x, y float64) error {
@@ -48,14 +62,19 @@ func (m *MouseController) Move(x, y float64) error {
 }
 
 // MoveRelative moves mouse using relative coordinates (0.0-1.0)
+// Applies virtual desktop offset for multi-monitor support
 func (m *MouseController) MoveRelative(x, y float64) error {
-	// Convert relative (0-1) to absolute screen coordinates
+	// Convert relative (0-1) to absolute screen coordinates for this monitor
 	screenX := int(math.Round(x * float64(m.screenWidth)))
 	screenY := int(math.Round(y * float64(m.screenHeight)))
 
-	// Clamp to screen bounds
+	// Clamp to monitor bounds
 	screenX = clamp(screenX, 0, m.screenWidth-1)
 	screenY = clamp(screenY, 0, m.screenHeight-1)
+
+	// Apply virtual desktop offset for multi-monitor
+	screenX += m.offsetX
+	screenY += m.offsetY
 
 	// Use Windows API directly to avoid robotgo DPI scaling issues
 	m.setCursorPos(screenX, screenY)

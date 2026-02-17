@@ -1,7 +1,6 @@
 // WebRTC Connection Module
 // Handles peer connection, media tracks, and data channels
-let peerConnection = null;
-let dataChannel = null;
+// All per-session state lives on ctx (session object from SessionManager)
 
 // ICE Configuration - fetched dynamically for security
 let iceConfig = {
@@ -40,111 +39,139 @@ async function fetchTurnCredentials() {
   }
 }
 
-// Clean up existing connection before creating new one
+// Clean up a specific session's WebRTC resources
+function cleanupSessionWebRTC(ctx) {
+  if (!ctx) return;
+  debug('🧹 Cleaning up WebRTC for session:', ctx.id);
+
+  // Stop bandwidth interval
+  if (ctx.bandwidthInterval) {
+    clearInterval(ctx.bandwidthInterval);
+    ctx.bandwidthInterval = null;
+  }
+
+  // Stop stats interval
+  if (ctx.statsInterval) {
+    clearInterval(ctx.statsInterval);
+    ctx.statsInterval = null;
+  }
+
+  // Clear frame timeout
+  if (ctx.frameTimeout) {
+    clearTimeout(ctx.frameTimeout);
+    ctx.frameTimeout = null;
+  }
+
+  // Close data channel
+  if (ctx.dataChannel) {
+    try { ctx.dataChannel.close(); } catch (e) {}
+    ctx.dataChannel = null;
+  }
+
+  // Close peer connection
+  if (ctx.peerConnection) {
+    try { ctx.peerConnection.close(); } catch (e) {}
+    ctx.peerConnection = null;
+  }
+
+  // Reset frame state
+  ctx.frameChunks = [];
+  ctx.expectedChunks = 0;
+  ctx.currentFrameId = -1;
+
+  // Update globals if this was the active session
+  if (window.SessionManager && window.SessionManager.activeSessionId === ctx.id) {
+    window.peerConnection = null;
+    window.dataChannel = null;
+  }
+
+  debug('✅ WebRTC cleanup complete for session:', ctx.id);
+}
+
+// Legacy cleanupWebRTC - cleans up active session
 function cleanupWebRTC() {
-  debug('🧹 Cleaning up WebRTC connection...');
-  
-  // Clean up input capture
+  const ctx = window.SessionManager?.getActiveSession();
+  if (ctx) {
+    cleanupSessionWebRTC(ctx);
+  }
+  // Also clean up input capture
   if (typeof cleanupInputCapture === 'function') {
     cleanupInputCapture();
   }
-  
-  // Close data channel
-  if (dataChannel) {
-    try {
-      dataChannel.close();
-    } catch (e) {}
-    dataChannel = null;
-  }
-  window.dataChannel = null;
-  
-  // Close peer connection
-  if (peerConnection) {
-    try {
-      peerConnection.close();
-    } catch (e) {}
-    peerConnection = null;
-  }
-  window.peerConnection = null;
-  
-  // Reset frame state
-  frameChunks = [];
-  expectedChunks = 0;
-  currentFrameId = -1;
-  if (frameTimeout) {
-    clearTimeout(frameTimeout);
-    frameTimeout = null;
-  }
-  
-  debug('✅ WebRTC cleanup complete');
 }
 
 // Expose cleanup globally
 window.cleanupWebRTC = cleanupWebRTC;
+window.cleanupSessionWebRTC = cleanupSessionWebRTC;
 
-async function initWebRTC(session) {
+async function initWebRTC(sessionData, ctx) {
   try {
-    debug('🚀 initWebRTC called with session:', session);
-    
-    // Clean up any existing connection first
-    cleanupWebRTC();
-    
-    if (!session || !session.session_id) {
+    debug('🚀 initWebRTC called for device:', ctx.id);
+
+    if (!sessionData || !sessionData.session_id) {
       throw new Error('Invalid session object - missing session_id');
     }
-    
+
     // Check if we should force relay mode (for testing TURN)
     const forceRelay = new URLSearchParams(window.location.search).get('relay') === 'true';
-    
+
     // Fetch TURN credentials if not already fetched
     if (iceConfig.iceServers.length <= 2) {
       await fetchTurnCredentials();
     }
-    
+
     // Use dynamically fetched ICE configuration
     const configuration = {
       ...iceConfig,
       // Force relay mode if ?relay=true in URL (for testing)
       ...(forceRelay && { iceTransportPolicy: 'relay' })
     };
-    
+
     if (forceRelay) {
       debug('⚠️ RELAY-ONLY MODE ENABLED (for testing)');
     }
 
     debug('🔐 Dashboard TURN config:', JSON.stringify(configuration, null, 2));
 
-    peerConnection = new RTCPeerConnection(configuration);
-    window.peerConnection = peerConnection; // Expose globally for signaling module
-    debug('✅ PeerConnection created');
+    // Create peer connection on ctx
+    ctx.peerConnection = new RTCPeerConnection(configuration);
+    // Set global ref for active session
+    if (window.SessionManager.activeSessionId === ctx.id) {
+      window.peerConnection = ctx.peerConnection;
+    }
+    debug('✅ PeerConnection created for', ctx.id);
 
     // Set up event handlers
-    setupPeerConnectionHandlers();
+    setupPeerConnectionHandlers(ctx);
     debug('✅ Event handlers set up');
 
     // Create data channel for control inputs
-    dataChannel = peerConnection.createDataChannel('control', {
+    ctx.dataChannel = ctx.peerConnection.createDataChannel('control', {
       ordered: true
     });
-    setupDataChannelHandlers();
+    setupDataChannelHandlers(ctx);
+    // Set global ref for active session
+    if (window.SessionManager.activeSessionId === ctx.id) {
+      window.dataChannel = ctx.dataChannel;
+    }
     debug('✅ Data channel created');
 
     // Create offer
     debug('📝 Creating offer...');
-    const offer = await peerConnection.createOffer({
+    const offer = await ctx.peerConnection.createOffer({
       offerToReceiveVideo: true,
       offerToReceiveAudio: false
     });
     debug('✅ Offer created');
 
     debug('📝 Setting local description...');
-    await peerConnection.setLocalDescription(offer);
+    await ctx.peerConnection.setLocalDescription(offer);
     debug('✅ Local description set');
 
     // Send offer via signaling
     debug('📤 Sending offer to agent via signaling...');
     await sendSignal({
-      session_id: session.session_id,
+      session_id: sessionData.session_id,
       from: 'dashboard',
       type: 'offer',
       sdp: offer.sdp
@@ -158,9 +185,11 @@ async function initWebRTC(session) {
   }
 }
 
-function setupPeerConnectionHandlers() {
+function setupPeerConnectionHandlers(ctx) {
+  const pc = ctx.peerConnection;
+
   // ICE candidate handler
-  peerConnection.onicecandidate = async (event) => {
+  pc.onicecandidate = async (event) => {
     if (event.candidate) {
       // Determine candidate type for logging
       const candidateStr = event.candidate.candidate;
@@ -174,16 +203,16 @@ function setupPeerConnectionHandlers() {
       } else if (candidateStr.includes('typ prflx')) {
         candidateType = 'PRFLX (peer)';
       }
-      
+
       debug(`📤 Sending ICE candidate [${candidateType}]:`, candidateStr.substring(0, 80) + '...');
-      
-      if (!window.currentSession) {
-        console.error('⚠️ Cannot send ICE candidate: currentSession is null');
+
+      if (!ctx.sessionData) {
+        console.error('⚠️ Cannot send ICE candidate: sessionData is null for', ctx.id);
         return;
       }
-      
+
       await sendSignal({
-        session_id: window.currentSession.session_id,
+        session_id: ctx.sessionData.session_id,
         from: 'dashboard',
         type: 'ice',
         candidate: event.candidate
@@ -193,127 +222,147 @@ function setupPeerConnectionHandlers() {
     }
   };
 
-  // ICE connection state handler
-  peerConnection.oniceconnectionstatechange = () => {
-    debug('ICE connection state:', peerConnection.iceConnectionState);
-  };
-
   // ICE gathering state handler
-  peerConnection.onicegatheringstatechange = () => {
-    debug('ICE gathering state:', peerConnection.iceGatheringState);
+  pc.onicegatheringstatechange = () => {
+    debug('ICE gathering state:', pc.iceGatheringState);
   };
 
   // Connection state handler
-  peerConnection.onconnectionstatechange = () => {
-    const state = peerConnection.connectionState;
-    debug('❗ Connection state:', state);
-    debug('❗ ICE state:', peerConnection.iceConnectionState);
-    debug('❗ Signaling state:', peerConnection.signalingState);
-    
-    const statusElement = document.getElementById('sessionStatus');
-    const overlay = document.getElementById('viewerOverlay');
+  pc.onconnectionstatechange = () => {
+    const state = pc.connectionState;
+    debug('❗ Connection state:', state, 'for device:', ctx.id);
+    debug('❗ ICE state:', pc.iceConnectionState);
+    debug('❗ Signaling state:', pc.signalingState);
 
-    // Update SessionManager if available
-    const deviceId = window.currentSession?.device_id;
-    if (window.SessionManager && deviceId) {
-      const sessionStatus = state === 'connected' ? 'connected' : 
+    // Update SessionManager
+    if (window.SessionManager) {
+      const sessionStatus = state === 'connected' ? 'connected' :
                            state === 'connecting' ? 'connecting' : 'disconnected';
-      window.SessionManager.updateSessionStatus(deviceId, sessionStatus);
+      window.SessionManager.updateSessionStatus(ctx.id, sessionStatus);
     }
 
-    switch (state) {
-      case 'connecting':
-        if (statusElement) {
-          statusElement.textContent = 'Connecting...';
-          statusElement.className = 'status-badge pending';
+    // Only update DOM elements if this is the active session
+    const isActive = window.SessionManager?.activeSessionId === ctx.id;
+
+    if (isActive) {
+      const statusElement = document.getElementById('sessionStatus');
+      const overlay = document.getElementById('viewerOverlay');
+      const reconnectOverlay = document.getElementById('previewReconnecting');
+
+      switch (state) {
+        case 'connecting':
+          if (statusElement) {
+            statusElement.textContent = 'Connecting...';
+            statusElement.className = 'status-badge pending';
+          }
+          break;
+        case 'connected':
+          if (statusElement) {
+            statusElement.textContent = 'Connected';
+            statusElement.className = 'status-badge online';
+          }
+          if (overlay) overlay.style.display = 'none';
+          // Hide reconnect overlay if we just reconnected
+          if (ctx.reconnectState === 'reconnecting') {
+            ctx.reconnectState = 'idle';
+            ctx.reconnectAttempt = 0;
+            ctx.reconnectStartedAt = null;
+            if (reconnectOverlay) reconnectOverlay.style.display = 'none';
+            showToast('Forbindelse genoprettet!', 'success');
+            debug('✅ Reconnect successful for', ctx.id);
+          }
+          updateConnectionStats(ctx);
+          break;
+        case 'disconnected':
+        case 'failed':
+          if (statusElement) {
+            statusElement.textContent = state === 'failed' ? 'Connection Failed' : 'Disconnected';
+            statusElement.className = 'status-badge offline';
+          }
+          // Trigger auto-reconnect if not already in progress
+          if (ctx.reconnectState === 'idle' && ctx.sessionData) {
+            debug('🔄 Starting auto-reconnect for', ctx.id);
+            ctx.reconnectState = 'reconnecting';
+            ctx.reconnectStartedAt = Date.now();
+            ctx.reconnectAttempt = 0;
+            if (reconnectOverlay) {
+              reconnectOverlay.style.display = 'flex';
+              const statusEl = document.getElementById('reconnectStatus');
+              if (statusEl) statusEl.textContent = 'Forsøg 1/8';
+            }
+            // Start reconnect from app.js
+            if (typeof window.reconnectSession === 'function') {
+              window.reconnectSession(ctx.id);
+            }
+          }
+          break;
+      }
+    } else {
+      // Not active session, but still trigger reconnect
+      if ((state === 'disconnected' || state === 'failed') && ctx.reconnectState === 'idle' && ctx.sessionData) {
+        ctx.reconnectState = 'reconnecting';
+        ctx.reconnectStartedAt = Date.now();
+        ctx.reconnectAttempt = 0;
+        if (typeof window.reconnectSession === 'function') {
+          window.reconnectSession(ctx.id);
         }
-        break;
-      case 'connected':
-        if (statusElement) {
-          statusElement.textContent = 'Connected';
-          statusElement.className = 'status-badge online';
-        }
-        if (overlay) overlay.style.display = 'none';
-        updateConnectionStats();
-        // Stop polling since we're connected
-        if (window.stopPolling) {
-          window.stopPolling();
-          debug('🛑 Stopped signaling polling (connection established)');
-        }
-        break;
-      case 'disconnected':
-        if (statusElement) {
-          statusElement.textContent = 'Disconnected';
-          statusElement.className = 'status-badge offline';
-        }
-        break;
-      case 'failed':
-        if (statusElement) {
-          statusElement.textContent = 'Connection Failed';
-          statusElement.className = 'status-badge offline';
-        }
-        if (overlay) {
-          overlay.style.display = 'flex';
-          overlay.innerHTML = '<p>Connection failed. Please try again.</p>';
-        }
-        break;
+      }
+    }
+
+    // Stop polling when connected (per-session)
+    if (state === 'connected') {
+      if (window.stopSessionPolling) {
+        window.stopSessionPolling(ctx);
+        debug('🛑 Stopped signaling polling for', ctx.id, '(connection established)');
+      }
     }
   };
 
   // Track handler (remote video/canvas)
-  peerConnection.ontrack = (event) => {
-    debug('Remote track received:', event.track.kind);
-    const remoteVideo = document.getElementById('remoteVideo');
-    if (remoteVideo && event.streams[0]) {
-      remoteVideo.srcObject = event.streams[0];
+  pc.ontrack = (event) => {
+    debug('Remote track received:', event.track.kind, 'for device:', ctx.id);
+    // Only set video srcObject if this is the active session
+    if (window.SessionManager?.activeSessionId === ctx.id) {
+      const remoteVideo = document.getElementById('remoteVideo');
+      if (remoteVideo && event.streams[0]) {
+        remoteVideo.srcObject = event.streams[0];
+      }
     }
   };
 
   // ICE connection state handler
-  peerConnection.oniceconnectionstatechange = () => {
-    debug('ICE state:', peerConnection.iceConnectionState);
-    
-    if (peerConnection.iceConnectionState === 'connected') {
-      updateConnectionType();
+  pc.oniceconnectionstatechange = () => {
+    debug('ICE state:', pc.iceConnectionState, 'for device:', ctx.id);
+
+    if (pc.iceConnectionState === 'connected') {
+      updateConnectionType(ctx);
     }
   };
 }
 
-// Frame reassembly state
-let frameChunks = [];
-let expectedChunks = 0;
-let frameTimeout = null;
-let framesReceived = 0;
-let framesDropped = 0;
-let currentFrameId = -1;
+function setupDataChannelHandlers(ctx) {
+  const dc = ctx.dataChannel;
 
-// Bandwidth tracking
-let bytesReceived = 0;
-let lastBandwidthCheck = Date.now();
-let currentBandwidthMbps = 0;
-
-// Screen size tracking for dirty regions (set by first full frame)
-let screenWidth = 0;
-let screenHeight = 0;
-
-function setupDataChannelHandlers() {
-  dataChannel.onopen = () => {
-    debug('Data channel opened');
-    // Enable mouse/keyboard input
+  dc.onopen = () => {
+    debug('Data channel opened for', ctx.id);
+    // Enable mouse/keyboard input (only once, shared across sessions)
     setupInputCapture();
   };
 
-  dataChannel.onclose = () => {
-    debug('Data channel closed');
-    cleanupInputCapture();
+  dc.onclose = () => {
+    debug('Data channel closed for', ctx.id);
+    // Only cleanup input if no sessions remain
+    if (window.SessionManager && window.SessionManager.getSessionCount() <= 1) {
+      cleanupInputCapture();
+    }
   };
 
-  dataChannel.onerror = (error) => {
-    console.error('Data channel error:', error);
+  dc.onerror = (error) => {
+    console.error('Data channel error for', ctx.id, ':', error);
   };
 
-  dataChannel.onmessage = async (event) => {
-    // Track bandwidth
+  dc.onmessage = async (event) => {
+    // Track bandwidth per-session
     let dataSize = 0;
     if (event.data instanceof ArrayBuffer) {
       dataSize = event.data.byteLength;
@@ -322,15 +371,14 @@ function setupDataChannelHandlers() {
     } else if (typeof event.data === 'string') {
       dataSize = event.data.length;
     }
-    bytesReceived += dataSize;
-    
+    ctx.bytesReceived += dataSize;
+
     // Receive JPEG frame from agent (possibly chunked)
     if (event.data instanceof ArrayBuffer) {
       const data = new Uint8Array(event.data);
-      
+
       // Check if this is JSON (starts with '{' = 0x7B)
       if (data.length > 0 && data[0] === 0x7B) {
-        // This is a JSON message, not a frame
         try {
           const text = new TextDecoder().decode(data);
           const msg = JSON.parse(text);
@@ -340,138 +388,151 @@ function setupDataChannelHandlers() {
         }
         return;
       }
-      
+
       // Frame type detection
-      const FRAME_TYPE_REGION = 0x02;  // Dirty region update
-      const CHUNK_MAGIC_OLD = 0xFF;    // Old chunked frame marker (3-byte header)
-      const CHUNK_MAGIC_NEW = 0xFE;    // New chunked frame marker (5-byte header with frame ID)
-      
+      const FRAME_TYPE_REGION = 0x02;
+      const CHUNK_MAGIC_OLD = 0xFF;
+      const CHUNK_MAGIC_NEW = 0xFE;
+
       // Check for dirty region (type 0x02)
       if (data.length > 9 && data[0] === FRAME_TYPE_REGION) {
-        // Dirty region: [type(1), x(2), y(2), w(2), h(2), ...jpeg_data]
         const x = data[1] | (data[2] << 8);
         const y = data[3] | (data[4] << 8);
         const w = data[5] | (data[6] << 8);
         const h = data[7] | (data[8] << 8);
         const jpegData = data.slice(9);
-        displayDirtyRegion(jpegData.buffer, x, y, w, h);
-        framesReceived++;
+        // Only display if active session
+        if (window.SessionManager?.activeSessionId === ctx.id) {
+          displayDirtyRegion(jpegData.buffer, x, y, w, h);
+        }
+        ctx.framesReceived++;
       }
-      // Check for NEW chunked frame format: [0xFE, frame_id_hi, frame_id_lo, chunk_index, total_chunks, ...data]
+      // Check for NEW chunked frame format
       else if (data.length > 5 && data[0] === CHUNK_MAGIC_NEW) {
         const frameId = (data[1] << 8) | data[2];
         const chunkIndex = data[3];
         const totalChunks = data[4];
         const chunkData = data.slice(5);
-        
-        // If frame ID changed, start a new frame (drop incomplete previous)
-        if (currentFrameId !== frameId) {
-          if (frameChunks.length > 0 && expectedChunks > 0) {
-            framesDropped++;
+
+        // If frame ID changed, start a new frame
+        if (ctx.currentFrameId !== frameId) {
+          if (ctx.frameChunks.length > 0 && ctx.expectedChunks > 0) {
+            ctx.framesDropped++;
           }
-          frameChunks = new Array(totalChunks);
-          expectedChunks = totalChunks;
-          currentFrameId = frameId;
-          
-          if (frameTimeout) clearTimeout(frameTimeout);
-          frameTimeout = setTimeout(() => {
-            if (expectedChunks > 0 && currentFrameId === frameId) {
-              framesDropped++;
-              frameChunks = [];
-              expectedChunks = 0;
+          ctx.frameChunks = new Array(totalChunks);
+          ctx.expectedChunks = totalChunks;
+          ctx.currentFrameId = frameId;
+
+          if (ctx.frameTimeout) clearTimeout(ctx.frameTimeout);
+          ctx.frameTimeout = setTimeout(() => {
+            if (ctx.expectedChunks > 0 && ctx.currentFrameId === frameId) {
+              ctx.framesDropped++;
+              ctx.frameChunks = [];
+              ctx.expectedChunks = 0;
             }
           }, 500);
         }
-        
+
         // Store this chunk
-        if (expectedChunks > 0 && chunkIndex < expectedChunks) {
-          frameChunks[chunkIndex] = chunkData;
-          
-          const receivedCount = frameChunks.filter(c => c).length;
-          if (receivedCount === expectedChunks) {
-            if (frameTimeout) {
-              clearTimeout(frameTimeout);
-              frameTimeout = null;
+        if (ctx.expectedChunks > 0 && chunkIndex < ctx.expectedChunks) {
+          ctx.frameChunks[chunkIndex] = chunkData;
+
+          const receivedCount = ctx.frameChunks.filter(c => c).length;
+          if (receivedCount === ctx.expectedChunks) {
+            if (ctx.frameTimeout) {
+              clearTimeout(ctx.frameTimeout);
+              ctx.frameTimeout = null;
             }
-            
+
             // Reassemble frame
-            const totalLength = frameChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            const totalLength = ctx.frameChunks.reduce((sum, chunk) => sum + chunk.length, 0);
             const completeFrame = new Uint8Array(totalLength);
             let offset = 0;
-            for (const chunk of frameChunks) {
+            for (const chunk of ctx.frameChunks) {
               completeFrame.set(chunk, offset);
               offset += chunk.length;
             }
-            
-            // Display the complete reassembled frame (full JPEG)
-            displayVideoFrame(completeFrame.buffer);
-            framesReceived++;
-            
-            frameChunks = [];
-            expectedChunks = 0;
+
+            // Only display if active session
+            if (window.SessionManager?.activeSessionId === ctx.id) {
+              displayVideoFrame(completeFrame.buffer, ctx);
+            } else {
+              // Store frame for tab switching even when not active
+              storeFrameForSession(completeFrame.buffer, ctx);
+            }
+            ctx.framesReceived++;
+
+            ctx.frameChunks = [];
+            ctx.expectedChunks = 0;
           }
         }
       }
-      // Check for OLD chunked frame format: [0xFF, chunk_index, total_chunks, ...data]
+      // Check for OLD chunked frame format
       else if (data.length > 3 && data[0] === CHUNK_MAGIC_OLD && data[1] !== 0xD8) {
         const chunkIndex = data[1];
         const totalChunks = data[2];
         const chunkData = data.slice(3);
-        
-        // Initialize chunk array if first chunk
+
         if (chunkIndex === 0) {
-          if (frameChunks.length > 0 && expectedChunks > 0) {
-            framesDropped++;
+          if (ctx.frameChunks.length > 0 && ctx.expectedChunks > 0) {
+            ctx.framesDropped++;
           }
-          frameChunks = new Array(totalChunks);
-          expectedChunks = totalChunks;
-          
-          if (frameTimeout) clearTimeout(frameTimeout);
-          frameTimeout = setTimeout(() => {
-            if (expectedChunks > 0) {
-              framesDropped++;
-              frameChunks = [];
-              expectedChunks = 0;
+          ctx.frameChunks = new Array(totalChunks);
+          ctx.expectedChunks = totalChunks;
+
+          if (ctx.frameTimeout) clearTimeout(ctx.frameTimeout);
+          ctx.frameTimeout = setTimeout(() => {
+            if (ctx.expectedChunks > 0) {
+              ctx.framesDropped++;
+              ctx.frameChunks = [];
+              ctx.expectedChunks = 0;
             }
           }, 500);
         }
-        
-        // Store this chunk
-        if (expectedChunks > 0 && chunkIndex < expectedChunks) {
-          frameChunks[chunkIndex] = chunkData;
-          
-          const receivedCount = frameChunks.filter(c => c).length;
-          if (receivedCount === expectedChunks) {
-            if (frameTimeout) {
-              clearTimeout(frameTimeout);
-              frameTimeout = null;
+
+        if (ctx.expectedChunks > 0 && chunkIndex < ctx.expectedChunks) {
+          ctx.frameChunks[chunkIndex] = chunkData;
+
+          const receivedCount = ctx.frameChunks.filter(c => c).length;
+          if (receivedCount === ctx.expectedChunks) {
+            if (ctx.frameTimeout) {
+              clearTimeout(ctx.frameTimeout);
+              ctx.frameTimeout = null;
             }
-            
-            // Reassemble frame
-            const totalLength = frameChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+
+            const totalLength = ctx.frameChunks.reduce((sum, chunk) => sum + chunk.length, 0);
             const completeFrame = new Uint8Array(totalLength);
             let offset = 0;
-            for (const chunk of frameChunks) {
+            for (const chunk of ctx.frameChunks) {
               completeFrame.set(chunk, offset);
               offset += chunk.length;
             }
-            
-            // Display the complete reassembled frame (full JPEG)
-            displayVideoFrame(completeFrame.buffer);
-            framesReceived++;
-            
-            frameChunks = [];
-            expectedChunks = 0;
+
+            if (window.SessionManager?.activeSessionId === ctx.id) {
+              displayVideoFrame(completeFrame.buffer, ctx);
+            } else {
+              storeFrameForSession(completeFrame.buffer, ctx);
+            }
+            ctx.framesReceived++;
+
+            ctx.frameChunks = [];
+            ctx.expectedChunks = 0;
           }
         }
       } else {
         // Single-packet frame (raw JPEG starting with FF D8)
-        displayVideoFrame(event.data);
-        framesReceived++;
+        if (window.SessionManager?.activeSessionId === ctx.id) {
+          displayVideoFrame(event.data, ctx);
+        } else {
+          storeFrameForSession(event.data, ctx);
+        }
+        ctx.framesReceived++;
       }
     } else if (event.data instanceof Blob) {
-      displayVideoFrame(event.data);
-      framesReceived++;
+      if (window.SessionManager?.activeSessionId === ctx.id) {
+        displayVideoFrame(event.data, ctx);
+      }
+      ctx.framesReceived++;
     } else if (typeof event.data === 'string') {
       try {
         const msg = JSON.parse(event.data);
@@ -481,40 +542,63 @@ function setupDataChannelHandlers() {
       }
     }
   };
-  
-  // Calculate and display bandwidth every second
-  setInterval(() => {
+
+  // Per-session bandwidth interval
+  ctx.bandwidthInterval = setInterval(() => {
     const now = Date.now();
-    const elapsed = (now - lastBandwidthCheck) / 1000; // seconds
-    
-    if (elapsed > 0 && bytesReceived > 0) {
-      const bitsPerSecond = (bytesReceived * 8) / elapsed;
-      currentBandwidthMbps = bitsPerSecond / 1000000;
-      
-      // Update UI
-      updateBandwidthDisplay(currentBandwidthMbps, framesReceived / elapsed);
-      
-      // Log to console
-      debug(`📊 Bandwidth: ${currentBandwidthMbps.toFixed(2)} Mbit/s | FPS: ${(framesReceived / elapsed).toFixed(1)} | Dropped: ${framesDropped}`);
+    const elapsed = (now - ctx.lastBandwidthCheck) / 1000;
+
+    if (elapsed > 0 && ctx.bytesReceived > 0) {
+      const bitsPerSecond = (ctx.bytesReceived * 8) / elapsed;
+      ctx.currentBandwidthMbps = bitsPerSecond / 1000000;
+
+      // Only update UI for active session
+      if (window.SessionManager?.activeSessionId === ctx.id) {
+        updateBandwidthDisplay(ctx.currentBandwidthMbps, ctx.framesReceived / elapsed);
+        debug(`📊 Bandwidth: ${ctx.currentBandwidthMbps.toFixed(2)} Mbit/s | FPS: ${(ctx.framesReceived / elapsed).toFixed(1)} | Dropped: ${ctx.framesDropped}`);
+      }
     }
-    
+
     // Reset counters
-    bytesReceived = 0;
-    framesReceived = 0;
-    framesDropped = 0;
-    lastBandwidthCheck = now;
+    ctx.bytesReceived = 0;
+    ctx.framesReceived = 0;
+    ctx.framesDropped = 0;
+    ctx.lastBandwidthCheck = now;
   }, 1000);
+
+  // Per-session stats interval
+  ctx.statsInterval = setInterval(() => {
+    if (ctx.peerConnection && ctx.peerConnection.connectionState === 'connected') {
+      if (window.SessionManager?.activeSessionId === ctx.id) {
+        updateConnectionStats(ctx);
+      }
+    }
+  }, 2000);
+}
+
+// Store a frame as base64 for tab-switching (non-active sessions)
+function storeFrameForSession(data, ctx) {
+  // Only store every ~10th frame to save memory
+  if (Math.random() >= 0.1) return;
+
+  const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
+  const reader = new FileReader();
+  reader.onloadend = () => {
+    const base64 = reader.result.split(',')[1];
+    if (base64 && window.SessionManager) {
+      window.SessionManager.storeFrame(ctx.id, base64);
+    }
+  };
+  reader.readAsDataURL(blob);
 }
 
 // Update bandwidth display in UI
 function updateBandwidthDisplay(mbps, fps) {
-  // Update stats display if it exists
   const statsEl = document.getElementById('bandwidthStats');
   if (statsEl) {
     statsEl.textContent = `${mbps.toFixed(1)} Mbit/s | ${fps.toFixed(0)} FPS`;
   }
-  
-  // Also update connection info if available
+
   const connectionInfo = document.getElementById('connectionInfo');
   if (connectionInfo) {
     const bwSpan = connectionInfo.querySelector('.bandwidth');
@@ -526,18 +610,17 @@ function updateBandwidthDisplay(mbps, fps) {
 
 // Get current bandwidth (for external use)
 function getCurrentBandwidth() {
-  return currentBandwidthMbps;
+  const ctx = window.SessionManager?.getActiveSession();
+  return ctx ? ctx.currentBandwidthMbps : 0;
 }
 
 // Helper function to calculate actual image area within canvas (accounting for object-fit: contain)
 function getImageCoordinates(element, clientX, clientY) {
   const rect = element.getBoundingClientRect();
-  
-  // Get displayed size (CSS size on screen)
+
   const displayWidth = rect.width;
   const displayHeight = rect.height;
-  
-  // Get actual canvas/image size (internal pixel buffer)
+
   let actualWidth, actualHeight;
   if (element.tagName === 'CANVAS') {
     actualWidth = element.width;
@@ -549,35 +632,28 @@ function getImageCoordinates(element, clientX, clientY) {
     actualWidth = displayWidth;
     actualHeight = displayHeight;
   }
-  
-  // If canvas has no content yet, use display size
+
   if (actualWidth === 0 || actualHeight === 0) {
     actualWidth = displayWidth;
     actualHeight = displayHeight;
   }
-  
-  // Calculate coordinates relative to element's top-left
+
   const relX = clientX - rect.left;
   const relY = clientY - rect.top;
-  
-  // For canvas with object-fit: contain, the image is scaled to fit
-  // Calculate the scale factor and offset
+
   const scaleX = displayWidth / actualWidth;
   const scaleY = displayHeight / actualHeight;
-  const scale = Math.min(scaleX, scaleY); // object-fit: contain uses the smaller scale
-  
-  // Calculate rendered size
+  const scale = Math.min(scaleX, scaleY);
+
   const renderWidth = actualWidth * scale;
   const renderHeight = actualHeight * scale;
-  
-  // Calculate offset (centering)
+
   const offsetX = (displayWidth - renderWidth) / 2;
   const offsetY = (displayHeight - renderHeight) / 2;
-  
-  // Map click position to normalized coordinates (0-1)
+
   const x = Math.max(0, Math.min(1, (relX - offsetX) / renderWidth));
   const y = Math.max(0, Math.min(1, (relY - offsetY) / renderHeight));
-  
+
   return { x, y };
 }
 
@@ -591,19 +667,17 @@ function setupInputCapture() {
   const target = remoteCanvas || remoteVideo;
 
   if (!target) return;
-  
-  // Prevent duplicate event listeners (would cause double input!)
+
+  // Prevent duplicate event listeners
   if (inputListenersAttached) {
     debug('Input capture already enabled, skipping duplicate setup');
     return;
   }
   inputListenersAttached = true;
-  
-  // Focus canvas for keyboard input
+
   target.focus();
   debug('🎯 Canvas focused for keyboard input');
 
-  // Prevent context menu
   const contextMenuHandler = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -611,32 +685,31 @@ function setupInputCapture() {
   target.addEventListener('contextmenu', contextMenuHandler);
   inputEventHandlers.contextMenu = contextMenuHandler;
 
-  // Mouse move with throttling to prevent overwhelming the connection
   let lastMouseMove = 0;
   const mouseMoveHandler = (e) => {
-    if (!dataChannel || dataChannel.readyState !== 'open') return;
-    
-    // Throttle to max 60 FPS (16ms) to reduce network load
+    const dc = getActiveDataChannel();
+    if (!dc || dc.readyState !== 'open') return;
+
     const now = Date.now();
     if (now - lastMouseMove < 16) return;
     lastMouseMove = now;
-    
+
     const coords = getImageCoordinates(target, e.clientX, e.clientY);
-    
+
     sendControlEvent({
       t: 'mouse_move',
       x: Math.round(coords.x * 10000) / 10000,
       y: Math.round(coords.y * 10000) / 10000,
-      rel: true  // Flag for relative coordinates (0-1)
+      rel: true
     });
   };
   target.addEventListener('mousemove', mouseMoveHandler);
   inputEventHandlers.mouseMove = mouseMoveHandler;
 
-  // Mouse click
   const mouseDownHandler = (e) => {
-    if (!dataChannel || dataChannel.readyState !== 'open') return;
-    
+    const dc = getActiveDataChannel();
+    if (!dc || dc.readyState !== 'open') return;
+
     const button = ['left', 'middle', 'right'][e.button] || 'left';
     sendControlEvent({
       t: 'mouse_click',
@@ -649,8 +722,9 @@ function setupInputCapture() {
   inputEventHandlers.mouseDown = mouseDownHandler;
 
   const mouseUpHandler = (e) => {
-    if (!dataChannel || dataChannel.readyState !== 'open') return;
-    
+    const dc = getActiveDataChannel();
+    if (!dc || dc.readyState !== 'open') return;
+
     const button = ['left', 'middle', 'right'][e.button] || 'left';
     sendControlEvent({
       t: 'mouse_click',
@@ -662,49 +736,44 @@ function setupInputCapture() {
   target.addEventListener('mouseup', mouseUpHandler);
   inputEventHandlers.mouseUp = mouseUpHandler;
 
-  // Mouse wheel / scroll
   const wheelHandler = (e) => {
-    if (!dataChannel || dataChannel.readyState !== 'open') return;
-    
+    const dc = getActiveDataChannel();
+    if (!dc || dc.readyState !== 'open') return;
+
     sendControlEvent({
       t: 'mouse_scroll',
-      delta: e.deltaY > 0 ? -1 : 1  // Negative for down, positive for up
+      delta: e.deltaY > 0 ? -1 : 1
     });
     e.preventDefault();
   };
   target.addEventListener('wheel', wheelHandler);
   inputEventHandlers.wheel = wheelHandler;
 
-  // Keyboard (when viewer is focused)
-  target.tabIndex = 0; // Make focusable
-  target.style.outline = 'none'; // Remove focus outline
-  
-  // Auto-focus on click
+  target.tabIndex = 0;
+  target.style.outline = 'none';
+
   const clickHandler = () => {
     target.focus();
   };
   target.addEventListener('click', clickHandler);
   inputEventHandlers.click = clickHandler;
-  
-  // Track pressed keys to prevent duplicates from key repeat
+
   const pressedKeys = new Set();
-  
+
   const keyDownHandler = async (e) => {
-    if (!dataChannel || dataChannel.readyState !== 'open') return;
-    
-    // Handle Ctrl+V - paste from local clipboard to agent
+    const dc = getActiveDataChannel();
+    if (!dc || dc.readyState !== 'open') return;
+
     if (e.ctrlKey && e.code === 'KeyV') {
       e.preventDefault();
       e.stopPropagation();
       await sendClipboardToAgent();
       return;
     }
-    
-    // Ignore key repeat events (only send first press)
+
     if (pressedKeys.has(e.code)) return;
     pressedKeys.add(e.code);
-    
-    // Send modifier state with each key press for better compatibility
+
     sendControlEvent({
       t: 'key',
       code: e.code,
@@ -720,11 +789,11 @@ function setupInputCapture() {
   inputEventHandlers.keyDown = keyDownHandler;
 
   const keyUpHandler = (e) => {
-    if (!dataChannel || dataChannel.readyState !== 'open') return;
-    
-    // Remove from pressed keys
+    const dc = getActiveDataChannel();
+    if (!dc || dc.readyState !== 'open') return;
+
     pressedKeys.delete(e.code);
-    
+
     sendControlEvent({
       t: 'key',
       code: e.code,
@@ -736,17 +805,16 @@ function setupInputCapture() {
   target.addEventListener('keyup', keyUpHandler);
   inputEventHandlers.keyUp = keyUpHandler;
 
-  debug('✅ Input capture enabled (duplicate prevention active)');
+  debug('✅ Input capture enabled (routes to active session)');
 }
 
-// Clean up input capture when connection closes
 function cleanupInputCapture() {
   if (!inputListenersAttached) return;
-  
+
   const remoteVideo = document.getElementById('remoteVideo');
   const remoteCanvas = document.getElementById('remoteCanvas');
   const target = remoteCanvas || remoteVideo;
-  
+
   if (target && inputEventHandlers) {
     Object.entries(inputEventHandlers).forEach(([name, handler]) => {
       const eventName = {
@@ -764,42 +832,49 @@ function cleanupInputCapture() {
       }
     });
   }
-  
+
   inputListenersAttached = false;
   inputEventHandlers = {};
   debug('🧹 Input capture cleaned up');
 }
 
+// Get the active session's data channel
+function getActiveDataChannel() {
+  const session = window.SessionManager?.getActiveSession();
+  return session?.dataChannel || null;
+}
+
 function sendControlEvent(event) {
-  if (dataChannel && dataChannel.readyState === 'open') {
-    dataChannel.send(JSON.stringify(event));
+  const dc = getActiveDataChannel();
+  if (dc && dc.readyState === 'open') {
+    dc.send(JSON.stringify(event));
   }
 }
 
 // Export for use in other modules
 window.sendControlEvent = sendControlEvent;
 
-async function updateConnectionStats() {
-  if (!peerConnection) return;
+async function updateConnectionStats(ctx) {
+  const pc = ctx ? ctx.peerConnection : window.peerConnection;
+  if (!pc) return;
 
   try {
-    const stats = await peerConnection.getStats();
+    const stats = await pc.getStats();
     let bitrate = 0;
     let rtt = 0;
     let packetLoss = 0;
 
     stats.forEach(report => {
       if (report.type === 'inbound-rtp' && report.kind === 'video') {
-        bitrate = Math.round((report.bytesReceived * 8) / 1000); // kbps
+        bitrate = Math.round((report.bytesReceived * 8) / 1000);
         packetLoss = report.packetsLost || 0;
       }
       if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-        rtt = report.currentRoundTripTime ? 
+        rtt = report.currentRoundTripTime ?
           Math.round(report.currentRoundTripTime * 1000) : 0;
       }
     });
 
-    // Update UI
     document.getElementById('statBitrate').textContent = bitrate + ' kbps';
     document.getElementById('statRtt').textContent = rtt + ' ms';
     document.getElementById('statPacketLoss').textContent = packetLoss + ' packets';
@@ -809,14 +884,17 @@ async function updateConnectionStats() {
   }
 }
 
-async function updateConnectionType() {
-  if (!peerConnection) return;
+async function updateConnectionType(ctx) {
+  const pc = ctx ? ctx.peerConnection : window.peerConnection;
+  if (!pc) return;
+
+  // Only update UI for active session
+  if (ctx && window.SessionManager?.activeSessionId !== ctx.id) return;
 
   try {
-    const stats = await peerConnection.getStats();
+    const stats = await pc.getStats();
     let connectionType = 'Unknown';
 
-    // First, find the active candidate pair
     let activePair = null;
     stats.forEach(report => {
       if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.nominated) {
@@ -824,7 +902,6 @@ async function updateConnectionType() {
       }
     });
 
-    // If we found an active pair, look up the candidate details
     if (activePair) {
       let localType = 'unknown';
       let remoteType = 'unknown';
@@ -857,17 +934,15 @@ async function updateConnectionType() {
 }
 
 // Display video frame on canvas
-function displayVideoFrame(data) {
-  // Use preview canvas (new dashboard) or remote canvas (old)
+function displayVideoFrame(data, ctx) {
   const canvas = document.getElementById('previewCanvas') || document.getElementById('remoteCanvas');
   if (!canvas) {
     console.error('Canvas not found!');
     return;
   }
 
-  const ctx = canvas.getContext('2d');
-  
-  // Debug: log data info
+  const canvasCtx = canvas.getContext('2d');
+
   let dataSize = 0;
   if (data instanceof Blob) {
     dataSize = data.size;
@@ -876,85 +951,74 @@ function displayVideoFrame(data) {
   } else if (data && data.byteLength) {
     dataSize = data.byteLength;
   }
-  
-  // Check if data looks like JPEG (starts with 0xFF 0xD8)
+
   let isJpeg = false;
   let headerHex = '';
   let jpegData = data;
-  
+
   if (data instanceof ArrayBuffer && data.byteLength > 10) {
     const header = new Uint8Array(data, 0, 10);
     isJpeg = header[0] === 0xFF && header[1] === 0xD8;
     headerHex = Array.from(header).map(b => b.toString(16).padStart(2, '0')).join(' ');
-    
-    // Check for 4-byte prefix before JPEG (agent sends frame type prefix)
+
     if (!isJpeg && header[4] === 0xFF && header[5] === 0xD8) {
-      // Skip 4-byte prefix
       jpegData = data.slice(4);
       isJpeg = true;
       debug('📷 Stripped 4-byte prefix from frame');
     }
   }
-  
+
   debug(`📷 Frame received: ${dataSize} bytes, isJPEG: ${isJpeg}, header: ${headerHex}`);
-  
+
   if (dataSize < 100) {
     console.error('❌ Frame too small, likely corrupt:', dataSize);
     return;
   }
-  
-  // Convert data to blob if it's an ArrayBuffer
+
   const blob = jpegData instanceof Blob ? jpegData : new Blob([jpegData], { type: 'image/jpeg' });
-  
-  // Hide overlays immediately when we start receiving frames
+
+  // Hide overlays
   const previewIdle = document.getElementById('previewIdle');
   const previewConnecting = document.getElementById('previewConnecting');
   if (previewIdle) previewIdle.style.display = 'none';
   if (previewConnecting) previewConnecting.style.display = 'none';
-  
-  // Create image from blob
+
   const img = new Image();
   img.onload = () => {
-    // Store screen size for dirty region calculations
-    screenWidth = img.width;
-    screenHeight = img.height;
-    
-    // Resize canvas to match image (only for full frames)
+    // Store screen size on ctx
+    if (ctx) {
+      ctx.screenWidth = img.width;
+      ctx.screenHeight = img.height;
+    }
+
     if (canvas.width !== img.width || canvas.height !== img.height) {
       canvas.width = img.width;
       canvas.height = img.height;
       debug(`📐 Canvas resized to ${img.width}x${img.height}`);
     }
-    
-    // Draw image on canvas
-    ctx.drawImage(img, 0, 0);
-    
-    // Store frame in SessionManager for tab switching
-    const deviceId = window.currentSession?.device_id;
-    if (window.SessionManager && deviceId) {
-      // Convert to base64 for storage (only every 10th frame to save memory)
-      if (Math.random() < 0.1) {
-        // Use FileReader to avoid stack overflow with large frames
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64 = reader.result.split(',')[1]; // Remove data:image/jpeg;base64, prefix
-          if (base64) {
-            window.SessionManager.storeFrame(deviceId, base64);
-          }
-        };
-        reader.readAsDataURL(blob);
-      }
+
+    canvasCtx.drawImage(img, 0, 0);
+
+    // Store frame in SessionManager for tab switching (every ~10th frame)
+    if (ctx && window.SessionManager && Math.random() < 0.1) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result.split(',')[1];
+        if (base64) {
+          window.SessionManager.storeFrame(ctx.id, base64);
+        }
+      };
+      reader.readAsDataURL(blob);
     }
-    
-    // Clean up
+
     URL.revokeObjectURL(img.src);
   };
-  
+
   img.onerror = (e) => {
     console.error('Failed to load image:', e);
     URL.revokeObjectURL(img.src);
   };
-  
+
   img.src = URL.createObjectURL(blob);
 }
 
@@ -966,42 +1030,27 @@ function displayDirtyRegion(data, x, y, w, h) {
     return;
   }
 
-  // Don't draw if canvas hasn't been initialized with a full frame yet
   if (canvas.width === 0 || canvas.height === 0) {
     console.warn('Canvas not initialized, skipping dirty region');
     return;
   }
 
   const ctx = canvas.getContext('2d');
-  
-  // Convert data to blob
   const blob = new Blob([data], { type: 'image/jpeg' });
-  
-  // Create image from blob
+
   const img = new Image();
   img.onload = () => {
-    // Draw the region at the specified position (don't resize canvas!)
-    // The image should be drawn at its natural size at position (x, y)
     ctx.drawImage(img, x, y);
-    
-    // Clean up
     URL.revokeObjectURL(img.src);
   };
-  
+
   img.onerror = (e) => {
     console.error('Failed to load dirty region:', e);
     URL.revokeObjectURL(img.src);
   };
-  
+
   img.src = URL.createObjectURL(blob);
 }
-
-// Update stats every 2 seconds when connected
-setInterval(() => {
-  if (peerConnection && peerConnection.connectionState === 'connected') {
-    updateConnectionStats();
-  }
-}, 2000);
 
 // Fullscreen functionality
 document.addEventListener('DOMContentLoaded', () => {
@@ -1019,13 +1068,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // Update button text when fullscreen changes
     document.addEventListener('fullscreenchange', () => {
       if (document.fullscreenElement) {
-        fullscreenBtn.textContent = '⛶'; // Exit fullscreen icon
+        fullscreenBtn.textContent = '⛶';
         fullscreenBtn.title = 'Exit Fullscreen (Esc)';
       } else {
-        fullscreenBtn.textContent = '⛶'; // Fullscreen icon
+        fullscreenBtn.textContent = '⛶';
         fullscreenBtn.title = 'Fullscreen (F11)';
       }
     });
@@ -1034,14 +1082,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ==================== CLIPBOARD SYNC ====================
 
-// Handle messages from agent (clipboard, etc.)
 function handleAgentMessage(msg) {
   if (!msg.type) return;
-  
+
   switch (msg.type) {
+    case 'monitor_list':
+      handleMonitorList(msg);
+      break;
+
+    case 'monitor_switched':
+      handleMonitorSwitched(msg);
+      break;
+
     case 'clipboard_text':
       if (msg.content) {
-        // Write text to local clipboard
         navigator.clipboard.writeText(msg.content).then(() => {
           debug('📋 Clipboard received from agent (text:', msg.content.length, 'bytes)');
         }).catch(err => {
@@ -1049,10 +1103,9 @@ function handleAgentMessage(msg) {
         });
       }
       break;
-      
+
     case 'clipboard_image':
       if (msg.content) {
-        // Decode base64 image and write to clipboard
         try {
           const binary = atob(msg.content);
           const bytes = new Uint8Array(binary.length);
@@ -1075,12 +1128,12 @@ function handleAgentMessage(msg) {
   }
 }
 
-// Send clipboard to agent
+// Send clipboard to agent (uses active session's data channel)
 async function sendClipboardToAgent() {
-  if (!dataChannel || dataChannel.readyState !== 'open') return;
-  
+  const dc = getActiveDataChannel();
+  if (!dc || dc.readyState !== 'open') return;
+
   try {
-    // Try to read text first
     const text = await navigator.clipboard.readText();
     if (text) {
       sendControlEvent({
@@ -1093,9 +1146,8 @@ async function sendClipboardToAgent() {
   } catch (e) {
     // Text read failed, try image
   }
-  
+
   try {
-    // Try to read image
     const items = await navigator.clipboard.read();
     for (const item of items) {
       if (item.types.includes('image/png')) {
@@ -1106,7 +1158,7 @@ async function sendClipboardToAgent() {
           type: 'clipboard_image',
           content: base64
         });
-      debug('📋 Clipboard sent to agent (image:', buffer.byteLength, 'bytes');
+        debug('📋 Clipboard sent to agent (image:', buffer.byteLength, 'bytes');
         return;
       }
     }
@@ -1115,7 +1167,71 @@ async function sendClipboardToAgent() {
   }
 }
 
+// ==================== MULTI-MONITOR ====================
+
+function handleMonitorList(msg) {
+  const monitors = msg.monitors || [];
+  const active = msg.active || 0;
+
+  debug(`📺 Monitor list received: ${monitors.length} monitors, active: ${active}`);
+
+  // Store on active session ctx
+  const ctx = window.SessionManager?.getActiveSession();
+  if (ctx) {
+    ctx.monitors = monitors;
+    ctx.activeMonitor = active;
+  }
+
+  // Populate monitor selector dropdown
+  const select = document.getElementById('monitorSelect');
+  if (!select) return;
+
+  select.innerHTML = '';
+  monitors.forEach(mon => {
+    const opt = document.createElement('option');
+    opt.value = mon.index;
+    const label = mon.primary ? `${mon.name} (${mon.width}x${mon.height}) ★` : `${mon.name} (${mon.width}x${mon.height})`;
+    opt.textContent = label;
+    if (mon.index === active) opt.selected = true;
+    select.appendChild(opt);
+  });
+
+  // Show/hide selector based on monitor count
+  const container = document.getElementById('monitorSelectContainer');
+  if (container) {
+    container.style.display = monitors.length > 1 ? 'inline-flex' : 'none';
+  }
+}
+
+function handleMonitorSwitched(msg) {
+  const index = msg.index;
+  const width = msg.width;
+  const height = msg.height;
+
+  debug(`📺 Monitor switched to ${index}: ${width}x${height}`);
+
+  // Update canvas size
+  const canvas = document.getElementById('previewCanvas');
+  if (canvas) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+
+  // Update active session ctx
+  const ctx = window.SessionManager?.getActiveSession();
+  if (ctx) {
+    ctx.activeMonitor = index;
+    ctx.screenWidth = width;
+    ctx.screenHeight = height;
+  }
+
+  // Update dropdown selection
+  const select = document.getElementById('monitorSelect');
+  if (select) select.value = index;
+
+  showToast(`Skiftet til monitor ${index + 1} (${width}x${height})`, 'success');
+}
+
 // Export
 window.initWebRTC = initWebRTC;
-window.peerConnection = peerConnection;
 window.sendClipboardToAgent = sendClipboardToAgent;

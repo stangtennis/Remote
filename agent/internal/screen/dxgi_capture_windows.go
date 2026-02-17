@@ -18,7 +18,19 @@ typedef struct {
     int height;
 } DXGICapture;
 
+typedef struct {
+    int index;
+    int width;
+    int height;
+    int offsetX;
+    int offsetY;
+    int isPrimary;
+    char name[64];
+} MonitorInfoC;
+
 DXGICapture* InitDXGI();
+DXGICapture* InitDXGIForOutput(int outputIndex);
+int EnumDXGIOutputs(MonitorInfoC* infos, int maxCount);
 int CaptureDXGI(DXGICapture* cap, unsigned char* buffer, int bufferSize);
 void CloseDXGI(DXGICapture* cap);
 */
@@ -49,6 +61,56 @@ func NewDXGICapturer() (*DXGICapturer, error) {
 		width:  int(handle.width),
 		height: int(handle.height),
 	}, nil
+}
+
+// NewDXGICapturerForOutput creates a DXGI capturer for a specific monitor output
+func NewDXGICapturerForOutput(outputIndex int) (*DXGICapturer, error) {
+	handle := C.InitDXGIForOutput(C.int(outputIndex))
+	if handle == nil {
+		return nil, fmt.Errorf("failed to initialize DXGI capture for output %d", outputIndex)
+	}
+
+	return &DXGICapturer{
+		handle: handle,
+		width:  int(handle.width),
+		height: int(handle.height),
+	}, nil
+}
+
+// MonitorInfo describes a connected display
+type MonitorInfo struct {
+	Index   int
+	Name    string
+	Width   int
+	Height  int
+	OffsetX int
+	OffsetY int
+	Primary bool
+}
+
+// EnumerateDisplays returns info about all connected monitors via DXGI
+func EnumerateDisplays() []MonitorInfo {
+	const maxMonitors = 16
+	var infos [maxMonitors]C.MonitorInfoC
+
+	count := int(C.EnumDXGIOutputs(&infos[0], C.int(maxMonitors)))
+	if count <= 0 {
+		return nil
+	}
+
+	result := make([]MonitorInfo, count)
+	for i := 0; i < count; i++ {
+		result[i] = MonitorInfo{
+			Index:   int(infos[i].index),
+			Name:    C.GoString(&infos[i].name[0]),
+			Width:   int(infos[i].width),
+			Height:  int(infos[i].height),
+			OffsetX: int(infos[i].offsetX),
+			OffsetY: int(infos[i].offsetY),
+			Primary: infos[i].isPrimary != 0,
+		}
+	}
+	return result
 }
 
 func (c *DXGICapturer) CaptureJPEG(quality int) ([]byte, error) {

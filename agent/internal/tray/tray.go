@@ -14,12 +14,18 @@ import (
 	"github.com/stangtennis/remote-agent/internal/updater"
 )
 
-// Version information - update before each release
+// Version information - injected at build time via -ldflags -X
 var (
-	Version       = "v2.68.12"
-	BuildDate     = "2026-02-15"
-	VersionString = Version + " (built " + BuildDate + ")"
+	Version       = "dev"
+	BuildDate     = "unknown"
+	VersionString = ""
 )
+
+func init() {
+	if VersionString == "" {
+		VersionString = Version + " (built " + BuildDate + ")"
+	}
+}
 
 type TrayApp struct {
 	device *device.Device

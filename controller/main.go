@@ -28,12 +28,18 @@ import (
 	"github.com/stangtennis/Remote/controller/internal/viewer"
 )
 
-// Version information - update before each release
+// Version information - injected at build time via -ldflags -X
 var (
-	Version     = "v2.69.0"
-	BuildDate   = "2026-02-17"
-	VersionInfo = Version + " (built " + BuildDate + ")"
+	Version     = "dev"
+	BuildDate   = "unknown"
+	VersionInfo = ""
 )
+
+func init() {
+	if VersionInfo == "" {
+		VersionInfo = Version + " (built " + BuildDate + ")"
+	}
+}
 
 var (
 	supabaseClient        *supabase.Client
