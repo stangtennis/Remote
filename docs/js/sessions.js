@@ -224,17 +224,23 @@ const SessionManager = {
     }
   },
 
-  // Display a frame on the canvas
+  // Display a frame on both canvases (preview + viewer)
   displayFrame(frameData) {
-    const canvas = document.getElementById('previewCanvas');
-    if (!canvas) return;
+    const canvases = [
+      document.getElementById('previewCanvas'),
+      document.getElementById('remoteCanvas')
+    ].filter(Boolean);
+    if (canvases.length === 0) return;
 
-    const ctx = canvas.getContext('2d');
     const img = new Image();
     img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
+      canvases.forEach(canvas => {
+        if (canvas.width !== img.width || canvas.height !== img.height) {
+          canvas.width = img.width;
+          canvas.height = img.height;
+        }
+        canvas.getContext('2d').drawImage(img, 0, 0);
+      });
     };
     img.src = 'data:image/jpeg;base64,' + frameData;
   },
