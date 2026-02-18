@@ -34,6 +34,11 @@ cp builds/controller-$ARGUMENTS.exe ~/caddy/downloads/controller.exe
 cp builds/remote-agent-$ARGUMENTS.exe ~/caddy/downloads/
 cp builds/remote-agent-console-$ARGUMENTS.exe ~/caddy/downloads/
 cp builds/controller-$ARGUMENTS.exe ~/caddy/downloads/
+
+# Deploy installere (generiske navne til download-links)
+cp builds/RemoteDesktopAgent-$ARGUMENTS-Setup.exe ~/caddy/downloads/RemoteDesktopAgent-Setup.exe
+cp builds/RemoteDesktopAgentConsole-$ARGUMENTS-Setup.exe ~/caddy/downloads/RemoteDesktopAgentConsole-Setup.exe
+cp builds/RemoteDesktopController-$ARGUMENTS-Setup.exe ~/caddy/downloads/RemoteDesktopController-Setup.exe
 ```
 
 ### 3. Opdater version.json (trigger auto-update)

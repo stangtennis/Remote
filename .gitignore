@@ -39,6 +39,7 @@ agent/.device_id
 dist/
 build/
 builds/
+installer/staging-*/
 *.zip
 *.tar.gz
 

@@ -42,6 +42,77 @@ cd agent
 timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -ldflags \"$AGENT_CONSOLE_LDFLAGS\" -o ../builds/remote-agent-console-$VERSION.exe ./cmd/remote-agent" 2>&1 && echo "✅ Agent Console built" || echo "⚠️  Agent Console build failed (try on Windows)"
 cd ..
 
+# =============================================================================
+# NSIS Installers
+# =============================================================================
+echo ""
+echo "📦 Building NSIS installers..."
+
+# Strip leading 'v' for NSIS version (e.g. v2.72.2 -> 2.72.2)
+NSI_VERSION="${VERSION#v}"
+
+build_installer() {
+    local NAME="$1"       # e.g. "Agent"
+    local NSI_FILE="$2"   # e.g. "agent-installer.nsi"
+    local OUTPUT="$3"     # e.g. "RemoteDesktopAgent"
+
+    local STAGING="installer/staging-${NAME,,}"
+    rm -rf "$STAGING"
+    mkdir -p "$STAGING"
+
+    # Copy LICENSE
+    cp installer/LICENSE.txt "$STAGING/"
+
+    # Create versioned .nsi copy (sed version + VIProductVersion + OutFile)
+    sed -e "s/!define VERSION \"[^\"]*\"/!define VERSION \"${NSI_VERSION}\"/" \
+        -e "s/VIProductVersion \"[^\"]*\"/VIProductVersion \"${NSI_VERSION}.0\"/" \
+        -e "s/OutFile \"${OUTPUT}-Setup.exe\"/OutFile \"${OUTPUT}-${VERSION}-Setup.exe\"/" \
+        "installer/$NSI_FILE" > "$STAGING/$NSI_FILE"
+}
+
+# --- Agent installer (GUI + Console + OpenH264) ---
+build_installer "Agent" "agent-installer.nsi" "RemoteDesktopAgent"
+STAGING="installer/staging-agent"
+cp "builds/remote-agent-${VERSION}.exe" "$STAGING/remote-agent.exe"
+cp "builds/remote-agent-console-${VERSION}.exe" "$STAGING/remote-agent-console.exe"
+cp "installer/openh264-2.1.1-win64.dll" "$STAGING/"
+if makensis -V2 "$STAGING/agent-installer.nsi" >/dev/null 2>&1; then
+    mv "$STAGING/RemoteDesktopAgent-${VERSION}-Setup.exe" "builds/"
+    echo "  ✅ RemoteDesktopAgent-${VERSION}-Setup.exe"
+else
+    echo "  ❌ Agent installer build failed"
+    makensis -V2 "$STAGING/agent-installer.nsi" 2>&1 | tail -5
+fi
+rm -rf "$STAGING"
+
+# --- Agent Console installer (Console + OpenH264) ---
+build_installer "AgentConsole" "agent-console-installer.nsi" "RemoteDesktopAgentConsole"
+STAGING="installer/staging-agentconsole"
+cp "builds/remote-agent-console-${VERSION}.exe" "$STAGING/remote-agent-console.exe"
+cp "installer/openh264-2.1.1-win64.dll" "$STAGING/"
+if makensis -V2 "$STAGING/agent-console-installer.nsi" >/dev/null 2>&1; then
+    mv "$STAGING/RemoteDesktopAgentConsole-${VERSION}-Setup.exe" "builds/"
+    echo "  ✅ RemoteDesktopAgentConsole-${VERSION}-Setup.exe"
+else
+    echo "  ❌ Agent Console installer build failed"
+    makensis -V2 "$STAGING/agent-console-installer.nsi" 2>&1 | tail -5
+fi
+rm -rf "$STAGING"
+
+# --- Controller installer (Controller + FFmpeg) ---
+build_installer "Controller" "controller-installer.nsi" "RemoteDesktopController"
+STAGING="installer/staging-controller"
+cp "builds/controller-${VERSION}.exe" "$STAGING/controller.exe"
+cp "installer/ffmpeg.exe" "$STAGING/"
+if makensis -V2 "$STAGING/controller-installer.nsi" >/dev/null 2>&1; then
+    mv "$STAGING/RemoteDesktopController-${VERSION}-Setup.exe" "builds/"
+    echo "  ✅ RemoteDesktopController-${VERSION}-Setup.exe"
+else
+    echo "  ❌ Controller installer build failed"
+    makensis -V2 "$STAGING/controller-installer.nsi" 2>&1 | tail -5
+fi
+rm -rf "$STAGING"
+
 echo ""
 echo "=================================="
 echo "📁 Build output in ./builds/"
