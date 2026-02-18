@@ -935,13 +935,17 @@ async function updateConnectionType(ctx) {
 
 // Display video frame on canvas
 function displayVideoFrame(data, ctx) {
-  const canvas = document.getElementById('previewCanvas') || document.getElementById('remoteCanvas');
+  // Render to both canvases - previewCanvas (tab preview) and remoteCanvas (viewer)
+  const previewCanvas = document.getElementById('previewCanvas');
+  const remoteCanvas = document.getElementById('remoteCanvas');
+  const canvas = previewCanvas || remoteCanvas;
   if (!canvas) {
     console.error('Canvas not found!');
     return;
   }
 
   const canvasCtx = canvas.getContext('2d');
+  const remoteCtx = remoteCanvas ? remoteCanvas.getContext('2d') : null;
 
   let dataSize = 0;
   if (data instanceof Blob) {
@@ -999,6 +1003,15 @@ function displayVideoFrame(data, ctx) {
 
     canvasCtx.drawImage(img, 0, 0);
 
+    // Also render to remoteCanvas (viewer) if it exists and is different
+    if (remoteCtx && remoteCanvas !== canvas) {
+      if (remoteCanvas.width !== img.width || remoteCanvas.height !== img.height) {
+        remoteCanvas.width = img.width;
+        remoteCanvas.height = img.height;
+      }
+      remoteCtx.drawImage(img, 0, 0);
+    }
+
     // Store frame in SessionManager for tab switching (every ~10th frame)
     if (ctx && window.SessionManager && Math.random() < 0.1) {
       const reader = new FileReader();
@@ -1024,23 +1037,27 @@ function displayVideoFrame(data, ctx) {
 
 // Display a dirty region (partial screen update) on canvas
 function displayDirtyRegion(data, x, y, w, h) {
-  const canvas = document.getElementById('previewCanvas') || document.getElementById('remoteCanvas');
-  if (!canvas) {
+  const canvas = document.getElementById('previewCanvas');
+  const remoteCanvas = document.getElementById('remoteCanvas');
+  if (!canvas && !remoteCanvas) {
     console.error('Canvas not found!');
     return;
   }
 
-  if (canvas.width === 0 || canvas.height === 0) {
+  const targetCanvas = canvas || remoteCanvas;
+  if (targetCanvas.width === 0 || targetCanvas.height === 0) {
     console.warn('Canvas not initialized, skipping dirty region');
     return;
   }
 
-  const ctx = canvas.getContext('2d');
+  const ctx = targetCanvas.getContext('2d');
+  const remoteCtx = remoteCanvas && remoteCanvas !== targetCanvas ? remoteCanvas.getContext('2d') : null;
   const blob = new Blob([data], { type: 'image/jpeg' });
 
   const img = new Image();
   img.onload = () => {
     ctx.drawImage(img, x, y);
+    if (remoteCtx) remoteCtx.drawImage(img, x, y);
     URL.revokeObjectURL(img.src);
   };
 
