@@ -312,6 +312,34 @@ echo "$ANON_SUPPORT" | grep -qv "error"
 check "RLS: anon har adgang til Quick Support" $?
 
 # =============================================================================
+# TEST 6: Windows Service Registration (Wine)
+# =============================================================================
+echo ""
+echo -e "${YELLOW}--- Service Registration Test ---${NC}"
+
+if [ -n "${WINE_CMD:-}" ]; then
+    # Register test service via sc.exe (Wine returns empty output on success)
+    WINEDEBUG=-all "$WINE_CMD" sc create RemoteDesktopAgent binPath= "C:\\RemoteAgent\\remote-agent.exe" start= auto 2>&1 || true
+
+    # Verify service was created via query
+    SC_QUERY=$(WINEDEBUG=-all "$WINE_CMD" sc query RemoteDesktopAgent 2>&1 || true)
+    echo "$SC_QUERY" | grep -qi "SERVICE_NAME.*RemoteDesktopAgent"
+    check "Service: sc create + query verificering" $?
+
+    echo "$SC_QUERY" | grep -qi "STOPPED\|WIN32_OWN_PROCESS"
+    check "Service: korrekt type og status" $?
+
+    # Cleanup - delete the test service, verify it's gone (query returns empty + exit 1)
+    WINEDEBUG=-all "$WINE_CMD" sc delete RemoteDesktopAgent 2>&1 || true
+    SC_QUERY_AFTER=$(WINEDEBUG=-all "$WINE_CMD" sc query RemoteDesktopAgent 2>&1)
+    SC_QUERY_EXIT=$?
+    [ "$SC_QUERY_EXIT" -ne 0 ] && [ -z "$(echo "$SC_QUERY_AFTER" | grep -i SERVICE_NAME)" ]
+    check "Service: sc delete oprydning verificeret" $?
+else
+    echo -e "  ${YELLOW}⚠️  Wine ikke tilgængelig - springer service test over${NC}"
+fi
+
+# =============================================================================
 # Results
 # =============================================================================
 echo ""
