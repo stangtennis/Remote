@@ -19,6 +19,7 @@ import (
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/desktop"
 	"github.com/stangtennis/remote-agent/internal/device"
+	"github.com/stangtennis/remote-agent/internal/screen"
 	"github.com/stangtennis/remote-agent/internal/tray"
 	"github.com/stangtennis/remote-agent/internal/webrtc"
 	"github.com/stangtennis/remote-agent/pkg/logging"
@@ -61,18 +62,17 @@ var (
 	cfg         *config.Config
 	dev         *device.Device
 	rtc         *webrtc.Manager
-	logFile     *os.File
 	currentUser *auth.Credentials
 )
 
 func setupLogging() error {
 	// Initialize structured logging with rotation
 	isService, _ := svc.IsWindowsService()
-	
+
 	cfg := logging.DefaultConfig()
 	cfg.Console = !isService // Only log to console if not running as service
 	cfg.Level = "info"        // Can be changed to "debug" for troubleshooting
-	
+
 	if err := logging.Init(cfg); err != nil {
 		return fmt.Errorf("failed to initialize logging: %w", err)
 	}
@@ -80,19 +80,19 @@ func setupLogging() error {
 	logging.Logger.Info().
 		Str("version", tray.VersionString).
 		Bool("is_service", isService).
+		Str("log_file", logging.GetLogFilePath()).
 		Msg("Remote Desktop Agent starting")
 
 	// Sync log file immediately
-	logFile.Sync()
+	logging.Sync()
 
-	// Start background goroutine to periodically sync log file
+	// Start background goroutine to periodically sync log file to disk
+	// This ensures logs survive VM force-stops
 	go func() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			if logFile != nil {
-				logFile.Sync()
-			}
+			logging.Sync()
 		}
 	}()
 
@@ -101,9 +101,7 @@ func setupLogging() error {
 
 // flushLog ensures all log data is written to disk
 func flushLog() {
-	if logFile != nil {
-		logFile.Sync()
-	}
+	logging.Sync()
 }
 
 const serviceName = "RemoteDesktopAgent"
@@ -292,6 +290,15 @@ func main() {
 		return
 	}
 
+	// Check for capture helper mode (launched by service in user session for Session 0 capture)
+	if len(os.Args) >= 3 && os.Args[1] == "--capture-helper" {
+		if err := screen.RunCaptureHelper(os.Args[2]); err != nil {
+			log.Printf("Capture helper error: %v", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// Check if running from Program Files install directory (autostart mode)
 	isService, _ := svc.IsWindowsService()
 	runningFromProgramFiles := isRunningFromProgramFiles()
@@ -376,11 +383,7 @@ func main() {
 		if err := setupLogging(); err != nil {
 			os.Exit(1)
 		}
-		defer func() {
-			if logFile != nil {
-				logFile.Close()
-			}
-		}()
+		defer logging.Sync()
 		log.Println("🔧 Kører som Windows Service")
 		runService()
 		return
@@ -392,11 +395,7 @@ func main() {
 			fmt.Printf("Kunne ikke opsætte logging: %v\n", err)
 			os.Exit(1)
 		}
-		defer func() {
-			if logFile != nil {
-				logFile.Close()
-			}
-		}()
+		defer logging.Sync()
 		log.Println("🔧 Kører fra Program Files - auto-start med system tray")
 		runInteractive()
 		return
@@ -414,12 +413,8 @@ func main() {
 		fmt.Printf("Kunne ikke opsætte logging: %v\n", err)
 		os.Exit(1)
 	}
-	defer func() {
-		if logFile != nil {
-			logFile.Close()
-		}
-	}()
-	
+	defer logging.Sync()
+
 	// Console mode - run without system tray, keep CMD open
 	if *consoleFlag {
 		log.Println("🔧 Kører i KONSOL tilstand (ingen system tray)")
@@ -520,11 +515,7 @@ func showStartupDialog() {
 				messageBox("Error", "Failed to setup logging: "+err.Error(), MB_OK|MB_ICONERROR)
 				return
 			}
-			defer func() {
-				if logFile != nil {
-					logFile.Close()
-				}
-			}()
+			defer logging.Sync()
 			log.Println("🔧 Kører i interaktiv tilstand")
 			runInteractive()
 			return

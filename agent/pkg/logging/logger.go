@@ -13,7 +13,9 @@ import (
 )
 
 var (
-	Logger zerolog.Logger
+	Logger      zerolog.Logger
+	logFilePath string              // Path to log file for syncing
+	fileWriter  *lumberjack.Logger  // Reference for Sync (Close flushes to disk)
 )
 
 // Config holds logging configuration
@@ -59,9 +61,9 @@ func Init(cfg *Config) error {
 	zerolog.SetGlobalLevel(level)
 
 	// Configure log rotation
-	logFile := filepath.Join(cfg.LogDir, "agent.log")
-	fileWriter := &lumberjack.Logger{
-		Filename:   logFile,
+	logFilePath = filepath.Join(cfg.LogDir, "agent.log")
+	fileWriter = &lumberjack.Logger{
+		Filename:   logFilePath,
 		MaxSize:    cfg.MaxSize,
 		MaxBackups: cfg.MaxBackups,
 		MaxAge:     cfg.MaxAge,
@@ -117,6 +119,21 @@ func getDefaultLogDir() string {
 		return "./logs"
 	}
 	return filepath.Join(home, ".remote-agent", "logs")
+}
+
+// Sync flushes the log file to disk by closing and reopening lumberjack's file handle.
+// lumberjack.Close() flushes pending data and closes the file.
+// The next Write() call automatically reopens it.
+// This is thread-safe (lumberjack uses internal mutex).
+func Sync() {
+	if fileWriter != nil {
+		fileWriter.Close()
+	}
+}
+
+// GetLogFilePath returns the path to the current log file
+func GetLogFilePath() string {
+	return logFilePath
 }
 
 // Info logs an info message

@@ -321,6 +321,14 @@ func (m *Manager) handleWebSession(session Session) {
 		SDP:  session.Offer,
 	}
 
+	// Log SDP diagnostics: check for data channel (m=application) in offer
+	if strings.Contains(session.Offer, "m=application") {
+		log.Println("✅ Offer SDP contains m=application (data channel/SCTP)")
+	} else {
+		log.Println("❌ Offer SDP is MISSING m=application - data channel will NOT work!")
+		log.Printf("   Offer SDP (first 500 chars): %.500s", session.Offer)
+	}
+
 	if err := m.peerConnection.SetRemoteDescription(offer); err != nil {
 		log.Printf("Failed to set remote description: %v", err)
 		return
@@ -331,6 +339,13 @@ func (m *Manager) handleWebSession(session Session) {
 	if err != nil {
 		log.Printf("Failed to create answer: %v", err)
 		return
+	}
+
+	// Log answer SDP diagnostics
+	if strings.Contains(answer.SDP, "m=application") {
+		log.Println("✅ Answer SDP contains m=application (data channel/SCTP)")
+	} else {
+		log.Println("❌ Answer SDP is MISSING m=application!")
 	}
 
 	if err := m.peerConnection.SetLocalDescription(answer); err != nil {

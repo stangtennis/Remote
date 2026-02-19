@@ -98,20 +98,56 @@ int CaptureGDI(GDICapture* cap, unsigned char* buffer, int bufferSize) {
         return -1;
     }
 
+    // Switch to input desktop before each capture (handles desktop switches)
+    SwitchToInputDesktopGDI();
+
+    // Always recreate screen DC after desktop switch.
+    // In Session 0, the old DC points to the empty Session 0 desktop.
+    // After SwitchToInputDesktopGDI(), we need a fresh DC for the user's desktop.
+    if (cap->screenDC) {
+        DeleteDC(cap->screenDC);
+        cap->screenDC = NULL;
+    }
+    cap->screenDC = CreateDC("DISPLAY", NULL, NULL, NULL);
+    if (!cap->screenDC) {
+        cap->screenDC = GetDC(NULL);
+        if (!cap->screenDC) {
+            return -3;
+        }
+    }
+
+    // Check if resolution changed (can happen when switching between desktops)
+    int width = GetSystemMetrics(SM_CXSCREEN);
+    int height = GetSystemMetrics(SM_CYSCREEN);
+    if (width > 0 && height > 0 && (width != cap->width || height != cap->height)) {
+        // Resolution changed - recreate memDC and bitmap
+        if (cap->bitmap) { DeleteObject(cap->bitmap); cap->bitmap = NULL; }
+        if (cap->memDC) { DeleteDC(cap->memDC); cap->memDC = NULL; }
+
+        cap->width = width;
+        cap->height = height;
+
+        cap->memDC = CreateCompatibleDC(cap->screenDC);
+        if (!cap->memDC) return -3;
+
+        cap->bitmap = CreateCompatibleBitmap(cap->screenDC, width, height);
+        if (!cap->bitmap) return -3;
+
+        SelectObject(cap->memDC, cap->bitmap);
+
+        cap->bmi.bmiHeader.biWidth = width;
+        cap->bmi.bmiHeader.biHeight = -height;
+    }
+
     int expectedSize = cap->width * cap->height * 4;
     if (bufferSize < expectedSize) {
         return -2;
     }
 
-    // Switch to input desktop before each capture (handles desktop switches)
-    SwitchToInputDesktopGDI();
-
     // Direct BitBlt from screen DC to memory DC
     // SRCCOPY | CAPTUREBLT ensures we capture layered windows
     if (!BitBlt(cap->memDC, 0, 0, cap->width, cap->height,
                 cap->screenDC, 0, 0, SRCCOPY | CAPTUREBLT)) {
-        // Get last error for debugging
-        DWORD error = GetLastError();
         return -3;
     }
 
@@ -164,13 +200,36 @@ func NewGDICapturer() (*GDICapturer, error) {
 	}, nil
 }
 
+func (c *GDICapturer) refreshDimensions() {
+	cap := (*C.GDICapture)(c.handle)
+	c.width = int(cap.width)
+	c.height = int(cap.height)
+}
+
 func (c *GDICapturer) CaptureJPEG(quality int) ([]byte, error) {
-	// Allocate buffer for BGRA data
+	// Allocate buffer for max possible BGRA data (use current dimensions)
+	// C code may update dimensions after desktop switch, so use generous buffer
 	bufferSize := c.width * c.height * 4
+	if bufferSize == 0 {
+		// Session 0 may start with 0x0 - try a 1920x1080 buffer
+		bufferSize = 1920 * 1080 * 4
+	}
 	buffer := make([]byte, bufferSize)
 
 	// Capture screen
 	result := C.CaptureGDI((*C.GDICapture)(c.handle), (*C.uchar)(unsafe.Pointer(&buffer[0])), C.int(bufferSize))
+
+	// Update Go dimensions from C struct (may have changed after desktop switch)
+	c.refreshDimensions()
+
+	if result == -2 {
+		// Buffer too small after resolution change - retry with new size
+		bufferSize = c.width * c.height * 4
+		buffer = make([]byte, bufferSize)
+		result = C.CaptureGDI((*C.GDICapture)(c.handle), (*C.uchar)(unsafe.Pointer(&buffer[0])), C.int(bufferSize))
+		c.refreshDimensions()
+	}
+
 	if result != 0 {
 		var errMsg string
 		switch result {
@@ -192,7 +251,8 @@ func (c *GDICapturer) CaptureJPEG(quality int) ([]byte, error) {
 
 	// Convert BGRA to RGBA
 	img := image.NewRGBA(image.Rect(0, 0, c.width, c.height))
-	for i := 0; i < len(buffer); i += 4 {
+	pixelBytes := c.width * c.height * 4
+	for i := 0; i < pixelBytes; i += 4 {
 		img.Pix[i] = buffer[i+2]   // R
 		img.Pix[i+1] = buffer[i+1] // G
 		img.Pix[i+2] = buffer[i]   // B
@@ -213,17 +273,33 @@ func (c *GDICapturer) CaptureJPEG(quality int) ([]byte, error) {
 func (c *GDICapturer) CaptureRGBA() (*image.RGBA, error) {
 	// Allocate buffer for BGRA data
 	bufferSize := c.width * c.height * 4
+	if bufferSize == 0 {
+		bufferSize = 1920 * 1080 * 4
+	}
 	buffer := make([]byte, bufferSize)
 
 	// Capture screen
 	result := C.CaptureGDI((*C.GDICapture)(c.handle), (*C.uchar)(unsafe.Pointer(&buffer[0])), C.int(bufferSize))
+
+	// Update Go dimensions from C struct (may have changed after desktop switch)
+	c.refreshDimensions()
+
+	if result == -2 {
+		// Buffer too small after resolution change - retry with new size
+		bufferSize = c.width * c.height * 4
+		buffer = make([]byte, bufferSize)
+		result = C.CaptureGDI((*C.GDICapture)(c.handle), (*C.uchar)(unsafe.Pointer(&buffer[0])), C.int(bufferSize))
+		c.refreshDimensions()
+	}
+
 	if result != 0 {
 		return nil, fmt.Errorf("GDI capture failed: error %d", result)
 	}
 
 	// Convert BGRA to RGBA
 	img := image.NewRGBA(image.Rect(0, 0, c.width, c.height))
-	for i := 0; i < len(buffer); i += 4 {
+	pixelBytes := c.width * c.height * 4
+	for i := 0; i < pixelBytes; i += 4 {
 		img.Pix[i] = buffer[i+2]   // R
 		img.Pix[i+1] = buffer[i+1] // G
 		img.Pix[i+2] = buffer[i]   // B
@@ -231,6 +307,32 @@ func (c *GDICapturer) CaptureRGBA() (*image.RGBA, error) {
 	}
 
 	return img, nil
+}
+
+// CaptureBGRA captures the screen as raw BGRA bytes (used by Session 0 pipe helper).
+// Returns the raw pixel data without BGRA→RGBA conversion.
+func (c *GDICapturer) CaptureBGRA() ([]byte, int, int, error) {
+	bufferSize := c.width * c.height * 4
+	if bufferSize == 0 {
+		bufferSize = 1920 * 1080 * 4
+	}
+	buffer := make([]byte, bufferSize)
+
+	result := C.CaptureGDI((*C.GDICapture)(c.handle), (*C.uchar)(unsafe.Pointer(&buffer[0])), C.int(bufferSize))
+	c.refreshDimensions()
+
+	if result == -2 {
+		bufferSize = c.width * c.height * 4
+		buffer = make([]byte, bufferSize)
+		result = C.CaptureGDI((*C.GDICapture)(c.handle), (*C.uchar)(unsafe.Pointer(&buffer[0])), C.int(bufferSize))
+		c.refreshDimensions()
+	}
+
+	if result != 0 {
+		return nil, 0, 0, fmt.Errorf("GDI capture failed: error %d", result)
+	}
+
+	return buffer[:c.width*c.height*4], c.width, c.height, nil
 }
 
 func (c *GDICapturer) GetBounds() image.Rectangle {
