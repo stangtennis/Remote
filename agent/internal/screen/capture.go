@@ -14,22 +14,40 @@ import (
 )
 
 type Capturer struct {
-	displayIndex int
-	bounds       image.Rectangle
-	lastHash     []byte // Hash of last frame for change detection
-	dxgiCapturer *DXGICapturer // DXGI capturer if available (works better with RDP)
-	gdiCapturer  *GDICapturer  // GDI capturer for Session 0 / login screen
-	useGDI       bool          // Force GDI mode (for Session 0)
-	mu           sync.Mutex    // Protect capturer switching
+	displayIndex     int
+	bounds           image.Rectangle
+	lastHash         []byte              // Hash of last frame for change detection
+	dxgiCapturer     *DXGICapturer       // DXGI capturer if available (works better with RDP)
+	gdiCapturer      *GDICapturer        // GDI capturer for Session 0 / login screen
+	session0Capturer *Session0PipeCapturer // Pipe-based capturer for Session 0 (helper in user session)
+	useGDI           bool                // Force GDI mode (for Session 0)
+	mu               sync.Mutex          // Protect capturer switching
 }
 
 func NewCapturer() (*Capturer, error) {
 	return NewCapturerWithMode(false)
 }
 
-// NewCapturerForSession0 creates a capturer specifically for Session 0 (login screen)
-// Uses GDI capture which works better in Session 0
+// NewCapturerForSession0 creates a capturer specifically for Session 0 (login screen).
+// First tries a pipe-based capturer that launches a helper in the user's session
+// (since GDI/DXGI cannot capture from Session 0). Falls back to direct GDI.
 func NewCapturerForSession0() (*Capturer, error) {
+	// Try Session 0 pipe capturer (launches helper in user session via CreateProcessAsUser)
+	s0, err := NewSession0PipeCapturer()
+	if err == nil {
+		bounds := s0.GetBounds()
+		log.Printf("✅ Session 0 pipe capturer ready: %dx%d", bounds.Dx(), bounds.Dy())
+		return &Capturer{
+			displayIndex:     0,
+			bounds:           bounds,
+			session0Capturer: s0,
+			useGDI:           true,
+		}, nil
+	}
+	log.Printf("⚠️ Session 0 pipe capturer failed: %v", err)
+	log.Println("   Falling back to direct GDI (may not work in Session 0)")
+
+	// Fallback to direct GDI
 	return NewCapturerWithMode(true)
 }
 
@@ -99,9 +117,21 @@ func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Use Session 0 pipe capturer if available (helper in user session)
+	if c.session0Capturer != nil {
+		data, err := c.session0Capturer.CaptureJPEG(quality)
+		if err == nil {
+			c.bounds = c.session0Capturer.GetBounds()
+		}
+		return data, err
+	}
+
 	// Use GDI if in GDI mode (Session 0 / login screen)
 	if c.useGDI && c.gdiCapturer != nil {
-		return c.gdiCapturer.CaptureJPEG(quality)
+		data, err := c.gdiCapturer.CaptureJPEG(quality)
+		// Update bounds in case resolution changed after desktop switch
+		c.bounds = c.gdiCapturer.GetBounds()
+		return data, err
 	}
 
 	// Use DXGI if available (better for RDP)
@@ -196,6 +226,10 @@ func (c *Capturer) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if c.session0Capturer != nil {
+		c.session0Capturer.Close()
+		c.session0Capturer = nil
+	}
 	if c.dxgiCapturer != nil {
 		c.dxgiCapturer.Close()
 		c.dxgiCapturer = nil
@@ -212,7 +246,14 @@ func (c *Capturer) Reinitialize(forceGDI bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Remember if we had a Session 0 pipe capturer
+	wasSession0 := c.session0Capturer != nil
+
 	// Close existing capturers
+	if c.session0Capturer != nil {
+		c.session0Capturer.Close()
+		c.session0Capturer = nil
+	}
 	if c.dxgiCapturer != nil {
 		c.dxgiCapturer.Close()
 		c.dxgiCapturer = nil
@@ -222,8 +263,20 @@ func (c *Capturer) Reinitialize(forceGDI bool) error {
 		c.gdiCapturer = nil
 	}
 
-	// Reinitialize based on mode
-	if forceGDI {
+	// If in GDI/Session0 mode, try Session 0 pipe capturer first (user may have logged in)
+	if wasSession0 || forceGDI || c.useGDI {
+		// Try Session 0 pipe capturer (launches helper in user session)
+		s0, err := NewSession0PipeCapturer()
+		if err == nil {
+			c.session0Capturer = s0
+			c.bounds = s0.GetBounds()
+			c.useGDI = true
+			log.Printf("✅ Reinitialized Session 0 pipe capturer: %dx%d", c.bounds.Dx(), c.bounds.Dy())
+			return nil
+		}
+		log.Printf("⚠️ Session 0 pipe capturer reinit failed: %v", err)
+
+		// Fall back to direct GDI
 		gdi, err := NewGDICapturer()
 		if err != nil {
 			return fmt.Errorf("failed to reinitialize GDI capturer: %w", err)
@@ -231,7 +284,7 @@ func (c *Capturer) Reinitialize(forceGDI bool) error {
 		c.gdiCapturer = gdi
 		c.bounds = gdi.GetBounds()
 		c.useGDI = true
-		log.Printf("✅ Reinitialized GDI capturer: %dx%d", c.bounds.Dx(), c.bounds.Dy())
+		log.Printf("✅ Reinitialized GDI capturer (fallback): %dx%d", c.bounds.Dx(), c.bounds.Dy())
 		return nil
 	}
 
@@ -319,7 +372,12 @@ func (c *Capturer) CaptureJPEGScaled(quality int, scale float64) ([]byte, int, i
 	var err error
 
 	// Capture based on mode
-	if c.useGDI && c.gdiCapturer != nil {
+	if c.session0Capturer != nil {
+		img, err = c.session0Capturer.CaptureRGBA()
+		if err == nil {
+			c.bounds = c.session0Capturer.GetBounds()
+		}
+	} else if c.useGDI && c.gdiCapturer != nil {
 		img, err = c.gdiCapturer.CaptureRGBA()
 	} else if c.dxgiCapturer != nil {
 		img, err = c.dxgiCapturer.CaptureRGBA()
@@ -393,9 +451,21 @@ func (c *Capturer) CaptureRGBA() (*image.RGBA, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Use Session 0 pipe capturer if available
+	if c.session0Capturer != nil {
+		img, err := c.session0Capturer.CaptureRGBA()
+		if err == nil {
+			c.bounds = c.session0Capturer.GetBounds()
+		}
+		return img, err
+	}
+
 	// Use GDI if in GDI mode
 	if c.useGDI && c.gdiCapturer != nil {
-		return c.gdiCapturer.CaptureRGBA()
+		img, err := c.gdiCapturer.CaptureRGBA()
+		// Update bounds in case resolution changed after desktop switch
+		c.bounds = c.gdiCapturer.GetBounds()
+		return img, err
 	}
 
 	// Use DXGI if available

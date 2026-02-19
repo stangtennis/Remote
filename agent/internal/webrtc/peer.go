@@ -1229,6 +1229,14 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		m.dirtyDetector = screen.NewDirtyRegionDetector(128, 128)
 	}
 
+	// Log capturer state for debugging
+	if m.screenCapturer != nil {
+		log.Printf("📸 Capturer state: GDI=%v, Session0=%v, resolution=%dx%d",
+			m.screenCapturer.IsGDIMode(),
+			m.isSession0,
+			m.screenCapturer.GetBounds().Dx(), m.screenCapturer.GetBounds().Dy())
+	}
+
 	// Send monitor list to dashboard (skip in Session 0 - DXGI enumeration can crash)
 	if !m.isSession0 {
 		m.sendMonitorList()
@@ -1300,6 +1308,9 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		m.collectStats(ctx)
 	}()
 
+	dcWaitLogged := false
+	dcWaitCount := 0
+
 	for m.isStreaming.Load() {
 		// Wait for either ticker, input-triggered frame request, or context cancellation
 		select {
@@ -1315,6 +1326,40 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		}
 
 		if m.dataChannel == nil || m.dataChannel.ReadyState() != webrtc.DataChannelStateOpen {
+			dcWaitCount++
+			if !dcWaitLogged {
+				dcWaitLogged = true
+				if m.dataChannel == nil {
+					log.Println("⏳ Waiting for data channel (nil) - streaming loop running but no data channel yet")
+				} else {
+					log.Printf("⏳ Waiting for data channel (state: %s)", m.dataChannel.ReadyState().String())
+				}
+			} else if dcWaitCount%200 == 0 {
+				// Log every ~10s at 20fps
+				if m.dataChannel == nil {
+					log.Printf("⏳ Still waiting for data channel (nil) - %d ticks", dcWaitCount)
+				} else {
+					log.Printf("⏳ Still waiting for data channel (state: %s) - %d ticks", m.dataChannel.ReadyState().String(), dcWaitCount)
+				}
+				// Also check SCTP transport state
+				if m.peerConnection != nil {
+					log.Printf("   PC state: %s, ICE: %s, signaling: %s",
+						m.peerConnection.ConnectionState().String(),
+						m.peerConnection.ICEConnectionState().String(),
+						m.peerConnection.SignalingState().String())
+					sctp := m.peerConnection.SCTP()
+					if sctp != nil {
+						transport := sctp.Transport()
+						if transport != nil {
+							log.Printf("   SCTP transport state: %s", transport.State().String())
+						} else {
+							log.Println("   SCTP transport: nil")
+						}
+					} else {
+						log.Println("   SCTP: nil")
+					}
+				}
+			}
 			continue
 		}
 
@@ -1330,33 +1375,48 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		if err != nil {
 			errorCount++
 
-			// Check if DXGI needs reinitialization (screensaver, lock screen, power save)
+			// Check if capture needs reinitialization (DXGI errors, GDI errors, pipe errors)
 			errStr := err.Error()
-			isDXGIError := strings.Contains(errStr, "AcquireNextFrame") ||
+			isCaptureError := strings.Contains(errStr, "AcquireNextFrame") ||
 				strings.Contains(errStr, "error -2") ||
+				strings.Contains(errStr, "error -3") ||
 				strings.Contains(errStr, "DXGI") ||
-				strings.Contains(errStr, "capture failed")
+				strings.Contains(errStr, "capture failed") ||
+				strings.Contains(errStr, "capture helper") ||
+				strings.Contains(errStr, "pipe") ||
+				strings.Contains(errStr, "timeout")
 
-			if isDXGIError {
-				if errorCount%10 == 1 {
-					log.Printf("⚠️ DXGI error: %s (#%d)", errStr, errorCount)
+			// Log every error for the first 10, then every 10th
+			if errorCount <= 10 || errorCount%10 == 0 {
+				log.Printf("⚠️ Capture error #%d: %s (retryable: %v)", errorCount, errStr, isCaptureError)
+			}
+
+			if isCaptureError {
+				// Rate-limit reinit attempts: first error, then exponential backoff
+				// (every 5, 10, 20, 50, 100 errors — capped at every 100)
+				reinitInterval := 5
+				if errorCount > 50 {
+					reinitInterval = 100
+				} else if errorCount > 20 {
+					reinitInterval = 50
+				} else if errorCount > 10 {
+					reinitInterval = 20
 				}
-
-				// Try to reinitialize on first error, then every 3 errors
-				if errorCount == 1 || errorCount%3 == 0 {
-					log.Printf("🔄 Reinitializing screen capturer...")
+				if errorCount == 1 || errorCount%reinitInterval == 0 {
+					log.Printf("🔄 Reinitializing screen capturer (error #%d, next reinit in %d errors)...", errorCount, reinitInterval)
 					time.Sleep(500 * time.Millisecond)
 
 					if reinitErr := m.screenCapturer.Reinitialize(false); reinitErr != nil {
 						log.Printf("⚠️ Reinit failed: %v", reinitErr)
 					} else {
 						log.Printf("✅ Screen capturer reinitialized!")
-						errorCount = 0
+						// Don't reset errorCount — prevents infinite reinit loop
+						// when the same error keeps recurring (e.g., GDI -3 in Session 0)
 					}
 				}
 				time.Sleep(200 * time.Millisecond)
 			} else if errorCount%50 == 1 {
-				log.Printf("⚠️ Capture error: %v", err)
+				log.Printf("⚠️ Unknown capture error: %v", err)
 			}
 			continue
 		}
