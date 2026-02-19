@@ -975,6 +975,11 @@ async function connectToHelper() {
         };
         helperWs.send(JSON.stringify(authMsg));
 
+        // Enable all input (keyboard + clipboard are disabled by default)
+        helperWs.send(JSON.stringify({
+          type: 'control', action: 'enable', scope: 'all'
+        }));
+
         resolve(true);
       };
 
@@ -1056,9 +1061,10 @@ function sendToHelper(event) {
 }
 
 function handleRemoteInput(event) {
-  // Handle remote input commands - forward to local helper
+  // Handle remote input commands - translate and forward to local helper
   try {
-    const input = JSON.parse(event.data);
+    const raw = JSON.parse(event.data);
+    const input = translateForHelper(raw);
     debug('🎮 Remote input:', input.type);
 
     // Forward to local helper if connected
@@ -1075,6 +1081,31 @@ function handleRemoteInput(event) {
 
   } catch (error) {
     console.error('Input handling error:', error);
+  }
+}
+
+// Translate dashboard event format to input-helper format
+function translateForHelper(evt) {
+  // Dashboard may use "t" as shorthand for "type"
+  const type = evt.t || evt.type;
+
+  switch (type) {
+    case 'mouse_move':
+      return { type: 'mouse_abs', x: evt.x, y: evt.y };
+    case 'mouse_click':
+      return { type: 'mouse_button', button: evt.button, down: evt.down };
+    case 'mouse_scroll':
+      return { type: 'wheel', dy: evt.delta || 0, dx: 0 };
+    case 'key':
+      return { type: 'key', code: evt.code, down: evt.down,
+               ctrl: evt.ctrl || false, shift: evt.shift || false, alt: evt.alt || false };
+    case 'clipboard_text':
+      return { type: 'clipboard', direction: 'to_system', content: evt.content };
+    case 'clipboard_image':
+      return { type: 'clipboard', direction: 'to_system', content: evt.content };
+    default:
+      // Pass through with normalized type field (monitor switch, control, auth, etc.)
+      return { ...evt, type: type };
   }
 }
 
