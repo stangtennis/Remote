@@ -116,15 +116,22 @@ func (m *Manager) ListenForSessions() {
 			errorCount = 0
 		}
 
-		for _, session := range sessions {
-			if handledSessions[session.ID] {
+		// Only handle the NEWEST unhandled controller session
+		var newestCtrlSession *Session
+		for i := range sessions {
+			if handledSessions[sessions[i].ID] {
 				continue
 			}
-			log.Printf("📞 Incoming session (controller): %s", session.ID)
+			handledSessions[sessions[i].ID] = true
+			if newestCtrlSession == nil {
+				newestCtrlSession = &sessions[i]
+			}
+		}
+		if newestCtrlSession != nil {
+			log.Printf("📞 Incoming session (controller): %s", newestCtrlSession.ID)
 			log.Printf("   Device ID: %s", m.device.ID)
-			handledSessions[session.ID] = true
-			m.sessionID = session.ID
-			go m.handleSession(session)
+			m.sessionID = newestCtrlSession.ID
+			go m.handleSession(*newestCtrlSession)
 		}
 
 		// 2. Check session_signaling (Web dashboard)
@@ -136,15 +143,21 @@ func (m *Manager) ListenForSessions() {
 			}
 		}
 
-		for _, session := range webSessions {
-			if handledSessions[session.ID] {
+		// Only handle the NEWEST unhandled session (avoid concurrent session storms)
+		var newestSession *Session
+		for i := range webSessions {
+			if handledSessions[webSessions[i].ID] {
 				continue
 			}
-			log.Printf("📞 Incoming session (web dashboard): %s", session.ID)
+			handledSessions[webSessions[i].ID] = true
+			if newestSession == nil {
+				newestSession = &webSessions[i]
+			}
+		}
+		if newestSession != nil {
+			log.Printf("📞 Incoming session (web dashboard): %s", newestSession.ID)
 			log.Printf("   Device ID: %s", m.device.ID)
-			handledSessions[session.ID] = true
-			// Don't set m.sessionID here - let handleWebSession do it
-			go m.handleWebSession(session)
+			go m.handleWebSession(*newestSession)
 		}
 	}
 }
@@ -255,7 +268,7 @@ func (m *Manager) checkSessionDevice(sessionID string) (bool, string) {
 
 	// Check status - only handle pending/connecting sessions
 	status, _ := sessions[0]["status"].(string)
-	if status == "connected" || status == "ended" {
+	if status != "pending" && status != "connecting" {
 		return false, ""
 	}
 

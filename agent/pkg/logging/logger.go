@@ -3,6 +3,7 @@ package logging
 import (
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -82,6 +83,11 @@ func Init(cfg *Config) error {
 
 	// Create multi-writer
 	multi := io.MultiWriter(writers...)
+
+	// Redirect standard log package output to same writers
+	// This ensures log.Println() calls (used in startAgent etc.) are captured
+	log.SetOutput(multi)
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
 	// Initialize logger
 	Logger = zerolog.New(multi).With().
