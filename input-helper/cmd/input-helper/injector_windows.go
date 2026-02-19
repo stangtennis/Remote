@@ -209,7 +209,7 @@ var vkCodes = map[string]uint16{
 	"Numpad0": 0x60, "Numpad1": 0x61, "Numpad2": 0x62, "Numpad3": 0x63, "Numpad4": 0x64,
 	"Numpad5": 0x65, "Numpad6": 0x66, "Numpad7": 0x67, "Numpad8": 0x68, "Numpad9": 0x69,
 	"NumpadMultiply": 0x6A, "NumpadAdd": 0x6B, "NumpadSubtract": 0x6D,
-	"NumpadDecimal": 0x6E, "NumpadDivide": 0x6F, "NumLock": 0x90,
+	"NumpadDecimal": 0x6E, "NumpadDivide": 0x6F, "NumpadEnter": 0x0D, "NumLock": 0x90,
 
 	"Semicolon": 0xBA, "Equal": 0xBB, "Comma": 0xBC, "Minus": 0xBD,
 	"Period": 0xBE, "Slash": 0xBF, "Backquote": 0xC0,

@@ -48,6 +48,7 @@ var upgrader = websocket.Upgrader{
 // InputEvent represents an input event from the browser
 type InputEvent struct {
 	Type      string  `json:"type"`
+	T         string  `json:"t,omitempty"` // alias from dashboard shorthand
 	Seq       int64   `json:"seq,omitempty"`
 	Timestamp int64   `json:"ts,omitempty"`
 
@@ -175,6 +176,11 @@ func (h *InputHelper) handleEvent(conn *websocket.Conn, session *Session, event 
 	session.mu.Lock()
 	session.lastActivity = time.Now()
 	session.mu.Unlock()
+
+	// Accept "t" as alias for "type" (dashboard shorthand)
+	if event.Type == "" && event.T != "" {
+		event.Type = event.T
+	}
 
 	switch event.Type {
 	case "auth":
