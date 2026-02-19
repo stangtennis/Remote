@@ -8,6 +8,7 @@ import (
 	"image"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"os"
 	"path/filepath"
 	"strings"
@@ -421,7 +422,15 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 			if m.mouseController != nil {
 				m.mouseController.HideCursor()
 			}
-			go m.startScreenStreaming(m.connCtx)
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("🔥 STREAMING PANIC: %v", r)
+						log.Printf("🔥 Stack: %s", string(debug.Stack()))
+					}
+				}()
+				m.startScreenStreaming(m.connCtx)
+			}()
 		case webrtc.PeerConnectionStateDisconnected:
 			log.Println("⚠️  WebRTC DISCONNECTED - waiting for ICE recovery...")
 			m.isStreaming.Store(false) // Stop sending frames during recovery
@@ -430,7 +439,15 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 				m.connCancel()
 			}
 			m.connCtx, m.connCancel = context.WithCancel(context.Background())
-			go m.handleDisconnectGracePeriod(m.connCtx)
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("🔥 DISCONNECT HANDLER PANIC: %v", r)
+						log.Printf("🔥 Stack: %s", string(debug.Stack()))
+					}
+				}()
+				m.handleDisconnectGracePeriod(m.connCtx)
+			}()
 		case webrtc.PeerConnectionStateFailed:
 			log.Println("❌ WebRTC CONNECTION FAILED")
 			// Restore local cursor
@@ -1212,8 +1229,12 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		m.dirtyDetector = screen.NewDirtyRegionDetector(128, 128)
 	}
 
-	// Send monitor list to dashboard
-	m.sendMonitorList()
+	// Send monitor list to dashboard (skip in Session 0 - DXGI enumeration can crash)
+	if !m.isSession0 {
+		m.sendMonitorList()
+	} else {
+		log.Println("⚠️  Skipping monitor enumeration in Session 0 (DXGI not available)")
+	}
 
 	// Adaptive streaming parameters
 	fps := 20     // Current FPS (12-30)
@@ -1269,7 +1290,15 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	}
 
 	// Start stats collection goroutine
-	go m.collectStats(ctx)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("🔥 STATS COLLECTOR PANIC: %v", r)
+				log.Printf("🔥 Stack: %s", string(debug.Stack()))
+			}
+		}()
+		m.collectStats(ctx)
+	}()
 
 	for m.isStreaming.Load() {
 		// Wait for either ticker, input-triggered frame request, or context cancellation

@@ -1270,6 +1270,13 @@ func runService() {
 type windowsService struct{}
 
 func (s *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<- svc.Status) (ssec bool, errno uint32) {
+	// Recover from panics to log them before crashing
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("🔥 SERVICE PANIC: %v", r)
+		}
+	}()
+
 	const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown
 	changes <- svc.Status{State: svc.StartPending}
 
