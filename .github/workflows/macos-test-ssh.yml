@@ -50,8 +50,7 @@ jobs:
 
           Agent binary: \`\$(pwd)/agent/remote-agent-macos\`
 
-          > Denne issue lukkes automatisk når sessionen slutter." \
-            --label "tmate"
+          > Denne issue lukkes automatisk når sessionen slutter."
           # Vent
           echo "SSH session aktiv. Opret /tmp/continue for at afslutte."
           while [ ! -f /tmp/continue ]; do sleep 30; done
@@ -61,7 +60,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ISSUE=$(gh issue list --label tmate --state open --json number --jq '.[0].number')
+          ISSUE=$(gh issue list --state open --json number,title --jq '.[] | select(.title | test("tmate")) | .number' | head -1)
           if [ -n "$ISSUE" ]; then
             gh issue close "$ISSUE" --comment "Session afsluttet."
           fi
