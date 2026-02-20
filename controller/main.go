@@ -126,8 +126,8 @@ func main() {
 			logger.Error("Failed to create updater: %v", err)
 			return
 		}
-		if !u.ShouldAutoCheck(1 * time.Hour) {
-			logger.Info("Auto-update: skipped (checked recently)")
+		if !u.ShouldAutoCheck(5 * time.Minute) {
+			logger.Info("Auto-update: skipped (checked within 5 min)")
 			return
 		}
 		if err := u.CheckForUpdate(); err != nil {
