@@ -2,6 +2,9 @@ name: macOS E2E Test (Agent + Controller)
 
 on:
   workflow_dispatch:
+  schedule:
+    # Kør dagligt kl. 06:00 UTC (08:00 dansk tid)
+    - cron: '0 6 * * *'
 
 permissions:
   issues: write
@@ -19,7 +22,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
-          cache: false
+          cache-dependency-path: |
+            agent/go.sum
+            controller/go.sum
 
       - name: System info
         run: |
@@ -27,52 +32,47 @@ jobs:
           uname -a
           sw_vers
           sysctl -n machdep.cpu.brand_string
-          echo "Display: $(system_profiler SPDisplaysDataType 2>/dev/null | grep Resolution || echo 'N/A')"
+          echo "=== Display ==="
+          system_profiler SPDisplaysDataType 2>/dev/null | grep -E 'Resolution|Chipset|VRAM' || echo 'N/A'
+          echo "=== Netværk ==="
+          echo "Public IP: $(curl -s ifconfig.me)"
+          echo "Local IP: $(ipconfig getifaddr en0 2>/dev/null || echo 'N/A')"
 
       - name: Byg macOS agent + controller
         run: |
           echo "=== Bygger Agent ==="
           cd agent
-          go mod download
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o remote-agent-macos ./cmd/remote-agent/
           file remote-agent-macos
           ls -lh remote-agent-macos
-          echo ""
 
           echo "=== Bygger Controller ==="
           cd ../controller
-          go mod download
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o controller-macos .
           file controller-macos
           ls -lh controller-macos
-          echo ""
 
-          echo "✅ Begge binaries bygget succesfuldt"
+          echo "Begge binaries bygget"
 
       - name: Kør agent unit tests
         working-directory: ./agent
         run: |
-          echo "=== Input tests (keyboard, mouse) ==="
+          echo "=== Input tests ==="
           go test ./internal/input/... -v -count=1 2>&1 | tail -20
-          echo ""
           echo "=== Screen capture tests ==="
           go test ./internal/screen/... -v -count=1 2>&1 | tail -20
-          echo ""
           echo "=== Device tests ==="
           go test ./internal/device/... -v -count=1 2>&1 | tail -10
 
       - name: Kør controller unit tests
         working-directory: ./controller
         run: |
-          echo "=== Updater tests ==="
           go test ./internal/updater/... -v -count=1 2>&1 | tail -10
 
       - name: Verificer controller starter op
         run: |
-          cd controller
-          # Controller er GUI-app — kør kort for at verificere den starter uden crash
-          timeout 5 ./controller-macos --help 2>&1 || true
-          echo "✅ Controller binary kører på macOS arm64"
+          timeout 5 ./controller/controller-macos --help 2>&1 || true
+          echo "Controller binary kører på macOS arm64"
 
       - name: Authenticer via Supabase API
         env:
@@ -82,11 +82,16 @@ jobs:
           SUPABASE_URL="https://supabase.hawkeye123.dk"
           ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
 
-          # Login via Supabase Auth
           RESPONSE=$(curl -s "$SUPABASE_URL/auth/v1/token?grant_type=password" \
             -H "apikey: $ANON_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"email\":\"$AGENT_EMAIL\",\"password\":\"$AGENT_PASSWORD\"}")
+
+          # Valider response
+          if ! echo "$RESPONSE" | python3 -c "import json,sys; json.load(sys.stdin)['access_token']" 2>/dev/null; then
+            echo "Login fejlede! Response: $RESPONSE"
+            exit 1
+          fi
 
           ACCESS_TOKEN=$(echo "$RESPONSE" | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
           REFRESH_TOKEN=$(echo "$RESPONSE" | python3 -c "import json,sys; print(json.load(sys.stdin)['refresh_token'])")
@@ -100,92 +105,85 @@ jobs:
           # Gem agent credentials
           CRED_DIR="$HOME/Library/Application Support/RemoteDesktopAgent"
           mkdir -p "$CRED_DIR"
-          cat > "$CRED_DIR/.credentials" << CREDEOF
-          {
-            "email": "$AGENT_EMAIL",
-            "access_token": "$ACCESS_TOKEN",
-            "refresh_token": "$REFRESH_TOKEN",
-            "user_id": "$USER_ID",
-            "expires_at": $EXPIRES_AT
+          python3 -c "
+          import json
+          creds = {
+            'email': '$AGENT_EMAIL',
+            'access_token': '$ACCESS_TOKEN',
+            'refresh_token': '$REFRESH_TOKEN',
+            'user_id': '$USER_ID',
+            'expires_at': $EXPIRES_AT
           }
-          CREDEOF
+          with open('$CRED_DIR/.credentials', 'w') as f:
+            json.dump(creds, f, indent=2)
+          "
 
-          # Gem credentials til controller også (samme bruger)
+          # Gem controller credentials
           CTRL_DIR="$HOME/Library/Application Support/RemoteDesktopController"
           mkdir -p "$CTRL_DIR"
-          cat > "$CTRL_DIR/.credentials" << CREDEOF
-          {
-            "email": "$AGENT_EMAIL",
-            "access_token": "$ACCESS_TOKEN",
-            "refresh_token": "$REFRESH_TOKEN",
-            "user_id": "$USER_ID",
-            "expires_at": $EXPIRES_AT
-          }
-          CREDEOF
+          cp "$CRED_DIR/.credentials" "$CTRL_DIR/.credentials"
 
-          # Export for later steps
           echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
           echo "USER_ID=$USER_ID" >> $GITHUB_ENV
           echo "Credentials gemt for agent + controller"
 
-      - name: Generer TURN credentials
-        env:
-          TURN_SECRET: ${{ secrets.TURN_SECRET }}
-        run: |
-          TIMESTAMP=$(($(date +%s) + 86400))
-          TURN_USERNAME="${TIMESTAMP}:macos-e2e"
-          TURN_CREDENTIAL=$(echo -n "$TURN_USERNAME" | openssl dgst -sha1 -hmac "$TURN_SECRET" -binary | base64)
-          echo "TURN_USERNAME=$TURN_USERNAME" >> $GITHUB_ENV
-          echo "TURN_CREDENTIAL=$TURN_CREDENTIAL" >> $GITHUB_ENV
-          echo "TURN credentials genereret (expires in 24h)"
-
-      - name: Start agent + tmate + test forbindelse
+      - name: Start agent og verificer online
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TURN_SERVER: 188.228.14.94:3478
-          TURN_USERNAME: ${{ env.TURN_USERNAME }}
-          TURN_PASSWORD: ${{ env.TURN_CREDENTIAL }}
         run: |
-          echo "=== Starter macOS agent i console mode ==="
+          SUPABASE_URL="https://supabase.hawkeye123.dk"
+          ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
 
-          # Start agent i baggrunden
+          echo "=== Starter macOS agent (auto-TURN) ==="
           cd agent
           ./remote-agent-macos --console > /tmp/agent.log 2>&1 &
           AGENT_PID=$!
           echo "Agent PID: $AGENT_PID"
           cd ..
 
-          # Vent på agent registration
-          sleep 10
-          echo "=== Agent startup logs ==="
-          cat /tmp/agent.log
-          echo ""
+          # Vent på agent registration med retry
+          ONLINE=false
+          for i in $(seq 1 6); do
+            sleep 10
+            if ! kill -0 $AGENT_PID 2>/dev/null; then
+              echo "Agent crashede ved opstart!"
+              cat /tmp/agent.log
+              exit 1
+            fi
 
-          # Verificer agent kører
-          if ! kill -0 $AGENT_PID 2>/dev/null; then
-            echo "❌ Agent crashede ved opstart!"
+            DEVICES=$(curl -s "$SUPABASE_URL/rest/v1/remote_devices?select=id,device_name,platform,is_online&is_online=eq.true&platform=eq.macOS" \
+              -H "apikey: $ANON_KEY" \
+              -H "Authorization: Bearer $ACCESS_TOKEN")
+            COUNT=$(echo "$DEVICES" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
+
+            if [ "$COUNT" -gt 0 ]; then
+              ONLINE=true
+              echo "Agent online i Supabase efter $((i * 10))s"
+              echo "$DEVICES" | python3 -m json.tool
+              break
+            fi
+            echo "Venter på agent registration... ($((i * 10))s)"
+          done
+
+          if [ "$ONLINE" = "false" ]; then
+            echo "Agent ikke online efter 60s — agent logs:"
             cat /tmp/agent.log
             exit 1
           fi
-          echo "✅ Agent kører (PID $AGENT_PID)"
 
-          # Verificer agent er online i Supabase
-          SUPABASE_URL="https://supabase.hawkeye123.dk"
-          ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
-
-          DEVICES=$(curl -s "$SUPABASE_URL/rest/v1/remote_devices?select=id,device_name,platform,is_online&is_online=eq.true&platform=eq.macOS" \
-            -H "apikey: $ANON_KEY" \
-            -H "Authorization: Bearer $ACCESS_TOKEN")
-          echo "Online macOS enheder: $DEVICES"
-
-          DEVICE_COUNT=$(echo "$DEVICES" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
-          if [ "$DEVICE_COUNT" -gt 0 ]; then
-            echo "✅ Agent registreret og online i Supabase"
+          # Verificer auto-TURN virker (tjek agent logs for TURN credentials)
+          if grep -q "TURN" /tmp/agent.log; then
+            echo "Auto-TURN credentials hentet"
           else
-            echo "⚠️ Agent ikke fundet online endnu (kan tage lidt tid)"
+            echo "Ingen TURN-mentions i logs (kan være OK — hentes ved forbindelse)"
           fi
 
-          # Start tmate for interaktiv test af controller
+          echo "AGENT_PID=$AGENT_PID" >> $GITHUB_ENV
+
+      - name: Start tmate SSH session
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
           brew install tmate 2>/dev/null || true
           tmate -S /tmp/tmate.sock new-session -d
           sleep 10
@@ -194,67 +192,103 @@ jobs:
 
           # Post SSH info som issue
           gh issue create \
-            --title "macOS E2E Test — Agent + Controller (live)" \
-            --body "## macOS M1 E2E Test — Klar
+            --title "macOS E2E — Agent online ($(date +%Y-%m-%d))" \
+            --body "## macOS M1 E2E Test
 
-          **Agent** kører og er online i Supabase.
-          **Controller** er bygget og klar til test.
-          TURN server konfigureret.
+          **Agent** korer og er online i Supabase (auto-TURN).
+          **Controller** bygget og klar.
 
-          ### Binaries
-          - \`agent/remote-agent-macos\` — kører (PID $AGENT_PID)
-          - \`controller/controller-macos\` — klar til start
-
-          ### Test controller manuelt
-          \`\`\`bash
-          # SSH ind:
+          ### SSH adgang
+          \`\`\`
           $SSH_LINE
+          \`\`\`
 
-          # Start controller (GUI):
+          ### Test fra dashboard
+          https://stangtennis.github.io/Remote/dashboard.html
+
+          ### Start controller (valgfrit)
+          \`\`\`bash
           cd ~/work/Remote/Remote/controller
-          TURN_SERVER=188.228.14.94:3478 \\
-          TURN_USERNAME=$TURN_USERNAME \\
-          TURN_PASSWORD=$TURN_CREDENTIAL \\
           ./controller-macos
           \`\`\`
 
-          ### Dashboard test
-          https://stangtennis.github.io/Remote/dashboard.html
-
           ### Agent logs
-          \`tail -f /tmp/agent.log\`
+          \`\`\`bash
+          tail -f /tmp/agent.log
+          \`\`\`
 
           Web: $WEB_LINE
 
-          > Lukkes automatisk når workflow stopper." || echo "Issue creation failed"
+          > Lukkes automatisk naar workflow stopper (max 6 timer)." || echo "Issue creation failed"
 
-          echo ""
-          echo "=== E2E test kører ==="
-          echo "Agent: online (PID $AGENT_PID)"
-          echo "Controller: klar i controller/controller-macos"
           echo "SSH: $SSH_LINE"
-          echo "Opret /tmp/continue for at afslutte."
 
-          # Vent — vis agent logs hver 30 sek
+      - name: Overvåg agent (heartbeat hver 60s)
+        run: |
+          SUPABASE_URL="https://supabase.hawkeye123.dk"
+          ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
+          CRASHES=0
+
           while [ ! -f /tmp/continue ]; do
-            sleep 30
+            sleep 60
+
+            # Tjek agent process
             if ! kill -0 $AGENT_PID 2>/dev/null; then
-              echo "Agent crashede! Logs:"
-              cat /tmp/agent.log
-              break
+              CRASHES=$((CRASHES + 1))
+              echo "=== $(date) === Agent ned! (crash #$CRASHES) ==="
+              tail -20 /tmp/agent.log
+
+              if [ "$CRASHES" -ge 3 ]; then
+                echo "Agent crashede 3 gange — stopper"
+                break
+              fi
+
+              # Auto-restart agent
+              echo "Genstarter agent..."
+              cd agent
+              ./remote-agent-macos --console >> /tmp/agent.log 2>&1 &
+              AGENT_PID=$!
+              echo "AGENT_PID=$AGENT_PID" >> $GITHUB_ENV
+              cd ..
+              sleep 10
+              continue
             fi
-            echo "--- $(date) --- Agent alive (PID $AGENT_PID) ---"
-            tail -3 /tmp/agent.log
+
+            # Heartbeat — tjek Supabase online status
+            IS_ONLINE=$(curl -s "$SUPABASE_URL/rest/v1/remote_devices?select=is_online&platform=eq.macOS&is_online=eq.true" \
+              -H "apikey: $ANON_KEY" \
+              -H "Authorization: Bearer $ACCESS_TOKEN" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
+
+            if [ "$IS_ONLINE" -gt 0 ]; then
+              echo "--- $(date) --- Agent alive (PID $AGENT_PID) | Supabase: online ---"
+            else
+              echo "--- $(date) --- Agent alive (PID $AGENT_PID) | Supabase: OFFLINE ---"
+              tail -5 /tmp/agent.log
+            fi
           done
 
           kill $AGENT_PID 2>/dev/null || true
+
+      - name: Upload agent logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-logs-${{ github.run_number }}
+          path: /tmp/agent.log
+          retention-days: 7
 
       - name: Luk issue
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ISSUE=$(gh issue list --state open --json number,title --jq '.[] | select(.title | test("macOS.*E2E")) | .number' 2>/dev/null | head -1)
+          ISSUE=$(gh issue list --state open --json number,title --jq '.[] | select(.title | test("macOS E2E")) | .number' 2>/dev/null | head -1)
           if [ -n "$ISSUE" ]; then
+            # Post agent logs som kommentar
+            echo "## Agent logs (sidste 50 linjer)" > /tmp/issue-comment.md
+            echo '```' >> /tmp/issue-comment.md
+            tail -50 /tmp/agent.log >> /tmp/issue-comment.md 2>/dev/null || echo "Ingen logs" >> /tmp/issue-comment.md
+            echo '```' >> /tmp/issue-comment.md
+            gh issue comment "$ISSUE" --body-file /tmp/issue-comment.md || true
             gh issue close "$ISSUE" --comment "E2E test afsluttet." || true
           fi
