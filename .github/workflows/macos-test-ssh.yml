@@ -1,0 +1,32 @@
+name: macOS Test SSH (tmate)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  macos-ssh:
+    runs-on: macos-14  # Apple Silicon M1
+    timeout-minutes: 360  # 6 timer max
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Byg macOS agent
+        run: |
+          cd agent
+          CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o remote-agent-macos ./cmd/
+          echo "Agent binary bygget:"
+          file remote-agent-macos
+          ls -la remote-agent-macos
+
+      - name: Setup tmate SSH session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+        env:
+          AGENT_BINARY: ${{ github.workspace }}/agent/remote-agent-macos
