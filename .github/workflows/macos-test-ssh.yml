@@ -74,13 +74,30 @@ jobs:
           CREDEOF
           echo "Credentials gemt i: $CRED_DIR/.credentials"
 
+      - name: Generer TURN credentials
+        env:
+          TURN_SECRET: ${{ secrets.TURN_SECRET }}
+        run: |
+          # Generer HMAC-SHA1 time-limited TURN credentials
+          TIMESTAMP=$(($(date +%s) + 86400))  # 24 timer
+          TURN_USERNAME="${TIMESTAMP}:macos-agent"
+          TURN_CREDENTIAL=$(echo -n "$TURN_USERNAME" | openssl dgst -sha1 -hmac "$TURN_SECRET" -binary | base64)
+
+          echo "TURN_USERNAME=$TURN_USERNAME" >> $GITHUB_ENV
+          echo "TURN_CREDENTIAL=$TURN_CREDENTIAL" >> $GITHUB_ENV
+          echo "TURN credentials genereret (expires in 24h)"
+
       - name: Start agent og vent på forbindelse
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TURN_SERVER: 188.228.14.94:3478
+          TURN_USERNAME: ${{ env.TURN_USERNAME }}
+          TURN_PASSWORD: ${{ env.TURN_CREDENTIAL }}
         run: |
           cd agent
           echo "=== Starter macOS agent i console mode ==="
           echo "Agent lytter efter WebRTC sessions fra controller..."
+          echo "TURN server: $TURN_SERVER"
           echo ""
 
           # Start tmate for debugging
@@ -96,8 +113,9 @@ jobs:
             --body "## macOS M1 Agent - Klar til E2E test
 
           Agent kører på macOS 14 M1 og lytter efter WebRTC sessions.
+          TURN server konfigureret for NAT traversal.
 
-          **Forbind fra controller på win-test!**
+          **Forbind fra dashboard: https://stangtennis.github.io/Remote/dashboard.html**
 
           ### SSH debugging
           \`\`\`
