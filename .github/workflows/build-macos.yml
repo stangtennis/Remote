@@ -30,7 +30,7 @@ jobs:
           - os: macos-14         # Apple Silicon M1
             arch: arm64
             name: macos-arm64
-          - os: macos-13         # Intel
+          - os: macos-14         # Cross-compile Intel on M1
             arch: amd64
             name: macos-amd64
 
@@ -43,7 +43,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
           cache-dependency-path: |
             agent/go.sum
             controller/go.sum
@@ -74,24 +74,30 @@ jobs:
         env:
           CGO_ENABLED: 1
           GOARCH: ${{ matrix.arch }}
+          CGO_CFLAGS: ${{ matrix.arch == 'amd64' && '-arch x86_64' || '' }}
+          CGO_LDFLAGS: ${{ matrix.arch == 'amd64' && '-arch x86_64' || '' }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           BUILD_DATE=$(date +%Y-%m-%d)
           LDFLAGS="-s -w -X 'github.com/stangtennis/remote-agent/internal/tray.Version=${VERSION}' -X 'github.com/stangtennis/remote-agent/internal/tray.BuildDate=${BUILD_DATE}'"
           go build -ldflags "${LDFLAGS}" -o ../builds/remote-agent-${{ matrix.name }}-${VERSION} ./cmd/remote-agent
           echo "Built remote-agent-${{ matrix.name }}-${VERSION}"
+          file ../builds/remote-agent-${{ matrix.name }}-${VERSION}
 
       - name: Build Controller (macOS)
         working-directory: ./controller
         env:
           CGO_ENABLED: 1
           GOARCH: ${{ matrix.arch }}
+          CGO_CFLAGS: ${{ matrix.arch == 'amd64' && '-arch x86_64' || '' }}
+          CGO_LDFLAGS: ${{ matrix.arch == 'amd64' && '-arch x86_64' || '' }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           BUILD_DATE=$(date +%Y-%m-%d)
           LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.BuildDate=${BUILD_DATE}'"
           go build -ldflags "${LDFLAGS}" -o ../builds/controller-${{ matrix.name }}-${VERSION} .
           echo "Built controller-${{ matrix.name }}-${VERSION}"
+          file ../builds/controller-${{ matrix.name }}-${VERSION}
 
       - name: Test build runs
         working-directory: ./builds
