@@ -3,6 +3,10 @@ name: macOS Test SSH (tmate)
 on:
   workflow_dispatch:
 
+permissions:
+  issues: write
+  contents: read
+
 jobs:
   macos-ssh:
     runs-on: macos-14  # Apple Silicon M1
@@ -37,7 +41,7 @@ jobs:
           WEB_LINE=$(tmate -S /tmp/tmate.sock display -p '#{tmate_web}')
           echo "SSH: $SSH_LINE"
           echo "WEB: $WEB_LINE"
-          # Post som GitHub issue så vi kan se det med det samme
+          # Post som GitHub issue
           gh issue create \
             --title "tmate SSH session (auto-close)" \
             --body "## macOS M1 SSH Session
@@ -48,9 +52,9 @@ jobs:
 
           Web shell: $WEB_LINE
 
-          Agent binary: \`\$(pwd)/agent/remote-agent-macos\`
+          Agent binary: \`$(pwd)/agent/remote-agent-macos\`
 
-          > Denne issue lukkes automatisk når sessionen slutter."
+          > Denne issue lukkes automatisk når sessionen slutter." || echo "Issue creation failed, men SSH session kører stadig!"
           # Vent
           echo "SSH session aktiv. Opret /tmp/continue for at afslutte."
           while [ ! -f /tmp/continue ]; do sleep 30; done
@@ -60,7 +64,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ISSUE=$(gh issue list --state open --json number,title --jq '.[] | select(.title | test("tmate")) | .number' | head -1)
+          ISSUE=$(gh issue list --state open --json number,title --jq '.[] | select(.title | test("tmate")) | .number' 2>/dev/null | head -1)
           if [ -n "$ISSUE" ]; then
-            gh issue close "$ISSUE" --comment "Session afsluttet."
+            gh issue close "$ISSUE" --comment "Session afsluttet." || true
           fi
