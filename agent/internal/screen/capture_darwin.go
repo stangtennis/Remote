@@ -107,6 +107,44 @@ type Capturer struct {
 	mu           sync.Mutex
 }
 
+// MonitorInfo describes a connected display
+type MonitorInfo struct {
+	Index   int
+	Name    string
+	Width   int
+	Height  int
+	OffsetX int
+	OffsetY int
+	Primary bool
+}
+
+// EnumerateDisplays returns info about all connected monitors via CoreGraphics
+func EnumerateDisplays() []MonitorInfo {
+	var displays [16]C.CGDirectDisplayID
+	var displayCount C.uint32_t
+	C.CGGetActiveDisplayList(16, &displays[0], &displayCount)
+
+	if displayCount == 0 {
+		return nil
+	}
+
+	result := make([]MonitorInfo, int(displayCount))
+	mainDisplay := C.CGMainDisplayID()
+	for i := 0; i < int(displayCount); i++ {
+		bounds := C.CGDisplayBounds(displays[i])
+		result[i] = MonitorInfo{
+			Index:   i,
+			Name:    fmt.Sprintf("Display %d", i),
+			Width:   int(bounds.size.width),
+			Height:  int(bounds.size.height),
+			OffsetX: int(bounds.origin.x),
+			OffsetY: int(bounds.origin.y),
+			Primary: displays[i] == mainDisplay,
+		}
+	}
+	return result
+}
+
 func NewCapturer() (*Capturer, error) {
 	return NewCapturerWithMode(false)
 }

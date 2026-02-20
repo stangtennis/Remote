@@ -1,3 +1,4 @@
+#ifdef _WIN32
 #include <d3d11.h>
 #include <dxgi1_2.h>
 #include <windows.h>
@@ -335,3 +336,4 @@ void CloseDXGI(DXGICapture* cap) {
 }
 
 } // extern "C"
+#endif // _WIN32
