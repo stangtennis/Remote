@@ -1,4 +1,4 @@
-name: macOS Test SSH (tmate)
+name: macOS Agent E2E Test
 
 on:
   workflow_dispatch:
@@ -8,9 +8,9 @@ permissions:
   contents: read
 
 jobs:
-  macos-ssh:
+  macos-agent:
     runs-on: macos-14  # Apple Silicon M1
-    timeout-minutes: 360  # 6 timer max
+    timeout-minutes: 360
     steps:
       - name: Checkout kode
         uses: actions/checkout@v4
@@ -27,114 +27,122 @@ jobs:
           uname -a
           sw_vers
           sysctl -n machdep.cpu.brand_string
-          echo "RAM: $(sysctl -n hw.memsize | awk '{print $0/1024/1024/1024 " GB"}')"
-          echo ""
-          echo "=== Display ==="
-          system_profiler SPDisplaysDataType 2>/dev/null | head -20
-          echo ""
-          echo "=== Screen Capture Permission ==="
-          # Check if screen recording is allowed
-          sqlite3 ~/Library/Application\ Support/com.apple.TCC/TCC.db "SELECT * FROM access WHERE service='kTCCServiceScreenCapture'" 2>/dev/null || echo "TCC DB not accessible (expected on CI)"
+          echo "Display: $(system_profiler SPDisplaysDataType 2>/dev/null | grep Resolution || echo 'N/A')"
 
       - name: Byg macOS agent
         run: |
           cd agent
           go mod download
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o remote-agent-macos ./cmd/remote-agent/
-          echo "Agent binary bygget:"
           file remote-agent-macos
-          ls -la remote-agent-macos
+          ls -lh remote-agent-macos
 
-      - name: Test agent start (console mode)
+      - name: Authenticer agent via Supabase API
+        env:
+          AGENT_EMAIL: ${{ secrets.AGENT_EMAIL }}
+          AGENT_PASSWORD: ${{ secrets.AGENT_PASSWORD }}
         run: |
-          cd agent
-          echo "=== Starter agent i console mode (5 sek test) ==="
-          timeout 5 ./remote-agent-macos --console 2>&1 || true
-          echo ""
-          echo "=== Agent exit code: $? ==="
+          SUPABASE_URL="https://supabase.hawkeye123.dk"
+          ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
 
-      - name: Test screen capture
-        run: |
-          cd agent
-          echo "=== Test screen capture direkte ==="
-          # Byg en minimal test binary
-          cat > /tmp/test_capture.go << 'GOEOF'
-          package main
+          # Login via Supabase Auth
+          RESPONSE=$(curl -s "$SUPABASE_URL/auth/v1/token?grant_type=password" \
+            -H "apikey: $ANON_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"email\":\"$AGENT_EMAIL\",\"password\":\"$AGENT_PASSWORD\"}")
 
-          import (
-            "fmt"
-            "os"
-            "image/png"
-            "github.com/nicq-agent/internal/screen"
-          )
+          ACCESS_TOKEN=$(echo "$RESPONSE" | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+          REFRESH_TOKEN=$(echo "$RESPONSE" | python3 -c "import json,sys; print(json.load(sys.stdin)['refresh_token'])")
+          USER_ID=$(echo "$RESPONSE" | python3 -c "import json,sys; print(json.load(sys.stdin)['user']['id'])")
+          EXPIRES_IN=$(echo "$RESPONSE" | python3 -c "import json,sys; print(json.load(sys.stdin)['expires_in'])")
+          EXPIRES_AT=$(python3 -c "import time; print(int(time.time()) + $EXPIRES_IN)")
 
-          func main() {
-            capturer, err := screen.NewCapturer()
-            if err != nil {
-              fmt.Printf("NewCapturer error: %v\n", err)
-              os.Exit(1)
-            }
-            defer capturer.Close()
+          echo "User ID: $USER_ID"
+          echo "Token expires in: ${EXPIRES_IN}s"
 
-            img, err := capturer.CaptureFrame()
-            if err != nil {
-              fmt.Printf("CaptureFrame error: %v\n", err)
-              os.Exit(1)
-            }
-
-            f, _ := os.Create("/tmp/screenshot.png")
-            defer f.Close()
-            png.Encode(f, img)
-            bounds := img.Bounds()
-            fmt.Printf("Screenshot: %dx%d\n", bounds.Dx(), bounds.Dy())
-            fmt.Println("Screen capture works!")
+          # Gem credentials i macOS path
+          CRED_DIR="$HOME/Library/Application Support/RemoteDesktopAgent"
+          mkdir -p "$CRED_DIR"
+          cat > "$CRED_DIR/.credentials" << CREDEOF
+          {
+            "email": "$AGENT_EMAIL",
+            "access_token": "$ACCESS_TOKEN",
+            "refresh_token": "$REFRESH_TOKEN",
+            "user_id": "$USER_ID",
+            "expires_at": $EXPIRES_AT
           }
-          GOEOF
-          # Vi kan ikke nemt bygge en separat binary med internal packages
-          # I stedet kører vi Go test for screen package
-          echo "=== Kører screen capture unit test ==="
-          cd internal/screen
-          go test -v -run TestCapture -timeout 30s 2>&1 || echo "Screen test completed (may fail without permissions)"
+          CREDEOF
+          echo "Credentials gemt i: $CRED_DIR/.credentials"
 
-      - name: Test input injection
-        run: |
-          cd agent/internal/input
-          echo "=== Kører input unit tests ==="
-          go test -v -timeout 30s 2>&1 || echo "Input test completed (may fail without permissions)"
-
-      - name: Start tmate for debugging
+      - name: Start agent og vent på forbindelse
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          brew install tmate || true
+          cd agent
+          echo "=== Starter macOS agent i console mode ==="
+          echo "Agent lytter efter WebRTC sessions fra controller..."
+          echo ""
+
+          # Start tmate for debugging
+          brew install tmate 2>/dev/null || true
           tmate -S /tmp/tmate.sock new-session -d
           sleep 10
           SSH_LINE=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
           WEB_LINE=$(tmate -S /tmp/tmate.sock display -p '#{tmate_web}')
-          echo "SSH: $SSH_LINE"
-          echo "WEB: $WEB_LINE"
-          # Post som GitHub issue
-          gh issue create \
-            --title "tmate SSH session (auto-close)" \
-            --body "## macOS M1 SSH Session
 
+          # Post SSH info som issue
+          gh issue create \
+            --title "macOS Agent E2E Test (live)" \
+            --body "## macOS M1 Agent - Klar til E2E test
+
+          Agent kører på macOS 14 M1 og lytter efter WebRTC sessions.
+
+          **Forbind fra controller på win-test!**
+
+          ### SSH debugging
           \`\`\`
           $SSH_LINE
           \`\`\`
-
           Web: $WEB_LINE
-          Agent: \`$(pwd)/agent/remote-agent-macos\`
 
-          > Lukkes automatisk." || echo "Issue creation failed"
+          ### Agent logs
+          Kør \`tail -f /tmp/agent.log\` via SSH for live logs.
+
+          > Lukkes automatisk når workflow stopper." || echo "Issue creation failed"
+
+          # Start agent i baggrunden med log
+          ./remote-agent-macos --console > /tmp/agent.log 2>&1 &
+          AGENT_PID=$!
+          echo "Agent PID: $AGENT_PID"
+          sleep 5
+
+          # Vis første logs
+          echo "=== Agent startup logs ==="
+          cat /tmp/agent.log
+          echo ""
+          echo "=== Agent kører. Forbind fra controller! ==="
           echo "Opret /tmp/continue for at afslutte."
-          while [ ! -f /tmp/continue ]; do sleep 30; done
 
-      - name: Luk tmate issue
+          # Vent — vis agent logs hver 30 sek
+          while [ ! -f /tmp/continue ]; do
+            sleep 30
+            if ! kill -0 $AGENT_PID 2>/dev/null; then
+              echo "Agent crashede! Logs:"
+              cat /tmp/agent.log
+              break
+            fi
+            echo "--- $(date) --- Agent alive (PID $AGENT_PID) ---"
+            tail -5 /tmp/agent.log
+          done
+
+          kill $AGENT_PID 2>/dev/null || true
+
+      - name: Luk issue
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ISSUE=$(gh issue list --state open --json number,title --jq '.[] | select(.title | test("tmate")) | .number' 2>/dev/null | head -1)
+          ISSUE=$(gh issue list --state open --json number,title --jq '.[] | select(.title | test("macOS Agent")) | .number' 2>/dev/null | head -1)
           if [ -n "$ISSUE" ]; then
-            gh issue close "$ISSUE" --comment "Session afsluttet." || true
+            gh issue close "$ISSUE" --comment "Test afsluttet." || true
           fi
