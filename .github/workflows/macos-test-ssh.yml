@@ -26,29 +26,26 @@ jobs:
           file remote-agent-macos
           ls -la remote-agent-macos
 
-      - name: Start tmate og skriv SSH info
+      - name: Start tmate i baggrunden
         run: |
           brew install tmate || true
           tmate -S /tmp/tmate.sock new-session -d
-          sleep 5
-          # Hent SSH connection string
+          sleep 10
           SSH_LINE=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
           WEB_LINE=$(tmate -S /tmp/tmate.sock display -p '#{tmate_web}')
-          echo "========================================"
-          echo "SSH: $SSH_LINE"
-          echo "WEB: $WEB_LINE"
-          echo "========================================"
-          # Skriv til job summary (synlig i GitHub UI og API)
-          echo "## tmate SSH Session" >> $GITHUB_STEP_SUMMARY
+          echo "## macOS M1 SSH Session" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "$SSH_LINE" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "Web shell: $WEB_LINE" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Agent binary: \$(pwd)/agent/remote-agent-macos" >> $GITHUB_STEP_SUMMARY
-          # Skriv også som annotation
-          echo "::notice title=tmate SSH::$SSH_LINE"
-          echo "::notice title=tmate Web::$WEB_LINE"
-          # Vent i op til 6 timer
-          echo "Session aktiv. Opret /tmp/continue for at afslutte."
+          echo "Web: $WEB_LINE" >> $GITHUB_STEP_SUMMARY
+          echo "Agent: $(pwd)/agent/remote-agent-macos" >> $GITHUB_STEP_SUMMARY
+          echo "::notice title=SSH::$SSH_LINE"
+          echo "::notice title=Web::$WEB_LINE"
+          echo "$SSH_LINE" > /tmp/tmate-ssh.txt
+
+      - name: Vent på SSH session (opret /tmp/continue for at stoppe)
+        run: |
+          echo "SSH session aktiv. Se annotations ovenfor for connection info."
+          echo "Opret /tmp/continue i tmate-sessionen for at afslutte workflow."
+          cat /tmp/tmate-ssh.txt
           while [ ! -f /tmp/continue ]; do sleep 30; done
