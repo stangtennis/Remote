@@ -26,26 +26,42 @@ jobs:
           file remote-agent-macos
           ls -la remote-agent-macos
 
-      - name: Start tmate i baggrunden
+      - name: Start tmate og post SSH info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           brew install tmate || true
           tmate -S /tmp/tmate.sock new-session -d
           sleep 10
           SSH_LINE=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
           WEB_LINE=$(tmate -S /tmp/tmate.sock display -p '#{tmate_web}')
-          echo "## macOS M1 SSH Session" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "$SSH_LINE" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "Web: $WEB_LINE" >> $GITHUB_STEP_SUMMARY
-          echo "Agent: $(pwd)/agent/remote-agent-macos" >> $GITHUB_STEP_SUMMARY
-          echo "::notice title=SSH::$SSH_LINE"
-          echo "::notice title=Web::$WEB_LINE"
-          echo "$SSH_LINE" > /tmp/tmate-ssh.txt
+          echo "SSH: $SSH_LINE"
+          echo "WEB: $WEB_LINE"
+          # Post som GitHub issue så vi kan se det med det samme
+          gh issue create \
+            --title "tmate SSH session (auto-close)" \
+            --body "## macOS M1 SSH Session
 
-      - name: Vent på SSH session (opret /tmp/continue for at stoppe)
-        run: |
-          echo "SSH session aktiv. Se annotations ovenfor for connection info."
-          echo "Opret /tmp/continue i tmate-sessionen for at afslutte workflow."
-          cat /tmp/tmate-ssh.txt
+          \`\`\`
+          $SSH_LINE
+          \`\`\`
+
+          Web shell: $WEB_LINE
+
+          Agent binary: \`\$(pwd)/agent/remote-agent-macos\`
+
+          > Denne issue lukkes automatisk når sessionen slutter." \
+            --label "tmate"
+          # Vent
+          echo "SSH session aktiv. Opret /tmp/continue for at afslutte."
           while [ ! -f /tmp/continue ]; do sleep 30; done
+
+      - name: Luk tmate issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE=$(gh issue list --label tmate --state open --json number --jq '.[0].number')
+          if [ -n "$ISSUE" ]; then
+            gh issue close "$ISSUE" --comment "Session afsluttet."
+          fi
