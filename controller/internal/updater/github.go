@@ -136,10 +136,31 @@ func (c *GitHubClient) fetchRelease(url string) (*Release, error) {
 
 // VersionInfo represents version information from Caddy server
 type VersionInfo struct {
-	AgentVersion      string `json:"agent_version"`
-	ControllerVersion string `json:"controller_version"`
-	AgentURL          string `json:"agent_url"`
-	ControllerURL     string `json:"controller_url"`
+	// Primary field - shared version for both agent and controller
+	Version string `json:"version"`
+	// Legacy separate fields (kept for backwards compatibility)
+	AgentVersion      string `json:"agent_version,omitempty"`
+	ControllerVersion string `json:"controller_version,omitempty"`
+	// Download URLs
+	DownloadURL   string `json:"download_url"`
+	AgentURL      string `json:"agent_url,omitempty"`
+	ControllerURL string `json:"controller_url"`
+}
+
+// GetControllerVersion returns the controller version from the VersionInfo
+func (v *VersionInfo) GetControllerVersion() string {
+	if v.ControllerVersion != "" {
+		return v.ControllerVersion
+	}
+	return v.Version
+}
+
+// GetAgentVersion returns the agent version from the VersionInfo
+func (v *VersionInfo) GetAgentVersion() string {
+	if v.AgentVersion != "" {
+		return v.AgentVersion
+	}
+	return v.Version
 }
 
 // CheckForUpdate checks if an update is available for the given app
@@ -176,11 +197,15 @@ func (c *GitHubClient) CheckForUpdate(currentVersion string, appType string, cha
 	// Get version and URL based on app type
 	var remoteVersionStr, downloadURL string
 	if appType == "controller" {
-		remoteVersionStr = versionInfo.ControllerVersion
+		remoteVersionStr = versionInfo.GetControllerVersion()
 		downloadURL = versionInfo.ControllerURL
 	} else {
-		remoteVersionStr = versionInfo.AgentVersion
-		downloadURL = versionInfo.AgentURL
+		remoteVersionStr = versionInfo.GetAgentVersion()
+		if versionInfo.AgentURL != "" {
+			downloadURL = versionInfo.AgentURL
+		} else {
+			downloadURL = versionInfo.DownloadURL
+		}
 	}
 
 	remoteVersion, err := ParseVersion(remoteVersionStr)
