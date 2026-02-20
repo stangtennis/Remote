@@ -160,19 +160,17 @@ func (m *Manager) ListenForSessions() {
 	go m.listenForKickSignals()
 
 	for range ticker.C {
+		isConnected := m.peerConnection != nil && m.peerConnection.ConnectionState() == webrtc.PeerConnectionStateConnected
+
 		// Check for kick signals on current session
 		if m.sessionID != "" && m.peerConnection != nil {
 			if kicked := m.checkIfKicked(); kicked {
 				log.Println("🔴 Session was kicked - cleaning up for new connection")
 				m.cleanupConnection("Kicked by new controller")
-				continue
+				// Clear handledSessions so we pick up new offers immediately
+				handledSessions = make(map[string]bool)
+				isConnected = false
 			}
-		}
-
-		// Skip polling for NEW sessions if currently connected
-		// But still check for kicks above
-		if m.peerConnection != nil && m.peerConnection.ConnectionState() == webrtc.PeerConnectionStateConnected {
-			continue
 		}
 
 		// 1. Check webrtc_sessions (Go controller)
@@ -199,6 +197,11 @@ func (m *Manager) ListenForSessions() {
 			}
 		}
 		if newestCtrlSession != nil {
+			if isConnected {
+				// New controller session while connected — takeover
+				log.Printf("📞 New session (controller) while connected — takeover: %s", newestCtrlSession.ID)
+				m.cleanupConnection("New controller connection")
+			}
 			log.Printf("📞 Incoming session (controller): %s", newestCtrlSession.ID)
 			log.Printf("   Device ID: %s", m.device.ID)
 			m.sessionID = newestCtrlSession.ID
@@ -226,6 +229,11 @@ func (m *Manager) ListenForSessions() {
 			}
 		}
 		if newestSession != nil {
+			if isConnected {
+				// New dashboard session while connected — takeover
+				log.Printf("📞 New session (dashboard) while connected — takeover: %s", newestSession.ID)
+				m.cleanupConnection("New dashboard connection")
+			}
 			log.Printf("📞 Incoming session (web dashboard): %s", newestSession.ID)
 			log.Printf("   Device ID: %s", m.device.ID)
 			go m.handleWebSession(*newestSession)
@@ -1052,7 +1060,8 @@ func (m *Manager) listenForKickSignals() {
 				log.Println("🔴 KICK SIGNAL RECEIVED - another controller took over")
 				log.Printf("   Kick payload: %s", string(sig.Payload))
 				m.cleanupConnection("Kicked by new controller")
-				return // Stop listening after kick
+				// Continue listening — don't exit, so we can handle future kicks
+				break
 			}
 		}
 	}
@@ -1099,7 +1108,7 @@ func (m *Manager) checkIfKicked() bool {
 		return false
 	}
 
-	// Check via RPC function
+	// Method 1: Check via RPC function (webrtc_sessions table)
 	url := m.cfg.SupabaseURL + "/rest/v1/rpc/check_session_kicked"
 
 	payload := map[string]string{
@@ -1108,27 +1117,56 @@ func (m *Manager) checkIfKicked() bool {
 
 	jsonData, _ := json.Marshal(payload)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err == nil {
+		req.Header.Set("Content-Type", "application/json")
+		if err := m.setAuthHeaders(req); err == nil {
+			client := &http.Client{Timeout: 3 * time.Second}
+			resp, err := client.Do(req)
+			if err == nil {
+				defer resp.Body.Close()
+				var result map[string]interface{}
+				if err := json.NewDecoder(resp.Body).Decode(&result); err == nil {
+					if kicked, _ := result["kicked"].(bool); kicked {
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	// Method 2: Check remote_sessions table for ended/kicked status
+	rsURL := m.cfg.SupabaseURL + "/rest/v1/remote_sessions"
+	rsReq, err := http.NewRequest("GET", rsURL, nil)
 	if err != nil {
 		return false
 	}
-
-	req.Header.Set("Content-Type", "application/json")
-	if err := m.setAuthHeaders(req); err != nil {
+	if err := m.setAuthHeaders(rsReq); err != nil {
 		return false
 	}
+	q := rsReq.URL.Query()
+	q.Add("id", "eq."+m.sessionID)
+	q.Add("select", "status")
+	q.Add("limit", "1")
+	rsReq.URL.RawQuery = q.Encode()
 
 	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Do(req)
+	rsResp, err := client.Do(rsReq)
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer rsResp.Body.Close()
 
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	var sessions []map[string]interface{}
+	if err := json.NewDecoder(rsResp.Body).Decode(&sessions); err != nil {
 		return false
 	}
 
-	kicked, _ := result["kicked"].(bool)
-	return kicked
+	if len(sessions) > 0 {
+		status, _ := sessions[0]["status"].(string)
+		if status == "ended" || status == "kicked" {
+			return true
+		}
+	}
+
+	return false
 }
