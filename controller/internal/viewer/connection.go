@@ -9,6 +9,7 @@ import (
 	"image/jpeg"
 	"log"
 	"math"
+	"net/http"
 	"os"
 	"time"
 
@@ -24,8 +25,81 @@ import (
 	xclipboard "golang.design/x/clipboard"
 )
 
+// fetchTurnCredentials fetches TURN credentials from the Supabase Edge Function
+func fetchTurnCredentials(supabaseURL, anonKey, authToken string) []webrtc.ICEServer {
+	if supabaseURL == "" || authToken == "" {
+		return nil
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequest("POST", supabaseURL+"/functions/v1/turn-credentials", nil)
+	if err != nil {
+		log.Printf("⚠️ TURN fetch error: %v", err)
+		return nil
+	}
+	req.Header.Set("Authorization", "Bearer "+authToken)
+	req.Header.Set("apikey", anonKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("⚠️ TURN fetch failed: %v", err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		log.Printf("⚠️ TURN fetch status %d", resp.StatusCode)
+		return nil
+	}
+
+	var result struct {
+		ICEServers []struct {
+			URLs       interface{} `json:"urls"`
+			Username   string      `json:"username,omitempty"`
+			Credential string      `json:"credential,omitempty"`
+		} `json:"iceServers"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("⚠️ TURN decode error: %v", err)
+		return nil
+	}
+
+	var servers []webrtc.ICEServer
+	for _, s := range result.ICEServers {
+		var urls []string
+		switch v := s.URLs.(type) {
+		case string:
+			urls = []string{v}
+		case []interface{}:
+			for _, u := range v {
+				if str, ok := u.(string); ok {
+					urls = append(urls, str)
+				}
+			}
+		}
+		server := webrtc.ICEServer{URLs: urls}
+		if s.Username != "" {
+			server.Username = s.Username
+			server.Credential = s.Credential
+		}
+		servers = append(servers, server)
+	}
+
+	if len(servers) > 2 {
+		log.Printf("🔒 TURN credentials hentet automatisk")
+	}
+	return servers
+}
+
 // getICEServers returns the ICE server configuration with STUN and optional TURN
-func getICEServers() []webrtc.ICEServer {
+func getICEServers(supabaseURL, anonKey, authToken string) []webrtc.ICEServer {
+	// Try fetching from Edge Function first (automatic, no manual config needed)
+	if servers := fetchTurnCredentials(supabaseURL, anonKey, authToken); len(servers) > 0 {
+		return servers
+	}
+
+	// Fallback to env vars
 	iceServers := []webrtc.ICEServer{
 		{URLs: []string{"stun:stun.l.google.com:19302"}},
 		{URLs: []string{"stun:stun1.l.google.com:19302"}},
@@ -127,7 +201,7 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 	})
 
 	// Create peer connection with STUN and TURN servers
-	if err := client.CreatePeerConnection(getICEServers()); err != nil {
+	if err := client.CreatePeerConnection(getICEServers(supabaseURL, anonKey, authToken)); err != nil {
 		return fmt.Errorf("failed to create peer connection: %w", err)
 	}
 
