@@ -79,6 +79,20 @@ func findFFmpeg() string {
 		}
 	}
 
+	// macOS: check Homebrew paths (Apple Silicon + Intel)
+	if runtime.GOOS == "darwin" || runtime.GOOS != "windows" {
+		macPaths := []string{
+			"/opt/homebrew/bin/ffmpeg", // Apple Silicon
+			"/usr/local/bin/ffmpeg",    // Intel Mac / Homebrew on Linux
+		}
+		for _, p := range macPaths {
+			if _, err := os.Stat(p); err == nil {
+				log.Printf("🎬 Found FFmpeg at: %s", p)
+				return p
+			}
+		}
+	}
+
 	// Fall back to PATH
 	if path, err := exec.LookPath(ffmpegName); err == nil {
 		log.Printf("🎬 Found FFmpeg in PATH: %s", path)

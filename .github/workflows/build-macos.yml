@@ -1,15 +1,17 @@
-name: Build macOS Agent
+name: Build macOS Agent + Controller
 
 on:
   push:
     branches: [main]
     paths:
       - 'agent/**'
+      - 'controller/**'
       - '.github/workflows/build-macos.yml'
   pull_request:
     branches: [main]
     paths:
       - 'agent/**'
+      - 'controller/**'
   workflow_dispatch:
     inputs:
       version:
@@ -42,10 +44,18 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23'
-          cache-dependency-path: agent/go.sum
+          cache-dependency-path: |
+            agent/go.sum
+            controller/go.sum
 
-      - name: Tidy Go modules
+      - name: Tidy Agent Go modules
         working-directory: ./agent
+        run: |
+          go mod tidy
+          go mod download
+
+      - name: Tidy Controller Go modules
+        working-directory: ./controller
         run: |
           go mod tidy
           go mod download
@@ -71,41 +81,73 @@ jobs:
           go build -ldflags "${LDFLAGS}" -o ../builds/remote-agent-${{ matrix.name }}-${VERSION} ./cmd/remote-agent
           echo "Built remote-agent-${{ matrix.name }}-${VERSION}"
 
+      - name: Build Controller (macOS)
+        working-directory: ./controller
+        env:
+          CGO_ENABLED: 1
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BUILD_DATE=$(date +%Y-%m-%d)
+          LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.BuildDate=${BUILD_DATE}'"
+          go build -ldflags "${LDFLAGS}" -o ../builds/controller-${{ matrix.name }}-${VERSION} .
+          echo "Built controller-${{ matrix.name }}-${VERSION}"
+
       - name: Test build runs
         working-directory: ./builds
         run: |
-          chmod +x remote-agent-*
+          chmod +x remote-agent-* controller-*
           ./remote-agent-${{ matrix.name }}-${{ steps.version.outputs.version }} --help || true
+          ./controller-${{ matrix.name }}-${{ steps.version.outputs.version }} --help || true
 
       - name: Run Go tests
         working-directory: ./agent
         run: |
           go test ./internal/config/... ./internal/auth/... ./internal/device/... -v -count=1 || true
 
-      - name: Upload artifact
+      - name: Upload Agent artifact
         uses: actions/upload-artifact@v4
         with:
           name: remote-agent-${{ matrix.name }}
           path: builds/remote-agent-*
           retention-days: 30
 
-  # Create universal binary (fat binary for both architectures)
+      - name: Upload Controller artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: controller-${{ matrix.name }}
+          path: builds/controller-*
+          retention-days: 30
+
+  # Create universal binaries (fat binary for both architectures)
   universal-binary:
     needs: build-macos
     runs-on: macos-14
     if: github.event_name == 'workflow_dispatch'
 
     steps:
-      - name: Download arm64 artifact
+      - name: Download Agent arm64 artifact
         uses: actions/download-artifact@v4
         with:
           name: remote-agent-macos-arm64
           path: builds/
 
-      - name: Download amd64 artifact
+      - name: Download Agent amd64 artifact
         uses: actions/download-artifact@v4
         with:
           name: remote-agent-macos-amd64
+          path: builds/
+
+      - name: Download Controller arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: controller-macos-arm64
+          path: builds/
+
+      - name: Download Controller amd64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: controller-macos-amd64
           path: builds/
 
       - name: Determine version
@@ -113,19 +155,36 @@ jobs:
         run: |
           echo "version=${{ github.event.inputs.version || 'dev' }}" >> $GITHUB_OUTPUT
 
-      - name: Create Universal Binary
+      - name: Create Agent Universal Binary
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           ARM64=$(ls builds/remote-agent-macos-arm64-*)
           AMD64=$(ls builds/remote-agent-macos-amd64-*)
           chmod +x "$ARM64" "$AMD64"
           lipo -create "$ARM64" "$AMD64" -output "builds/remote-agent-macos-universal-${VERSION}"
-          echo "Created universal binary"
+          echo "Created Agent universal binary"
           file "builds/remote-agent-macos-universal-${VERSION}"
 
-      - name: Upload universal artifact
+      - name: Create Controller Universal Binary
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ARM64=$(ls builds/controller-macos-arm64-*)
+          AMD64=$(ls builds/controller-macos-amd64-*)
+          chmod +x "$ARM64" "$AMD64"
+          lipo -create "$ARM64" "$AMD64" -output "builds/controller-macos-universal-${VERSION}"
+          echo "Created Controller universal binary"
+          file "builds/controller-macos-universal-${VERSION}"
+
+      - name: Upload Agent universal artifact
         uses: actions/upload-artifact@v4
         with:
           name: remote-agent-macos-universal
           path: builds/remote-agent-macos-universal-*
+          retention-days: 30
+
+      - name: Upload Controller universal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: controller-macos-universal
+          path: builds/controller-macos-universal-*
           retention-days: 30

@@ -64,6 +64,24 @@ fi
 cd ..
 
 # =============================================================================
+# macOS Controller (requires osxcross or native macOS)
+# =============================================================================
+echo ""
+echo "📦 Building Controller (macOS arm64)..."
+MACOS_CTRL_LDFLAGS="-s -w -X 'main.Version=$VERSION' -X 'main.BuildDate=$BUILD_DATE'"
+cd controller
+if command -v o64-clang &> /dev/null; then
+    # Cross-compile via osxcross
+    timeout $TIMEOUT bash -c "GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=oa64-clang CXX=oa64-clang++ go build -ldflags \"$MACOS_CTRL_LDFLAGS\" -o ../builds/controller-macos-arm64-$VERSION ." 2>&1 && echo "✅ macOS Controller (arm64) built" || echo "⚠️  macOS Controller arm64 build failed"
+    timeout $TIMEOUT bash -c "GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC=o64-clang CXX=o64-clang++ go build -ldflags \"$MACOS_CTRL_LDFLAGS\" -o ../builds/controller-macos-amd64-$VERSION ." 2>&1 && echo "✅ macOS Controller (amd64) built" || echo "⚠️  macOS Controller amd64 build failed"
+elif [[ "$(uname -s)" == "Darwin" ]]; then
+    timeout $TIMEOUT bash -c "CGO_ENABLED=1 go build -ldflags \"$MACOS_CTRL_LDFLAGS\" -o ../builds/controller-macos-$VERSION ." 2>&1 && echo "✅ macOS Controller built (native)" || echo "⚠️  macOS Controller build failed"
+else
+    echo "⏭️  Skipping macOS Controller build (no osxcross and not on macOS)"
+fi
+cd ..
+
+# =============================================================================
 # NSIS Installers (Windows)
 # =============================================================================
 echo ""
