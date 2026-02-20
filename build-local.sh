@@ -43,7 +43,28 @@ timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-
 cd ..
 
 # =============================================================================
-# NSIS Installers
+# macOS Agent (requires osxcross or native macOS)
+# =============================================================================
+echo ""
+echo "📦 Building Agent (macOS arm64)..."
+echo "   Note: Requires osxcross or native macOS with Xcode CLI tools"
+MACOS_AGENT_LDFLAGS="-s -w -X 'github.com/stangtennis/remote-agent/internal/tray.Version=$VERSION' -X 'github.com/stangtennis/remote-agent/internal/tray.BuildDate=$BUILD_DATE'"
+cd agent
+if command -v o64-clang &> /dev/null; then
+    # Cross-compile via osxcross
+    timeout $TIMEOUT bash -c "GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=oa64-clang CXX=oa64-clang++ go build -ldflags \"$MACOS_AGENT_LDFLAGS\" -o ../builds/remote-agent-macos-arm64-$VERSION ./cmd/remote-agent" 2>&1 && echo "✅ macOS Agent (arm64) built" || echo "⚠️  macOS arm64 build failed (osxcross)"
+    timeout $TIMEOUT bash -c "GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC=o64-clang CXX=o64-clang++ go build -ldflags \"$MACOS_AGENT_LDFLAGS\" -o ../builds/remote-agent-macos-amd64-$VERSION ./cmd/remote-agent" 2>&1 && echo "✅ macOS Agent (amd64) built" || echo "⚠️  macOS amd64 build failed (osxcross)"
+elif [[ "$(uname -s)" == "Darwin" ]]; then
+    # Native macOS build
+    timeout $TIMEOUT bash -c "CGO_ENABLED=1 go build -ldflags \"$MACOS_AGENT_LDFLAGS\" -o ../builds/remote-agent-macos-$VERSION ./cmd/remote-agent" 2>&1 && echo "✅ macOS Agent built (native)" || echo "⚠️  macOS Agent build failed"
+else
+    echo "⏭️  Skipping macOS build (no osxcross and not on macOS)"
+    echo "   macOS builds will be done via GitHub Actions CI"
+fi
+cd ..
+
+# =============================================================================
+# NSIS Installers (Windows)
 # =============================================================================
 echo ""
 echo "📦 Building NSIS installers..."
