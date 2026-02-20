@@ -82,6 +82,19 @@ fi
 cd ..
 
 # =============================================================================
+# macOS Universal Binaries (arm64 + amd64 combined)
+# =============================================================================
+LIPO=$(command -v /opt/osxcross/target/bin/lipo 2>/dev/null || command -v lipo 2>/dev/null || echo "")
+if [ -n "$LIPO" ] && [ -f "builds/remote-agent-macos-arm64-$VERSION" ] && [ -f "builds/remote-agent-macos-amd64-$VERSION" ]; then
+    echo ""
+    echo "📦 Building macOS Universal Binaries..."
+    $LIPO -create builds/remote-agent-macos-arm64-$VERSION builds/remote-agent-macos-amd64-$VERSION \
+        -output builds/remote-agent-macos-universal-$VERSION && echo "✅ macOS Agent Universal built" || echo "⚠️  Agent Universal failed"
+    $LIPO -create builds/controller-macos-arm64-$VERSION builds/controller-macos-amd64-$VERSION \
+        -output builds/controller-macos-universal-$VERSION && echo "✅ macOS Controller Universal built" || echo "⚠️  Controller Universal failed"
+fi
+
+# =============================================================================
 # NSIS Installers (Windows)
 # =============================================================================
 echo ""
