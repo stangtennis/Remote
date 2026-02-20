@@ -92,10 +92,28 @@ jobs:
           ./remote-agent-macos-arm64-${{ steps.version.outputs.version }} --help || true
           ./controller-macos-arm64-${{ steps.version.outputs.version }} --help || true
 
-      - name: Run Go tests
+      - name: Run Agent unit tests
         working-directory: ./agent
         run: |
-          go test ./internal/config/... ./internal/auth/... ./internal/device/... -v -count=1 || true
+          echo "=== Testing input package (keyboard mapping, mouse helpers) ==="
+          go test ./internal/input/... -v -count=1
+
+          echo "=== Testing desktop package (macOS stubs) ==="
+          go test ./internal/desktop/... -v -count=1
+
+          echo "=== Testing device package (device ID, platform) ==="
+          go test ./internal/device/... -v -count=1
+
+          echo "=== Testing service package (launchd plist) ==="
+          go test ./internal/service/... -v -count=1
+
+          echo "=== Testing screen package (display enumeration) ==="
+          go test ./internal/screen/... -v -count=1
+
+      - name: Run Controller unit tests
+        working-directory: ./controller
+        run: |
+          go test ./internal/updater/... -v -count=1
 
       - name: Upload Agent artifact
         uses: actions/upload-artifact@v4
