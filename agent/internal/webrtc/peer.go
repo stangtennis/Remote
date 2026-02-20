@@ -362,6 +362,12 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	// Reset state for new connection
 	m.answerSent = false
 	m.pendingCandidates = nil
+	m.mu.Lock()
+	m.dataChannel = nil
+	m.controlChannel = nil
+	m.videoChannel = nil
+	m.fileChannel = nil
+	m.mu.Unlock()
 	m.peerConnection = pc
 
 	// Always add video track (even if not using H.264 yet)
@@ -1909,11 +1915,23 @@ func (m *Manager) cleanupConnection(reason string) {
 		m.updateSessionStatus("ended")
 	}
 
-	// Close data channel and peer connection under mutex
+	// Close data channels and peer connection under mutex
 	m.mu.Lock()
 	if m.dataChannel != nil {
 		m.dataChannel.Close()
 		m.dataChannel = nil
+	}
+	if m.controlChannel != nil {
+		m.controlChannel.Close()
+		m.controlChannel = nil
+	}
+	if m.videoChannel != nil {
+		m.videoChannel.Close()
+		m.videoChannel = nil
+	}
+	if m.fileChannel != nil {
+		m.fileChannel.Close()
+		m.fileChannel = nil
 	}
 
 	pc := m.peerConnection
