@@ -28,14 +28,14 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  one_minute_ago timestamptz := now() - interval '1 minute';
+  five_minutes_ago timestamptz := now() - interval '5 minutes';
   fifteen_minutes_ago timestamptz := now() - interval '15 minutes';
   twenty_four_hours_ago timestamptz := now() - interval '24 hours';
   two_minutes_ago timestamptz := now() - interval '2 minutes';
 BEGIN
-  -- 1. Clean up old signaling messages (older than 1 minute)
+  -- 1. Clean up old signaling messages (older than 5 minutes)
   DELETE FROM public.session_signaling
-  WHERE created_at < one_minute_ago;
+  WHERE created_at < five_minutes_ago;
   
   RAISE NOTICE '✅ Cleaned up old signaling messages';
 
