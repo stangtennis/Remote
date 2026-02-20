@@ -236,16 +236,19 @@ ssh ubuntu "docker stop caddy"
 ### Project Info
 ```yaml
 Repository: https://github.com/stangtennis/Remote
-Agent Version: v2.64.0
-Controller Version: v2.63.9
-Last Updated: 2025-12-18
+Agent Version: v2.73.5
+Controller Version: v2.73.5
+Last Updated: 2026-02-19
+Build Server: Ubuntu (192.168.1.92), cross-compile to Windows
+Build Script: ./build-local.sh v2.XX.X (builds all 3 exe + NSIS installers)
 ```
 
 ### Downloads
 ```yaml
 Releases: https://github.com/stangtennis/Remote/releases
-Agent Installer: RemoteDesktopAgent-Setup-v2.64.0.exe
-Controller Installer: RemoteDesktopController-Setup-v2.63.9.exe
+Agent Installer: https://updates.hawkeye123.dk/RemoteDesktopAgent-Setup.exe
+Agent Console Installer: https://updates.hawkeye123.dk/RemoteDesktopAgentConsole-Setup.exe
+Controller Installer: https://updates.hawkeye123.dk/RemoteDesktopController-Setup.exe
 ```
 
 ### Auto-Update (Agent + Controller)
@@ -267,13 +270,21 @@ https://downloads.hawkeye123.dk
 - Binaries are still publicly reachable by their exact URL on `updates`, so treat them as distributable artifacts.
 
 ### Current Features
-- WebRTC video streaming (adaptive 2-30 FPS)
+- WebRTC video streaming (adaptive 2-30 FPS JPEG + 25 FPS H.264)
+- H.264 encoding via OpenH264 with RTP video track
 - Bandwidth optimization (50-80% savings on static desktop)
 - Full mouse & keyboard control
 - File browser and transfer
-- Clipboard sync (text and images)
+- Clipboard sync (text and images, bidirectional)
 - Fullscreen mode with auto-hide toolbar
-- Adaptive quality based on network/CPU
+- Adaptive quality based on network/CPU/RTT
+- **Session 0 pipe capturer** — screen capture fra Windows Service via named pipe
+- SYSTEM token fallback — virker selv på login-skærmen (ingen bruger logget ind)
+- NSIS installere (automatisk bygget via build-local.sh)
+- Quick Support (browser-baseret skærmdeling for gæster)
+- Auto-update system (agent + controller checker version.json)
+- Authenticated JWT tokens (ingen anon key exposure)
+- Owner-scoped RLS policies
 
 ### Performance
 | Scenario | Bandwidth |
@@ -281,23 +292,25 @@ https://downloads.hawkeye123.dk
 | Static desktop | ~0.5-2 Mbit/s |
 | Active use | ~10-25 Mbit/s |
 
-### Build Commands (from Ubuntu)
-```bash
-# Agent GUI
-cd ~/projekter/Remote\ Desktop/agent && \
-GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
-CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
-go build -ldflags '-s -w -H windowsgui' -o ../builds/remote-agent.exe ./cmd/remote-agent
+### Streaming Modes
+| Mode | FPS | Encoding | Trigger |
+|------|-----|----------|---------|
+| Idle Tiles | 2 | JPEG 85% | No motion + no input >1s |
+| Active Tiles | 20 | JPEG 65% | Active use, JPEG mode |
+| Active H.264 | 25 | H.264 8Mbps | H.264 enabled + good conditions |
 
-# Controller
-cd ~/projekter/Remote\ Desktop/controller && \
-GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
-CC=x86_64-w64-mingw32-gcc \
-go build -ldflags '-s -w -H windowsgui' -o ../builds/controller.exe .
+### Build (from Ubuntu)
+```bash
+# Byg alle 3 exe + NSIS installere:
+cd ~/projekter/Remote\ Desktop
+./build-local.sh v2.73.5
+
+# Deploy til Caddy:
+cp builds/*.exe ~/caddy/downloads/
+# Opdater version.json
 ```
 
 ### Planned Features
-- Hardware H.264 encoding (GPU-accelerated)
 - Multi-monitor support
 - Audio streaming
 
@@ -2955,55 +2968,50 @@ https://github.com/stangtennis/Remote/releases
 
 ### Overview
 WebRTC-based remote desktop solution with three components:
-- **Agent** - Runs on remote machine (Windows), captures screen, handles input
-- **Controller** - Desktop app (Windows) for controlling remote machines
-- **Dashboard** - Web interface for controlling remote machines
+- **Agent** - Runs on remote machine (Windows service/app), captures screen, handles input
+- **Controller** - Desktop app (Windows, Fyne UI) for controlling remote machines
+- **Dashboard** - Web interface for remote control and management
 
-### Current Version: v2.6.8 (2025-12-05)
+### Current Version: v2.73.5 (2026-02-19)
 
 ### Repository
 ```yaml
 GitHub: https://github.com/stangtennis/Remote
 Dashboard: https://stangtennis.github.io/Remote/dashboard.html
 Releases: https://github.com/stangtennis/Remote/releases
+Info Repo: https://github.com/stangtennis/info (PRIVATE - all docs)
 ```
 
-### Components Location
+### Components Location (Ubuntu build server)
 ```yaml
-Agent: f:\#Remote\agent\
-Controller: f:\#Remote\controller\
-Dashboard: f:\#Remote\docs\
-Supabase Functions: f:\#Remote\supabase\functions\
+Agent: ~/projekter/Remote Desktop/agent/
+Controller: ~/projekter/Remote Desktop/controller/
+Dashboard: ~/projekter/Remote Desktop/docs/
+Supabase Functions: ~/projekter/Remote Desktop/supabase/functions/
+Builds: ~/projekter/Remote Desktop/builds/
 ```
 
-### Build Commands
-```powershell
-# Build Agent
-cd f:\#Remote\agent
-go build -ldflags "-s -w" -o remote-agent.exe ./cmd/remote-agent
+### Build & Deploy
+```bash
+# Byg alle 3 exe + NSIS installere (fra Ubuntu):
+cd ~/projekter/Remote\ Desktop
+./build-local.sh v2.73.5
 
-# Build Controller
-cd f:\#Remote\controller
-go build -ldflags "-s -w -H windowsgui" -o remote-controller.exe .
-
-# Create GitHub Release
-cd f:\#Remote
-gh release create v2.6.8 agent/remote-agent-v2.6.8.exe --title "v2.6.8" --notes "Release notes"
-```
-
-### Supabase Configuration
-```yaml
-URL: https://supabase.hawkeye123.dk
-Anon Key: <SUPABASE_ANON_KEY>
+# Deploy:
+cp builds/*.exe ~/caddy/downloads/
+# Opdater version.json med ny version
 ```
 
 ### Database Tables
 | Table | Purpose |
 |-------|---------|
 | `remote_devices` | Registered devices (agents) |
+| `user_approvals` | User accounts and roles |
+| `device_assignments` | Device-to-user assignments |
 | `remote_sessions` | Active/pending sessions |
 | `session_signaling` | WebRTC signaling messages |
 | `webrtc_sessions` | Controller-to-agent sessions |
+| `audit_logs` | Security audit trail |
 
 ### Edge Functions
 | Function | Purpose |
@@ -3011,36 +3019,7 @@ Anon Key: <SUPABASE_ANON_KEY>
 | `device-register` | Register new devices |
 | `session-token` | Create sessions with PIN/TURN |
 | `session-cleanup` | Cleanup old sessions |
-
----
-
-### Recent Fixes (v2.6.x Series)
-
-#### v2.6.8 - DPI Scaling Fix
-- **Problem:** Mouse coordinates were wrong on high-DPI displays (125%, 150% scaling)
-- **Cause:** `robotgo.Move()` has known DPI scaling issues on Windows
-- **Fix:** Use Windows API `SetCursorPos` directly instead of robotgo
-- **File:** `agent/internal/input/mouse.go`
-
-#### v2.6.7 - Explicit Relative Coordinates
-- **Problem:** Coordinate type detection was unreliable
-- **Fix:** Dashboard sends `rel: true` flag with mouse events
-- **Files:** `docs/js/webrtc.js`, `agent/internal/webrtc/peer.go`
-
-#### v2.6.5 - Mouse Coordinate Conversion
-- **Problem:** Dashboard sent relative coords (0-1), agent expected absolute
-- **Fix:** Added `MoveRelative()` function for relative coordinates
-- **File:** `agent/internal/input/mouse.go`
-
-#### v2.6.3 - ICE Candidate Buffering
-- **Problem:** ICE candidates sent before answer, causing connection failures
-- **Fix:** Buffer ICE candidates until answer is sent
-- **Files:** `agent/internal/webrtc/peer.go`, `agent/internal/webrtc/signaling.go`
-
-#### v2.6.2 - ICE Candidate Format
-- **Problem:** Browser error "sdpMid and sdpMLineIndex are both null"
-- **Fix:** Ensure `sdpMid` and `sdpMLineIndex` are always included
-- **File:** `agent/internal/webrtc/signaling.go`
+| `turn-credentials` | TURN server credentials for dashboard |
 
 ---
 
@@ -3134,7 +3113,8 @@ Anon Key: <SUPABASE_ANON_KEY>
 
 #### Screen Capture Errors
 - "DXGI capture failed: timeout" is normal when screen is static
-- Errors increase when no screen changes occur
+- "GDI capture failed: error -3" i Session 0 — pipe capturer bruges i stedet
+- Exponential backoff forhindrer reinit-spam (5→20→50→100 errors)
 - Not a problem unless video freezes
 
 ---
@@ -3143,91 +3123,134 @@ Anon Key: <SUPABASE_ANON_KEY>
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v2.10.0 | 2025-12-06 | Session 0 desktop switch, file browser, 60 FPS streaming |
+| v2.73.5 | 2026-02-19 | Session 0 pipe capturer, SYSTEM token fallback, reinit backoff |
+| v2.73.0 | 2026-02-18 | Fix service mode crashes (log redirect, stale sessions, DXGI Session 0) |
+| v2.72.2 | 2026-02-17 | NSIS installere, Wine integration tests (27/27) |
+| v2.72.0 | 2026-02-16 | JWT tokens (no anon key), owner-scoped RLS, TokenProvider |
+| v2.71.0 | 2026-02-15 | Path traversal beskyttelse, input validering |
+| v2.70.0 | 2026-02-14 | Fix race conditions i WebRTC Manager |
+| v2.69.0 | 2026-02-13 | Quick Support (browser screen sharing), auto-reconnect, multi-monitor |
+| v2.68.7 | 2026-02-12 | Fix H264 controller decode: FFmpeg NV12→MJPEG + decoder restart |
+| v2.68.6 | 2026-02-11 | Fix H264 mode dropping to idle tiles (2 FPS freeze) |
+| v2.68.5 | 2026-02-10 | Start Menu + Desktop shortcuts |
+| v2.68.4 | 2026-02-09 | Fix taskkill killing own process |
+| v2.68.3 | 2026-02-08 | Install as Program for controller |
+| v2.68.2 | 2026-02-07 | Auto-stop tray, dashboard 0xFE chunk fix |
+| v2.65.0 | 2025-12 | Adaptive mode-model, CPU/bandwidth optimizations |
+| v2.10.0 | 2025-12-06 | Session 0 desktop switch, file browser |
 | v2.6.8 | 2025-12-05 | Fix DPI scaling with SetCursorPos API |
-| v2.6.7 | 2025-12-04 | Explicit rel flag for coordinates |
-| v2.6.6 | 2025-12-04 | Separate Move/MoveRelative functions |
-| v2.6.5 | 2025-12-04 | Mouse coordinate conversion fix |
-| v2.6.4 | 2025-12-04 | Cursor hiding during remote session |
-| v2.6.3 | 2025-12-04 | ICE candidate buffering |
-| v2.6.2 | 2025-12-04 | ICE candidate format fix |
-| v2.6.1 | 2025-12-04 | Dashboard signaling improvements |
 | v2.6.0 | 2025-12-04 | Web dashboard support |
 
 ---
 
 ## 🖥️ REMOTE DESKTOP APPLICATION - COMPLETE REFERENCE
 
-### Current Version: v2.10.0
+### Current Version: v2.73.5
 
 ### Repository & Downloads
 ```yaml
 GitHub: https://github.com/stangtennis/Remote
-Releases: https://github.com/stangtennis/Remote/releases
 Dashboard: https://stangtennis.github.io/Remote/
+Updates: https://updates.hawkeye123.dk/version.json
+Downloads (Basic Auth): https://downloads.hawkeye123.dk
+```
+
+### NSIS Installere
+```yaml
+Agent Setup: https://updates.hawkeye123.dk/RemoteDesktopAgent-Setup.exe
+Agent Console Setup: https://updates.hawkeye123.dk/RemoteDesktopAgentConsole-Setup.exe
+Controller Setup: https://updates.hawkeye123.dk/RemoteDesktopController-Setup.exe
 ```
 
 ### Components
 | Component | Description | Location |
 |-----------|-------------|----------|
 | **Agent** | Windows service/app on remote machine | `agent/` |
-| **Controller** | Desktop app to control remote machines | `controller/` |
+| **Controller** | Desktop app to control remote machines (Fyne UI) | `controller/` |
 | **Dashboard** | Web interface for remote control | `docs/` |
 | **Supabase** | Backend for auth, signaling, device management | `supabase/` |
 
-### Build Commands
-```powershell
-# Build Agent (Windows)
-cd F:\#Remote\agent
-.\build.bat
+### Build Commands (Ubuntu cross-compile)
+```bash
+# Build all 3 exe files (agent GUI, agent console, controller)
+./build-local.sh v2.73.5
 
-# Build Controller (Windows)
-cd F:\#Remote\controller
-go build -o remote-controller.exe .
+# Or manually:
+# Agent GUI (no console window)
+cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
+CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
+go build -ldflags '-s -w -H windowsgui -X main.Version=v2.73.5' \
+-o ../builds/remote-agent-v2.73.5.exe ./cmd/remote-agent
 
-# Release to GitHub
-cd F:\#Remote
-Copy-Item agent\remote-agent.exe agent\remote-agent-v2.10.0.exe -Force
-gh release upload v2.10.0 agent/remote-agent-v2.10.0.exe --clobber
+# Agent Console (with console window for debugging)
+cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
+CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
+go build -ldflags '-s -w -X main.Version=v2.73.5' \
+-o ../builds/remote-agent-console-v2.73.5.exe ./cmd/remote-agent
+
+# Controller
+cd controller && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
+CC=x86_64-w64-mingw32-gcc \
+go build -ldflags '-s -w -H windowsgui -X main.version=v2.73.5' \
+-o ../builds/controller-v2.73.5.exe .
 ```
 
-### Agent Features (v2.10.0)
-- **Screen Capture**: DXGI (fast) or GDI (Session 0 compatible)
-- **Streaming**: 60 FPS JPEG over WebRTC data channel
+### Agent Features (v2.73.5)
+- **Screen Capture**: DXGI (fast, hardware accelerated) or GDI (universal fallback)
+- **Session 0 Pipe Capturer**: Named pipe IPC for login screen capture (service mode)
+- **SYSTEM Token Fallback**: Capture works even when nobody is logged in
+- **Streaming**: Adaptive JPEG tiles (2-30 FPS) + H.264 via RTP video track (25 FPS)
+- **H.264 Encoding**: OpenH264 encoder with configurable bitrate (8 Mbps default)
 - **Input**: Mouse and keyboard control via SendInput API
 - **Clipboard**: Bidirectional text and image sync
 - **File Transfer**: Chunked file transfer over data channel
-- **Session 0 Support**: Desktop switch for login screen capture/input
-- **Service Mode**: Can run as Windows service
+- **Service Mode**: Can run as Windows service with Session 0 support
+- **Install as Program**: Program Files + autostart + Start Menu shortcuts
+- **Auto-Update**: Checks updates.hawkeye123.dk/version.json on startup
+- **Authenticated JWT**: Agent uses JWT tokens (not anon key) for API calls
+- **System Tray**: Icon with update check, install/uninstall options
 
-### Controller Features (v2.10.0)
+### Controller Features (v2.73.5)
 - **Fyne UI**: Native Windows desktop application
 - **Multi-device**: Connect to multiple agents
+- **H.264 Decoding**: FFmpeg subprocess (NV12→MJPEG output, self-framing)
 - **File Browser**: Total Commander-style dual-pane file manager
 - **Clipboard Sync**: Automatic clipboard sharing
 - **FPS Display**: Real-time performance stats
+- **Install as Program**: Program Files + autostart + Start Menu + optional Desktop shortcut
+- **Auto-Update**: Checks updates.hawkeye123.dk/version.json on startup
 
 ### Dashboard Features
 - **Web-based**: Works in any modern browser
 - **Device Management**: View and manage registered devices
 - **Admin Panel**: User approvals, device assignments, invitations
 - **Remote Control**: Full mouse/keyboard control via browser
+- **Quick Support**: Browser-based screen sharing for guests (view-only)
+- **H.264 Video**: Native browser H.264 decode via `<video>` element
 
 ---
 
 ### Agent Installation
 
+#### Via NSIS Installer (Anbefalet)
+```
+Download: https://updates.hawkeye123.dk/RemoteDesktopAgent-Setup.exe
+- Installerer til Program Files\RemoteDesktopAgent
+- Opretter Start Menu genvej
+- Registrerer autostart
+- Valgfri service installation
+```
+
 #### As Application (Development)
 ```powershell
 # Run directly
-cd F:\#Remote\agent
 .\remote-agent.exe
 ```
 
 #### As Windows Service (Production)
 ```powershell
 # Install service
-cd F:\#Remote\agent
+cd C:\Program Files\RemoteDesktopAgent
 .\install-service.bat
 
 # Or manually:
@@ -3310,6 +3333,10 @@ ssh dennis@192.168.1.92 "docker cp /tmp/query.sql supabase-db:/tmp/ && docker ex
 #### Limitations
 - **Ctrl+Alt+Del**: Not supported (requires SAS or DisableCAD)
 - **UAC Prompts**: May not be capturable on secure desktop
+- **Session 0 (Service Mode)**: Automatisk pipe capturer med SYSTEM token fallback
+  - Login screen capture virker selv når ingen bruger er logget ind
+  - Helper process launched i console session via CreateProcessAsUser
+  - Named pipe IPC for BGRA frame transport
 
 #### Enable DisableCAD (Optional)
 ```
@@ -3321,26 +3348,30 @@ Value: DisableCAD = 1 (DWORD)
 
 ### Streaming Configuration
 
-#### Agent Settings (peer.go)
-```go
-// Frame rate
-ticker := time.NewTicker(16 * time.Millisecond) // 60 FPS
+#### Adaptive Streaming Modes
+| Mode | FPS | Encoding | Quality | When |
+|------|-----|----------|---------|------|
+| Idle Tiles | 2 | JPEG | 85% | No motion, no input >1s (JPEG only) |
+| Active Tiles | 20 | JPEG | 65% | Active use, JPEG mode |
+| Active H.264 | 25 | H.264 | 8 Mbps | H.264 enabled, good conditions |
 
-// JPEG quality (1-100)
-jpeg, err := m.screenCapturer.CaptureJPEG(85)
-
-// Buffer size before dropping frames
-if m.dataChannel.BufferedAmount() > 16*1024*1024 { // 16MB
-    // Drop frame
-}
+#### H.264 Pipeline
+```
+Agent: OpenH264 encoder → NAL units → RTP video track → WebRTC
+Controller: RTP track → SampleBuilder → FFmpeg (-f mjpeg) → JPEG frames → Fyne canvas
+Dashboard: Browser native H.264 decode via <video> element
 ```
 
-#### Adjust for Network
-| Network | FPS | Quality | Buffer |
-|---------|-----|---------|--------|
-| LAN | 60 | 85 | 16MB |
-| Fast WiFi | 30 | 70 | 8MB |
-| Slow | 15 | 50 | 4MB |
+#### Bandwidth Usage
+| Scenario | Bandwidth |
+|----------|-----------|
+| Static desktop (idle) | ~0.5-2 Mbit/s |
+| Active use | ~10-25 Mbit/s |
+
+#### Adaptive Quality
+- CPU, RTT, loss, buffer levels → automatic FPS/quality/scale adjustment
+- H.264 mode NEVER drops to idle tiles (encoder handles static with tiny P-frames)
+- Buffer limit: 16MB (frames dropped if exceeded)
 
 ---
 
@@ -3361,8 +3392,9 @@ Get-Content "$env:APPDATA\RemoteAgent\agent.log" -Tail 50
 #### Black Screen / No Video
 1. Check agent is running and registered
 2. Verify device is online in dashboard
-3. Check if Session 0 (login screen) - needs GDI mode
-4. Restart agent
+3. Check if Session 0 (service mode) - pipe capturer bruges automatisk
+4. Check logs: `%APPDATA%\RemoteAgent\agent.log`
+5. Restart agent
 
 #### Mouse Not Working
 1. Verify agent has admin privileges
@@ -3376,44 +3408,139 @@ Get-Content "$env:APPDATA\RemoteAgent\agent.log" -Tail 50
 
 ---
 
+### Session 0 Pipe Capturer (v2.73.5+)
+
+#### Arkitektur
+```
+┌──────────────────────────────────────────────────────┐
+│ Session 0 (Service)                                  │
+│ ┌────────────────┐     Named Pipe      ┌───────────┐│
+│ │ Agent Service   │◄──────────────────►│  Helper    ││
+│ │ (pipe client)   │  \\.\pipe\remote   │ (capturer) ││
+│ └────────────────┘  capture_XXXX       └───────────┘│
+│                                              ↓       │
+│ Console Session (1+)              ┌─────────────┐   │
+│                                   │ GDI BitBlt  │   │
+│                                   │ Screen Cap  │   │
+│                                   └─────────────┘   │
+└──────────────────────────────────────────────────────┘
+```
+
+#### Token Acquisition
+1. **WTSQueryUserToken** — virker når bruger er logget ind
+2. **SYSTEM Token Fallback** — når ingen bruger er logget ind (login screen):
+   - `OpenProcessToken(GetCurrentProcess())` → SYSTEM token
+   - `DuplicateTokenEx()` → primary token
+   - `SetTokenInformation(TokenSessionId, consoleSession)` → assign session
+   - `CreateProcessAsUser(dupToken, ...)` → launch helper
+
+#### Pipe Protocol
+- Service sender `0x01` command → helper capturer skærm via GDI
+- Helper sender BGRA frames tilbage: `[width:4][height:4][pixels:w*h*4]`
+- ConnectNamedPipe timeout: 10s, CaptureRGBA read timeout: 5s
+- Helper alive check + exponential backoff reinit (5→20→50→100 errors)
+
+#### Key Files
+- `agent/internal/screen/session0_capture_windows.go` — pipe capturer + SYSTEM token
+- `agent/internal/screen/session0_helper_windows.go` — helper process (GDI capture)
+
+---
+
 ### Development Workflow
 
 #### Make Changes
-```powershell
-# Edit code in F:\#Remote\
+```bash
+# Edit code on Ubuntu build server
 
-# Build
-cd F:\#Remote\agent && .\build.bat
+# Build all 3 exe files
+./build-local.sh v2.73.5
 
-# Test locally
-.\remote-agent.exe
+# Deploy to Caddy
+cp builds/*.exe ~/caddy/downloads/
 
 # Commit and push
-cd F:\#Remote
+cd "/home/dennis/projekter/Remote Desktop"
 git add -A
 git commit -m "Description of changes"
-git push
+git push && git tag v2.73.5 && git push origin v2.73.5
 
-# Release
-Copy-Item agent\remote-agent.exe agent\remote-agent-v2.10.0.exe -Force
-gh release upload v2.10.0 agent/remote-agent-v2.10.0.exe --clobber
+# Deploy to Caddy (auto-update)
+cp builds/remote-agent-v2.73.5.exe ~/caddy/downloads/remote-agent.exe
+cp builds/remote-agent-console-v2.73.5.exe ~/caddy/downloads/remote-agent-console.exe
+cp builds/controller-v2.73.5.exe ~/caddy/downloads/controller.exe
+# Update version.json med ny version
 ```
 
 #### Key Files
 | File | Purpose |
 |------|---------|
 | `agent/internal/webrtc/peer.go` | WebRTC, streaming, input handling |
+| `agent/internal/webrtc/signaling.go` | Signaling, session handling, SDP exchange |
 | `agent/internal/screen/capturer.go` | Screen capture (DXGI/GDI) |
+| `agent/internal/screen/session0_capture_windows.go` | Session 0 pipe capturer + SYSTEM token |
+| `agent/internal/screen/session0_helper_windows.go` | Capture helper (GDI, runs in user session) |
+| `agent/internal/screen/h264_encoder.go` | OpenH264 encoder |
 | `agent/internal/input/mouse.go` | Mouse control |
 | `agent/internal/input/keyboard.go` | Keyboard control |
-| `agent/internal/desktop/desktop_windows.go` | Desktop switching |
+| `agent/internal/clipboard/monitor.go` | Clipboard monitoring |
+| `agent/internal/tray/tray.go` | System tray, install/uninstall, version |
+| `agent/internal/auth/token_provider.go` | JWT token provider with auto-refresh |
 | `controller/internal/viewer/viewer.go` | Controller UI |
+| `controller/internal/h264/decoder.go` | H.264 FFmpeg decoder |
 | `docs/js/devices.js` | Dashboard device management |
+| `docs/js/webrtc.js` | Dashboard WebRTC + data channel |
 | `docs/admin.html` | Admin panel |
+| `build-local.sh` | Build script (all 3 exe + NSIS) |
 
 ---
 
 ## 🔄 CHANGELOG
+
+### 2026-02-19
+- ✅ v2.73.5: Session 0 pipe capturer — screen capture via named pipe fra bruger-session
+- ✅ SYSTEM token fallback — virker på login-skærmen (ingen bruger logget ind)
+- ✅ ConnectNamedPipe/CaptureRGBA timeouts (10s/5s)
+- ✅ Exponential backoff reinit (5→20→50→100 errors)
+- ✅ Lumberjack log flush fix (fileWriter.Close() flusher til disk)
+- ✅ SDP diagnostik + data channel wait logging
+- ✅ Testet: 1024x768 login screen, 2 FPS idle, 0.1-0.4 Mbit/s, nul fejl
+
+### 2026-02-18
+- ✅ v2.73.0: Fix service mode crashes (3 bugs)
+- ✅ log.SetOutput redirect til logfil i service mode
+- ✅ Session filtrering: kun pending/connecting (expired ignoreres)
+- ✅ DXGI Session 0: skip EnumerateDisplays() (C-level crash)
+- ✅ Panic recovery på streaming/disconnect/stats goroutines
+- ✅ Serialiseret session-håndtering (kun nyeste)
+
+### 2026-02-17
+- ✅ v2.72.2: NSIS installere integreret i build-local.sh
+- ✅ Deploy af installere til Caddy med generiske navne
+- ✅ Wine service registration test
+- ✅ 27/27 Wine integration tests bestået
+
+### 2026-02-16
+- ✅ v2.72.0: Agent skiftet fra anon key til authenticated JWT tokens
+- ✅ RLS strammet med owner-scoped policies
+- ✅ Ny TokenProvider med auto-refresh
+
+### 2026-02-15
+- ✅ v2.71.0: Path traversal beskyttelse og input validering
+
+### 2026-02-14
+- ✅ v2.70.0: Fix kritiske race conditions i WebRTC Manager
+
+### 2026-02-13
+- ✅ v2.69.0: Quick Support — skærmdeling via browser
+- ✅ Auto-reconnect, multi-monitor support
+
+### 2026-02 (tidl.)
+- ✅ v2.68.7: Fix H264 controller decode (FFmpeg NV12→MJPEG)
+- ✅ v2.68.6: Fix H264 mode dropping to idle tiles
+- ✅ v2.68.5: Start Menu + Desktop shortcuts
+- ✅ v2.68.4: Fix taskkill killing own process
+- ✅ v2.68.3: Install as Program for controller
+- ✅ v2.68.2: Auto-stop tray, dashboard 0xFE chunk fix
 
 ### 2025-12-06
 - ✅ Added Session 0 desktop switch for login screen support
@@ -3422,7 +3549,7 @@ gh release upload v2.10.0 agent/remote-agent-v2.10.0.exe --clobber
 - ✅ Fixed device management (admins see all devices, claim button)
 - ✅ Created send_invitation and transfer_device SQL functions
 - ✅ Fixed admin panel field names (approved_at, is_online)
-- ✅ Optimized streaming: 60 FPS, 85% quality, 16MB buffer
+- ✅ Optimized streaming with adaptive quality
 - ✅ Updated ULTIMATE_GUIDE with comprehensive Remote Desktop docs
 
 ### 2025-12-05
