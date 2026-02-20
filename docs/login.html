@@ -42,6 +42,9 @@
         <div class="form-group">
           <label for="password">Adgangskode</label>
           <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+          <button type="button" class="password-toggle" tabindex="-1" aria-label="Vis adgangskode" onclick="togglePasswordVisibility(this)">
+            <i class="fas fa-eye"></i>
+          </button>
         </div>
         <button type="submit" class="btn btn-primary" id="loginBtn">
           <span>Log ind</span>
@@ -64,11 +67,17 @@
         <div class="form-group">
           <label for="signupPassword">Adgangskode</label>
           <input type="password" id="signupPassword" placeholder="••••••••" required autocomplete="new-password" minlength="6">
+          <button type="button" class="password-toggle" tabindex="-1" aria-label="Vis adgangskode" onclick="togglePasswordVisibility(this)">
+            <i class="fas fa-eye"></i>
+          </button>
           <div id="pwStrength" class="pw-meter"></div>
         </div>
         <div class="form-group">
           <label for="signupPasswordConfirm">Bekræft adgangskode</label>
           <input type="password" id="signupPasswordConfirm" placeholder="••••••••" required autocomplete="new-password" minlength="6">
+          <button type="button" class="password-toggle" tabindex="-1" aria-label="Vis adgangskode" onclick="togglePasswordVisibility(this)">
+            <i class="fas fa-eye"></i>
+          </button>
         </div>
         <button type="submit" class="btn btn-primary" id="signupBtn">
           <span>Opret konto</span>
@@ -100,6 +109,24 @@
   <script src="js/config.js?v=3"></script>
   <script src="js/auth.js?v=3"></script>
   <script>initPasswordStrength('signupPassword', 'pwStrength');</script>
+  <script>
+    function togglePasswordVisibility(btn) {
+      const input = btn.parentElement.querySelector('input[type="password"], input[type="text"]');
+      if (!input) return;
+      const icon = btn.querySelector('i');
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+        btn.setAttribute('aria-label', 'Skjul adgangskode');
+      } else {
+        input.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+        btn.setAttribute('aria-label', 'Vis adgangskode');
+      }
+    }
+  </script>
   <script>
     // Handle URL parameters for status messages and redirects
     (function() {
