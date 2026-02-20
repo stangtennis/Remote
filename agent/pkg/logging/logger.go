@@ -109,11 +109,20 @@ func Init(cfg *Config) error {
 
 // getDefaultLogDir returns the default log directory based on OS
 func getDefaultLogDir() string {
+	// macOS: ~/Library/Logs/RemoteDesktopAgent/
+	if home, err := os.UserHomeDir(); err == nil {
+		macLogDir := filepath.Join(home, "Library", "Logs", "RemoteDesktopAgent")
+		if _, err := os.Stat(filepath.Join(home, "Library")); err == nil {
+			return macLogDir
+		}
+	}
+
+	// Windows: %APPDATA%/RemoteAgent/logs/
 	if os.Getenv("APPDATA") != "" {
-		// Windows
 		return filepath.Join(os.Getenv("APPDATA"), "RemoteAgent", "logs")
 	}
-	// Unix-like
+
+	// Linux/other Unix
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "./logs"

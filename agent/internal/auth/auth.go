@@ -180,22 +180,31 @@ func CheckUserApproval(config AuthConfig, accessToken, userID string) (bool, err
 }
 
 // GetCredentialsPath returns the path to the credentials file
-// Uses AppData for normal user, ProgramData for service/admin
+// Uses AppData (Windows), ~/Library/Application Support (macOS), or exe directory
 func GetCredentialsPath() string {
-	// First try user's AppData (works without admin)
+	// macOS: ~/Library/Application Support/RemoteDesktopAgent/
+	if home, err := os.UserHomeDir(); err == nil {
+		macDir := filepath.Join(home, "Library", "Application Support", "RemoteDesktopAgent")
+		if _, err := os.Stat(filepath.Join(home, "Library")); err == nil {
+			if err := os.MkdirAll(macDir, 0755); err == nil {
+				return filepath.Join(macDir, ".credentials")
+			}
+		}
+	}
+
+	// Windows: AppData (works without admin)
 	appData := os.Getenv("APPDATA")
 	if appData != "" {
 		credDir := filepath.Join(appData, "RemoteDesktopAgent")
 		if err := os.MkdirAll(credDir, 0755); err == nil {
 			credPath := filepath.Join(credDir, ".credentials")
-			// If we can write here, use it
 			if _, err := os.Stat(credDir); err == nil {
 				return credPath
 			}
 		}
 	}
 
-	// Try ProgramData (for services running as SYSTEM)
+	// Windows: ProgramData (for services running as SYSTEM)
 	programData := os.Getenv("ProgramData")
 	if programData != "" {
 		credDir := filepath.Join(programData, "RemoteDesktopAgent")
@@ -222,9 +231,22 @@ func SaveCredentials(creds *Credentials) error {
 	var lastErr error
 	saved := false
 
-	// Save to AppData (user accessible)
+	// Save to macOS Application Support
+	if home, err := os.UserHomeDir(); err == nil {
+		macDir := filepath.Join(home, "Library", "Application Support", "RemoteDesktopAgent")
+		if _, err := os.Stat(filepath.Join(home, "Library")); err == nil {
+			if err := os.MkdirAll(macDir, 0755); err == nil {
+				credPath := filepath.Join(macDir, ".credentials")
+				if err := os.WriteFile(credPath, data, 0600); err == nil {
+					log.Printf("Saved to Application Support: %s", credPath)
+					saved = true
+				}
+			}
+		}
+	}
+
+	// Save to AppData (user accessible, Windows)
 	appData := os.Getenv("APPDATA")
-	log.Printf("📁 APPDATA=%s", appData)
 	if appData != "" {
 		credDir := filepath.Join(appData, "RemoteDesktopAgent")
 		log.Printf("📁 Creating dir: %s", credDir)
@@ -276,8 +298,13 @@ func SaveCredentials(creds *Credentials) error {
 func LoadCredentials() (*Credentials, error) {
 	// Build list of paths to check
 	var paths []string
-	
-	// 1. ProgramData (for services running as SYSTEM)
+
+	// 0. macOS Application Support
+	if home, err := os.UserHomeDir(); err == nil {
+		paths = append(paths, filepath.Join(home, "Library", "Application Support", "RemoteDesktopAgent", ".credentials"))
+	}
+
+	// 1. ProgramData (for services running as SYSTEM, Windows)
 	programData := os.Getenv("ProgramData")
 	if programData != "" {
 		paths = append(paths, filepath.Join(programData, "RemoteDesktopAgent", ".credentials"))
