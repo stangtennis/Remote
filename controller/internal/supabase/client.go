@@ -127,62 +127,84 @@ func (c *Client) SignIn(email, password string) (*AuthResponse, error) {
 	return &authResp, nil
 }
 
-// GetDevices fetches devices assigned to the user (by owner_id)
+// isAdmin checks if the current user has admin or super_admin role
+func (c *Client) isAdmin(userID string) bool {
+	url := fmt.Sprintf("%s/rest/v1/user_approvals?user_id=eq.%s&select=role", c.URL, userID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	var approvals []struct {
+		Role string `json:"role"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&approvals); err != nil || len(approvals) == 0 {
+		return false
+	}
+	return approvals[0].Role == "admin" || approvals[0].Role == "super_admin"
+}
+
+// GetDevices fetches devices visible to the user
+// Admins see all devices, regular users see only their assigned devices
 func (c *Client) GetDevices(userID string) ([]Device, error) {
 	logger.Debug("[GetDevices] Starting device fetch for user: %s", userID)
-	
+
 	if c.AuthToken == "" {
 		logger.Error("[GetDevices] Not authenticated - auth token is empty")
 		return nil, fmt.Errorf("not authenticated")
 	}
-	logger.Debug("[GetDevices] Auth token present, length: %d", len(c.AuthToken))
 
-	// Query devices table directly by owner_id
-	url := fmt.Sprintf("%s/rest/v1/remote_devices?owner_id=eq.%s&select=*", c.URL, userID)
-	logger.Debug("[GetDevices] Query URL: %s", url)
+	var url string
+	if c.isAdmin(userID) {
+		// Admins see ALL devices (same as dashboard)
+		logger.Info("[GetDevices] User is admin — fetching all devices")
+		url = fmt.Sprintf("%s/rest/v1/remote_devices?select=*&order=last_seen.desc", c.URL)
+	} else {
+		// Regular users: query by owner_id
+		logger.Debug("[GetDevices] Regular user — fetching owned devices")
+		url = fmt.Sprintf("%s/rest/v1/remote_devices?owner_id=eq.%s&select=*", c.URL, userID)
+	}
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		logger.Error("[GetDevices] Failed to create HTTP request: %v", err)
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("apikey", c.AnonKey)
 	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
 	req.Header.Set("Content-Type", "application/json")
-	logger.Debug("[GetDevices] Request headers set, sending request...")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		logger.Error("[GetDevices] HTTP request failed: %v", err)
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
-	logger.Debug("[GetDevices] Received response with status: %d", resp.StatusCode)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Error("[GetDevices] Failed to read response body: %v", err)
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
-	logger.Debug("[GetDevices] Response body: %s", string(body))
 
 	if resp.StatusCode != http.StatusOK {
-		logger.Error("[GetDevices] Failed to fetch devices with status %d: %s", resp.StatusCode, string(body))
+		logger.Error("[GetDevices] Failed with status %d: %s", resp.StatusCode, string(body))
 		return nil, fmt.Errorf("failed to fetch devices: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
 	var devices []Device
 	if err := json.Unmarshal(body, &devices); err != nil {
-		logger.Error("[GetDevices] Failed to unmarshal devices response: %v", err)
-		logger.Debug("[GetDevices] Raw response: %s", string(body))
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	logger.Info("[GetDevices] Successfully fetched %d devices", len(devices))
 	for i, device := range devices {
-		logger.Debug("[GetDevices] Device %d: ID=%s, Name=%s, Platform=%s, Status=%s, Owner=%s",
-			i+1, device.DeviceID, device.DeviceName, device.Platform, device.Status, device.OwnerID)
+		logger.Debug("[GetDevices] Device %d: ID=%s, Name=%s, Platform=%s, Owner=%s",
+			i+1, device.DeviceID, device.DeviceName, device.Platform, device.OwnerID)
 	}
 
 	return devices, nil
