@@ -21,6 +21,21 @@ jobs:
           go-version: '1.24'
           cache: false
 
+      - name: System info
+        run: |
+          echo "=== System ==="
+          uname -a
+          sw_vers
+          sysctl -n machdep.cpu.brand_string
+          echo "RAM: $(sysctl -n hw.memsize | awk '{print $0/1024/1024/1024 " GB"}')"
+          echo ""
+          echo "=== Display ==="
+          system_profiler SPDisplaysDataType 2>/dev/null | head -20
+          echo ""
+          echo "=== Screen Capture Permission ==="
+          # Check if screen recording is allowed
+          sqlite3 ~/Library/Application\ Support/com.apple.TCC/TCC.db "SELECT * FROM access WHERE service='kTCCServiceScreenCapture'" 2>/dev/null || echo "TCC DB not accessible (expected on CI)"
+
       - name: Byg macOS agent
         run: |
           cd agent
@@ -30,7 +45,64 @@ jobs:
           file remote-agent-macos
           ls -la remote-agent-macos
 
-      - name: Start tmate og post SSH info
+      - name: Test agent start (console mode)
+        run: |
+          cd agent
+          echo "=== Starter agent i console mode (5 sek test) ==="
+          timeout 5 ./remote-agent-macos --console 2>&1 || true
+          echo ""
+          echo "=== Agent exit code: $? ==="
+
+      - name: Test screen capture
+        run: |
+          cd agent
+          echo "=== Test screen capture direkte ==="
+          # Byg en minimal test binary
+          cat > /tmp/test_capture.go << 'GOEOF'
+          package main
+
+          import (
+            "fmt"
+            "os"
+            "image/png"
+            "github.com/nicq-agent/internal/screen"
+          )
+
+          func main() {
+            capturer, err := screen.NewCapturer()
+            if err != nil {
+              fmt.Printf("NewCapturer error: %v\n", err)
+              os.Exit(1)
+            }
+            defer capturer.Close()
+
+            img, err := capturer.CaptureFrame()
+            if err != nil {
+              fmt.Printf("CaptureFrame error: %v\n", err)
+              os.Exit(1)
+            }
+
+            f, _ := os.Create("/tmp/screenshot.png")
+            defer f.Close()
+            png.Encode(f, img)
+            bounds := img.Bounds()
+            fmt.Printf("Screenshot: %dx%d\n", bounds.Dx(), bounds.Dy())
+            fmt.Println("Screen capture works!")
+          }
+          GOEOF
+          # Vi kan ikke nemt bygge en separat binary med internal packages
+          # I stedet kører vi Go test for screen package
+          echo "=== Kører screen capture unit test ==="
+          cd internal/screen
+          go test -v -run TestCapture -timeout 30s 2>&1 || echo "Screen test completed (may fail without permissions)"
+
+      - name: Test input injection
+        run: |
+          cd agent/internal/input
+          echo "=== Kører input unit tests ==="
+          go test -v -timeout 30s 2>&1 || echo "Input test completed (may fail without permissions)"
+
+      - name: Start tmate for debugging
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -50,13 +122,11 @@ jobs:
           $SSH_LINE
           \`\`\`
 
-          Web shell: $WEB_LINE
+          Web: $WEB_LINE
+          Agent: \`$(pwd)/agent/remote-agent-macos\`
 
-          Agent binary: \`$(pwd)/agent/remote-agent-macos\`
-
-          > Denne issue lukkes automatisk når sessionen slutter." || echo "Issue creation failed, men SSH session kører stadig!"
-          # Vent
-          echo "SSH session aktiv. Opret /tmp/continue for at afslutte."
+          > Lukkes automatisk." || echo "Issue creation failed"
+          echo "Opret /tmp/continue for at afslutte."
           while [ ! -f /tmp/continue ]; do sleep 30; done
 
       - name: Luk tmate issue
