@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -64,8 +63,8 @@ type FileBrowser struct {
 func NewFileBrowser(parent fyne.Window) *FileBrowser {
 	fb := &FileBrowser{
 		parentWindow:   parent,
-		localPath:      getDefaultPath(),
-		remotePath:     "C:\\",
+		localPath:      defaultRemotePath,
+		remotePath:     defaultRemotePath,
 		localSelected:  -1,
 		remoteSelected: -1,
 	}
@@ -197,10 +196,10 @@ func (fb *FileBrowser) buildUI() fyne.CanvasObject {
 	fb.remotePathLabel.Wrapping = fyne.TextTruncate
 
 	// Drive selector for remote
-	fb.remoteDriveSelect = widget.NewSelect([]string{"C:\\"}, func(drive string) {
+	fb.remoteDriveSelect = widget.NewSelect([]string{defaultRemotePath}, func(drive string) {
 		fb.requestRemoteDir(drive)
 	})
-	fb.remoteDriveSelect.SetSelected("C:\\")
+	fb.remoteDriveSelect.SetSelected(defaultRemotePath)
 
 	remoteUpBtn := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() {
 		parent := filepath.Dir(fb.remotePath)
@@ -542,41 +541,6 @@ func (fb *FileBrowser) Close() {
 }
 
 // === Helper functions ===
-
-func getDefaultPath() string {
-	if runtime.GOOS == "windows" {
-		return "C:\\"
-	}
-	home, _ := os.UserHomeDir()
-	return home
-}
-
-func getLocalDrives() []string {
-	if runtime.GOOS != "windows" {
-		return []string{"/"}
-	}
-
-	drives := []string{}
-	
-	// Use a safer method to detect drives on Windows
-	// Only check common drive letters to avoid hanging on CD-ROM/network drives
-	commonDrives := []rune{'C', 'D', 'E', 'F', 'G', 'H'}
-	
-	for _, letter := range commonDrives {
-		drive := string(letter) + ":\\"
-		// Use a quick check - just see if the path exists
-		if info, err := os.Stat(drive); err == nil && info.IsDir() {
-			drives = append(drives, drive)
-		}
-	}
-	
-	// Fallback to C:\ if nothing found
-	if len(drives) == 0 {
-		drives = []string{"C:\\"}
-	}
-	
-	return drives
-}
 
 func formatSize(size int64) string {
 	const (

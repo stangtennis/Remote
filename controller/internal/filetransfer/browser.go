@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -365,8 +364,8 @@ func (fb *FileBrowser) refreshLocal() {
 			continue
 		}
 		
-		// Skip hidden files on Windows
-		if runtime.GOOS == "windows" && strings.HasPrefix(e.Name(), ".") {
+		// Skip hidden files (dotfiles)
+		if strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 		
@@ -511,7 +510,7 @@ func (fb *FileBrowser) doUploadFile(localPath string) {
 		return
 	}
 	
-	remoteDst := fb.remotePath + "\\" + filepath.Base(localPath)
+	remoteDst := filepath.Join(fb.remotePath, filepath.Base(localPath))
 	fb.manager.Upload(localPath, remoteDst)
 	fb.statusLabel.SetText(fmt.Sprintf("Uploader: %s", filepath.Base(localPath)))
 	fb.progressBar.Show()
@@ -541,7 +540,7 @@ func (fb *FileBrowser) doNewFolder() {
 				dialog.ShowInformation("Fejl", "Naviger til en mappe først", fb.window)
 				return
 			}
-			newPath := fb.remotePath + "\\" + entry.Text
+			newPath := filepath.Join(fb.remotePath, entry.Text)
 			fb.manager.CreateDirectory(newPath)
 			// Refresh will happen when we get ACK
 			time.AfterFunc(500*time.Millisecond, func() {
@@ -629,7 +628,7 @@ func (fb *FileBrowser) doRename() {
 			fb.refreshLocal()
 		} else {
 			dir := filepath.Dir(entry.Path)
-			newPath := dir + "\\" + nameEntry.Text
+			newPath := filepath.Join(dir, nameEntry.Text)
 			fb.manager.Rename(entry.Path, newPath)
 			time.AfterFunc(500*time.Millisecond, func() {
 				fb.manager.ListDirectory(fb.remotePath)

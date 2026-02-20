@@ -31,12 +31,22 @@ func (w *syncWriter) Write(p []byte) (n int, err error) {
 func Init() error {
 	var logFilePath string
 
-	// Try AppData first (always writable), then exe directory
-	if appData := os.Getenv("APPDATA"); appData != "" {
-		logDir := filepath.Join(appData, "RemoteDesktopController")
+	// Try macOS ~/Library/Logs first, then Windows APPDATA, then exe directory
+	if home, err := os.UserHomeDir(); err == nil {
+		if _, err := os.Stat(filepath.Join(home, "Library")); err == nil {
+			// macOS: ~/Library/Logs/RemoteDesktopController/
+			logDir := filepath.Join(home, "Library", "Logs", "RemoteDesktopController")
+			os.MkdirAll(logDir, 0755)
+			logFilePath = filepath.Join(logDir, "controller.log")
+		}
+	}
+	if logFilePath == "" && os.Getenv("APPDATA") != "" {
+		// Windows: %APPDATA%/RemoteDesktopController/
+		logDir := filepath.Join(os.Getenv("APPDATA"), "RemoteDesktopController")
 		os.MkdirAll(logDir, 0755)
 		logFilePath = filepath.Join(logDir, "controller.log")
-	} else {
+	}
+	if logFilePath == "" {
 		// Fallback to executable directory
 		exePath, err := os.Executable()
 		if err != nil {
@@ -113,9 +123,17 @@ func Fatal(format string, v ...interface{}) {
 
 // GetLogPath returns the path to the log file
 func GetLogPath() string {
+	// macOS: ~/Library/Logs/RemoteDesktopController/
+	if home, err := os.UserHomeDir(); err == nil {
+		if _, err := os.Stat(filepath.Join(home, "Library")); err == nil {
+			return filepath.Join(home, "Library", "Logs", "RemoteDesktopController", "controller.log")
+		}
+	}
+	// Windows: %APPDATA%/RemoteDesktopController/
 	if appData := os.Getenv("APPDATA"); appData != "" {
 		return filepath.Join(appData, "RemoteDesktopController", "controller.log")
 	}
+	// Fallback: exe directory
 	exePath, err := os.Executable()
 	if err != nil {
 		return "controller.log"
