@@ -117,6 +117,53 @@ func main() {
 	myWindow.SetContent(content)
 	logger.Info("UI initialized successfully")
 
+	// Auto-update check in background
+	go func() {
+		time.Sleep(3 * time.Second) // Vent til UI er klar
+		logger.Info("🔍 Auto-update check starting...")
+		u, err := updater.NewUpdater(Version, "controller")
+		if err != nil {
+			logger.Error("Failed to create updater: %v", err)
+			return
+		}
+		if !u.ShouldAutoCheck(1 * time.Hour) {
+			logger.Info("Auto-update: skipped (checked recently)")
+			return
+		}
+		if err := u.CheckForUpdate(); err != nil {
+			logger.Error("Auto-update check failed: %v", err)
+			return
+		}
+		info := u.GetAvailableUpdate()
+		if info == nil {
+			logger.Info("✅ Controller is up to date")
+			return
+		}
+		logger.Info("🆕 Update available: %s", info.TagName)
+		// Download update
+		if err := u.DownloadUpdate(); err != nil {
+			logger.Error("Auto-update download failed: %v", err)
+			return
+		}
+		// Prompt user to install
+		fyne.Do(func() {
+			dialog.ShowConfirm(
+				"Opdatering tilgængelig",
+				fmt.Sprintf("Version %s er klar til installation.\nGenstart nu?", info.TagName),
+				func(ok bool) {
+					if ok {
+						if err := u.InstallUpdate(); err != nil {
+							dialog.ShowError(err, myWindow)
+							return
+						}
+						myApp.Quit()
+					}
+				},
+				myWindow,
+			)
+		})
+	}()
+
 	// Show and run
 	logger.Info("Launching application window")
 	myWindow.ShowAndRun()
