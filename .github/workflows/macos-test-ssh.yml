@@ -2,6 +2,9 @@ name: macOS E2E Test (Agent + Controller)
 
 on:
   workflow_dispatch:
+  schedule:
+    # Kør dagligt kl. 06:00 UTC (08:00 dansk tid)
+    - cron: '0 6 * * *'
 
 permissions:
   issues: write
