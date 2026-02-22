@@ -1075,11 +1075,11 @@
         remoteDataChannel.send(JSON.stringify({ t: 'mouse_click', button: buttons[e.button] || 'left', down: false }));
       });
 
-      // Mouse scroll
+      // Mouse scroll (agent expects normalized delta: -1 or 1)
       canvas.addEventListener('wheel', (e) => {
         if (!remoteDataChannel || remoteDataChannel.readyState !== 'open') return;
         e.preventDefault();
-        remoteDataChannel.send(JSON.stringify({ t: 'mouse_scroll', dx: e.deltaX, dy: e.deltaY }));
+        remoteDataChannel.send(JSON.stringify({ t: 'mouse_scroll', delta: e.deltaY > 0 ? -1 : 1 }));
       }, { passive: false });
 
       // Keyboard
