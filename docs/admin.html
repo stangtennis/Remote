@@ -859,6 +859,16 @@
     let remoteDataChannel = null;
     let remoteCanvas = null;
     let remoteCtx = null;
+    let remoteStatsInterval = null;
+    let remoteFramesReceived = 0;
+    let remoteBytesReceived = 0;
+    let remoteLastStatsTime = Date.now();
+    let remoteInputActive = false;
+    // Chunked frame reassembly
+    let remoteFrameChunks = [];
+    let remoteExpectedChunks = 0;
+    let remoteCurrentFrameId = -1;
+    let remoteFrameTimeout = null;
 
     // Load online devices for remote control
     async function loadRemoteDevices() {
@@ -874,7 +884,7 @@
 
         const select = document.getElementById('remoteDeviceSelect');
         select.innerHTML = '<option value="">Vælg en online enhed...</option>';
-        
+
         if (devices && devices.length > 0) {
           devices.forEach(device => {
             const option = document.createElement('option');
@@ -908,13 +918,194 @@
       await startRemoteSession(deviceId);
     };
 
+    // Display a full JPEG frame on canvas
+    function remoteDisplayFrame(jpegData) {
+      const blob = new Blob([jpegData], { type: 'image/jpeg' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        if (remoteCanvas.width !== img.width || remoteCanvas.height !== img.height) {
+          remoteCanvas.width = img.width;
+          remoteCanvas.height = img.height;
+        }
+        remoteCtx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    }
+
+    // Display a dirty region (partial update)
+    function remoteDisplayRegion(jpegData, x, y, w, h) {
+      const blob = new Blob([jpegData], { type: 'image/jpeg' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        remoteCtx.drawImage(img, x, y, w, h);
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    }
+
+    // Handle agent JSON messages (monitor list, clipboard, etc.)
+    function handleRemoteAgentMessage(msg) {
+      if (msg.type === 'monitors') {
+        console.log('📺 Monitor list:', msg.monitors);
+      } else if (msg.type === 'clipboard') {
+        console.log('📋 Clipboard:', msg.text?.substring(0, 50));
+      } else {
+        console.log('📨 Agent message:', msg.type);
+      }
+    }
+
+    // Process incoming data channel message (JPEG frames)
+    function handleRemoteDataMessage(event) {
+      let dataSize = 0;
+      if (event.data instanceof ArrayBuffer) {
+        dataSize = event.data.byteLength;
+      } else if (event.data instanceof Blob) {
+        dataSize = event.data.size;
+      } else if (typeof event.data === 'string') {
+        dataSize = event.data.length;
+        // Try to parse JSON control messages
+        try {
+          const msg = JSON.parse(event.data);
+          handleRemoteAgentMessage(msg);
+        } catch(e) {}
+        return;
+      }
+      remoteBytesReceived += dataSize;
+
+      if (event.data instanceof ArrayBuffer) {
+        const data = new Uint8Array(event.data);
+
+        // Check if JSON (starts with '{' = 0x7B)
+        if (data.length > 0 && data[0] === 0x7B) {
+          try {
+            const text = new TextDecoder().decode(data);
+            const msg = JSON.parse(text);
+            handleRemoteAgentMessage(msg);
+          } catch (e) {}
+          return;
+        }
+
+        const FRAME_TYPE_REGION = 0x02;
+        const CHUNK_MAGIC_NEW = 0xFE;
+
+        // Dirty region (type 0x02): [type, x_lo, x_hi, y_lo, y_hi, w_lo, w_hi, h_lo, h_hi, ...jpeg]
+        if (data.length > 9 && data[0] === FRAME_TYPE_REGION) {
+          const x = data[1] | (data[2] << 8);
+          const y = data[3] | (data[4] << 8);
+          const w = data[5] | (data[6] << 8);
+          const h = data[7] | (data[8] << 8);
+          const jpegData = data.slice(9);
+          remoteDisplayRegion(jpegData, x, y, w, h);
+          remoteFramesReceived++;
+        }
+        // Chunked frame (0xFE magic): [magic, frameId_hi, frameId_lo, chunkIdx, totalChunks, ...data]
+        else if (data.length > 5 && data[0] === CHUNK_MAGIC_NEW) {
+          const frameId = (data[1] << 8) | data[2];
+          const chunkIndex = data[3];
+          const totalChunks = data[4];
+          const chunkData = data.slice(5);
+
+          if (remoteCurrentFrameId !== frameId) {
+            remoteFrameChunks = new Array(totalChunks);
+            remoteExpectedChunks = totalChunks;
+            remoteCurrentFrameId = frameId;
+            if (remoteFrameTimeout) clearTimeout(remoteFrameTimeout);
+            remoteFrameTimeout = setTimeout(() => {
+              remoteFrameChunks = [];
+              remoteExpectedChunks = 0;
+            }, 500);
+          }
+
+          if (remoteExpectedChunks > 0 && chunkIndex < remoteExpectedChunks) {
+            remoteFrameChunks[chunkIndex] = chunkData;
+            const received = remoteFrameChunks.filter(c => c).length;
+            if (received === remoteExpectedChunks) {
+              if (remoteFrameTimeout) { clearTimeout(remoteFrameTimeout); remoteFrameTimeout = null; }
+              const totalLen = remoteFrameChunks.reduce((sum, c) => sum + c.length, 0);
+              const complete = new Uint8Array(totalLen);
+              let off = 0;
+              for (const chunk of remoteFrameChunks) { complete.set(chunk, off); off += chunk.length; }
+              remoteDisplayFrame(complete.buffer);
+              remoteFrameChunks = [];
+              remoteExpectedChunks = 0;
+              remoteFramesReceived++;
+            }
+          }
+        }
+        // Legacy full frame (starts with JPEG SOI marker 0xFF 0xD8)
+        else if (data.length > 2 && data[0] === 0xFF && data[1] === 0xD8) {
+          remoteDisplayFrame(data.buffer);
+          remoteFramesReceived++;
+        }
+      }
+    }
+
+    // Setup mouse/keyboard input on remote canvas
+    function setupRemoteInput() {
+      if (remoteInputActive) return;
+      remoteInputActive = true;
+      const canvas = remoteCanvas;
+
+      // Prevent context menu
+      canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      // Mouse move
+      canvas.addEventListener('mousemove', (e) => {
+        if (!remoteDataChannel || remoteDataChannel.readyState !== 'open') return;
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+        remoteDataChannel.send(JSON.stringify({ t: 'mouse_move', x, y }));
+      });
+
+      // Mouse down/up
+      canvas.addEventListener('mousedown', (e) => {
+        if (!remoteDataChannel || remoteDataChannel.readyState !== 'open') return;
+        e.preventDefault();
+        const buttons = ['left', 'middle', 'right'];
+        remoteDataChannel.send(JSON.stringify({ t: 'mouse_click', button: buttons[e.button] || 'left', down: true }));
+      });
+      canvas.addEventListener('mouseup', (e) => {
+        if (!remoteDataChannel || remoteDataChannel.readyState !== 'open') return;
+        e.preventDefault();
+        const buttons = ['left', 'middle', 'right'];
+        remoteDataChannel.send(JSON.stringify({ t: 'mouse_click', button: buttons[e.button] || 'left', down: false }));
+      });
+
+      // Mouse scroll
+      canvas.addEventListener('wheel', (e) => {
+        if (!remoteDataChannel || remoteDataChannel.readyState !== 'open') return;
+        e.preventDefault();
+        remoteDataChannel.send(JSON.stringify({ t: 'mouse_scroll', dx: e.deltaX, dy: e.deltaY }));
+      }, { passive: false });
+
+      // Keyboard
+      canvas.setAttribute('tabindex', '0');
+      canvas.addEventListener('keydown', (e) => {
+        if (!remoteDataChannel || remoteDataChannel.readyState !== 'open') return;
+        e.preventDefault();
+        remoteDataChannel.send(JSON.stringify({ t: 'key', code: e.code, key: e.key, down: true, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey }));
+      });
+      canvas.addEventListener('keyup', (e) => {
+        if (!remoteDataChannel || remoteDataChannel.readyState !== 'open') return;
+        e.preventDefault();
+        remoteDataChannel.send(JSON.stringify({ t: 'key', code: e.code, key: e.key, down: false, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey }));
+      });
+
+      // Focus canvas on click
+      canvas.addEventListener('click', () => canvas.focus());
+    }
+
     // Start remote WebRTC session
     async function startRemoteSession(deviceId) {
       try {
         updateRemoteStatus('🟡 Forbinder...');
 
         const { data: { session } } = await supabase.auth.getSession();
-        
+
         // Create session via Edge Function
         const { data: sessionData, error } = await supabase.functions.invoke('session-token', {
           body: { device_id: deviceId, use_pin: false },
@@ -924,17 +1115,37 @@
         if (error) throw error;
         remoteSession = sessionData;
 
-        // Setup WebRTC
-        const config = {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
+        // Fetch TURN credentials
+        let iceServers = [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ];
+        try {
+          const { data: turnData } = await supabase.functions.invoke('turn-credentials', {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+          });
+          if (turnData && turnData.iceServers) {
+            iceServers = turnData.iceServers;
+            console.log('🔒 TURN credentials fetched');
+          }
+        } catch(e) { console.warn('TURN fetch failed, using STUN only'); }
+
+        remotePeerConnection = new RTCPeerConnection({ iceServers });
+
+        // Create data channel BEFORE offer (critical - agent needs this for streaming)
+        remoteDataChannel = remotePeerConnection.createDataChannel('control', { ordered: true });
+        remoteDataChannel.binaryType = 'arraybuffer';
+
+        remoteDataChannel.onopen = () => {
+          console.log('📡 Data channel OPEN - agent will start streaming');
+          setupRemoteInput();
         };
+        remoteDataChannel.onclose = () => {
+          console.log('📡 Data channel closed');
+        };
+        remoteDataChannel.onmessage = handleRemoteDataMessage;
 
-        remotePeerConnection = new RTCPeerConnection(config);
-
-        // Handle incoming video track
+        // Handle incoming video track (H.264 mode)
         remotePeerConnection.ontrack = (event) => {
           console.log('📹 Received video track');
           const stream = event.streams[0];
@@ -942,42 +1153,60 @@
           video.srcObject = stream;
           video.autoplay = true;
           video.muted = true;
-          
+          video.playsInline = true;
+          // Append to DOM (required for autoplay in some browsers)
+          video.style.position = 'absolute';
+          video.style.width = '0';
+          video.style.height = '0';
+          video.style.opacity = '0';
+          document.body.appendChild(video);
+
           video.onloadedmetadata = () => {
             remoteCanvas.width = video.videoWidth;
             remoteCanvas.height = video.videoHeight;
-            
             function drawFrame() {
-              if (video.readyState === video.HAVE_ENOUGH_DATA) {
+              if (video.readyState >= video.HAVE_CURRENT_DATA) {
                 remoteCtx.drawImage(video, 0, 0, remoteCanvas.width, remoteCanvas.height);
               }
               requestAnimationFrame(drawFrame);
             }
             drawFrame();
           };
+          video.play().catch(e => console.warn('Video autoplay blocked:', e));
         };
 
-        // Handle data channel
-        remotePeerConnection.ondatachannel = (event) => {
-          remoteDataChannel = event.channel;
-          console.log('📡 Data channel opened');
+        // ICE candidate handler
+        remotePeerConnection.onicecandidate = async (event) => {
+          if (event.candidate) {
+            await sendRemoteSignal({
+              session_id: remoteSession.session_id,
+              from: 'dashboard',
+              type: 'ice',
+              candidate: {
+                candidate: event.candidate.candidate,
+                sdpMid: event.candidate.sdpMid,
+                sdpMLineIndex: event.candidate.sdpMLineIndex
+              }
+            });
+          }
         };
 
         // Handle connection state
         remotePeerConnection.onconnectionstatechange = () => {
           const state = remotePeerConnection.connectionState;
           console.log('Connection state:', state);
-          
+
           if (state === 'connected') {
             updateRemoteStatus('🟢 Forbundet');
             document.getElementById('remoteStats').style.display = 'block';
+            startRemoteStats();
           } else if (state === 'disconnected' || state === 'failed') {
             updateRemoteStatus('🔴 Afbrudt');
-            document.getElementById('remoteStats').style.display = 'none';
+            stopRemoteStats();
           }
         };
 
-        // Create offer
+        // Create offer (with data channel already added)
         const offer = await remotePeerConnection.createOffer({
           offerToReceiveVideo: true,
           offerToReceiveAudio: false
@@ -999,6 +1228,43 @@
         console.error('Error starting remote session:', error);
         updateRemoteStatus('🔴 Fejl: ' + error.message);
       }
+    }
+
+    // FPS and RTT stats
+    function startRemoteStats() {
+      stopRemoteStats();
+      remoteLastStatsTime = Date.now();
+      remoteFramesReceived = 0;
+      remoteBytesReceived = 0;
+
+      remoteStatsInterval = setInterval(async () => {
+        const now = Date.now();
+        const elapsed = (now - remoteLastStatsTime) / 1000;
+        const fps = elapsed > 0 ? (remoteFramesReceived / elapsed).toFixed(1) : 0;
+        const mbps = elapsed > 0 ? ((remoteBytesReceived * 8) / elapsed / 1000000).toFixed(2) : 0;
+
+        // Get RTT from WebRTC stats
+        let rtt = 0;
+        if (remotePeerConnection) {
+          try {
+            const stats = await remotePeerConnection.getStats();
+            stats.forEach(report => {
+              if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.currentRoundTripTime) {
+                rtt = Math.round(report.currentRoundTripTime * 1000);
+              }
+            });
+          } catch(e) {}
+        }
+
+        document.getElementById('remoteStats').textContent = `FPS: ${fps} | RTT: ${rtt}ms | ${mbps} Mbit/s`;
+        remoteFramesReceived = 0;
+        remoteBytesReceived = 0;
+        remoteLastStatsTime = now;
+      }, 1000);
+    }
+
+    function stopRemoteStats() {
+      if (remoteStatsInterval) { clearInterval(remoteStatsInterval); remoteStatsInterval = null; }
     }
 
     // Send signaling message
@@ -1026,7 +1292,7 @@
           filter: `session_id=eq.${sessionId}`
         }, async (payload) => {
           const signal = payload.new;
-          
+
           if (signal.from_side === 'agent') {
             if (signal.msg_type === 'answer') {
               const answer = new RTCSessionDescription({
@@ -1051,6 +1317,7 @@
 
     // Disconnect remote session
     window.disconnectRemote = function() {
+      stopRemoteStats();
       if (remotePeerConnection) {
         remotePeerConnection.close();
         remotePeerConnection = null;
@@ -1059,7 +1326,8 @@
         remoteDataChannel.close();
         remoteDataChannel = null;
       }
-      
+      remoteInputActive = false;
+
       updateRemoteStatus('🔴 Ikke forbundet');
       document.getElementById('remoteStats').style.display = 'none';
       document.getElementById('remotePreviewContainer').style.display = 'none';
