@@ -980,8 +980,6 @@
 
         // Check if JSON (starts with '{' = 0x7B)
         if (data.length > 0 && data[0] === 0x7B) {
-          console.log(`📊 JSON via ArrayBuffer: ${dataSize} bytes`);
-
           try {
             const text = new TextDecoder().decode(data);
             const msg = JSON.parse(text);
@@ -990,11 +988,17 @@
           return;
         }
 
+        const FRAME_TYPE_FULL = 0x01;
         const FRAME_TYPE_REGION = 0x02;
         const CHUNK_MAGIC_NEW = 0xFE;
 
+        // Full frame (type 0x01): [type, reserved(3), ...jpeg_data]
+        if (data.length > 4 && data[0] === FRAME_TYPE_FULL) {
+          remoteDisplayFrame(data.slice(4).buffer);
+          remoteFramesReceived++;
+        }
         // Dirty region (type 0x02): [type, x_lo, x_hi, y_lo, y_hi, w_lo, w_hi, h_lo, h_hi, ...jpeg]
-        if (data.length > 9 && data[0] === FRAME_TYPE_REGION) {
+        else if (data.length > 9 && data[0] === FRAME_TYPE_REGION) {
           const x = data[1] | (data[2] << 8);
           const y = data[3] | (data[4] << 8);
           const w = data[5] | (data[6] << 8);
@@ -1030,23 +1034,21 @@
               const complete = new Uint8Array(totalLen);
               let off = 0;
               for (const chunk of remoteFrameChunks) { complete.set(chunk, off); off += chunk.length; }
-              console.log(`🖼️ Frame ${frameId} assembled: ${totalLen} bytes, first byte: 0x${complete[0].toString(16)}`);
-              // Check if reassembled data is a dirty region (0x02 header) or full JPEG
-              if (complete.length > 9 && complete[0] === FRAME_TYPE_REGION) {
+              // Check reassembled data type: full frame (0x01), dirty region (0x02), or raw JPEG
+              if (complete.length > 4 && complete[0] === FRAME_TYPE_FULL) {
+                remoteDisplayFrame(complete.slice(4).buffer);
+              } else if (complete.length > 9 && complete[0] === FRAME_TYPE_REGION) {
                 const rx = complete[1] | (complete[2] << 8);
                 const ry = complete[3] | (complete[4] << 8);
                 const rw = complete[5] | (complete[6] << 8);
                 const rh = complete[7] | (complete[8] << 8);
-                console.log(`🖼️ Dirty region: ${rx},${ry} ${rw}x${rh}, jpeg: ${complete.length - 9} bytes`);
                 remoteDisplayRegion(complete.slice(9), rx, ry, rw, rh);
               } else {
-                console.log(`🖼️ Full JPEG frame: ${totalLen} bytes`);
                 remoteDisplayFrame(complete.buffer);
               }
               remoteFrameChunks = [];
               remoteExpectedChunks = 0;
               remoteFramesReceived++;
-              console.log(`🖼️ remoteFramesReceived now: ${remoteFramesReceived}`);
             }
           }
         }
