@@ -8,17 +8,33 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 const (
-	// OpenH264 version and download URL (v2.1.1 is latest available on GitHub)
+	// OpenH264 version (v2.1.1 is latest available on GitHub)
 	openH264Version = "2.1.1"
-	openH264URL     = "https://github.com/cisco/openh264/releases/download/v2.1.1/openh264-2.1.1-win64.dll.bz2"
-	openH264DLLName = "openh264-2.1.1-win64.dll"
 )
 
-// EnsureOpenH264DLL checks if OpenH264 DLL exists, downloads if not
+// Platform-specific OpenH264 download URLs and library names
+func openH264Config() (url, libName string) {
+	switch runtime.GOOS {
+	case "darwin":
+		return "https://github.com/cisco/openh264/releases/download/v2.1.1/libopenh264-2.1.1-osx64.6.dylib.bz2",
+			"libopenh264-2.1.1-osx64.6.dylib"
+	case "linux":
+		return "https://github.com/cisco/openh264/releases/download/v2.1.1/libopenh264-2.1.1-linux64.6.so.bz2",
+			"libopenh264-2.1.1-linux64.6.so"
+	default: // windows
+		return "https://github.com/cisco/openh264/releases/download/v2.1.1/openh264-2.1.1-win64.dll.bz2",
+			"openh264-2.1.1-win64.dll"
+	}
+}
+
+// EnsureOpenH264DLL checks if OpenH264 library exists, downloads if not
 func EnsureOpenH264DLL() (string, error) {
+	openH264URL, openH264LibName := openH264Config()
+
 	// Get executable directory
 	exePath, err := os.Executable()
 	if err != nil {
@@ -26,15 +42,15 @@ func EnsureOpenH264DLL() (string, error) {
 	}
 	exeDir := filepath.Dir(exePath)
 
-	// Prefer placing the DLL next to the executable (best for portability),
+	// Prefer placing the library next to the executable (best for portability),
 	// but fall back to a writable per-machine/per-user location if exeDir isn't writable.
-	primaryPath := filepath.Join(exeDir, openH264DLLName)
+	primaryPath := filepath.Join(exeDir, openH264LibName)
 	paths := []string{primaryPath}
 	if cacheDir, err := os.UserCacheDir(); err == nil && cacheDir != "" {
-		paths = append(paths, filepath.Join(cacheDir, "RemoteDesktopAgent", "openh264", openH264DLLName))
+		paths = append(paths, filepath.Join(cacheDir, "RemoteDesktopAgent", "openh264", openH264LibName))
 	}
 	if programData := os.Getenv("PROGRAMDATA"); programData != "" {
-		paths = append(paths, filepath.Join(programData, "RemoteDesktopAgent", "openh264", openH264DLLName))
+		paths = append(paths, filepath.Join(programData, "RemoteDesktopAgent", "openh264", openH264LibName))
 	}
 
 	// Check if DLL already exists in any candidate location
