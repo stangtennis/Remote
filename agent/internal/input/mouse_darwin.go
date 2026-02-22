@@ -10,7 +10,7 @@ package input
 static void mouseMove(double x, double y) {
     CGEventRef event = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved,
         CGPointMake(x, y), kCGMouseButtonLeft);
-    CGEventPost(kCGHIDEventTap, event);
+    CGEventPost(kCGSessionEventTap, event);
     CFRelease(event);
 }
 
@@ -32,7 +32,7 @@ static void mouseDown(double x, double y, int button) {
         break;
     }
     CGEventRef event = CGEventCreateMouseEvent(NULL, type, CGPointMake(x, y), btn);
-    CGEventPost(kCGHIDEventTap, event);
+    CGEventPost(kCGSessionEventTap, event);
     CFRelease(event);
 }
 
@@ -54,13 +54,13 @@ static void mouseUp(double x, double y, int button) {
         break;
     }
     CGEventRef event = CGEventCreateMouseEvent(NULL, type, CGPointMake(x, y), btn);
-    CGEventPost(kCGHIDEventTap, event);
+    CGEventPost(kCGSessionEventTap, event);
     CFRelease(event);
 }
 
 static void mouseScroll(int dy) {
     CGEventRef event = CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitLine, 1, dy);
-    CGEventPost(kCGHIDEventTap, event);
+    CGEventPost(kCGSessionEventTap, event);
     CFRelease(event);
 }
 */

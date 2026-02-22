@@ -9,20 +9,21 @@ package input
 
 static void keyEvent(int keyCode, int down) {
     CGEventRef event = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)keyCode, down ? true : false);
-    CGEventPost(kCGHIDEventTap, event);
+    CGEventPost(kCGSessionEventTap, event);
     CFRelease(event);
 }
 
 static void keyEventWithFlags(int keyCode, int down, uint64_t flags) {
     CGEventRef event = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)keyCode, down ? true : false);
     CGEventSetFlags(event, (CGEventFlags)flags);
-    CGEventPost(kCGHIDEventTap, event);
+    CGEventPost(kCGSessionEventTap, event);
     CFRelease(event);
 }
 */
 import "C"
 import (
 	"fmt"
+	"log"
 	"strings"
 )
 
@@ -52,6 +53,8 @@ func (k *KeyboardController) SendKeyWithModifiers(code string, down bool, ctrl, 
 	if keyCode < 0 {
 		return fmt.Errorf("unknown key code: %s", code)
 	}
+
+	log.Printf("⌨️ Key: %s (0x%02X) down=%v ctrl=%v shift=%v alt=%v", code, keyCode, down, ctrl, shift, alt)
 
 	// Build modifier flags (macOS CGEvent flag masks)
 	var flags C.uint64_t = 0
