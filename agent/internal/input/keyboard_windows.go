@@ -78,6 +78,13 @@ func (k *KeyboardController) SendKeyWithModifiers(code string, down bool, ctrl, 
 	return nil
 }
 
+// ClearModifiers releases all modifier keys to prevent stuck modifier state
+func (k *KeyboardController) ClearModifiers() {
+	for _, mod := range []string{"ctrl", "shift", "alt", "cmd"} {
+		robotgo.KeyUp(mod)
+	}
+}
+
 func mapKeyCode(code string) string {
 	// Common key mappings from JavaScript to robotgo
 	keyMap := map[string]string{

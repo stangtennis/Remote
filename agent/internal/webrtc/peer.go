@@ -530,6 +530,11 @@ func (m *Manager) setupDataChannelHandlers(dc *webrtc.DataChannel) {
 	dc.OnOpen(func() {
 		log.Println("✅ DATA CHANNEL READY - Controller can now receive frames!")
 
+		// Clear any stuck modifier keys from previous sessions
+		if m.keyController != nil {
+			m.keyController.ClearModifiers()
+		}
+
 		// NOTE: File transfer callback is set in setupFileChannelHandlers
 		// Do NOT set it here as it would override the file channel callback
 
@@ -593,6 +598,10 @@ func (m *Manager) setupFileChannelHandlers(dc *webrtc.DataChannel) {
 func (m *Manager) setupControlChannelHandlers(dc *webrtc.DataChannel) {
 	dc.OnOpen(func() {
 		log.Println("🎮 CONTROL CHANNEL READY - Low-latency input enabled!")
+		// Clear any stuck modifier keys from previous sessions
+		if m.keyController != nil {
+			m.keyController.ClearModifiers()
+		}
 	})
 
 	dc.OnClose(func() {
