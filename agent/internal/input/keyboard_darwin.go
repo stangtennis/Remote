@@ -9,6 +9,7 @@ package input
 
 static void keyEvent(int keyCode, int down) {
     CGEventRef event = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)keyCode, down ? true : false);
+    CGEventSetFlags(event, 0);  // Explicitly clear all modifiers to prevent stuck modifier state
     CGEventPost(kCGHIDEventTap, event);
     CFRelease(event);
 }
@@ -72,6 +73,24 @@ func (k *KeyboardController) SendKeyWithModifiers(code string, down bool, ctrl, 
 	}
 
 	return nil
+}
+
+// ClearModifiers releases all modifier keys to prevent stuck modifier state
+// (e.g., after a session drops while modifier keys were held)
+func (k *KeyboardController) ClearModifiers() {
+	modifiers := []int{
+		0x37, // Left Command
+		0x36, // Right Command
+		0x38, // Left Shift
+		0x3C, // Right Shift
+		0x3B, // Left Control
+		0x3E, // Right Control
+		0x3A, // Left Alt/Option
+		0x3D, // Right Alt/Option
+	}
+	for _, code := range modifiers {
+		C.keyEvent(C.int(code), 0) // keyup
+	}
 }
 
 func boolToInt(b bool) C.int {
