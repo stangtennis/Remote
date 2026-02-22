@@ -9,7 +9,6 @@ package input
 
 static void keyEvent(int keyCode, int down) {
     CGEventRef event = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)keyCode, down ? true : false);
-    CGEventSetFlags(event, 0);  // Explicitly clear all modifiers to prevent stuck modifier state
     CGEventPost(kCGHIDEventTap, event);
     CFRelease(event);
 }
@@ -54,10 +53,10 @@ func (k *KeyboardController) SendKeyWithModifiers(code string, down bool, ctrl, 
 		return fmt.Errorf("unknown key code: %s", code)
 	}
 
-	// Build modifier flags
+	// Build modifier flags (macOS CGEvent flag masks)
 	var flags C.uint64_t = 0
 	if ctrl {
-		flags |= 0x40000 // kCGEventFlagMaskCommand (Ctrl maps to Cmd on macOS)
+		flags |= 0x100000 // kCGEventFlagMaskCommand (Ctrl maps to Cmd on macOS)
 	}
 	if shift {
 		flags |= 0x20000 // kCGEventFlagMaskShift
