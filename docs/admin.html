@@ -1075,7 +1075,7 @@
         const rect = canvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) / rect.width;
         const y = (e.clientY - rect.top) / rect.height;
-        remoteDataChannel.send(JSON.stringify({ t: 'mouse_move', x, y }));
+        remoteDataChannel.send(JSON.stringify({ t: 'mouse_move', x, y, rel: true }));
       });
 
       // Mouse down/up
