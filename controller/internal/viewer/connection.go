@@ -340,8 +340,8 @@ func (v *Viewer) setupInputForwarding() {
 		v.SendMouseScroll(deltaX, deltaY)
 	})
 
-	// Hook up keyboard
-	v.interactiveCanvas.SetOnKeyPress(func(key *fyne.KeyEvent) {
+	// Hook up keyboard with modifier support (separate down/up events)
+	v.interactiveCanvas.SetOnKeyDown(func(key *fyne.KeyEvent, modifier desktop.Modifier) {
 		// Intercept ESC for local fullscreen exit
 		if key.Name == fyne.KeyEscape && v.fullscreen {
 			log.Println("🔑 ESC pressed - exiting fullscreen locally")
@@ -363,9 +363,20 @@ func (v *Viewer) setupInputForwarding() {
 		// Map Fyne key names to JavaScript KeyboardEvent.code format
 		jsCode := mapFyneKeyToJSCode(key.Name)
 		if jsCode != "" {
-			// Send key down and immediately key up (tap)
-			v.SendKeyPress(jsCode, true)
-			v.SendKeyPress(jsCode, false)
+			ctrl := modifier&desktop.ControlModifier != 0
+			shift := modifier&desktop.ShiftModifier != 0
+			alt := modifier&desktop.AltModifier != 0
+			v.SendKeyPress(jsCode, true, ctrl, shift, alt)
+		}
+	})
+
+	v.interactiveCanvas.SetOnKeyUp(func(key *fyne.KeyEvent, modifier desktop.Modifier) {
+		jsCode := mapFyneKeyToJSCode(key.Name)
+		if jsCode != "" {
+			ctrl := modifier&desktop.ControlModifier != 0
+			shift := modifier&desktop.ShiftModifier != 0
+			alt := modifier&desktop.AltModifier != 0
+			v.SendKeyPress(jsCode, false, ctrl, shift, alt)
 		}
 	})
 
@@ -557,16 +568,19 @@ func (v *Viewer) SendMouseScroll(deltaX, deltaY float32) {
 	}
 }
 
-// SendKeyPress sends a keyboard event to the agent
-func (v *Viewer) SendKeyPress(key string, pressed bool) {
+// SendKeyPress sends a keyboard event to the agent with modifier state
+func (v *Viewer) SendKeyPress(key string, pressed bool, ctrl, shift, alt bool) {
 	if v.webrtcClient == nil {
 		return
 	}
 
 	event := map[string]interface{}{
-		"t":    "key",
-		"code": key,
-		"down": pressed,
+		"t":     "key",
+		"code":  key,
+		"down":  pressed,
+		"ctrl":  ctrl,
+		"shift": shift,
+		"alt":   alt,
 	}
 
 	eventJSON, _ := json.Marshal(event)
@@ -612,6 +626,29 @@ func mapFyneKeyToJSCode(keyName fyne.KeyName) string {
 		fyne.KeyF10: "F10",
 		fyne.KeyF11: "F11",
 		fyne.KeyF12: "F12",
+
+		// Modifier keys (desktop.Keyable)
+		desktop.KeyShiftLeft:    "ShiftLeft",
+		desktop.KeyShiftRight:   "ShiftRight",
+		desktop.KeyControlLeft:  "ControlLeft",
+		desktop.KeyControlRight: "ControlRight",
+		desktop.KeyAltLeft:      "AltLeft",
+		desktop.KeyAltRight:     "AltRight",
+		desktop.KeySuperLeft:    "MetaLeft",
+		desktop.KeySuperRight:   "MetaRight",
+
+		// Punctuation
+		fyne.KeyName(","):  "Comma",
+		fyne.KeyName("."):  "Period",
+		fyne.KeyName("/"):  "Slash",
+		fyne.KeyName(";"):  "Semicolon",
+		fyne.KeyName("'"):  "Quote",
+		fyne.KeyName("["):  "BracketLeft",
+		fyne.KeyName("]"):  "BracketRight",
+		fyne.KeyName("\\"): "Backslash",
+		fyne.KeyName("-"):  "Minus",
+		fyne.KeyName("="):  "Equal",
+		fyne.KeyName("`"):  "Backquote",
 	}
 
 	if code, ok := keyMap[keyName]; ok {
