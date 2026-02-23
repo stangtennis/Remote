@@ -23,6 +23,8 @@ type InteractiveCanvas struct {
 	onMouseButton func(button desktop.MouseButton, pressed bool, x, y float32)
 	onMouseScroll func(deltaX, deltaY float32)
 	onKeyPress    func(key *fyne.KeyEvent)
+	onKeyDown     func(key *fyne.KeyEvent, modifier desktop.Modifier)
+	onKeyUp       func(key *fyne.KeyEvent, modifier desktop.Modifier)
 
 	// Throttling for mouse move
 	lastMoveTime  time.Time
@@ -131,8 +133,22 @@ func (ic *InteractiveCanvas) Scrolled(event *fyne.ScrollEvent) {
 func (ic *InteractiveCanvas) TypedRune(rune) {}
 
 func (ic *InteractiveCanvas) TypedKey(event *fyne.KeyEvent) {
-	if ic.onKeyPress != nil {
+	// Only use TypedKey as fallback if KeyDown/KeyUp not set
+	if ic.onKeyDown == nil && ic.onKeyPress != nil {
 		ic.onKeyPress(event)
+	}
+}
+
+// desktop.Keyable interface — provides modifier state and separate down/up
+func (ic *InteractiveCanvas) KeyDown(event *fyne.KeyEvent, modifier desktop.Modifier) {
+	if ic.onKeyDown != nil {
+		ic.onKeyDown(event, modifier)
+	}
+}
+
+func (ic *InteractiveCanvas) KeyUp(event *fyne.KeyEvent, modifier desktop.Modifier) {
+	if ic.onKeyUp != nil {
+		ic.onKeyUp(event, modifier)
 	}
 }
 
@@ -159,6 +175,14 @@ func (ic *InteractiveCanvas) SetOnMouseScroll(callback func(deltaX, deltaY float
 
 func (ic *InteractiveCanvas) SetOnKeyPress(callback func(key *fyne.KeyEvent)) {
 	ic.onKeyPress = callback
+}
+
+func (ic *InteractiveCanvas) SetOnKeyDown(callback func(key *fyne.KeyEvent, modifier desktop.Modifier)) {
+	ic.onKeyDown = callback
+}
+
+func (ic *InteractiveCanvas) SetOnKeyUp(callback func(key *fyne.KeyEvent, modifier desktop.Modifier)) {
+	ic.onKeyUp = callback
 }
 
 // Renderer

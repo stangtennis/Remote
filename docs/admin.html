@@ -1078,18 +1078,24 @@
         remoteDataChannel.send(JSON.stringify({ t: 'mouse_move', x, y, rel: true }));
       });
 
-      // Mouse down/up
+      // Mouse down/up (include coordinates so agent moves cursor before clicking)
       canvas.addEventListener('mousedown', (e) => {
         if (!remoteDataChannel || remoteDataChannel.readyState !== 'open') return;
         e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
         const buttons = ['left', 'middle', 'right'];
-        remoteDataChannel.send(JSON.stringify({ t: 'mouse_click', button: buttons[e.button] || 'left', down: true }));
+        remoteDataChannel.send(JSON.stringify({ t: 'mouse_click', button: buttons[e.button] || 'left', down: true, x, y, rel: true }));
       });
       canvas.addEventListener('mouseup', (e) => {
         if (!remoteDataChannel || remoteDataChannel.readyState !== 'open') return;
         e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
         const buttons = ['left', 'middle', 'right'];
-        remoteDataChannel.send(JSON.stringify({ t: 'mouse_click', button: buttons[e.button] || 'left', down: false }));
+        remoteDataChannel.send(JSON.stringify({ t: 'mouse_click', button: buttons[e.button] || 'left', down: false, x, y, rel: true }));
       });
 
       // Mouse scroll (agent expects normalized delta: -1 or 1)
