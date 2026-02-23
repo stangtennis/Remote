@@ -1148,11 +1148,9 @@
         } catch(e) { console.warn('TURN fetch failed, using STUN only'); }
 
         remotePeerConnection = new RTCPeerConnection({ iceServers });
-        window._pc = remotePeerConnection; // Debug: expose for WebRTC stats
 
         // Create data channel BEFORE offer (critical - agent needs this for streaming)
         remoteDataChannel = remotePeerConnection.createDataChannel('control', { ordered: true });
-        window._dc = remoteDataChannel; // Debug: expose for inspection
         remoteDataChannel.binaryType = 'arraybuffer';
 
         remoteDataChannel.onopen = () => {
