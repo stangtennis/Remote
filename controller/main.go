@@ -53,6 +53,12 @@ func main() {
 		return
 	}
 
+	// Headless mode — no GUI, direct WebRTC test
+	if len(os.Args) >= 2 && os.Args[1] == "--headless" {
+		runHeadless()
+		return
+	}
+
 	// Initialize logger first
 	if err := logger.Init(); err != nil {
 		fmt.Printf("Failed to initialize logger: %v\n", err)
