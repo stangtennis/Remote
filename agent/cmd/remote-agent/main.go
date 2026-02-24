@@ -1130,21 +1130,10 @@ func runConsoleMode() {
 	// Setup firewall rules
 	setupFirewallRules()
 
-	// Check if already logged in
-	if !auth.IsLoggedIn() {
-		log.Println("❌ Ikke logget ind! Kør uden --console først for at logge ind via GUI")
-		log.Println("   Eller kør: remote-agent.exe --silent for at logge ind via native dialog")
-		return
+	// Start agent (handles auth, token refresh, device registration)
+	if err := startAgent(); err != nil {
+		log.Fatalf("❌ Kunne ikke starte agent: %v", err)
 	}
-
-	// Load existing credentials
-	creds, err := auth.GetCurrentUser()
-	if err != nil {
-		log.Printf("❌ Kunne ikke indlæse gemte credentials: %v", err)
-		return
-	}
-	log.Printf("✅ Logget ind som: %s", creds.Email)
-	currentUser = creds
 
 	// Check current desktop
 	desktopName, err := desktop.GetInputDesktop()
@@ -1152,11 +1141,6 @@ func runConsoleMode() {
 		log.Printf("⚠️  Kan ikke detektere skrivebord: %v", err)
 	} else {
 		log.Printf("🖥️  Nuværende skrivebord: %s", desktopName)
-	}
-
-	// Start agent
-	if err := startAgent(); err != nil {
-		log.Fatalf("❌ Kunne ikke starte agent: %v", err)
 	}
 
 	log.Println("")
