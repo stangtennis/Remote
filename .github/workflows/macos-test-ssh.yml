@@ -177,6 +177,33 @@ jobs:
 
           echo "AGENT_PID=$AGENT_PID" >> $GITHUB_ENV
 
+      - name: Test WebRTC forbindelse (headless controller)
+        env:
+          AGENT_EMAIL: ${{ secrets.AGENT_EMAIL }}
+          AGENT_PASSWORD: ${{ secrets.AGENT_PASSWORD }}
+          HEADLESS_DURATION: "15s"
+        run: |
+          echo "=== Testing WebRTC connection (headless) ==="
+          cd controller
+          timeout 90 ./controller-macos --headless 2>&1 | tee /tmp/ctrl-headless.log || {
+            EXIT=$?
+            echo "Controller headless exit code: $EXIT"
+            if [ $EXIT -eq 124 ]; then
+              echo "Timeout (OK if frames received)"
+            fi
+          }
+
+          # Check results
+          if grep -q "RESULT: PASS" /tmp/ctrl-headless.log; then
+            echo "WebRTC E2E test PASSED!"
+          elif grep -q "First video frame" /tmp/ctrl-headless.log; then
+            echo "Video frames received (partial pass)"
+          else
+            echo "WARNING: No video frames received"
+            echo "Agent log after test:"
+            tail -20 /tmp/agent.log
+          fi
+
       - name: Start tmate SSH session
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -266,12 +293,14 @@ jobs:
 
           kill $AGENT_PID 2>/dev/null || true
 
-      - name: Upload agent logs
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: agent-logs-${{ github.run_number }}
-          path: /tmp/agent.log
+          name: e2e-logs-${{ github.run_number }}
+          path: |
+            /tmp/agent.log
+            /tmp/ctrl-headless.log
           retention-days: 7
 
       - name: Luk issue
