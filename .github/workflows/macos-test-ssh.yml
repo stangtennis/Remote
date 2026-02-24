@@ -185,22 +185,32 @@ jobs:
         run: |
           echo "=== Testing WebRTC connection (headless) ==="
           cd controller
-          timeout 90 ./controller-macos --headless 2>&1 | tee /tmp/ctrl-headless.log || {
-            EXIT=$?
-            echo "Controller headless exit code: $EXIT"
-            if [ $EXIT -eq 124 ]; then
-              echo "Timeout (OK if frames received)"
-            fi
-          }
+
+          # macOS har ikke timeout — brug gtimeout fra coreutils eller kør direkte
+          brew list coreutils &>/dev/null || brew install coreutils 2>/dev/null
+          TIMEOUT_CMD=$(command -v gtimeout || command -v timeout || echo "")
+
+          if [ -n "$TIMEOUT_CMD" ]; then
+            $TIMEOUT_CMD 90 ./controller-macos --headless 2>&1 | tee /tmp/ctrl-headless.log || true
+          else
+            ./controller-macos --headless 2>&1 | tee /tmp/ctrl-headless.log &
+            CTRL_PID=$!
+            sleep 90
+            kill $CTRL_PID 2>/dev/null || true
+          fi
 
           # Check results
           if grep -q "RESULT: PASS" /tmp/ctrl-headless.log; then
             echo "WebRTC E2E test PASSED!"
           elif grep -q "First video frame" /tmp/ctrl-headless.log; then
             echo "Video frames received (partial pass)"
+          elif grep -q "CONNECTION ESTABLISHED" /tmp/ctrl-headless.log; then
+            echo "WebRTC connected but no frames yet"
           else
-            echo "WARNING: No video frames received"
-            echo "Agent log after test:"
+            echo "WARNING: WebRTC test did not complete successfully"
+            echo "=== Controller headless log ==="
+            cat /tmp/ctrl-headless.log
+            echo "=== Agent log after test ==="
             tail -20 /tmp/agent.log
           fi
 
