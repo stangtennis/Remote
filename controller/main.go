@@ -321,11 +321,33 @@ func createModernUI(window fyne.Window) *fyne.Container {
 					refreshPendingDevices()
 					// Start periodic device refresh (every 10 seconds)
 					startDeviceRefreshTicker()
+
+					// Auto-connect to first online device if AUTO_CONNECT env is set
+					if os.Getenv("AUTO_CONNECT") != "" {
+						for _, d := range devices {
+							if d.Status == "online" {
+								logger.Info("🔗 Auto-connecting to: %s", d.DeviceName)
+								connectToDevice(d)
+								break
+							}
+						}
+					}
 				})
 			}
 		}()
 	})
 	loginButton.Importance = widget.HighImportance
+
+	// Auto-login if saved credentials exist
+	if savedCreds != nil && savedCreds.Remember && savedCreds.Email != "" && savedCreds.Password != "" {
+		go func() {
+			time.Sleep(500 * time.Millisecond) // Vent til UI er klar
+			logger.Info("🔑 Auto-login med gemte credentials for: %s", savedCreds.Email)
+			fyne.Do(func() {
+				loginButton.Tapped(nil)
+			})
+		}()
+	}
 
 	// Logout button
 	logoutButton := widget.NewButton("Logout", func() {
