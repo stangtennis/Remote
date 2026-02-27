@@ -315,7 +315,7 @@ func cmdType() {
 
 func cmdKey() {
 	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "Usage: remote-desktop-cli key <key> [--ctrl] [--shift] [--alt]")
+		fmt.Fprintln(os.Stderr, "Usage: remote-desktop-cli key <key> [--ctrl] [--shift] [--alt] [--meta]")
 		os.Exit(1)
 	}
 
@@ -323,6 +323,7 @@ func cmdKey() {
 	ctrl := false
 	shift := false
 	alt := false
+	meta := false
 
 	for i := 3; i < len(os.Args); i++ {
 		switch os.Args[i] {
@@ -332,6 +333,8 @@ func cmdKey() {
 			shift = true
 		case "--alt":
 			alt = true
+		case "--meta", "--win", "--super":
+			meta = true
 		}
 	}
 
@@ -342,6 +345,7 @@ func cmdKey() {
 			"ctrl":  ctrl,
 			"shift": shift,
 			"alt":   alt,
+			"meta":  meta,
 		},
 	})
 	if err != nil {
@@ -362,6 +366,9 @@ func cmdKey() {
 	}
 	if alt {
 		modifiers += "Alt+"
+	}
+	if meta {
+		modifiers += "Win+"
 	}
 	fmt.Printf("Pressed %s%s\n", modifiers, key)
 }

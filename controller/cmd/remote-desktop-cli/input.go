@@ -56,7 +56,7 @@ func buildScroll(delta int) string {
 }
 
 // buildKeyPress creates key down + up events
-func buildKeyPress(code string, ctrl, shift, alt bool) []string {
+func buildKeyPress(code string, ctrl, shift, alt, meta bool) []string {
 	down := map[string]interface{}{
 		"t":     "key",
 		"code":  code,
@@ -64,6 +64,7 @@ func buildKeyPress(code string, ctrl, shift, alt bool) []string {
 		"ctrl":  ctrl,
 		"shift": shift,
 		"alt":   alt,
+		"meta":  meta,
 	}
 	up := map[string]interface{}{
 		"t":     "key",
@@ -72,6 +73,7 @@ func buildKeyPress(code string, ctrl, shift, alt bool) []string {
 		"ctrl":  ctrl,
 		"shift": shift,
 		"alt":   alt,
+		"meta":  meta,
 	}
 	downJSON, _ := json.Marshal(down)
 	upJSON, _ := json.Marshal(up)
@@ -165,14 +167,40 @@ func charToKeyCode(c rune) (string, bool) {
 }
 
 // buildTypeText generates key events for typing a string
+// buildTypeText generates key events for typing a string.
+// Uses "char" field for Unicode input — bypasses keyboard layout issues on non-US keyboards.
 func buildTypeText(text string) []string {
 	var events []string
 	for _, c := range text {
 		code, needShift := charToKeyCode(c)
 		if code == "" {
-			continue
+			code = "Unidentified" // Use Unicode fallback for unknown chars
 		}
-		events = append(events, buildKeyPress(code, false, needShift, false)...)
+		// Include "char" field so agent can use Unicode input (SendInput KEYEVENTF_UNICODE)
+		charStr := string(c)
+		down := map[string]interface{}{
+			"t":     "key",
+			"code":  code,
+			"down":  true,
+			"ctrl":  false,
+			"shift": needShift,
+			"alt":   false,
+			"meta":  false,
+			"char":  charStr,
+		}
+		up := map[string]interface{}{
+			"t":     "key",
+			"code":  code,
+			"down":  false,
+			"ctrl":  false,
+			"shift": needShift,
+			"alt":   false,
+			"meta":  false,
+			"char":  charStr,
+		}
+		downJSON, _ := json.Marshal(down)
+		upJSON, _ := json.Marshal(up)
+		events = append(events, string(downJSON), string(upJSON))
 	}
 	return events
 }

@@ -723,8 +723,18 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 		ctrl, _ := event["ctrl"].(bool)
 		shift, _ := event["shift"].(bool)
 		alt, _ := event["alt"].(bool)
-		if m.keyController != nil {
-			m.keyController.SendKeyWithModifiers(code, down, ctrl, shift, alt)
+		meta, _ := event["meta"].(bool)
+
+		// If "char" field is present, use Unicode input (bypasses keyboard layout)
+		if charStr, ok := event["char"].(string); ok && charStr != "" && down {
+			for _, ch := range charStr {
+				if err := m.keyController.SendUnicodeChar(ch); err != nil {
+					// Fallback to key code approach
+					m.keyController.SendKeyWithModifiers(code, down, ctrl, shift, alt, meta)
+				}
+			}
+		} else if m.keyController != nil {
+			m.keyController.SendKeyWithModifiers(code, down, ctrl, shift, alt, meta)
 		}
 	}
 }
@@ -961,10 +971,23 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 		ctrl, _ := event["ctrl"].(bool)
 		shift, _ := event["shift"].(bool)
 		alt, _ := event["alt"].(bool)
+		meta, _ := event["meta"].(bool)
 
-		// Send key with modifiers
-		if err := m.keyController.SendKeyWithModifiers(code, down, ctrl, shift, alt); err != nil {
-			log.Printf("Key event error: %v", err)
+		// If "char" field is present, use Unicode input (bypasses keyboard layout)
+		if charStr, ok := event["char"].(string); ok && charStr != "" && down {
+			for _, ch := range charStr {
+				if err := m.keyController.SendUnicodeChar(ch); err != nil {
+					// Fallback to key code approach
+					if err2 := m.keyController.SendKeyWithModifiers(code, down, ctrl, shift, alt, meta); err2 != nil {
+						log.Printf("Key event error: %v", err2)
+					}
+				}
+			}
+		} else {
+			// Send key with modifiers
+			if err := m.keyController.SendKeyWithModifiers(code, down, ctrl, shift, alt, meta); err != nil {
+				log.Printf("Key event error: %v", err)
+			}
 		}
 	}
 }
