@@ -14,6 +14,8 @@ import (
 	"github.com/stangtennis/remote-agent/internal/auth"
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/device"
+	"github.com/stangtennis/remote-agent/internal/input"
+	"github.com/stangtennis/remote-agent/internal/screen"
 	"github.com/stangtennis/remote-agent/internal/tray"
 	"github.com/stangtennis/remote-agent/internal/webrtc"
 	"github.com/stangtennis/remote-agent/pkg/logging"
@@ -205,6 +207,9 @@ func startAgent() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Check macOS permissions (Accessibility + Screen Recording)
+	checkMacOSPermissions()
+
 	log.Printf("Credentials path: %s", auth.GetCredentialsPath())
 	deviceID, _ := device.GetOrCreateDeviceID()
 	log.Printf("Device ID: %s", deviceID)
@@ -274,4 +279,48 @@ func stopAgent() {
 		dev.SetOffline()
 	}
 	time.Sleep(500 * time.Millisecond)
+}
+
+// checkMacOSPermissions checks Accessibility and Screen Recording TCC permissions.
+// Logs status and starts a background watcher if Accessibility is not yet granted.
+func checkMacOSPermissions() {
+	log.Println("Checking macOS permissions...")
+
+	// Check Accessibility (required for keyboard/mouse input via CGEventPost)
+	if input.IsAccessibilityTrusted() {
+		log.Println("  Accessibility permission: GRANTED")
+	} else {
+		log.Println("  ⚠️  Accessibility permission: NOT granted")
+		log.Println("     Keyboard and mouse input will NOT work!")
+		log.Println("     Add this binary to: System Settings → Privacy & Security → Accessibility")
+		// Prompt the user (opens System Settings on macOS 13+)
+		input.CheckAccessibilityPermission(true)
+		// Start background watcher to detect when permission is granted
+		go watchAccessibilityPermission()
+	}
+
+	// Check Screen Recording (required for CGDisplayCreateImage)
+	if screen.CheckScreenRecordingPermission() {
+		log.Println("  Screen Recording permission: GRANTED")
+	} else {
+		log.Println("  ⚠️  Screen Recording permission: NOT granted")
+		log.Println("     Screen capture may return black frames!")
+		log.Println("     Add this binary to: System Settings → Privacy & Security → Screen Recording")
+		screen.RequestScreenRecordingPermission()
+	}
+}
+
+// watchAccessibilityPermission polls Accessibility permission every 30 seconds.
+// Logs when permission is granted and then exits.
+func watchAccessibilityPermission() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if input.IsAccessibilityTrusted() {
+			log.Println("  ✅ Accessibility permission: NOW GRANTED — input will work")
+			return
+		}
+		log.Println("  ⏳ Accessibility permission still not granted — waiting...")
+	}
 }
