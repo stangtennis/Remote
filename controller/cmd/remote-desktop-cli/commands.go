@@ -148,9 +148,10 @@ func handleKey(req daemonRequest, connMgr *ConnectionManager, deviceID string) d
 	ctrl := getBoolArg(req.Args, "ctrl", false)
 	shift := getBoolArg(req.Args, "shift", false)
 	alt := getBoolArg(req.Args, "alt", false)
+	meta := getBoolArg(req.Args, "meta", false)
 
 	keyCode := parseKeyName(key)
-	events := buildKeyPress(keyCode, ctrl, shift, alt)
+	events := buildKeyPress(keyCode, ctrl, shift, alt, meta)
 
 	for _, evt := range events {
 		if err := conn.SendInput(evt); err != nil {

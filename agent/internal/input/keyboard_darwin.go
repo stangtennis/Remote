@@ -47,7 +47,7 @@ func (k *KeyboardController) SendKey(code string, down bool) error {
 	return nil
 }
 
-func (k *KeyboardController) SendKeyWithModifiers(code string, down bool, ctrl, shift, alt bool) error {
+func (k *KeyboardController) SendKeyWithModifiers(code string, down bool, ctrl, shift, alt, meta bool) error {
 	keyCode := mapKeyCodeToMac(code)
 	if keyCode < 0 {
 		return fmt.Errorf("unknown key code: %s", code)
@@ -64,6 +64,9 @@ func (k *KeyboardController) SendKeyWithModifiers(code string, down bool, ctrl, 
 	if alt {
 		flags |= 0x80000 // kCGEventFlagMaskAlternate
 	}
+	if meta {
+		flags |= 0x40000 // kCGEventFlagMaskControl (Meta maps to Control on macOS)
+	}
 
 	if flags != 0 {
 		C.keyEventWithFlags(C.int(keyCode), boolToInt(down), flags)
@@ -72,6 +75,13 @@ func (k *KeyboardController) SendKeyWithModifiers(code string, down bool, ctrl, 
 	}
 
 	return nil
+}
+
+// SendUnicodeChar sends a Unicode character (macOS stub — uses CGEvent with key mapping)
+func (k *KeyboardController) SendUnicodeChar(char rune) error {
+	// On macOS, we'd need CGEventKeyboardSetUnicodeString
+	// For now, fall back to key code mapping
+	return fmt.Errorf("unicode char input not implemented on macOS")
 }
 
 // ClearModifiers releases all modifier keys to prevent stuck modifier state

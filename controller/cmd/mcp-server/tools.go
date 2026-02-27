@@ -380,6 +380,7 @@ func pressKeyHandler(connMgr *ConnectionManager) server.ToolHandlerFunc {
 		ctrl := request.GetBool("ctrl", false)
 		shift := request.GetBool("shift", false)
 		alt := request.GetBool("alt", false)
+		meta := request.GetBool("meta", false)
 
 		conn, err := connMgr.GetConnection(deviceID)
 		if err != nil {
@@ -387,7 +388,7 @@ func pressKeyHandler(connMgr *ConnectionManager) server.ToolHandlerFunc {
 		}
 
 		keyCode := parseKeyName(key)
-		events := buildKeyPress(keyCode, ctrl, shift, alt)
+		events := buildKeyPress(keyCode, ctrl, shift, alt, meta)
 
 		for _, evt := range events {
 			if err := conn.SendInput(evt); err != nil {
