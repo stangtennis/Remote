@@ -196,16 +196,23 @@ func connectDeviceHandler(cfg *config.Config, auth *authInfo, connMgr *Connectio
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to fetch devices: %v", err)), nil
 		}
 
-		deviceName := deviceID
-		for _, d := range devices {
-			if d.DeviceID == deviceID {
-				deviceName = d.DeviceName
-				if !d.isOnline() {
-					return mcp.NewToolResultError(fmt.Sprintf("Device '%s' is offline (last seen: %s)", d.DeviceName, d.LastSeen.Format(time.RFC3339))), nil
-				}
+		// Look up by device_id or device_name
+		var found *device
+		for i := range devices {
+			if devices[i].DeviceID == deviceID || devices[i].DeviceName == deviceID {
+				found = &devices[i]
 				break
 			}
 		}
+		if found == nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Device '%s' not found", deviceID)), nil
+		}
+		if !found.isOnline() {
+			return mcp.NewToolResultError(fmt.Sprintf("Device '%s' is offline (last seen: %s)", found.DeviceName, found.LastSeen.Format(time.RFC3339))), nil
+		}
+		// Use the actual device_id for connection
+		deviceID = found.DeviceID
+		deviceName := found.DeviceName
 
 		if err := connMgr.Connect(deviceID, deviceName); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to connect: %v", err)), nil
