@@ -22,19 +22,35 @@ import (
 
 const (
 	// Windows API constants
-	_MAXIMUM_ALLOWED = 0x02000000
-	_WAIT_TIMEOUT    = 0x00000102
+	_MAXIMUM_ALLOWED        = 0x02000000
+	_WAIT_TIMEOUT           = 0x00000102
+	_SE_PRIVILEGE_ENABLED   = 0x00000002
+	_TOKEN_ADJUST_PRIVILEGES = 0x0020
+	_TOKEN_QUERY            = 0x0008
+	_ERROR_NOT_ALL_ASSIGNED = 1300
+
+	// Pipe command bytes (service → helper)
+	cmdCapture    = 0x01
+	cmdMouseMove  = 0x02
+	cmdMouseClick = 0x03
+	cmdScroll     = 0x04
+	cmdKeyEvent   = 0x05
+	cmdUnicode    = 0x06
+	cmdQuit       = 0xFF
 )
 
 var (
 	modKernel32s = windows.NewLazySystemDLL("kernel32.dll")
 	modWtsapi32  = windows.NewLazySystemDLL("wtsapi32.dll")
 	modUserenv   = windows.NewLazySystemDLL("userenv.dll")
+	modAdvapi32s = windows.NewLazySystemDLL("advapi32.dll")
 
 	procWTSGetActiveConsoleSessionId = modKernel32s.NewProc("WTSGetActiveConsoleSessionId")
 	procWTSQueryUserToken            = modWtsapi32.NewProc("WTSQueryUserToken")
 	procCreateEnvironmentBlock       = modUserenv.NewProc("CreateEnvironmentBlock")
 	procDestroyEnvironmentBlock      = modUserenv.NewProc("DestroyEnvironmentBlock")
+	procLookupPrivilegeValueW        = modAdvapi32s.NewProc("LookupPrivilegeValueW")
+	procAdjustTokenPrivileges        = modAdvapi32s.NewProc("AdjustTokenPrivileges")
 )
 
 // pipeRW wraps a Windows named pipe handle as io.ReadWriter.
@@ -67,6 +83,54 @@ func (p *pipeRW) Write(b []byte) (int, error) {
 	return total, nil
 }
 
+// enablePrivilege enables a named privilege on the current process token.
+// Required for SeTcbPrivilege which allows CreateProcessAsUser to work across sessions.
+func enablePrivilege(name string) error {
+	var token windows.Token
+	process, _ := windows.GetCurrentProcess()
+	err := windows.OpenProcessToken(process, _TOKEN_ADJUST_PRIVILEGES|_TOKEN_QUERY, &token)
+	if err != nil {
+		return fmt.Errorf("OpenProcessToken: %w", err)
+	}
+	defer token.Close()
+
+	nameUTF16, _ := windows.UTF16PtrFromString(name)
+	var luid [2]uint32 // LUID is 8 bytes (LowPart + HighPart)
+	ret, _, err := procLookupPrivilegeValueW.Call(
+		0,
+		uintptr(unsafe.Pointer(nameUTF16)),
+		uintptr(unsafe.Pointer(&luid[0])),
+	)
+	if ret == 0 {
+		return fmt.Errorf("LookupPrivilegeValue(%s): %v", name, err)
+	}
+
+	// TOKEN_PRIVILEGES struct: Count(4) + LUID(8) + Attributes(4) = 16 bytes
+	var tp [16]byte
+	binary.LittleEndian.PutUint32(tp[0:4], 1)                    // PrivilegeCount
+	binary.LittleEndian.PutUint32(tp[4:8], luid[0])              // LUID.LowPart
+	binary.LittleEndian.PutUint32(tp[8:12], luid[1])             // LUID.HighPart
+	binary.LittleEndian.PutUint32(tp[12:16], _SE_PRIVILEGE_ENABLED) // Attributes
+
+	ret, _, err = procAdjustTokenPrivileges.Call(
+		uintptr(token),
+		0, // DisableAllPrivileges = FALSE
+		uintptr(unsafe.Pointer(&tp[0])),
+		0, 0, 0,
+	)
+	if ret == 0 {
+		return fmt.Errorf("AdjustTokenPrivileges: %v", err)
+	}
+
+	// Check if privilege was actually assigned
+	if errno, ok := windows.GetLastError().(windows.Errno); ok && errno == _ERROR_NOT_ALL_ASSIGNED {
+		return fmt.Errorf("privilege %s not held by process (not running as LocalSystem?)", name)
+	}
+
+	log.Printf("SeTcbPrivilege enabled successfully")
+	return nil
+}
+
 // Session0PipeCapturer captures screen from a helper process running in the user's session.
 // Services run in Session 0 which has no physical display — GDI/DXGI capture always fails.
 // This capturer launches a helper process in the user's session via CreateProcessAsUser,
@@ -78,7 +142,9 @@ type Session0PipeCapturer struct {
 	helperProc windows.Handle
 	width      int
 	height     int
+	sessionID  uintptr // Current console session ID
 	mu         sync.Mutex
+	stopCh     chan struct{} // For graceful shutdown of session monitor
 }
 
 // NewSession0PipeCapturer creates a pipe-based capturer for Session 0.
@@ -116,6 +182,7 @@ func NewSession0PipeCapturer() (*Session0PipeCapturer, error) {
 		pipeHandle: pipeHandle,
 		width:      1920,
 		height:     1080,
+		stopCh:     make(chan struct{}),
 	}
 
 	// Launch helper process in user's session
@@ -175,11 +242,23 @@ func NewSession0PipeCapturer() (*Session0PipeCapturer, error) {
 	c.width = int(binary.LittleEndian.Uint32(resoBuf[0:4]))
 	c.height = int(binary.LittleEndian.Uint32(resoBuf[4:8]))
 
-	log.Printf("✅ Session 0 pipe capturer ready: %dx%d (helper in user session)", c.width, c.height)
+	// Remember current session ID for session monitor
+	c.sessionID, _, _ = procWTSGetActiveConsoleSessionId.Call()
+
+	log.Printf("✅ Session 0 pipe capturer ready: %dx%d (helper in user session %d)", c.width, c.height, c.sessionID)
+
+	// Start session monitor goroutine
+	go c.monitorSession()
+
 	return c, nil
 }
 
 func (c *Session0PipeCapturer) launchHelper() error {
+	// Enable SeTcbPrivilege (required for WTSQueryUserToken and SetTokenInformation across sessions)
+	if err := enablePrivilege("SeTcbPrivilege"); err != nil {
+		log.Printf("⚠️ enablePrivilege(SeTcbPrivilege): %v (may fail if not LocalSystem)", err)
+	}
+
 	// Get active console session (the session with the physical display)
 	sessionID, _, _ := procWTSGetActiveConsoleSessionId.Call()
 	if sessionID == 0xFFFFFFFF {
@@ -407,12 +486,241 @@ func (c *Session0PipeCapturer) GetResolution() (int, int) {
 	return c.width, c.height
 }
 
+// --- Input forwarding methods (service → helper via pipe) ---
+
+// SendMouseMove sends a mouse move command to the helper process.
+func (c *Session0PipeCapturer) SendMouseMove(x, y int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.pipe == nil {
+		return fmt.Errorf("pipe not connected")
+	}
+	var buf [5]byte
+	buf[0] = cmdMouseMove
+	binary.LittleEndian.PutUint16(buf[1:3], uint16(x))
+	binary.LittleEndian.PutUint16(buf[3:5], uint16(y))
+	_, err := c.pipe.Write(buf[:])
+	return err
+}
+
+// SendMouseClick sends a mouse click command to the helper process.
+func (c *Session0PipeCapturer) SendMouseClick(button, down int, x, y int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.pipe == nil {
+		return fmt.Errorf("pipe not connected")
+	}
+	var buf [7]byte
+	buf[0] = cmdMouseClick
+	buf[1] = byte(button)
+	buf[2] = byte(down)
+	binary.LittleEndian.PutUint16(buf[3:5], uint16(x))
+	binary.LittleEndian.PutUint16(buf[5:7], uint16(y))
+	_, err := c.pipe.Write(buf[:])
+	return err
+}
+
+// SendScroll sends a scroll command to the helper process.
+func (c *Session0PipeCapturer) SendScroll(delta, x, y int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.pipe == nil {
+		return fmt.Errorf("pipe not connected")
+	}
+	var buf [7]byte
+	buf[0] = cmdScroll
+	binary.LittleEndian.PutUint16(buf[1:3], uint16(int16(delta)))
+	binary.LittleEndian.PutUint16(buf[3:5], uint16(x))
+	binary.LittleEndian.PutUint16(buf[5:7], uint16(y))
+	_, err := c.pipe.Write(buf[:])
+	return err
+}
+
+// SendKeyEvent sends a key event command to the helper process.
+func (c *Session0PipeCapturer) SendKeyEvent(code string, down bool, ctrl, shift, alt, meta bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.pipe == nil {
+		return fmt.Errorf("pipe not connected")
+	}
+	keyBytes := []byte(code)
+	if len(keyBytes) > 255 {
+		keyBytes = keyBytes[:255]
+	}
+	buf := make([]byte, 7+len(keyBytes))
+	buf[0] = cmdKeyEvent
+	if down {
+		buf[1] = 1
+	}
+	if ctrl {
+		buf[2] = 1
+	}
+	if shift {
+		buf[3] = 1
+	}
+	if alt {
+		buf[4] = 1
+	}
+	if meta {
+		buf[5] = 1
+	}
+	buf[6] = byte(len(keyBytes))
+	copy(buf[7:], keyBytes)
+	_, err := c.pipe.Write(buf)
+	return err
+}
+
+// SendUnicodeChar sends a unicode character to the helper process.
+func (c *Session0PipeCapturer) SendUnicodeChar(char rune) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.pipe == nil {
+		return fmt.Errorf("pipe not connected")
+	}
+	var buf [3]byte
+	buf[0] = cmdUnicode
+	binary.LittleEndian.PutUint16(buf[1:3], uint16(char))
+	_, err := c.pipe.Write(buf[:])
+	return err
+}
+
+// --- Session monitor ---
+
+// monitorSession polls the active console session and relaunches the helper if it changes.
+func (c *Session0PipeCapturer) monitorSession() {
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.stopCh:
+			return
+		case <-ticker.C:
+			newSession, _, _ := procWTSGetActiveConsoleSessionId.Call()
+			if newSession == 0xFFFFFFFF {
+				continue // No session available
+			}
+			if newSession != c.sessionID {
+				log.Printf("🔄 Console session changed: %d → %d, relaunching helper...", c.sessionID, newSession)
+				c.relaunchHelper(newSession)
+			}
+		}
+	}
+}
+
+// relaunchHelper kills the current helper and launches a new one in the given session.
+func (c *Session0PipeCapturer) relaunchHelper(newSession uintptr) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Close existing pipe and kill helper
+	if c.pipe != nil {
+		c.pipe.Write([]byte{cmdQuit})
+		c.pipe = nil
+	}
+	if c.pipeHandle != 0 {
+		windows.CloseHandle(c.pipeHandle)
+		c.pipeHandle = 0
+	}
+	if c.helperProc != 0 {
+		event, _ := windows.WaitForSingleObject(c.helperProc, 1000)
+		if event == _WAIT_TIMEOUT {
+			windows.TerminateProcess(c.helperProc, 1)
+		}
+		windows.CloseHandle(c.helperProc)
+		c.helperProc = 0
+	}
+
+	// Create new pipe
+	pipeName := fmt.Sprintf(`\\.\pipe\RemoteDesktopCapture-%d`, rand.Intn(999999))
+	sd, err := windows.SecurityDescriptorFromString("D:(A;;GA;;;WD)")
+	if err != nil {
+		log.Printf("❌ relaunchHelper: SecurityDescriptorFromString: %v", err)
+		return
+	}
+	sa := &windows.SecurityAttributes{
+		Length:             uint32(unsafe.Sizeof(windows.SecurityAttributes{})),
+		SecurityDescriptor: sd,
+	}
+
+	pipeNameUTF16, _ := windows.UTF16PtrFromString(pipeName)
+	pipeHandle, err := windows.CreateNamedPipe(
+		pipeNameUTF16,
+		windows.PIPE_ACCESS_DUPLEX,
+		windows.PIPE_TYPE_BYTE|windows.PIPE_READMODE_BYTE|windows.PIPE_WAIT,
+		1, 65536, 65536, 30000, sa,
+	)
+	if err != nil {
+		log.Printf("❌ relaunchHelper: CreateNamedPipe: %v", err)
+		return
+	}
+
+	c.pipeName = pipeName
+	c.pipeHandle = pipeHandle
+	c.sessionID = newSession
+
+	// Launch helper in new session
+	if err := c.launchHelper(); err != nil {
+		log.Printf("❌ relaunchHelper: launchHelper: %v", err)
+		windows.CloseHandle(pipeHandle)
+		c.pipeHandle = 0
+		return
+	}
+
+	// Wait for helper to connect
+	time.Sleep(2 * time.Second)
+	connectDone := make(chan error, 1)
+	go func() {
+		connectDone <- windows.ConnectNamedPipe(pipeHandle, nil)
+	}()
+
+	select {
+	case err := <-connectDone:
+		if err != nil && err != windows.ERROR_PIPE_CONNECTED {
+			log.Printf("❌ relaunchHelper: ConnectNamedPipe: %v", err)
+			return
+		}
+	case <-time.After(10 * time.Second):
+		log.Println("❌ relaunchHelper: timeout waiting for helper")
+		windows.CloseHandle(pipeHandle)
+		c.pipeHandle = 0
+		<-connectDone
+		if c.helperProc != 0 {
+			windows.TerminateProcess(c.helperProc, 1)
+			windows.CloseHandle(c.helperProc)
+			c.helperProc = 0
+		}
+		return
+	}
+
+	c.pipe = &pipeRW{handle: pipeHandle}
+
+	// Read new resolution
+	resoBuf := make([]byte, 8)
+	if _, err := io.ReadFull(c.pipe, resoBuf); err != nil {
+		log.Printf("❌ relaunchHelper: failed to read resolution: %v", err)
+		return
+	}
+	c.width = int(binary.LittleEndian.Uint32(resoBuf[0:4]))
+	c.height = int(binary.LittleEndian.Uint32(resoBuf[4:8]))
+
+	log.Printf("✅ Helper relaunched in session %d: %dx%d", newSession, c.width, c.height)
+}
+
 func (c *Session0PipeCapturer) Close() error {
+	// Stop session monitor
+	select {
+	case <-c.stopCh:
+		// Already closed
+	default:
+		close(c.stopCh)
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.pipe != nil {
-		c.pipe.Write([]byte{0xFF}) // quit command (best effort)
+		c.pipe.Write([]byte{cmdQuit})
 		c.pipe = nil
 	}
 	if c.pipeHandle != 0 {

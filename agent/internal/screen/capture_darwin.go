@@ -353,6 +353,15 @@ func (c *Capturer) EncodeRGBAToJPEG(img *image.RGBA, quality int, scale float64)
 	return buf.Bytes(), int(targetWidth), int(targetHeight), nil
 }
 
+// --- Input forwarding stubs (Session 0 is Windows-only) ---
+
+func (c *Capturer) HasInputForwarder() bool                                              { return false }
+func (c *Capturer) ForwardMouseMove(x, y int) error                                      { return fmt.Errorf("not supported on macOS") }
+func (c *Capturer) ForwardMouseClick(button, down int, x, y int) error                   { return fmt.Errorf("not supported on macOS") }
+func (c *Capturer) ForwardScroll(delta, x, y int) error                                  { return fmt.Errorf("not supported on macOS") }
+func (c *Capturer) ForwardKeyEvent(code string, down bool, ctrl, shift, alt, meta bool) error { return fmt.Errorf("not supported on macOS") }
+func (c *Capturer) ForwardUnicodeChar(char rune) error                                   { return fmt.Errorf("not supported on macOS") }
+
 func (c *Capturer) CaptureRGBA() (*image.RGBA, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

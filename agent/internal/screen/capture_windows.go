@@ -448,6 +448,53 @@ func (c *Capturer) EncodeRGBAToJPEG(img *image.RGBA, quality int, scale float64)
 	return buf.Bytes(), int(targetWidth), int(targetHeight), nil
 }
 
+// --- Input forwarding wrappers (delegate to Session0PipeCapturer) ---
+
+// HasInputForwarder returns true if this capturer can forward input to a helper process.
+func (c *Capturer) HasInputForwarder() bool {
+	return c.session0Capturer != nil
+}
+
+// ForwardMouseMove forwards a mouse move event to the Session 0 helper.
+func (c *Capturer) ForwardMouseMove(x, y int) error {
+	if c.session0Capturer == nil {
+		return fmt.Errorf("no session0 capturer")
+	}
+	return c.session0Capturer.SendMouseMove(x, y)
+}
+
+// ForwardMouseClick forwards a mouse click event to the Session 0 helper.
+func (c *Capturer) ForwardMouseClick(button, down int, x, y int) error {
+	if c.session0Capturer == nil {
+		return fmt.Errorf("no session0 capturer")
+	}
+	return c.session0Capturer.SendMouseClick(button, down, x, y)
+}
+
+// ForwardScroll forwards a scroll event to the Session 0 helper.
+func (c *Capturer) ForwardScroll(delta, x, y int) error {
+	if c.session0Capturer == nil {
+		return fmt.Errorf("no session0 capturer")
+	}
+	return c.session0Capturer.SendScroll(delta, x, y)
+}
+
+// ForwardKeyEvent forwards a key event to the Session 0 helper.
+func (c *Capturer) ForwardKeyEvent(code string, down bool, ctrl, shift, alt, meta bool) error {
+	if c.session0Capturer == nil {
+		return fmt.Errorf("no session0 capturer")
+	}
+	return c.session0Capturer.SendKeyEvent(code, down, ctrl, shift, alt, meta)
+}
+
+// ForwardUnicodeChar forwards a unicode character to the Session 0 helper.
+func (c *Capturer) ForwardUnicodeChar(char rune) error {
+	if c.session0Capturer == nil {
+		return fmt.Errorf("no session0 capturer")
+	}
+	return c.session0Capturer.SendUnicodeChar(char)
+}
+
 // CaptureRGBA captures the screen as RGBA image (for dirty region detection)
 func (c *Capturer) CaptureRGBA() (*image.RGBA, error) {
 	c.mu.Lock()
