@@ -53,7 +53,10 @@ Function .onInit
         Abort
 
     upgrade:
-        ; Graceful shutdown first (without /F)
+        ; Stop service if running
+        nsExec::ExecToLog 'sc stop RemoteDesktopAgent'
+        Sleep 2000
+        ; Graceful shutdown first (without /F) for legacy process mode
         nsExec::ExecToLog 'taskkill /IM remote-agent.exe'
         nsExec::ExecToLog 'taskkill /IM remote-agent-console.exe'
         Sleep 3000
@@ -97,9 +100,20 @@ Section "Install"
     
     ; Desktop shortcut
     CreateShortcut "$DESKTOP\Remote Desktop Agent.lnk" "$INSTDIR\remote-agent.exe"
-    
-    ; Startup shortcut (auto-start with Windows)
-    CreateShortcut "$SMSTARTUP\Remote Desktop Agent.lnk" "$INSTDIR\remote-agent.exe"
+
+    ; Remove old startup shortcut (replaced by Windows Service)
+    Delete "$SMSTARTUP\Remote Desktop Agent.lnk"
+
+    ; Stop and remove existing service (if upgrading)
+    nsExec::ExecToLog 'sc stop RemoteDesktopAgent'
+    Sleep 2000
+    nsExec::ExecToLog 'sc delete RemoteDesktopAgent'
+    Sleep 1000
+
+    ; Register as Windows Service (LocalSystem = has SeTcbPrivilege for Session 0 capture)
+    nsExec::ExecToLog 'sc create RemoteDesktopAgent binPath= "$INSTDIR\remote-agent.exe" start= auto obj= LocalSystem DisplayName= "Remote Desktop Agent"'
+    nsExec::ExecToLog 'sc description RemoteDesktopAgent "Remote Desktop Agent - WebRTC remote desktop"'
+    nsExec::ExecToLog 'sc failure RemoteDesktopAgent reset= 86400 actions= restart/5000/restart/10000/restart/30000'
     
     ; Write registry keys
     WriteRegStr HKLM "Software\RemoteDesktopAgent" "InstallDir" "$INSTDIR"
@@ -116,16 +130,24 @@ Section "Install"
     ; Create uninstaller
     WriteUninstaller "$INSTDIR\uninstall.exe"
     
-    ; Start agent after install
-    Exec "$INSTDIR\remote-agent.exe"
+    ; Start service after install
+    nsExec::ExecToLog 'sc start RemoteDesktopAgent'
 SectionEnd
 
 ; Uninstaller Section
 Section "Uninstall"
-    ; Stop agent if running
+    ; Stop and remove Windows Service
+    nsExec::ExecToLog 'sc stop RemoteDesktopAgent'
+    Sleep 2000
+    nsExec::ExecToLog 'sc delete RemoteDesktopAgent'
+
+    ; Stop agent if running as process (legacy)
     nsExec::ExecToLog 'taskkill /F /IM remote-agent.exe'
     nsExec::ExecToLog 'taskkill /F /IM remote-agent-console.exe'
-    
+
+    ; Remove old startup shortcut
+    Delete "$SMSTARTUP\Remote Desktop Agent.lnk"
+
     ; Remove files
     Delete "$INSTDIR\remote-agent.exe"
     Delete "$INSTDIR\remote-agent-console.exe"

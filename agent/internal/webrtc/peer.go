@@ -686,7 +686,56 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 		}
 	}
 
-	// Handle input events
+	// Route input via pipe when in Session 0 with a pipe-based capturer
+	if m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
+		switch eventType {
+		case "mouse_move":
+			x, _ := event["x"].(float64)
+			y, _ := event["y"].(float64)
+			m.screenCapturer.ForwardMouseMove(int(x), int(y))
+
+		case "mouse_click":
+			button, _ := event["button"].(string)
+			down, _ := event["down"].(bool)
+			x, _ := event["x"].(float64)
+			y, _ := event["y"].(float64)
+			btnCode := 0 // left
+			if button == "right" {
+				btnCode = 1
+			} else if button == "middle" {
+				btnCode = 2
+			}
+			downVal := 0
+			if down {
+				downVal = 1
+			}
+			m.screenCapturer.ForwardMouseClick(btnCode, downVal, int(x), int(y))
+
+		case "mouse_scroll":
+			delta, _ := event["delta"].(float64)
+			m.screenCapturer.ForwardScroll(int(delta), 0, 0)
+
+		case "key":
+			code, _ := event["code"].(string)
+			down, _ := event["down"].(bool)
+			ctrl, _ := event["ctrl"].(bool)
+			shift, _ := event["shift"].(bool)
+			alt, _ := event["alt"].(bool)
+			meta, _ := event["meta"].(bool)
+
+			// Unicode char forwarding
+			if charStr, ok := event["char"].(string); ok && charStr != "" && down {
+				for _, ch := range charStr {
+					m.screenCapturer.ForwardUnicodeChar(ch)
+				}
+			} else {
+				m.screenCapturer.ForwardKeyEvent(code, down, ctrl, shift, alt, meta)
+			}
+		}
+		return
+	}
+
+	// Handle input events (direct — not Session 0 or no pipe capturer)
 	switch eventType {
 	case "mouse_move":
 		x, _ := event["x"].(float64)
