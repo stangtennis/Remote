@@ -325,6 +325,11 @@ func (u *Updater) HasPendingUpdate() bool {
 	return true
 }
 
+// GetDownloadPath returns the path to the downloaded update binary
+func (u *Updater) GetDownloadPath() string {
+	return u.state.DownloadPath
+}
+
 // FetchVersionInfo fetches version info from the update server
 func (u *Updater) FetchVersionInfo() (*VersionInfo, error) {
 	return u.github.FetchVersionInfo()

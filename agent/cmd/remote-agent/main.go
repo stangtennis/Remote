@@ -21,6 +21,7 @@ import (
 	"github.com/stangtennis/remote-agent/internal/device"
 	"github.com/stangtennis/remote-agent/internal/screen"
 	"github.com/stangtennis/remote-agent/internal/tray"
+	"github.com/stangtennis/remote-agent/internal/updater"
 	"github.com/stangtennis/remote-agent/internal/webrtc"
 	"github.com/stangtennis/remote-agent/pkg/logging"
 	"golang.org/x/sys/windows/svc"
@@ -1281,6 +1282,13 @@ func (s *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, chan
 	changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 	log.Println("Service kører")
 
+	// Auto-update timers
+	updateTicker := time.NewTicker(30 * time.Minute)
+	defer updateTicker.Stop()
+	startupUpdateTimer := time.NewTimer(2 * time.Minute)
+	defer startupUpdateTimer.Stop()
+	updateTriggered := false
+
 loop:
 	for {
 		select {
@@ -1298,11 +1306,27 @@ loop:
 			default:
 				log.Printf("Uventet kontrol forespørgsel #%d", c)
 			}
+		case <-startupUpdateTimer.C:
+			log.Println("🔄 Service startup update check...")
+			if serviceCheckAndApplyUpdate() {
+				updateTriggered = true
+				break loop
+			}
+		case <-updateTicker.C:
+			log.Println("🔄 Periodisk service update check...")
+			if serviceCheckAndApplyUpdate() {
+				updateTriggered = true
+				break loop
+			}
 		}
 	}
 
 	changes <- svc.Status{State: svc.StopPending}
 	stopAgent()
+	if updateTriggered {
+		log.Println("🔄 Update installeret — stopper service med errno=1 for SCM restart")
+		return false, 1
+	}
 	return
 }
 
@@ -1672,6 +1696,79 @@ func stopAgent() {
 		dev.SetOffline()
 	}
 	time.Sleep(500 * time.Millisecond)
+}
+
+// serviceCheckAndApplyUpdate checks for updates and applies them in-place for service mode.
+// Returns true if an update was applied and the service should restart via SCM.
+func serviceCheckAndApplyUpdate() bool {
+	u, err := updater.NewUpdater(tray.Version)
+	if err != nil {
+		log.Printf("❌ Service update: kunne ikke oprette updater: %v", err)
+		return false
+	}
+
+	if !u.ShouldAutoCheck(30 * time.Minute) {
+		log.Println("⏭️  Service update: for tidligt at checke igen")
+		return false
+	}
+
+	if err := u.CheckForUpdate(); err != nil {
+		log.Printf("❌ Service update: check fejlede: %v", err)
+		return false
+	}
+
+	info := u.GetAvailableUpdate()
+	if info == nil {
+		log.Println("✅ Service update: allerede opdateret")
+		return false
+	}
+
+	log.Printf("🆕 Service update: ny version fundet: %s", info.TagName)
+
+	if err := u.DownloadUpdate(); err != nil {
+		log.Printf("❌ Service update: download fejlede: %v", err)
+		return false
+	}
+
+	downloadPath := u.GetDownloadPath()
+	if downloadPath == "" {
+		log.Println("❌ Service update: ingen download path")
+		return false
+	}
+
+	currentExe, err := os.Executable()
+	if err != nil {
+		log.Printf("❌ Service update: kunne ikke finde kørende exe: %v", err)
+		return false
+	}
+	// Resolve symlinks
+	currentExe, err = filepath.EvalSymlinks(currentExe)
+	if err != nil {
+		log.Printf("❌ Service update: kunne ikke resolve exe path: %v", err)
+		return false
+	}
+
+	oldExe := currentExe + ".old"
+
+	// Rename current exe to .old (Windows allows rename of running exe)
+	os.Remove(oldExe) // Remove previous .old if it exists
+	if err := os.Rename(currentExe, oldExe); err != nil {
+		log.Printf("❌ Service update: kunne ikke omdøbe exe: %v (AV lås?)", err)
+		return false
+	}
+
+	// Copy downloaded exe to original path
+	if err := copyFile(downloadPath, currentExe); err != nil {
+		log.Printf("❌ Service update: kopi fejlede: %v — ruller tilbage", err)
+		os.Remove(currentExe)
+		if rbErr := os.Rename(oldExe, currentExe); rbErr != nil {
+			log.Printf("❌ Service update: rollback fejlede også: %v", rbErr)
+		}
+		return false
+	}
+
+	log.Printf("✅ Service update: %s installeret — SCM genstarter service", info.TagName)
+	return true
 }
 
 // runUpdateMode runs when started with --update-from flag
