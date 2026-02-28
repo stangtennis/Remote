@@ -116,21 +116,10 @@ func cmdList() {
 
 func cmdConnect() {
 	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "Usage: remote-desktop-cli connect <device_id>")
+		fmt.Fprintln(os.Stderr, "Usage: remote-desktop-cli connect <device_id_or_name>")
 		os.Exit(1)
 	}
-	deviceID := os.Args[2]
-
-	// Check if daemon is already running and connected
-	if resp, err := sendDaemonRequest(daemonRequest{Cmd: "status"}); err == nil && resp.OK {
-		if connID, ok := resp.Data["device_id"].(string); ok && connID == deviceID {
-			fmt.Printf("Already connected to %s\n", deviceID)
-			return
-		}
-		// Connected to different device — disconnect first
-		sendDaemonRequest(daemonRequest{Cmd: "disconnect"})
-		time.Sleep(500 * time.Millisecond)
-	}
+	deviceArg := os.Args[2]
 
 	// Start daemon
 	auth, cfg, err := getAuthAndConfig()
@@ -139,23 +128,41 @@ func cmdConnect() {
 		os.Exit(1)
 	}
 
-	// Look up device name
+	// Fetch devices and resolve by device_id or device_name
 	devices, err := fetchDevices(cfg.SupabaseURL, cfg.SupabaseAnonKey, auth)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error fetching devices: %v\n", err)
 		os.Exit(1)
 	}
 
-	deviceName := deviceID
-	for _, d := range devices {
-		if d.DeviceID == deviceID {
-			deviceName = d.DeviceName
-			if !d.isOnline() {
-				fmt.Fprintf(os.Stderr, "Error: device '%s' is offline (last seen: %s)\n", d.DeviceName, d.LastSeen.Format(time.RFC3339))
-				os.Exit(1)
-			}
+	var found *device
+	for i := range devices {
+		if devices[i].DeviceID == deviceArg || strings.EqualFold(devices[i].DeviceName, deviceArg) {
+			found = &devices[i]
 			break
 		}
+	}
+	if found == nil {
+		fmt.Fprintf(os.Stderr, "Error: device '%s' not found\n", deviceArg)
+		os.Exit(1)
+	}
+	if !found.isOnline() {
+		fmt.Fprintf(os.Stderr, "Error: device '%s' is offline (last seen: %s)\n", found.DeviceName, found.LastSeen.Format(time.RFC3339))
+		os.Exit(1)
+	}
+
+	deviceID := found.DeviceID
+	deviceName := found.DeviceName
+
+	// Check if daemon is already running and connected to this device
+	if resp, err := sendDaemonRequest(daemonRequest{Cmd: "status"}); err == nil && resp.OK {
+		if connID, ok := resp.Data["device_id"].(string); ok && connID == deviceID {
+			fmt.Printf("Already connected to %s (%s)\n", deviceName, deviceID)
+			return
+		}
+		// Connected to different device — disconnect first
+		sendDaemonRequest(daemonRequest{Cmd: "disconnect"})
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	pid, err := startDaemon(cfg, auth, deviceID, deviceName)
@@ -164,7 +171,7 @@ func cmdConnect() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Connected to %s. Daemon running (PID %d).\n", deviceName, pid)
+	fmt.Printf("Connected to %s (%s). Daemon running (PID %d).\n", deviceName, deviceID, pid)
 }
 
 func cmdDisconnect() {
