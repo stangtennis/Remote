@@ -961,6 +961,12 @@ func installService() error {
 		fmt.Printf("⚠️  Warning: Could not set recovery actions: %v\n", err)
 	}
 
+	// Aktiver recovery ved graceful exit med fejlkode (kræves for auto-update SCM restart)
+	err = s.SetRecoveryActionsOnNonCrashFailures(true)
+	if err != nil {
+		fmt.Printf("⚠️  Warning: Could not set non-crash failure actions: %v\n", err)
+	}
+
 	fmt.Println("✅ Service installed successfully!")
 	fmt.Println()
 	fmt.Printf("   Service Name: %s\n", serviceName)
@@ -1281,6 +1287,9 @@ func (s *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, chan
 
 	changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 	log.Println("Service kører")
+
+	// Sikr SCM recovery er korrekt konfigureret (auto-fix eksisterende installationer)
+	ensureRecoveryConfig()
 
 	// Auto-update timers
 	updateTicker := time.NewTicker(30 * time.Minute)
@@ -1716,6 +1725,32 @@ func cleanupOldBinaries() {
 			log.Printf("⚠️ Kunne ikke slette %s: %v", filepath.Base(f), err)
 		} else {
 			log.Printf("🧹 Slettet gammel fil: %s", filepath.Base(f))
+		}
+	}
+}
+
+// ensureRecoveryConfig sikrer at SCM recovery er konfigureret korrekt.
+// Kald én gang ved service startup for at auto-fikse eksisterende installationer.
+func ensureRecoveryConfig() {
+	m, err := mgr.Connect()
+	if err != nil {
+		return
+	}
+	defer m.Disconnect()
+
+	s, err := m.OpenService(serviceName)
+	if err != nil {
+		return
+	}
+	defer s.Close()
+
+	// Tjek om non-crash failure actions allerede er aktiveret
+	enabled, err := s.RecoveryActionsOnNonCrashFailures()
+	if err != nil || !enabled {
+		if err := s.SetRecoveryActionsOnNonCrashFailures(true); err != nil {
+			log.Printf("⚠️ Kunne ikke sætte non-crash recovery: %v", err)
+		} else {
+			log.Println("✅ SCM recovery konfigureret for non-crash failures")
 		}
 	}
 }
