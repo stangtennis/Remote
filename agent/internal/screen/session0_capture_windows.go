@@ -112,22 +112,24 @@ func enablePrivilege(name string) error {
 	binary.LittleEndian.PutUint32(tp[8:12], luid[1])             // LUID.HighPart
 	binary.LittleEndian.PutUint32(tp[12:16], _SE_PRIVILEGE_ENABLED) // Attributes
 
-	ret, _, err = procAdjustTokenPrivileges.Call(
+	var lastErr error
+	ret, _, lastErr = procAdjustTokenPrivileges.Call(
 		uintptr(token),
 		0, // DisableAllPrivileges = FALSE
 		uintptr(unsafe.Pointer(&tp[0])),
 		0, 0, 0,
 	)
 	if ret == 0 {
-		return fmt.Errorf("AdjustTokenPrivileges: %v", err)
+		return fmt.Errorf("AdjustTokenPrivileges: %v", lastErr)
 	}
 
-	// Check if privilege was actually assigned
-	if errno, ok := windows.GetLastError().(windows.Errno); ok && errno == _ERROR_NOT_ALL_ASSIGNED {
+	// Check if privilege was actually assigned (AdjustTokenPrivileges returns TRUE
+	// but sets ERROR_NOT_ALL_ASSIGNED if the privilege couldn't be enabled)
+	if errno, ok := lastErr.(windows.Errno); ok && errno == _ERROR_NOT_ALL_ASSIGNED {
 		return fmt.Errorf("privilege %s not held by process (not running as LocalSystem?)", name)
 	}
 
-	log.Printf("SeTcbPrivilege enabled successfully")
+	log.Printf("✅ Privilege enabled: %s", name)
 	return nil
 }
 
@@ -254,9 +256,14 @@ func NewSession0PipeCapturer() (*Session0PipeCapturer, error) {
 }
 
 func (c *Session0PipeCapturer) launchHelper() error {
-	// Enable SeTcbPrivilege (required for WTSQueryUserToken and SetTokenInformation across sessions)
-	if err := enablePrivilege("SeTcbPrivilege"); err != nil {
-		log.Printf("⚠️ enablePrivilege(SeTcbPrivilege): %v (may fail if not LocalSystem)", err)
+	// Enable required privileges for cross-session process creation
+	// SeTcbPrivilege: required for WTSQueryUserToken and SetTokenInformation across sessions
+	// SeAssignPrimaryTokenPrivilege: required for CreateProcessAsUser with a different user's token
+	// SeIncreaseQuotaPrivilege: required for CreateProcessAsUser to assign process quotas
+	for _, priv := range []string{"SeTcbPrivilege", "SeAssignPrimaryTokenPrivilege", "SeIncreaseQuotaPrivilege"} {
+		if err := enablePrivilege(priv); err != nil {
+			log.Printf("⚠️ enablePrivilege(%s): %v", priv, err)
+		}
 	}
 
 	// Get active console session (the session with the physical display)

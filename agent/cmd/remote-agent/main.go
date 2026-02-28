@@ -1228,7 +1228,16 @@ func runInteractive() {
 }
 
 func runService() {
-	// Windows Service mode
+	// Windows Service mode - redirect log to file since services have no console
+	logDir := filepath.Join(os.Getenv("ProgramData"), "RemoteDesktopAgent")
+	os.MkdirAll(logDir, 0755)
+	serviceLogPath := filepath.Join(logDir, "service.log")
+	if lf, err := os.OpenFile(serviceLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+		log.SetOutput(lf)
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
+		defer lf.Close()
+	}
+
 	log.Println("Starter som Windows Service...")
 
 	// Setup firewall rules (service runs as SYSTEM, has admin rights)
