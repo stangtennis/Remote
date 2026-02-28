@@ -165,6 +165,19 @@ else
 fi
 rm -rf "$STAGING"
 
+# =============================================================================
+# Generate SHA256 for agent exe
+# =============================================================================
+echo ""
+if [ -f "builds/remote-agent-${VERSION}.exe" ]; then
+    AGENT_SHA256=$(sha256sum "builds/remote-agent-${VERSION}.exe" | awk '{print $1}')
+    echo "🔐 Agent SHA256: ${AGENT_SHA256}"
+    echo "   Brug denne hash i version.json agent_sha256 feltet"
+else
+    AGENT_SHA256=""
+    echo "⚠️  Ingen agent exe fundet — SHA256 ikke beregnet"
+fi
+
 echo ""
 echo "=================================="
 echo "📁 Build output in ./builds/"
