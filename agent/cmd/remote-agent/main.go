@@ -1744,7 +1744,33 @@ func ensureRecoveryConfig() {
 	}
 	defer s.Close()
 
-	// Tjek om non-crash failure actions allerede er aktiveret
+	// Sæt recovery actions (restart on failure) — auto-fikser ældre installationer
+	actions, err := s.RecoveryActions()
+	needActions := err != nil || len(actions) == 0
+	if !needActions {
+		// Tjek om alle actions er NoAction (= ikke konfigureret)
+		allNoAction := true
+		for _, a := range actions {
+			if a.Type != mgr.NoAction {
+				allNoAction = false
+				break
+			}
+		}
+		needActions = allNoAction
+	}
+	if needActions {
+		if err := s.SetRecoveryActions([]mgr.RecoveryAction{
+			{Type: mgr.ServiceRestart, Delay: 5 * time.Second},
+			{Type: mgr.ServiceRestart, Delay: 10 * time.Second},
+			{Type: mgr.ServiceRestart, Delay: 30 * time.Second},
+		}, 86400); err != nil {
+			log.Printf("⚠️ Kunne ikke sætte recovery actions: %v", err)
+		} else {
+			log.Println("✅ SCM recovery actions konfigureret (restart on failure)")
+		}
+	}
+
+	// Aktiver recovery ved graceful exit med fejlkode (kræves for auto-update SCM restart)
 	enabled, err := s.RecoveryActionsOnNonCrashFailures()
 	if err != nil || !enabled {
 		if err := s.SetRecoveryActionsOnNonCrashFailures(true); err != nil {
