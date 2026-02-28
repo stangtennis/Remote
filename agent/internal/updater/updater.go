@@ -105,7 +105,10 @@ func (u *Updater) loadState() {
 	if err != nil {
 		return
 	}
-	json.Unmarshal(data, &u.state)
+	if err := json.Unmarshal(data, &u.state); err != nil {
+		log.Printf("⚠️ Korrupt update state fil, bruger defaults: %v", err)
+		os.Remove(u.stateFilePath)
+	}
 }
 
 func (u *Updater) saveState() error {
@@ -185,6 +188,7 @@ func (u *Updater) CheckForUpdate() error {
 		return err
 	}
 
+	// Gem LastCheck kun ved succesfuld check (ikke ved netværksfejl)
 	u.state.LastCheck = time.Now()
 	u.saveState()
 
@@ -240,22 +244,30 @@ func (u *Updater) DownloadUpdate() error {
 		return err
 	}
 
-	if info.SHA256URL != "" {
-		log.Printf("🔐 Verifying SHA256...")
-		expectedHash, err := u.github.DownloadSHA256(info.SHA256URL)
+	// Verificer SHA256 — inline hash fra version.json har forrang
+	expectedHash := info.SHA256Hash
+	if expectedHash == "" && info.SHA256URL != "" {
+		log.Printf("🔐 Henter SHA256 fra URL...")
+		var err error
+		expectedHash, err = u.github.DownloadSHA256(info.SHA256URL)
 		if err != nil {
 			u.lastError = fmt.Errorf("failed to get SHA256: %w", err)
 			u.setStatus(StatusError)
 			os.Remove(exePath)
 			return u.lastError
 		}
+	}
 
+	if expectedHash != "" {
+		log.Printf("🔐 Verificerer SHA256...")
 		if err := VerifySHA256(exePath, expectedHash); err != nil {
 			u.lastError = err
 			u.setStatus(StatusError)
 			os.Remove(exePath)
 			return err
 		}
+	} else {
+		log.Printf("⚠️ Ingen SHA256 hash tilgængelig — springer verifikation over")
 	}
 
 	u.state.DownloadedVersion = info.TagName
@@ -333,6 +345,35 @@ func (u *Updater) GetDownloadPath() string {
 // FetchVersionInfo fetches version info from the update server
 func (u *Updater) FetchVersionInfo() (*VersionInfo, error) {
 	return u.github.FetchVersionInfo()
+}
+
+// CleanOldDownloads sletter gamle version-directories i updates-mappen.
+// Beholder kun den aktuelle version og update_state.json.
+func (u *Updater) CleanOldDownloads(currentVersion string) {
+	updateDir, err := GetUpdateDirectory()
+	if err != nil {
+		return
+	}
+
+	entries, err := os.ReadDir(updateDir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue // Behold filer som update_state.json
+		}
+		if entry.Name() == currentVersion {
+			continue // Behold aktuel version
+		}
+		dirPath := filepath.Join(updateDir, entry.Name())
+		if err := os.RemoveAll(dirPath); err != nil {
+			log.Printf("⚠️ Kunne ikke slette gammel download %s: %v", entry.Name(), err)
+		} else {
+			log.Printf("🧹 Slettet gammel download: %s", entry.Name())
+		}
+	}
 }
 
 // IgnoreUpdate ignores the current available update

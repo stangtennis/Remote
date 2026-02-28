@@ -43,7 +43,8 @@ type UpdateInfo struct {
 	TagName      string
 	ExeURL       string
 	ExeSize      int64
-	SHA256URL    string
+	SHA256URL    string // Deprecated: brug SHA256Hash i stedet
+	SHA256Hash   string // Inline SHA256 hash fra version.json
 	IsPrerelease bool
 }
 
@@ -139,6 +140,7 @@ type VersionInfo struct {
 	ControllerVersion string `json:"controller_version"`
 	AgentURL          string `json:"agent_url"`
 	ControllerURL     string `json:"controller_url"`
+	AgentSHA256       string `json:"agent_sha256,omitempty"`
 }
 
 // CheckForUpdate checks if an update is available for the agent
@@ -184,6 +186,7 @@ func (c *GitHubClient) CheckForUpdate(currentVersion string, channel string) (*U
 		TagName:      versionInfo.AgentVersion,
 		ExeURL:       versionInfo.AgentURL,
 		ExeSize:      0, // Size will be determined during download
+		SHA256Hash:   versionInfo.AgentSHA256,
 		IsPrerelease: false,
 	}
 

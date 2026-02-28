@@ -1698,9 +1698,34 @@ func stopAgent() {
 	time.Sleep(500 * time.Millisecond)
 }
 
+// cleanupOldBinaries sletter *.exe.old filer fra exe-directoryet (rester fra forrige update)
+func cleanupOldBinaries() {
+	exePath, err := os.Executable()
+	if err != nil {
+		return
+	}
+	exePath, _ = filepath.EvalSymlinks(exePath)
+	dir := filepath.Dir(exePath)
+
+	matches, err := filepath.Glob(filepath.Join(dir, "*.exe.old"))
+	if err != nil {
+		return
+	}
+	for _, f := range matches {
+		if err := os.Remove(f); err != nil {
+			log.Printf("⚠️ Kunne ikke slette %s: %v", filepath.Base(f), err)
+		} else {
+			log.Printf("🧹 Slettet gammel fil: %s", filepath.Base(f))
+		}
+	}
+}
+
 // serviceCheckAndApplyUpdate checks for updates and applies them in-place for service mode.
 // Returns true if an update was applied and the service should restart via SCM.
 func serviceCheckAndApplyUpdate() bool {
+	// Opryd .old filer fra forrige update
+	cleanupOldBinaries()
+
 	u, err := updater.NewUpdater(tray.Version)
 	if err != nil {
 		log.Printf("❌ Service update: kunne ikke oprette updater: %v", err)
@@ -1751,9 +1776,19 @@ func serviceCheckAndApplyUpdate() bool {
 	oldExe := currentExe + ".old"
 
 	// Rename current exe to .old (Windows allows rename of running exe)
+	// Retry op til 3 gange — Windows Defender kan låse filen midlertidigt
 	os.Remove(oldExe) // Remove previous .old if it exists
-	if err := os.Rename(currentExe, oldExe); err != nil {
-		log.Printf("❌ Service update: kunne ikke omdøbe exe: %v (AV lås?)", err)
+	var renameErr error
+	for i := 0; i < 3; i++ {
+		renameErr = os.Rename(currentExe, oldExe)
+		if renameErr == nil {
+			break
+		}
+		log.Printf("⚠️ Rename forsøg %d/3 fejlede: %v — venter 2s", i+1, renameErr)
+		time.Sleep(2 * time.Second)
+	}
+	if renameErr != nil {
+		log.Printf("❌ Service update: kunne ikke omdøbe exe efter 3 forsøg: %v", renameErr)
 		return false
 	}
 
@@ -1766,6 +1801,9 @@ func serviceCheckAndApplyUpdate() bool {
 		}
 		return false
 	}
+
+	// Opryd gamle downloads (behold kun den nye version)
+	u.CleanOldDownloads(info.TagName)
 
 	log.Printf("✅ Service update: %s installeret — SCM genstarter service", info.TagName)
 	return true
