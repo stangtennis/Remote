@@ -152,6 +152,7 @@ func New(cfg *config.Config, dev *device.Device, tokenProvider *auth.TokenProvid
 		log.Printf("⚠️  Cannot detect desktop: %v", err)
 		log.Println("   Assuming Session 0 (pre-login) mode")
 		isSession0 = true
+		currentDesktopType = desktop.DesktopWinlogon // So WTS fallback can detect transition to DesktopDefault
 	} else {
 		currentDesktopType = desktop.GetDesktopType(desktopName)
 		if currentDesktopType == desktop.DesktopWinlogon {
