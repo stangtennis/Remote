@@ -20,7 +20,10 @@ var (
 	procOpenInputDesktop          = user32.NewProc("OpenInputDesktop")
 	procCloseDesktop              = user32.NewProc("CloseDesktop")
 	procSwitchDesktop             = user32.NewProc("SwitchDesktop")
-	procGetCurrentThreadId        = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetCurrentThreadId")
+
+	kernel32                         = windows.NewLazySystemDLL("kernel32.dll")
+	procGetCurrentThreadId           = kernel32.NewProc("GetCurrentThreadId")
+	procWTSGetActiveConsoleSessionId = kernel32.NewProc("WTSGetActiveConsoleSessionId")
 )
 
 const (
@@ -121,19 +124,52 @@ func IsOnLoginScreen() bool {
 	return GetDesktopType(desktop) == DesktopWinlogon
 }
 
+// GetActiveConsoleSession returns the session ID of the user logged in at the physical console.
+// Returns 0xFFFFFFFF if no user is logged in at the console.
+// This works from Session 0 (services) where OpenInputDesktop() fails.
+func GetActiveConsoleSession() uint32 {
+	ret, _, _ := procWTSGetActiveConsoleSessionId.Call()
+	return uint32(ret)
+}
+
 // MonitorDesktopSwitch monitors for desktop changes
 func MonitorDesktopSwitch(onChange func(DesktopType)) {
 	var currentDesktop string
+	// Track WTS session for Session 0 fallback (initialize to 0xFFFFFFFF = no user)
+	var lastWTSSession uint32 = 0xFFFFFFFF
 
 	for {
 		desktop, err := GetInputDesktop()
-		if err == nil && desktop != currentDesktop {
-			currentDesktop = desktop
-			desktopType := GetDesktopType(desktop)
+		if err == nil {
+			// OpenInputDesktop succeeded — normal mode
+			if desktop != currentDesktop {
+				currentDesktop = desktop
+				desktopType := GetDesktopType(desktop)
 
-			log.Printf("Desktop switched to: %s (type: %d)", desktop, desktopType)
-			if onChange != nil {
-				onChange(desktopType)
+				log.Printf("Desktop switched to: %s (type: %d)", desktop, desktopType)
+				if onChange != nil {
+					onChange(desktopType)
+				}
+			}
+		} else {
+			// OpenInputDesktop failed — Session 0 mode
+			// Use WTSGetActiveConsoleSessionId as fallback to detect user login/logout
+			sessionID := GetActiveConsoleSession()
+			if sessionID != lastWTSSession {
+				lastWTSSession = sessionID
+				if sessionID > 0 && sessionID != 0xFFFFFFFF {
+					log.Printf("👤 User session %d detected via WTS (Session 0 fallback)", sessionID)
+					currentDesktop = "Default" // Sync state
+					if onChange != nil {
+						onChange(DesktopDefault)
+					}
+				} else {
+					log.Println("🔒 No active user session (WTS fallback)")
+					currentDesktop = "Winlogon"
+					if onChange != nil {
+						onChange(DesktopWinlogon)
+					}
+				}
 			}
 		}
 

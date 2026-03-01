@@ -81,6 +81,7 @@ type Manager struct {
 	sessionID           string
 	isStreaming         atomic.Bool
 	isSession0          bool // Running in Session 0 (before user login)
+	startedInSession0   bool // Process was started in Session 0 (never changes)
 
 	// Concurrency control
 	mu         sync.Mutex             // Protects peerConnection, dataChannel, controlChannel
@@ -219,6 +220,7 @@ func New(cfg *config.Config, dev *device.Device, tokenProvider *auth.TokenProvid
 		keyController:       input.NewKeyboardController(),
 		fileTransferHandler: fileTransferHandler,
 		isSession0:          isSession0,
+		startedInSession0:   isSession0,
 		currentDesktop:      currentDesktopType,
 		videoEncoder:        videoEncoder,
 		useH264:             false, // Start with JPEG tiles; enable H.264 via set_mode when ready
@@ -265,18 +267,33 @@ func (m *Manager) monitorDesktopChanges() {
 				}
 			}
 		case desktop.DesktopDefault:
-			log.Println("🔓 Desktop switched to user desktop")
-			m.isSession0 = false
-			// Reinitialize capturer for user desktop (prefer DXGI)
-			if m.screenCapturer != nil {
-				log.Println("🔄 Reinitializing screen capturer for user desktop...")
-				if err := m.screenCapturer.Reinitialize(false); err != nil {
-					log.Printf("❌ Failed to reinitialize capturer: %v", err)
+			if m.startedInSession0 {
+				// We're still in Session 0 process but user has logged in
+				// Keep isSession0 = true so input goes through pipe forwarder
+				log.Println("🔓 User session detected from Session 0 — reinitializing capturer with pipe forwarder")
+				if m.screenCapturer != nil {
+					if err := m.screenCapturer.Reinitialize(true); err != nil {
+						log.Printf("❌ Failed to reinitialize capturer: %v", err)
+					}
+					width, height := m.screenCapturer.GetResolution()
+					m.mouseController = input.NewMouseController(width, height)
+					hasForwarder := m.screenCapturer.HasInputForwarder()
+					log.Printf("✅ Capturer reinitialized: %dx%d, HasInputForwarder=%v", width, height, hasForwarder)
 				}
-				// Update mouse controller with new resolution
-				width, height := m.screenCapturer.GetResolution()
-				m.mouseController = input.NewMouseController(width, height)
-				log.Printf("✅ Updated screen resolution: %dx%d", width, height)
+			} else {
+				log.Println("🔓 Desktop switched to user desktop")
+				m.isSession0 = false
+				// Reinitialize capturer for user desktop (prefer DXGI)
+				if m.screenCapturer != nil {
+					log.Println("🔄 Reinitializing screen capturer for user desktop...")
+					if err := m.screenCapturer.Reinitialize(false); err != nil {
+						log.Printf("❌ Failed to reinitialize capturer: %v", err)
+					}
+					// Update mouse controller with new resolution
+					width, height := m.screenCapturer.GetResolution()
+					m.mouseController = input.NewMouseController(width, height)
+					log.Printf("✅ Updated screen resolution: %dx%d", width, height)
+				}
 			}
 		default:
 			log.Printf("⚠️  Desktop switched to unknown type: %d (was: %d)", dt, oldDesktop)
