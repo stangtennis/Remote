@@ -864,6 +864,8 @@
     let remoteBytesReceived = 0;
     let remoteLastStatsTime = Date.now();
     let remoteInputActive = false;
+    let remoteVideoElement = null;
+    let remoteDrawFrameId = null;
     // Chunked frame reassembly
     let remoteFrameChunks = [];
     let remoteExpectedChunks = 0;
@@ -1171,6 +1173,10 @@
         // Handle incoming video track (H.264 mode)
         remotePeerConnection.ontrack = (event) => {
           console.log('📹 Received video track');
+
+          // Cleanup previous video element if any
+          cleanupRemoteVideo();
+
           const stream = event.streams[0];
           const video = document.createElement('video');
           video.srcObject = stream;
@@ -1183,6 +1189,7 @@
           video.style.height = '0';
           video.style.opacity = '0';
           document.body.appendChild(video);
+          remoteVideoElement = video;
 
           video.onloadedmetadata = () => {
             remoteCanvas.width = video.videoWidth;
@@ -1191,7 +1198,7 @@
               if (video.readyState >= video.HAVE_CURRENT_DATA) {
                 remoteCtx.drawImage(video, 0, 0, remoteCanvas.width, remoteCanvas.height);
               }
-              requestAnimationFrame(drawFrame);
+              remoteDrawFrameId = requestAnimationFrame(drawFrame);
             }
             drawFrame();
           };
@@ -1226,6 +1233,7 @@
           } else if (state === 'disconnected' || state === 'failed') {
             updateRemoteStatus('🔴 Afbrudt');
             stopRemoteStats();
+            cleanupRemoteVideo();
           }
         };
 
@@ -1338,9 +1346,24 @@
       document.getElementById('remoteStatus').textContent = text;
     }
 
+    // Cleanup video element and animation loop
+    function cleanupRemoteVideo() {
+      if (remoteDrawFrameId) {
+        cancelAnimationFrame(remoteDrawFrameId);
+        remoteDrawFrameId = null;
+      }
+      if (remoteVideoElement) {
+        remoteVideoElement.pause();
+        remoteVideoElement.srcObject = null;
+        remoteVideoElement.remove();
+        remoteVideoElement = null;
+      }
+    }
+
     // Disconnect remote session
     window.disconnectRemote = function() {
       stopRemoteStats();
+      cleanupRemoteVideo();
       if (remotePeerConnection) {
         remotePeerConnection.close();
         remotePeerConnection = null;
@@ -1350,6 +1373,11 @@
         remoteDataChannel = null;
       }
       remoteInputActive = false;
+
+      // Clear canvas
+      if (remoteCtx && remoteCanvas) {
+        remoteCtx.clearRect(0, 0, remoteCanvas.width, remoteCanvas.height);
+      }
 
       updateRemoteStatus('🔴 Ikke forbundet');
       document.getElementById('remoteStats').style.display = 'none';
