@@ -1,4 +1,4 @@
-name: Release
+name: Create Release
 
 on:
   push:
@@ -10,126 +10,64 @@ permissions:
 
 jobs:
   release:
-    name: Create Release
-    runs-on: windows-latest
-    
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
-      - name: Set up Go
-        uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
-          cache-dependency-path: |
-            agent/go.sum
-            controller/go.sum
-          
-      - name: Build Agent
+          fetch-depth: 0  # Full history for release notes generation
+
+      - name: Generate release notes from git log
+        id: notes
         run: |
-          cd agent
-          go build -ldflags="-s -w" -o remote-agent.exe .\cmd\remote-agent
-          
-      - name: Build Controller
-        run: |
-          cd controller
-          go build -ldflags="-s -w" -o controller.exe .
-          
-      - name: Get version from tag
-        id: get_version
-        run: |
-          $version = "${{ github.ref_name }}"
-          echo "version=$version" >> $env:GITHUB_OUTPUT
-          
+          TAG="${GITHUB_REF#refs/tags/}"
+
+          # Find previous tag
+          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]' | sed -n '2p')
+
+          if [ -z "$PREV_TAG" ]; then
+            # No previous tag, use all commits
+            COMMITS=$(git log --pretty=format:"- %s" --no-merges HEAD~20..HEAD)
+          else
+            COMMITS=$(git log --pretty=format:"- %s" --no-merges "${PREV_TAG}..${TAG}")
+          fi
+
+          # Build release body
+          {
+            echo "body<<RELEASE_EOF"
+            echo "## Remote Desktop ${TAG}"
+            echo ""
+            echo "### Changes since ${PREV_TAG:-inception}"
+            echo ""
+            echo "${COMMITS}"
+            echo ""
+            echo "---"
+            echo ""
+            echo "### Downloads"
+            echo ""
+            echo "Windows installer og exe-filer: https://updates.hawkeye123.dk"
+            echo ""
+            echo "| Fil | Beskrivelse |"
+            echo "|-----|-------------|"
+            echo "| RemoteDesktopAgent-Setup.exe | Agent installer (GUI + Console + OpenH264) |"
+            echo "| RemoteDesktopController-Setup.exe | Controller installer (Controller + FFmpeg) |"
+            echo "| remote-agent.exe | Agent standalone (GUI mode) |"
+            echo "| remote-agent-console.exe | Agent standalone (Console mode) |"
+            echo "| controller.exe | Controller standalone |"
+            echo ""
+            echo "### System Requirements"
+            echo ""
+            echo "- Windows 10/11 (64-bit)"
+            echo "- macOS 13+ (Apple Silicon / Intel)"
+            echo "RELEASE_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          name: ${{ steps.get_version.outputs.version }} - Mouse Drift Fix + Multi-Connection
-          body: |
-            # Release ${{ steps.get_version.outputs.version }}
-            
-            ## 🐛 Critical Bug Fixes
-            
-            ### Mouse Movement Drift - FIXED
-            The mouse drift issue has been completely resolved with multiple improvements:
-            
-            - **60 FPS Throttling** - Mouse events limited to 60/sec (16ms interval) to prevent event flooding
-            - **Precision Rounding** - Changed from int truncation to math.Round for accurate coordinate conversion
-            - **Float64 Calculations** - Higher precision in coordinate transformations to eliminate cumulative errors
-            - **Bounds Clamping** - Screen boundary checking prevents out-of-bounds coordinates
-            - **Division by Zero Protection** - Added safety checks for edge cases
-            
-            **Result**: Mouse cursor now tracks perfectly without drift, even during extended sessions.
-            
-            ---
-            
-            ## 🎯 Major Features
-            
-            ### Multi-Connection Support (v2.4.0)
-            - Controller can now manage multiple agent connections simultaneously
-            - Session switching UI for easy navigation between devices
-            - Per-session routing and state management
-            - Concurrent WebRTC connections with independent video/input streams
-            
-            ### Bidirectional Clipboard Sync
-            - Full two-way clipboard synchronization (agent ↔ controller)
-            - Text and image support
-            - Automatic conflict resolution
-            - Low latency sync
-            
-            ---
-            
-            ## 📦 Downloads
-            
-            ### Remote Agent (Client)
-            **For the computer you want to control**
-            - `remote-agent.exe` - Windows executable (optimized build)
-            
-            ### Remote Controller
-            **For the computer you control from**
-            - `controller.exe` - Windows executable (optimized build)
-            
-            ---
-            
-            ## 🚀 Quick Start
-            
-            ### Agent Setup
-            1. Download `remote-agent.exe`
-            2. Run `install-service.bat` (as Admin)
-            3. Agent will register and wait for approval
-            
-            ### Controller Setup
-            1. Download `controller.exe`
-            2. Login with your credentials
-            3. Go to "Approve Devices" tab
-            4. Approve your agent
-            5. Connect from "My Devices" tab
-            
-            ---
-            
-            ## 🔧 Technical Details
-            
-            **Files Modified:**
-            - controller/internal/viewer/interactive_canvas.go (throttling)
-            - controller/internal/viewer/connection.go (precision)
-            - agent/internal/input/mouse.go (rounding & clamping)
-            
-            **Infrastructure:**
-            - Supabase: https://supabase.hawkeye123.dk
-            - Dashboard: https://stangtennis.github.io/Remote
-            
-            ---
-            
-            ## 📊 Version History
-            - v2.4.0 - Mouse drift fix + Multi-connection
-            - v2.3.0 - Maximum quality mode (60 FPS, 4K support)
-            - v2.2.0 - Clipboard sync (agent → controller)
-            - v2.1.0 - File transfer + auto-reconnection
-            - v2.0.0 - Core remote desktop functionality
-            
-          files: |
-            agent/remote-agent.exe
-            controller/controller.exe
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: ${{ steps.notes.outputs.body }}
           draft: false
           prerelease: false
         env:
