@@ -89,6 +89,7 @@ type Manager struct {
 	currentDesktop      desktop.DesktopType
 	pendingCandidates   []*webrtc.ICECandidate // Buffer ICE candidates until answer is sent
 	answerSent          bool                   // Flag to track if answer has been sent
+	iceStopCh           chan struct{}           // Closed to stop ICE polling goroutine
 
 	// RTT measurement
 	lastRTT       time.Duration // Last measured round-trip time
@@ -1994,6 +1995,12 @@ func (m *Manager) cleanupConnection(reason string) {
 	// Update session status to ended
 	if m.sessionID != "" {
 		m.updateSessionStatus("ended")
+	}
+
+	// Stop ICE polling goroutine from previous session
+	if m.iceStopCh != nil {
+		close(m.iceStopCh)
+		m.iceStopCh = nil
 	}
 
 	// Close data channels and peer connection under mutex

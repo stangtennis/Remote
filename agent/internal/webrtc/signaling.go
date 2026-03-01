@@ -380,6 +380,12 @@ func (m *Manager) handleWebSession(session Session) {
 		log.Println("✅ Previous session disconnected, ready for new connection")
 	}
 
+	// Stop previous ICE polling goroutine and create new stop channel
+	if m.iceStopCh != nil {
+		close(m.iceStopCh)
+	}
+	m.iceStopCh = make(chan struct{})
+
 	// Reset ICE candidate buffer for new session
 	m.pendingCandidates = nil
 	m.answerSent = false
@@ -697,10 +703,21 @@ func (m *Manager) listenForICE(sessionID string) {
 	defer ticker.Stop()
 	processedIDs := make(map[int]bool)
 
+	// Capture stop channel for this session (avoid race with new sessions)
+	stopCh := m.iceStopCh
+
 	log.Println("🔍 Starting ICE candidate listener...")
 
 	// Only poll while connecting, stop once connected or failed
 	for {
+		// Check if this goroutine was superseded by a new session
+		select {
+		case <-stopCh:
+			log.Println("🛑 Stopped ICE candidate polling - superseded by new session")
+			return
+		default:
+		}
+
 		// Check state BEFORE waiting for tick
 		if m.peerConnection == nil {
 			log.Println("🛑 Stopped ICE candidate polling - connection closed")
@@ -717,8 +734,11 @@ func (m *Manager) listenForICE(sessionID string) {
 			return
 		}
 
-		// Now wait for tick or proceed immediately on first iteration
+		// Now wait for tick or stop signal
 		select {
+		case <-stopCh:
+			log.Println("🛑 Stopped ICE candidate polling - superseded by new session")
+			return
 		case <-ticker.C:
 			// Continue to fetch signals
 		}
