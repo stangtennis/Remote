@@ -204,7 +204,6 @@ func (m *Manager) ListenForSessions() {
 			}
 			log.Printf("📞 Incoming session (controller): %s", newestCtrlSession.ID)
 			log.Printf("   Device ID: %s", m.device.ID)
-			m.sessionID = newestCtrlSession.ID
 			go m.handleSession(*newestCtrlSession)
 		}
 
@@ -363,12 +362,12 @@ func (m *Manager) handleWebSession(session Session) {
 		return
 	}
 
-	// Mark this session as being handled immediately to prevent race conditions
-	m.sessionID = session.ID
-
 	log.Println("🔧 Setting up WebRTC connection (web dashboard)...")
 
 	// Cleanup previous connection if it's a different session
+	// IMPORTANT: Do NOT set m.sessionID before cleanup — cleanup calls
+	// updateSessionStatus("ended") on m.sessionID, which would mark the
+	// NEW session as ended instead of the old one.
 	if m.peerConnection != nil || m.isStreaming.Load() {
 		log.Println("🔄 New connection requested - disconnecting previous session...")
 		m.isStreaming.Store(false)
@@ -379,6 +378,9 @@ func (m *Manager) handleWebSession(session Session) {
 		time.Sleep(200 * time.Millisecond) // Give time for cleanup
 		log.Println("✅ Previous session disconnected, ready for new connection")
 	}
+
+	// NOW set the new session ID (after cleanup marked the OLD session as ended)
+	m.sessionID = session.ID
 
 	// Stop previous ICE polling goroutine and create new stop channel
 	if m.iceStopCh != nil {
@@ -574,12 +576,14 @@ func (m *Manager) handleSession(session Session) {
 	log.Println("🔧 Setting up WebRTC connection...")
 
 	// Ensure previous connection is fully cleaned up
+	// IMPORTANT: Set sessionID AFTER cleanup so cleanup marks the OLD session as ended
 	if m.peerConnection != nil {
 		log.Println("⚠️  Previous connection still exists, cleaning up first...")
 		m.cleanupConnection("Preparing for new session")
 		// Small delay to ensure cleanup completes
 		time.Sleep(100 * time.Millisecond)
 	}
+	m.sessionID = session.ID
 
 	if err := m.CreatePeerConnection(m.getICEServers()); err != nil {
 		log.Printf("Failed to create peer connection: %v", err)
