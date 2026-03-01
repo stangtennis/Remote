@@ -41,12 +41,13 @@ const (
 )
 
 var (
-	helperUser32        = syscall.NewLazyDLL("user32.dll")
-	procSetCursorPosH   = helperUser32.NewProc("SetCursorPos")
-	procSendInputH      = helperUser32.NewProc("SendInput")
+	helperUser32         = syscall.NewLazyDLL("user32.dll")
+	procSetCursorPosH    = helperUser32.NewProc("SetCursorPos")
+	procSendInputH       = helperUser32.NewProc("SendInput")
 	procOpenInputDesktop = helperUser32.NewProc("OpenInputDesktop")
 	procSetThreadDesktop = helperUser32.NewProc("SetThreadDesktop")
 	procCloseDesktop     = helperUser32.NewProc("CloseDesktop")
+	procGetSystemMetrics = helperUser32.NewProc("GetSystemMetrics")
 )
 
 // switchToInputDesktop attaches the calling thread to the current input desktop.
@@ -122,35 +123,39 @@ func handleMouseClick(pipe *pipeRW) error {
 
 	switchToInputDesktop()
 
-	// Move cursor first
-	procSetCursorPosH.Call(uintptr(x), uintptr(y))
-
 	// Determine mouse event flags
-	var flags uint32
+	var btnFlags uint32
 	switch button {
 	case 0: // left
 		if down != 0 {
-			flags = _MOUSEEVENTF_LEFTDOWN
+			btnFlags = _MOUSEEVENTF_LEFTDOWN
 		} else {
-			flags = _MOUSEEVENTF_LEFTUP
+			btnFlags = _MOUSEEVENTF_LEFTUP
 		}
 	case 1: // right
 		if down != 0 {
-			flags = _MOUSEEVENTF_RIGHTDOWN
+			btnFlags = _MOUSEEVENTF_RIGHTDOWN
 		} else {
-			flags = _MOUSEEVENTF_RIGHTUP
+			btnFlags = _MOUSEEVENTF_RIGHTUP
 		}
 	case 2: // middle
 		if down != 0 {
-			flags = _MOUSEEVENTF_MIDDLEDOWN
+			btnFlags = _MOUSEEVENTF_MIDDLEDOWN
 		} else {
-			flags = _MOUSEEVENTF_MIDDLEUP
+			btnFlags = _MOUSEEVENTF_MIDDLEUP
 		}
 	default:
 		return nil
 	}
 
-	inp := makeMouseInput(0, 0, 0, flags)
+	// Use MOUSEEVENTF_ABSOLUTE with combined move+click in one SendInput call.
+	// This is more reliable than SetCursorPos + separate click on some Windows configs.
+	screenW, _, _ := procGetSystemMetrics.Call(0) // SM_CXSCREEN
+	screenH, _, _ := procGetSystemMetrics.Call(1) // SM_CYSCREEN
+	absX := int32(x * 65535 / int(screenW))
+	absY := int32(y * 65535 / int(screenH))
+	flags := _MOUSEEVENTF_ABSOLUTE | _MOUSEEVENTF_MOVE | btnFlags
+	inp := makeMouseInput(absX, absY, 0, flags)
 	return helperSendInput(inp[:], 1)
 }
 
