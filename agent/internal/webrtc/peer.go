@@ -707,11 +707,22 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 
 	// Route input via pipe when in Session 0 with a pipe-based capturer
 	if m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
+		// Helper: convert relative (0.0-1.0) coordinates to absolute pixel coordinates
+		resolveCoords := func(x, y float64) (int, int) {
+			isRelative, _ := event["rel"].(bool)
+			if isRelative {
+				w, h := m.screenCapturer.GetResolution()
+				return int(x * float64(w)), int(y * float64(h))
+			}
+			return int(x), int(y)
+		}
+
 		switch eventType {
 		case "mouse_move":
 			x, _ := event["x"].(float64)
 			y, _ := event["y"].(float64)
-			m.screenCapturer.ForwardMouseMove(int(x), int(y))
+			absX, absY := resolveCoords(x, y)
+			m.screenCapturer.ForwardMouseMove(absX, absY)
 
 		case "mouse_click":
 			button, _ := event["button"].(string)
@@ -728,7 +739,8 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 			if down {
 				downVal = 1
 			}
-			m.screenCapturer.ForwardMouseClick(btnCode, downVal, int(x), int(y))
+			absX, absY := resolveCoords(x, y)
+			m.screenCapturer.ForwardMouseClick(btnCode, downVal, absX, absY)
 
 		case "mouse_scroll":
 			delta, _ := event["delta"].(float64)
