@@ -1317,13 +1317,13 @@ loop:
 			}
 		case <-startupUpdateTimer.C:
 			log.Println("🔄 Service startup update check...")
-			if serviceCheckAndApplyUpdate() {
+			if serviceCheckAndApplyUpdate(true) {
 				updateTriggered = true
 				break loop
 			}
 		case <-updateTicker.C:
 			log.Println("🔄 Periodisk service update check...")
-			if serviceCheckAndApplyUpdate() {
+			if serviceCheckAndApplyUpdate(false) {
 				updateTriggered = true
 				break loop
 			}
@@ -1782,8 +1782,9 @@ func ensureRecoveryConfig() {
 }
 
 // serviceCheckAndApplyUpdate checks for updates and applies them in-place for service mode.
+// forceCheck=true skips the interval check (used at startup to always check).
 // Returns true if an update was applied and the service should restart via SCM.
-func serviceCheckAndApplyUpdate() bool {
+func serviceCheckAndApplyUpdate(forceCheck bool) bool {
 	// Opryd .old filer fra forrige update
 	cleanupOldBinaries()
 
@@ -1793,7 +1794,7 @@ func serviceCheckAndApplyUpdate() bool {
 		return false
 	}
 
-	if !u.ShouldAutoCheck(30 * time.Minute) {
+	if !forceCheck && !u.ShouldAutoCheck(30 * time.Minute) {
 		log.Println("⏭️  Service update: for tidligt at checke igen")
 		return false
 	}
