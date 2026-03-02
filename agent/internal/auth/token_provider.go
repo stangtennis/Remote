@@ -62,6 +62,45 @@ func (tp *TokenProvider) GetToken() (string, error) {
 	return tp.creds.AccessToken, nil
 }
 
+// StartBackgroundRefresh starts a goroutine that pre-refreshes the token
+// 5 minutes before expiry. This prevents synchronous refresh blocking polling.
+func (tp *TokenProvider) StartBackgroundRefresh() {
+	go func() {
+		for {
+			tp.mu.Lock()
+			if tp.creds == nil {
+				tp.mu.Unlock()
+				time.Sleep(30 * time.Second)
+				continue
+			}
+			expiresAt := tp.creds.ExpiresAt
+			tp.mu.Unlock()
+
+			// Refresh 5 minutes before expiry
+			refreshAt := time.Unix(expiresAt, 0).Add(-5 * time.Minute)
+			sleepDur := time.Until(refreshAt)
+			if sleepDur <= 0 {
+				sleepDur = 10 * time.Second // Already expired — retry soon
+			}
+			time.Sleep(sleepDur)
+
+			tp.mu.Lock()
+			result, err := RefreshToken(tp.config, tp.creds.RefreshToken)
+			if err != nil || !result.Success {
+				log.Printf("⚠️  Background token refresh failed: %v", err)
+				tp.mu.Unlock()
+				continue
+			}
+			newCreds, err := LoadCredentials()
+			if err == nil {
+				tp.creds = newCreds
+				log.Printf("✅ Token pre-refreshed (expires: %s)", time.Unix(tp.creds.ExpiresAt, 0).Format("15:04:05"))
+			}
+			tp.mu.Unlock()
+		}
+	}()
+}
+
 // GetAnonKey returns the Supabase anon key (needed for apikey header).
 func (tp *TokenProvider) GetAnonKey() string {
 	return tp.config.AnonKey

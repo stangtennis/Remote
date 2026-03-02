@@ -131,13 +131,14 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 	return fmt.Errorf("registration failed: %s (status: %d)", string(body), resp.StatusCode)
 }
 
-// UpdateHeartbeat updates the device heartbeat using authenticated token
-func UpdateHeartbeat(config RegistrationConfig, deviceID string) error {
+// UpdateHeartbeat updates the device heartbeat using authenticated token.
+// isOnline indicates whether the agent is healthy and reachable.
+func UpdateHeartbeat(config RegistrationConfig, deviceID string, isOnline bool) error {
 	url := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, deviceID)
 
 	now := time.Now().Format(time.RFC3339)
 	payload := map[string]interface{}{
-		"is_online": true,
+		"is_online": isOnline,
 		"last_seen": now,
 	}
 
