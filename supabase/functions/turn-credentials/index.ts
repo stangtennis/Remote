@@ -47,7 +47,45 @@ serve(async (req) => {
       )
     }
 
-    // If TURN server is not configured, return STUN-only
+    // Try Cloudflare TURN first (managed, 1000 GB/month free)
+    const CF_TURN_KEY_ID = Deno.env.get('CF_TURN_KEY_ID') || ''
+    const CF_TURN_API_TOKEN = Deno.env.get('CF_TURN_API_TOKEN') || ''
+
+    if (CF_TURN_KEY_ID && CF_TURN_API_TOKEN) {
+      try {
+        const cfResp = await fetch(
+          `https://rtc.live.cloudflare.com/v1/turn/keys/${CF_TURN_KEY_ID}/credentials/generate-ice-servers`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${CF_TURN_API_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ttl: 86400 }),
+          }
+        )
+        if (cfResp.ok) {
+          const cfData = await cfResp.json()
+          return new Response(
+            JSON.stringify({
+              iceServers: cfData.iceServers,
+              ttl: 86400,
+              expires: Math.floor(Date.now() / 1000) + 86400,
+              provider: 'cloudflare',
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          )
+        }
+        console.error('Cloudflare TURN failed:', cfResp.status, await cfResp.text())
+      } catch (e) {
+        console.error('Cloudflare TURN error:', e)
+      }
+    }
+
+    // Fallback: coturn with HMAC-SHA1 credentials
     if (!TURN_SERVER || !TURN_SECRET) {
       return new Response(
         JSON.stringify({
@@ -56,11 +94,12 @@ serve(async (req) => {
             { urls: 'stun:stun1.l.google.com:19302' },
           ],
           ttl: TURN_TTL,
-          expires: Math.floor(Date.now() / 1000) + TURN_TTL
+          expires: Math.floor(Date.now() / 1000) + TURN_TTL,
+          provider: 'stun-only',
         }),
-        { 
-          status: 200, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       )
     }
@@ -69,7 +108,7 @@ serve(async (req) => {
     // Username format: timestamp:username (coturn style)
     const timestamp = Math.floor(Date.now() / 1000) + TURN_TTL
     const username = `${timestamp}:${user.id}`
-    
+
     // Generate HMAC-SHA1 credential (coturn compatible)
     const encoder = new TextEncoder()
     const key = encoder.encode(TURN_SECRET)
@@ -100,11 +139,12 @@ serve(async (req) => {
       JSON.stringify({
         iceServers,
         ttl: TURN_TTL,
-        expires: timestamp
+        expires: timestamp,
+        provider: 'coturn',
       }),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     )
 
