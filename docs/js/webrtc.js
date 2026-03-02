@@ -686,6 +686,7 @@ function setupInputCapture() {
   inputEventHandlers.contextMenu = contextMenuHandler;
 
   let lastMouseMove = 0;
+  let lastCoords = { x: 0.5, y: 0.5 }; // Track last known mouse position for clicks
   const mouseMoveHandler = (e) => {
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
@@ -696,10 +697,14 @@ function setupInputCapture() {
 
     const coords = getImageCoordinates(target, e.clientX, e.clientY);
 
+    lastCoords = {
+      x: Math.round(coords.x * 10000) / 10000,
+      y: Math.round(coords.y * 10000) / 10000
+    };
     sendControlEvent({
       t: 'mouse_move',
-      x: Math.round(coords.x * 10000) / 10000,
-      y: Math.round(coords.y * 10000) / 10000,
+      x: lastCoords.x,
+      y: lastCoords.y,
       rel: true
     });
   };
@@ -710,11 +715,19 @@ function setupInputCapture() {
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
 
+    const coords = getImageCoordinates(target, e.clientX, e.clientY);
+    lastCoords = {
+      x: Math.round(coords.x * 10000) / 10000,
+      y: Math.round(coords.y * 10000) / 10000
+    };
     const button = ['left', 'middle', 'right'][e.button] || 'left';
     sendControlEvent({
       t: 'mouse_click',
       button,
-      down: true
+      down: true,
+      x: lastCoords.x,
+      y: lastCoords.y,
+      rel: true
     });
     e.preventDefault();
   };
@@ -725,11 +738,19 @@ function setupInputCapture() {
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
 
+    const coords = getImageCoordinates(target, e.clientX, e.clientY);
+    lastCoords = {
+      x: Math.round(coords.x * 10000) / 10000,
+      y: Math.round(coords.y * 10000) / 10000
+    };
     const button = ['left', 'middle', 'right'][e.button] || 'left';
     sendControlEvent({
       t: 'mouse_click',
       button,
-      down: false
+      down: false,
+      x: lastCoords.x,
+      y: lastCoords.y,
+      rel: true
     });
     e.preventDefault();
   };
