@@ -864,6 +864,7 @@
     let remoteBytesReceived = 0;
     let remoteLastStatsTime = Date.now();
     let remoteInputActive = false;
+    let remoteInputAbort = null; // AbortController for input event listeners
     let remoteVideoElement = null;
     let remoteDrawFrameId = null;
     // Chunked frame reassembly
@@ -1068,8 +1069,13 @@
       remoteInputActive = true;
       const canvas = remoteCanvas;
 
+      // Abort previous listeners if any (prevents duplicates on reconnect)
+      if (remoteInputAbort) remoteInputAbort.abort();
+      remoteInputAbort = new AbortController();
+      const sig = { signal: remoteInputAbort.signal };
+
       // Prevent context menu
-      canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+      canvas.addEventListener('contextmenu', (e) => e.preventDefault(), sig);
 
       // Mouse move
       canvas.addEventListener('mousemove', (e) => {
@@ -1078,7 +1084,7 @@
         const x = (e.clientX - rect.left) / rect.width;
         const y = (e.clientY - rect.top) / rect.height;
         remoteDataChannel.send(JSON.stringify({ t: 'mouse_move', x, y, rel: true }));
-      });
+      }, sig);
 
       // Mouse down/up (include coordinates so agent moves cursor before clicking)
       canvas.addEventListener('mousedown', (e) => {
@@ -1089,7 +1095,7 @@
         const y = (e.clientY - rect.top) / rect.height;
         const buttons = ['left', 'middle', 'right'];
         remoteDataChannel.send(JSON.stringify({ t: 'mouse_click', button: buttons[e.button] || 'left', down: true, x, y, rel: true }));
-      });
+      }, sig);
       canvas.addEventListener('mouseup', (e) => {
         if (!remoteDataChannel || remoteDataChannel.readyState !== 'open') return;
         e.preventDefault();
@@ -1098,14 +1104,14 @@
         const y = (e.clientY - rect.top) / rect.height;
         const buttons = ['left', 'middle', 'right'];
         remoteDataChannel.send(JSON.stringify({ t: 'mouse_click', button: buttons[e.button] || 'left', down: false, x, y, rel: true }));
-      });
+      }, sig);
 
       // Mouse scroll (agent expects normalized delta: -1 or 1)
       canvas.addEventListener('wheel', (e) => {
         if (!remoteDataChannel || remoteDataChannel.readyState !== 'open') return;
         e.preventDefault();
         remoteDataChannel.send(JSON.stringify({ t: 'mouse_scroll', delta: e.deltaY > 0 ? -1 : 1 }));
-      }, { passive: false });
+      }, { passive: false, signal: remoteInputAbort.signal });
 
       // Keyboard
       canvas.setAttribute('tabindex', '0');
@@ -1113,15 +1119,15 @@
         if (!remoteDataChannel || remoteDataChannel.readyState !== 'open') return;
         e.preventDefault();
         remoteDataChannel.send(JSON.stringify({ t: 'key', code: e.code, key: e.key, down: true, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey }));
-      });
+      }, sig);
       canvas.addEventListener('keyup', (e) => {
         if (!remoteDataChannel || remoteDataChannel.readyState !== 'open') return;
         e.preventDefault();
         remoteDataChannel.send(JSON.stringify({ t: 'key', code: e.code, key: e.key, down: false, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey }));
-      });
+      }, sig);
 
       // Focus canvas on click
-      canvas.addEventListener('click', () => canvas.focus());
+      canvas.addEventListener('click', () => canvas.focus(), sig);
     }
 
     // Start remote WebRTC session
@@ -1373,6 +1379,7 @@
         remoteDataChannel = null;
       }
       remoteInputActive = false;
+      if (remoteInputAbort) { remoteInputAbort.abort(); remoteInputAbort = null; }
 
       // Clear canvas
       if (remoteCtx && remoteCanvas) {
