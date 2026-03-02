@@ -244,7 +244,8 @@ func startAgent() error {
 		return fmt.Errorf("failed to load credentials: %w", err)
 	}
 	tokenProvider := auth.NewTokenProvider(authConfig, creds)
-	log.Println("TokenProvider created")
+	tokenProvider.StartBackgroundRefresh()
+	log.Println("TokenProvider created with background refresh")
 
 	dev, err = device.New(cfg, tokenProvider)
 	if err != nil {
@@ -261,12 +262,19 @@ func startAgent() error {
 	log.Printf("   Platform: %s", dev.Platform)
 	log.Printf("   Arch: %s", dev.Arch)
 
-	go dev.StartPresence()
-
+	// Initialize WebRTC manager (before presence so we can wire health check)
 	rtc, err = webrtc.New(cfg, dev, tokenProvider)
 	if err != nil {
 		return fmt.Errorf("failed to initialize WebRTC: %w", err)
 	}
+
+	// Wire health check: heartbeat reports offline when polling is unhealthy
+	dev.SetHealthCheck(func() bool {
+		return rtc.IsPollingHealthy()
+	})
+
+	// Start presence heartbeat (now health-aware)
+	go dev.StartPresence()
 
 	log.Println("Listening for incoming connections...")
 	go rtc.ListenForSessions()

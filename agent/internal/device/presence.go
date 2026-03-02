@@ -23,7 +23,7 @@ func (d *Device) StartPresence() {
 		AccessToken: token,
 	}
 
-	if err := UpdateHeartbeat(config, d.ID); err != nil {
+	if err := UpdateHeartbeat(config, d.ID, true); err != nil {
 		fmt.Printf("⚠️  Initial heartbeat failed: %v\n", err)
 	}
 
@@ -45,7 +45,17 @@ func (d *Device) StartPresence() {
 			AccessToken: token,
 		}
 
-		if err := UpdateHeartbeat(config, d.ID); err != nil {
+		// Determine health status — if polling is unhealthy, report offline
+		isHealthy := true
+		if d.healthCheck != nil {
+			isHealthy = d.healthCheck()
+		}
+
+		if !isHealthy {
+			fmt.Println("⚠️  Heartbeat: polling is unhealthy — reporting offline")
+		}
+
+		if err := UpdateHeartbeat(config, d.ID, isHealthy); err != nil {
 			fmt.Printf("⚠️  Heartbeat failed: %v\n", err)
 		}
 	}

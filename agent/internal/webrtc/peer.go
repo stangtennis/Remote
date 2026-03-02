@@ -129,6 +129,20 @@ type Manager struct {
 	// CPU/RTT moving averages for mode switching
 	cpuAvg []float64
 	rttAvg []time.Duration
+
+	// Polling health tracking (for heartbeat awareness)
+	pollingHealthy  atomic.Bool  // true = polling is working
+	lastPollSuccess atomic.Int64 // Unix timestamp of last successful poll
+}
+
+// IsPollingHealthy returns true if session polling is working normally.
+func (m *Manager) IsPollingHealthy() bool {
+	return m.pollingHealthy.Load()
+}
+
+// LastPollSuccess returns the time of the last successful poll.
+func (m *Manager) LastPollSuccess() time.Time {
+	return time.Unix(m.lastPollSuccess.Load(), 0)
 }
 
 // setAuthHeaders sets apikey and Authorization headers using authenticated JWT token.
@@ -235,6 +249,8 @@ func New(cfg *config.Config, dev *device.Device, tokenProvider *auth.TokenProvid
 		cpuAvg: make([]float64, 0, 6),       // 3 seconds at 500ms intervals
 		rttAvg: make([]time.Duration, 0, 6), // 3 seconds at 500ms intervals
 	}
+	mgr.pollingHealthy.Store(true) // Start healthy
+	mgr.lastPollSuccess.Store(time.Now().Unix())
 
 	log.Printf("🎬 Video encoder: %s", videoEncoder.GetEncoderName())
 

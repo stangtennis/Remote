@@ -145,21 +145,40 @@ type ICEPayload struct {
 
 func (m *Manager) ListenForSessions() {
 	// Poll for new sessions from BOTH controller (webrtc_sessions) AND dashboard (session_signaling)
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
 	handledSessions := make(map[string]bool)
 	errorCount := 0
+	wasHealthy := true
+
+	// Dynamic polling interval with exponential backoff
+	pollInterval := 2 * time.Second
+	basePollInterval := 2 * time.Second
+	maxPollInterval := 30 * time.Second
 
 	log.Println("🔄 Session polling started (checking every 2 seconds)")
 	log.Println("   Listening on: webrtc_sessions (controller) + session_signaling (dashboard)")
 	log.Printf("   Device ID: %s", m.device.ID)
 	log.Printf("   Supabase URL: %s", m.cfg.SupabaseURL)
 
+	// Clean up stale sessions at startup
+	m.cleanupStaleSessions()
+
 	// Start kick signal listener in background
 	go m.listenForKickSignals()
 
-	for range ticker.C {
+	// Stale session cleanup ticker (every 5 minutes)
+	cleanupTicker := time.NewTicker(5 * time.Minute)
+	defer cleanupTicker.Stop()
+
+	for {
+		time.Sleep(pollInterval)
+
+		// Periodic stale session cleanup
+		select {
+		case <-cleanupTicker.C:
+			go m.cleanupStaleSessions()
+		default:
+		}
+
 		isConnected := m.peerConnection != nil && m.peerConnection.ConnectionState() == webrtc.PeerConnectionStateConnected
 
 		// Check for kick signals on current session
@@ -174,15 +193,53 @@ func (m *Manager) ListenForSessions() {
 		}
 
 		// 1. Check webrtc_sessions (Go controller)
+		pollFailed := false
 		sessions, err := m.fetchPendingSessions()
 		if err != nil {
 			errorCount++
+			pollFailed = true
 			if errorCount%30 == 1 {
 				log.Printf("⚠️  Error fetching webrtc_sessions (count: %d): %v", errorCount, err)
 			}
-		} else if errorCount > 0 {
-			log.Printf("✅ Session polling recovered after %d errors", errorCount)
+		}
+
+		// 2. Check session_signaling (Web dashboard)
+		webSessions, err2 := m.fetchWebDashboardSessions()
+		if err2 != nil {
+			pollFailed = true
+			// Only log occasionally
+			if errorCount%30 == 1 {
+				log.Printf("⚠️  Error fetching session_signaling: %v", err2)
+			}
+		}
+
+		// Update health status based on poll results
+		if pollFailed && err != nil {
+			// Both controller poll failed — track errors
+			if errorCount >= 5 && wasHealthy {
+				m.pollingHealthy.Store(false)
+				wasHealthy = false
+				log.Printf("🔴 Polling unhealthy after %d consecutive errors — heartbeat will report offline", errorCount)
+			}
+			// Exponential backoff
+			pollInterval = pollInterval * 2
+			if pollInterval > maxPollInterval {
+				pollInterval = maxPollInterval
+			}
+			continue
+		} else if err == nil {
+			// Controller poll succeeded — healthy
+			if errorCount > 0 {
+				log.Printf("✅ Polling recovered after %d errors (backoff was %s)", errorCount, pollInterval)
+			}
 			errorCount = 0
+			pollInterval = basePollInterval
+			m.pollingHealthy.Store(true)
+			m.lastPollSuccess.Store(time.Now().Unix())
+			if !wasHealthy {
+				wasHealthy = true
+				log.Println("🟢 Polling healthy again — heartbeat will report online")
+			}
 		}
 
 		// Only handle the NEWEST unhandled controller session
@@ -205,15 +262,6 @@ func (m *Manager) ListenForSessions() {
 			log.Printf("📞 Incoming session (controller): %s", newestCtrlSession.ID)
 			log.Printf("   Device ID: %s", m.device.ID)
 			go m.handleSession(*newestCtrlSession)
-		}
-
-		// 2. Check session_signaling (Web dashboard)
-		webSessions, err := m.fetchWebDashboardSessions()
-		if err != nil {
-			// Only log occasionally
-			if errorCount%30 == 1 {
-				log.Printf("⚠️  Error fetching session_signaling: %v", err)
-			}
 		}
 
 		// Only handle the NEWEST unhandled session (avoid concurrent session storms)
@@ -268,6 +316,11 @@ func (m *Manager) fetchWebDashboardSessions() ([]Session, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == 401 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		log.Printf("🔑 Token expired on dashboard poll (401)")
+		return nil, fmt.Errorf("HTTP 401 (token expired): %s", string(bodyBytes))
+	}
 	if resp.StatusCode != 200 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
@@ -530,7 +583,12 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 	}
 	defer resp.Body.Close()
 
-	// Log HTTP status
+	// Detect 401 (token expired) and other HTTP errors
+	if resp.StatusCode == 401 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		log.Printf("🔑 Token expired (401) — will be refreshed on next call")
+		return nil, fmt.Errorf("HTTP 401 (token expired): %s", string(bodyBytes))
+	}
 	if resp.StatusCode != 200 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
@@ -1193,4 +1251,65 @@ func (m *Manager) checkIfKicked() bool {
 	}
 
 	return false
+}
+
+// cleanupStaleSessions marks old non-ended sessions for this device as ended.
+// Prevents stale sessions from blocking new connections.
+func (m *Manager) cleanupStaleSessions() {
+	fiveMinAgo := time.Now().Add(-5 * time.Minute).Format(time.RFC3339)
+
+	// Clean up webrtc_sessions
+	url := m.cfg.SupabaseURL + "/rest/v1/webrtc_sessions"
+	payload := []byte(`{"status":"ended"}`)
+
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(payload))
+	if err != nil {
+		return
+	}
+	if err := m.setAuthHeaders(req); err != nil {
+		return
+	}
+	q := req.URL.Query()
+	q.Add("device_id", "eq."+m.device.ID)
+	q.Add("status", "neq.ended")
+	q.Add("created_at", "lt."+fiveMinAgo)
+	req.URL.RawQuery = q.Encode()
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=minimal")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("⚠️  Stale session cleanup (webrtc_sessions) failed: %v", err)
+		return
+	}
+	resp.Body.Close()
+
+	// Clean up remote_sessions
+	url2 := m.cfg.SupabaseURL + "/rest/v1/remote_sessions"
+	payload2 := []byte(`{"status":"ended"}`)
+
+	req2, err := http.NewRequest("PATCH", url2, bytes.NewBuffer(payload2))
+	if err != nil {
+		return
+	}
+	if err := m.setAuthHeaders(req2); err != nil {
+		return
+	}
+	q2 := req2.URL.Query()
+	q2.Add("device_id", "eq."+m.device.ID)
+	q2.Add("status", "neq.ended")
+	q2.Add("created_at", "lt."+fiveMinAgo)
+	req2.URL.RawQuery = q2.Encode()
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("Prefer", "return=minimal")
+
+	resp2, err := client.Do(req2)
+	if err != nil {
+		log.Printf("⚠️  Stale session cleanup (remote_sessions) failed: %v", err)
+		return
+	}
+	resp2.Body.Close()
+
+	log.Println("🧹 Stale sessions cleaned up")
 }

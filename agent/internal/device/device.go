@@ -9,6 +9,9 @@ import (
 	"github.com/stangtennis/remote-agent/internal/config"
 )
 
+// HealthChecker is a callback that returns true if the agent's polling is healthy.
+type HealthChecker func() bool
+
 type Device struct {
 	ID            string
 	Name          string
@@ -20,6 +23,13 @@ type Device struct {
 	cfg           *config.Config
 	tokenProvider *auth.TokenProvider
 	userID        string
+	healthCheck   HealthChecker
+}
+
+// SetHealthCheck sets a callback used by heartbeat to determine if polling is healthy.
+// If the health check returns false, the heartbeat will report is_online=false.
+func (d *Device) SetHealthCheck(fn HealthChecker) {
+	d.healthCheck = fn
 }
 
 type RegisterResponse struct {
