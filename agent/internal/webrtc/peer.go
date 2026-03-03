@@ -770,7 +770,10 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 			alt, _ := event["alt"].(bool)
 			meta, _ := event["meta"].(bool)
 
-			// Unicode char forwarding
+			// For type_text: send each character via ForwardUnicodeChar.
+			// The helper's handleUnicode uses charToVK() for ASCII chars
+			// (VK codes work with admin windows) and falls back to
+			// KEYEVENTF_UNICODE for non-ASCII chars.
 			if charStr, ok := event["char"].(string); ok && charStr != "" && down {
 				for _, ch := range charStr {
 					m.screenCapturer.ForwardUnicodeChar(ch)
