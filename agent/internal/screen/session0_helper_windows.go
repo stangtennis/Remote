@@ -32,8 +32,9 @@ const (
 	_MOUSEEVENTF_WHEEL      = 0x0800
 	_MOUSEEVENTF_ABSOLUTE   = 0x8000
 
-	_KEYEVENTF_KEYUP   = 0x0002
-	_KEYEVENTF_UNICODE = 0x0004
+	_KEYEVENTF_EXTENDEDKEY = 0x0001
+	_KEYEVENTF_KEYUP      = 0x0002
+	_KEYEVENTF_UNICODE    = 0x0004
 
 	_WHEEL_DELTA = 120
 
@@ -41,15 +42,37 @@ const (
 )
 
 var (
-	helperUser32         = syscall.NewLazyDLL("user32.dll")
-	procSetCursorPosH    = helperUser32.NewProc("SetCursorPos")
-	procSendInputH       = helperUser32.NewProc("SendInput")
-	procVkKeyScanW       = helperUser32.NewProc("VkKeyScanW")
-	procOpenInputDesktop = helperUser32.NewProc("OpenInputDesktop")
-	procSetThreadDesktop = helperUser32.NewProc("SetThreadDesktop")
-	procCloseDesktop     = helperUser32.NewProc("CloseDesktop")
-	procGetSystemMetrics = helperUser32.NewProc("GetSystemMetrics")
+	helperUser32           = syscall.NewLazyDLL("user32.dll")
+	procSetCursorPosH      = helperUser32.NewProc("SetCursorPos")
+	procSendInputH         = helperUser32.NewProc("SendInput")
+	procVkKeyScanW         = helperUser32.NewProc("VkKeyScanW")
+	procOpenInputDesktop   = helperUser32.NewProc("OpenInputDesktop")
+	procSetThreadDesktop   = helperUser32.NewProc("SetThreadDesktop")
+	procCloseDesktop       = helperUser32.NewProc("CloseDesktop")
+	procGetSystemMetrics   = helperUser32.NewProc("GetSystemMetrics")
+	procGetForegroundWnd   = helperUser32.NewProc("GetForegroundWindow")
+	procGetClassNameW      = helperUser32.NewProc("GetClassNameW")
 )
+
+// isForegroundConsole returns true if the foreground window is a console window.
+// Console windows (cmd, PowerShell in conhost, Windows Terminal) need VK codes
+// for AltGr characters because KEYEVENTF_UNICODE doesn't work reliably in
+// elevated console windows. GUI apps should use KEYEVENTF_UNICODE to avoid
+// Ctrl+key shortcut conflicts from AltGr simulation.
+func isForegroundConsole() bool {
+	hwnd, _, _ := procGetForegroundWnd.Call()
+	if hwnd == 0 {
+		return false
+	}
+	var className [256]uint16
+	ret, _, _ := procGetClassNameW.Call(hwnd, uintptr(unsafe.Pointer(&className[0])), 256)
+	if ret == 0 {
+		return false
+	}
+	name := syscall.UTF16ToString(className[:ret])
+	// ConsoleWindowClass = classic conhost, CASCADIA_HOSTING_WINDOW_CLASS = Windows Terminal
+	return name == "ConsoleWindowClass" || name == "CASCADIA_HOSTING_WINDOW_CLASS"
+}
 
 // switchToInputDesktop attaches the calling thread to the current input desktop.
 // This ensures input events reach the correct desktop (Winlogon at login screen, Default after login).
@@ -284,13 +307,28 @@ func handleUnicode(pipe *pipeRW) error {
 
 	switchToInputDesktop()
 
-	// For mappable characters, use VK codes (works with admin console windows)
+	// For mappable characters, use VK codes.
 	if vk, mods := charToVK(char); vk != 0 {
-		var inputs []byte
 		shift := mods&0x01 != 0
 		altGr := mods&0x06 == 0x06 // Ctrl+Alt = AltGr
+
+		// AltGr characters need different handling depending on window type:
+		// - Console windows: VK codes with Ctrl+Alt (KEYEVENTF_UNICODE/VK_PACKET is
+		//   ignored by elevated console windows)
+		// - GUI windows: KEYEVENTF_UNICODE (VK AltGr simulation triggers Ctrl+key
+		//   shortcuts in apps like Notepad's Markdown mode)
+		if altGr && !isForegroundConsole() {
+			down := makeKeyInput(0, char, _KEYEVENTF_UNICODE)
+			up := makeKeyInput(0, char, _KEYEVENTF_UNICODE|_KEYEVENTF_KEYUP)
+			var inputs [2 * _cbSizeInput]byte
+			copy(inputs[0:_cbSizeInput], down[:])
+			copy(inputs[_cbSizeInput:2*_cbSizeInput], up[:])
+			return helperSendInput(inputs[:], 2)
+		}
+
+		var inputs []byte
 		if altGr {
-			inp := makeKeyInput(0xA2, 0, 0) // VK_LCONTROL down
+			inp := makeKeyInput(0xA2, 0, _KEYEVENTF_EXTENDEDKEY) // VK_LCONTROL down (AltGr)
 			inputs = append(inputs, inp[:]...)
 			inp = makeKeyInput(0xA5, 0, 0) // VK_RMENU down
 			inputs = append(inputs, inp[:]...)
@@ -310,7 +348,7 @@ func handleUnicode(pipe *pipeRW) error {
 		if altGr {
 			inp := makeKeyInput(0xA5, 0, _KEYEVENTF_KEYUP) // VK_RMENU up
 			inputs = append(inputs, inp[:]...)
-			inp = makeKeyInput(0xA2, 0, _KEYEVENTF_KEYUP) // VK_LCONTROL up
+			inp = makeKeyInput(0xA2, 0, _KEYEVENTF_EXTENDEDKEY|_KEYEVENTF_KEYUP) // VK_LCONTROL up
 			inputs = append(inputs, inp[:]...)
 		}
 		return helperSendInput(inputs, len(inputs)/_cbSizeInput)
