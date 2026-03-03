@@ -171,10 +171,12 @@ func handleScroll(pipe *pipeRW) error {
 
 	switchToInputDesktop()
 
-	// Move cursor to position
-	procSetCursorPosH.Call(uintptr(x), uintptr(y))
+	// Only move cursor if coordinates are provided (non-zero)
+	if x != 0 || y != 0 {
+		procSetCursorPosH.Call(uintptr(x), uintptr(y))
+	}
 
-	// Send wheel event
+	// Send wheel event at current cursor position
 	inp := makeMouseInput(0, 0, uint32(int32(delta)*_WHEEL_DELTA), _MOUSEEVENTF_WHEEL)
 	return helperSendInput(inp[:], 1)
 }
