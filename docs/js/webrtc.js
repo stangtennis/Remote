@@ -795,14 +795,20 @@ function setupInputCapture() {
     if (pressedKeys.has(e.code)) return;
     pressedKeys.add(e.code);
 
-    sendControlEvent({
+    const evt = {
       t: 'key',
       code: e.code,
       down: true,
       ctrl: e.ctrlKey,
       shift: e.shiftKey,
       alt: e.altKey
-    });
+    };
+    // AltGr on Windows sends ctrlKey+altKey — include the resolved char
+    // so agent uses ForwardUnicodeChar (hybrid AltGr handler) instead of ForwardKeyEvent
+    if (e.ctrlKey && e.altKey && !e.metaKey && e.key.length === 1) {
+      evt.char = e.key;
+    }
+    sendControlEvent(evt);
     e.preventDefault();
     e.stopPropagation();
   };
