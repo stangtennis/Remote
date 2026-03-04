@@ -2,18 +2,21 @@ package main
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"os/exec"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/stangtennis/Remote/controller/internal/config"
+	"github.com/stangtennis/Remote/controller/internal/ui"
 	"github.com/stangtennis/Remote/controller/internal/credentials"
 	"github.com/stangtennis/Remote/controller/internal/logger"
 	"github.com/stangtennis/Remote/controller/internal/settings"
@@ -102,11 +105,7 @@ func main() {
 	// Create application with theme from settings
 	logger.Info("Creating Fyne application...")
 	myApp = app.New()
-	if appSettings.Theme == "dark" {
-		myApp.Settings().SetTheme(theme.DarkTheme())
-	} else {
-		myApp.Settings().SetTheme(theme.LightTheme())
-	}
+	myApp.Settings().SetTheme(&ui.CyberTheme{})
 
 	windowTitle := "Remote Desktop Controller " + Version
 	if appSettings.HighQualityMode {
@@ -179,14 +178,13 @@ func main() {
 func createModernUI(window fyne.Window) *fyne.Container {
 	// Title with modern styling
 	title := widget.NewLabelWithStyle(
-		"🎮 Remote Desktop Controller "+Version,
+		"Remote Desktop Controller "+Version,
 		fyne.TextAlignCenter,
 		fyne.TextStyle{Bold: true},
 	)
-	title.TextStyle.Bold = true
 
 	// Subtitle
-	subtitle := widget.NewLabel("High-Performance Remote Control for Powerful Computers")
+	subtitle := widget.NewLabel("High-Performance Remote Control")
 	subtitle.Alignment = fyne.TextAlignCenter
 
 	// Login section
@@ -227,12 +225,12 @@ func createModernUI(window fyne.Window) *fyne.Container {
 		logger.Info("Email: %s, Password length: %d", email, len(password))
 
 		if email == "" || password == "" {
-			statusLabel.SetText("❌ Please enter email and password")
+			statusLabel.SetText("Please enter email and password")
 			logger.Info("Empty email or password")
 			return
 		}
 
-		statusLabel.SetText("🔄 Connecting to Supabase...")
+		statusLabel.SetText("Connecting...")
 		loginButton.Disable()
 		logger.Info("Starting login process...")
 
@@ -257,7 +255,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			if err != nil {
 				logger.Error("Login failed for %s: %v", email, err)
 				fyne.Do(func() {
-					statusLabel.SetText("❌ Login failed: " + err.Error())
+					statusLabel.SetText("Login failed: " + err.Error())
 					dialog.ShowError(fmt.Errorf("Login failed: %v", err), window)
 					loginButton.Enable()
 				})
@@ -273,7 +271,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			if err != nil {
 				logger.Error("Failed to check approval for user %s: %v", currentUser.ID, err)
 				fyne.Do(func() {
-					statusLabel.SetText("❌ Failed to check approval")
+					statusLabel.SetText("Failed to check approval")
 					dialog.ShowError(fmt.Errorf("Failed to check approval: %v", err), window)
 					loginButton.Enable()
 				})
@@ -284,14 +282,14 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			if !approved {
 				logger.Info("User %s is not approved yet", currentUser.Email)
 				fyne.Do(func() {
-					statusLabel.SetText("⏸️ Account pending approval")
+					statusLabel.SetText("Account pending approval")
 					loginButton.Enable()
 				})
 				return
 			}
 
 			fyne.Do(func() {
-				statusLabel.SetText("✅ Connected as: " + currentUser.Email)
+				statusLabel.SetText("Connected as: " + currentUser.Email)
 			})
 
 			// Fetch devices assigned to this user
@@ -301,7 +299,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 				logger.Error("Failed to fetch devices for user %s: %v", currentUser.ID, err)
 				logger.Debug("Device fetch error details: %+v", err)
 				fyne.Do(func() {
-					statusLabel.SetText("⚠️ Connected but failed to load devices")
+					statusLabel.SetText("Connected but failed to load devices")
 				})
 			} else {
 				logger.Info("✅ Successfully loaded %d assigned devices", len(devices))
@@ -318,7 +316,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 					} else {
 						logger.Error("Device list widget is nil")
 					}
-					statusLabel.SetText(fmt.Sprintf("✅ Connected: %s (%d devices)", currentUser.Email, len(devices)))
+					statusLabel.SetText(fmt.Sprintf("Connected: %s (%d devices)", currentUser.Email, len(devices)))
 					loginButton.Enable()
 					// Hide login form, show logged in view
 					loginForm.Hide()
@@ -372,7 +370,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	})
 
 	// Restart button
-	restartButton := widget.NewButton("🔄 Genstart", func() {
+	restartButton := widget.NewButtonWithIcon("Genstart", theme.ViewRefreshIcon(), func() {
 		dialog.ShowConfirm("Genstart applikation",
 			"Er du sikker på at du vil genstarte?",
 			func(confirmed bool) {
@@ -385,23 +383,23 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	restartButton.Importance = widget.MediumImportance
 
 	// Update button
-	updateButton := widget.NewButton("🔄 Tjek opdatering", func() {
+	updateButton := widget.NewButtonWithIcon("Tjek opdatering", theme.ViewRefreshIcon(), func() {
 		showUpdateDialog(window)
 	})
 	updateButton.Importance = widget.LowImportance
 
 	// Install button - dynamic text based on install state
-	installBtnText := "📦 Installer"
+	installBtnText := "Installer"
 	if isInstalledAsProgram() {
-		installBtnText = "📦 Afinstaller"
+		installBtnText = "Afinstaller"
 	}
-	installButton := widget.NewButton(installBtnText, func() {
+	installButton := widget.NewButtonWithIcon(installBtnText, theme.DownloadIcon(), func() {
 		showInstallDialog(window)
 	})
 	installButton.Importance = widget.LowImportance
 
 	// Quick Support button
-	quickSupportButton := widget.NewButton("🆘 Quick Support", func() {
+	quickSupportButton := widget.NewButtonWithIcon("Quick Support", theme.HelpIcon(), func() {
 		if currentUser == nil || supabaseClient == nil {
 			dialog.ShowInformation("Ikke logget ind", "Du skal være logget ind for at bruge Quick Support.", window)
 			return
@@ -425,19 +423,19 @@ func createModernUI(window fyne.Window) *fyne.Container {
 				linkEntry.SetText(session.ShareURL)
 				linkEntry.Disable()
 
-				copyBtn := widget.NewButton("📋 Kopier link", func() {
+				copyBtn := widget.NewButtonWithIcon("Kopier link", theme.ContentCopyIcon(), func() {
 					window.Clipboard().SetContent(session.ShareURL)
 					dialog.ShowInformation("Kopieret", "Link kopieret til udklipsholder!", window)
 				})
 
-				openDashboardBtn := widget.NewButton("🌐 Åbn i dashboard", func() {
+				openDashboardBtn := widget.NewButton("Åbn i dashboard", func() {
 					dashURL := fmt.Sprintf("https://stangtennis.github.io/Remote/dashboard.html?support=%s", session.SessionID)
 					openBrowser(dashURL)
 				})
 				openDashboardBtn.Importance = widget.HighImportance
 
 				content := container.NewVBox(
-					widget.NewLabelWithStyle("🆘 Quick Support Session", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+					widget.NewLabelWithStyle("Quick Support Session", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 					widget.NewSeparator(),
 					widget.NewLabel("Del denne PIN eller link med personen:"),
 					pinLabel,
@@ -457,15 +455,15 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	})
 	quickSupportButton.Importance = widget.WarningImportance
 
-	loginForm = container.NewVBox(
-		widget.NewSeparator(),
-		widget.NewLabel("Login to Remote Desktop"),
+	loginFormContent := container.NewVBox(
 		emailEntry,
 		passwordEntry,
 		rememberCheck,
 		loginButton,
 		statusLabel,
-		widget.NewSeparator(),
+	)
+	loginForm = container.NewCenter(
+		widget.NewCard("Login", "Sign in to Remote Desktop", loginFormContent),
 	)
 
 	// Logged in view (shown after successful login)
@@ -483,10 +481,12 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			return len(devicesData)
 		},
 		func() fyne.CanvasObject {
+			dot := ui.NewStatusDot(ui.ColorOffline, 10)
 			return container.NewHBox(
+				dot,
 				widget.NewLabel("Device Name"),
 				widget.NewButton("Connect", func() {}),
-				widget.NewButton("🗑️ Remove", func() {}),
+				widget.NewButtonWithIcon("Remove", theme.DeleteIcon(), func() {}),
 			)
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
@@ -497,51 +497,46 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			device := devicesData[id]
 
 			box := obj.(*fyne.Container)
-			label := box.Objects[0].(*widget.Label)
-			connectBtn := box.Objects[1].(*widget.Button)
-			removeBtn := box.Objects[2].(*widget.Button)
+			dot := box.Objects[0].(*canvas.Circle)
+			label := box.Objects[1].(*widget.Label)
+			connectBtn := box.Objects[2].(*widget.Button)
+			removeBtn := box.Objects[3].(*widget.Button)
 
 			// Calculate REAL status based on last_seen (not trusting is_online flag)
-			// Device is considered online if last_seen is within 2 minutes
-			var statusIcon string
+			var statusColor color.Color
 			var statusText string
 			var isReallyOnline bool
 
 			if !device.LastSeen.IsZero() {
 				timeSince := time.Since(device.LastSeen)
 				if timeSince < 2*time.Minute {
-					// Recently seen = online
-					statusIcon = "🟢"
+					statusColor = ui.ColorOnline
 					statusText = "Online"
 					isReallyOnline = true
 				} else if timeSince < 5*time.Minute {
-					// Seen within 5 min = away
-					statusIcon = "🟡"
+					statusColor = ui.ColorAway
 					statusText = fmt.Sprintf("Away (%dm ago)", int(timeSince.Minutes()))
 					isReallyOnline = false
 				} else {
-					// Not seen for 5+ min = offline
-					statusIcon = "🔴"
+					statusColor = ui.ColorOffline
 					isReallyOnline = false
 					if timeSince < time.Hour {
-						mins := int(timeSince.Minutes())
-						statusText = fmt.Sprintf("Offline (%dm ago)", mins)
+						statusText = fmt.Sprintf("Offline (%dm ago)", int(timeSince.Minutes()))
 					} else if timeSince < 24*time.Hour {
-						hours := int(timeSince.Hours())
-						statusText = fmt.Sprintf("Offline (%dh ago)", hours)
+						statusText = fmt.Sprintf("Offline (%dh ago)", int(timeSince.Hours()))
 					} else {
-						days := int(timeSince.Hours() / 24)
-						statusText = fmt.Sprintf("Offline (%dd ago)", days)
+						statusText = fmt.Sprintf("Offline (%dd ago)", int(timeSince.Hours()/24))
 					}
 				}
 			} else {
-				statusIcon = "🔴"
+				statusColor = ui.ColorOffline
 				statusText = "Offline (never seen)"
 				isReallyOnline = false
 			}
 
-			displayName := fmt.Sprintf("%s %s (%s) - %s", statusIcon, device.DeviceName, device.Platform, statusText)
-			label.SetText(displayName)
+			dot.FillColor = statusColor
+			dot.Refresh()
+			label.SetText(fmt.Sprintf("%s (%s) - %s", device.DeviceName, device.Platform, statusText))
 
 			// Configure connect button based on REAL online status
 			if !isReallyOnline {
@@ -552,14 +547,12 @@ func createModernUI(window fyne.Window) *fyne.Container {
 				connectBtn.SetText("Connect")
 				connectBtn.Importance = widget.HighImportance
 				connectBtn.OnTapped = func() {
-					logger.Info("🔗 Initiating connection to device: %s (ID: %s)", device.DeviceName, device.DeviceID)
-					logger.Debug("Device details - Platform: %s, Status: %s", device.Platform, device.Status)
+					logger.Info("Initiating connection to device: %s (ID: %s)", device.DeviceName, device.DeviceID)
 					connectToDevice(device)
 				}
 			}
 
 			// Configure remove button
-			removeBtn.SetText("🗑️ Remove")
 			removeBtn.Importance = widget.DangerImportance
 			removeBtn.OnTapped = func() {
 				dialog.ShowConfirm("Remove Device",
@@ -594,13 +587,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 		},
 	)
 
-	deviceSection := container.NewBorder(
-		widget.NewLabel("📱 Available Devices (High-Performance Mode)"),
-		nil,
-		nil,
-		nil,
-		deviceListWidget,
-	)
+	deviceSection := widget.NewCard("My Devices", "Manage your connected devices", deviceListWidget)
 
 	// Login tab with both login form and logged-in view
 	loginTab := container.NewStack(loginForm, loggedInContainer)
@@ -642,8 +629,8 @@ func createModernUI(window fyne.Window) *fyne.Container {
 		func() fyne.CanvasObject {
 			return container.NewHBox(
 				widget.NewLabel("Device Name"),
-				widget.NewButton("✅ Approve", func() {}),
-				widget.NewButton("🗑️ Delete", func() {}),
+				widget.NewButtonWithIcon("Approve", theme.ConfirmIcon(), func() {}),
+				widget.NewButtonWithIcon("Delete", theme.DeleteIcon(), func() {}),
 			)
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
@@ -657,10 +644,10 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			approveBtn := box.Objects[1].(*widget.Button)
 			deleteBtn := box.Objects[2].(*widget.Button)
 
-			label.SetText(fmt.Sprintf("📱 %s (%s) - ID: %s", device.DeviceName, device.Platform, device.DeviceID))
+			label.SetText(fmt.Sprintf("%s (%s) - ID: %s", device.DeviceName, device.Platform, device.DeviceID))
 
 			// Configure approve button
-			approveBtn.SetText("✅ Approve")
+			approveBtn.SetText("Approve")
 			approveBtn.Importance = widget.SuccessImportance
 			approveBtn.OnTapped = func() {
 				dialog.ShowConfirm("Approve Device",
@@ -697,7 +684,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			}
 
 			// Configure delete button
-			deleteBtn.SetText("🗑️ Delete")
+			deleteBtn.SetText("Delete")
 			deleteBtn.Importance = widget.DangerImportance
 			deleteBtn.OnTapped = func() {
 				dialog.ShowConfirm("Delete Device",
@@ -725,16 +712,11 @@ func createModernUI(window fyne.Window) *fyne.Container {
 		},
 	)
 
-	pendingDevicesSection := container.NewBorder(
-		container.NewVBox(
-			widget.NewLabel("⏳ Pending Devices (Waiting for Approval)"),
-			widget.NewButton("🔄 Refresh", func() {
-				refreshPendingDevices()
-			}),
-		),
-		nil, nil, nil,
-		pendingDevicesWidget,
-	)
+	refreshBtn := widget.NewButtonWithIcon("Refresh", theme.ViewRefreshIcon(), func() {
+		refreshPendingDevices()
+	})
+	pendingContent := container.NewBorder(refreshBtn, nil, nil, nil, pendingDevicesWidget)
+	pendingDevicesSection := widget.NewCard("Pending Devices", "Approve or reject new devices", pendingContent)
 
 	// Main layout with tabs
 	tabs := container.NewAppTabs(
@@ -927,17 +909,14 @@ func createSettingsTab() *fyne.Container {
 	))
 	currentSettings.Wrapping = fyne.TextWrapWord
 
-	// Layout
-	return container.NewVBox(
-		widget.NewLabelWithStyle("⚙️ Performance Settings", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-		widget.NewSeparator(),
-
+	// Layout with Cards
+	performanceCard := widget.NewCard("Performance", "", container.NewVBox(
 		highQualityCheck,
 		widget.NewLabel("Quick Presets:"),
 		container.NewGridWithColumns(3, presetUltra, presetHigh, presetLow),
+	))
 
-		widget.NewSeparator(),
-		widget.NewLabel("Video Settings:"),
+	videoCard := widget.NewCard("Video", "", container.NewVBox(
 		container.NewGridWithColumns(2,
 			widget.NewLabel("Resolution:"), resolutionSelect,
 			widget.NewLabel("Target FPS:"), fpsSelect,
@@ -945,39 +924,41 @@ func createSettingsTab() *fyne.Container {
 		),
 		qualityLabel,
 		qualitySlider,
+	))
 
-		widget.NewSeparator(),
-		widget.NewLabel("Network Settings:"),
+	networkCard := widget.NewCard("Network", "", container.NewVBox(
 		bitrateLabel,
 		bitrateSlider,
 		adaptiveBitrateCheck,
+	))
 
-		widget.NewSeparator(),
-		widget.NewLabel("Advanced Options:"),
+	featuresCard := widget.NewCard("Features", "", container.NewVBox(
 		hardwareAccelCheck,
 		lowLatencyCheck,
-
-		widget.NewSeparator(),
-		widget.NewLabel("Features:"),
 		fileTransferCheck,
 		clipboardCheck,
 		audioCheck,
+	))
 
-		widget.NewSeparator(),
-		widget.NewLabel("Appearance:"),
+	viewLogBtn := widget.NewButtonWithIcon("View Log", theme.ContentCopyIcon(), func() {
+		showLogViewer(myWindow)
+	})
+
+	advancedCard := widget.NewCard("Advanced", "", container.NewVBox(
 		container.NewGridWithColumns(2,
 			widget.NewLabel("Theme:"), themeSelect,
 		),
-
-		widget.NewSeparator(),
-		widget.NewLabel("Debugging:"),
-		widget.NewButton("📋 View Log", func() {
-			showLogViewer(myWindow)
-		}),
-
-		widget.NewSeparator(),
+		viewLogBtn,
 		currentSettings,
 		resetButton,
+	))
+
+	return container.NewVBox(
+		performanceCard,
+		videoCard,
+		networkCard,
+		featuresCard,
+		advancedCard,
 	)
 }
 
@@ -1003,7 +984,7 @@ func showLogViewer(parent fyne.Window) {
 	logText.CursorRow = len(logContent)
 
 	// Refresh button
-	refreshBtn := widget.NewButton("🔄 Refresh", func() {
+	logRefreshBtn := widget.NewButtonWithIcon("Refresh", theme.ViewRefreshIcon(), func() {
 		newContent, err := logger.ReadLog(200)
 		if err == nil {
 			logText.SetText(newContent)
@@ -1011,13 +992,13 @@ func showLogViewer(parent fyne.Window) {
 	})
 
 	// Copy button
-	copyBtn := widget.NewButton("📋 Copy All", func() {
+	copyBtn := widget.NewButtonWithIcon("Copy All", theme.ContentCopyIcon(), func() {
 		parent.Clipboard().SetContent(logText.Text)
 		dialog.ShowInformation("Copied", "Log copied to clipboard", parent)
 	})
 
 	// Open file button
-	openBtn := widget.NewButton("📂 Open Log File", func() {
+	openBtn := widget.NewButtonWithIcon("Open Log File", theme.FolderOpenIcon(), func() {
 		logPath := logger.GetLogPath()
 		var cmd *exec.Cmd
 		if os.PathSeparator == '\\' { // Windows
@@ -1028,10 +1009,10 @@ func showLogViewer(parent fyne.Window) {
 		cmd.Start()
 	})
 
-	buttons := container.NewHBox(refreshBtn, copyBtn, openBtn)
+	buttons := container.NewHBox(logRefreshBtn, copyBtn, openBtn)
 
 	content := container.NewBorder(
-		widget.NewLabel("📋 Controller Log (last 200 lines)"),
+		widget.NewLabel("Controller Log (last 200 lines)"),
 		buttons,
 		nil, nil,
 		scroll,
@@ -1173,14 +1154,14 @@ func showUpdateDialog(window fyne.Window) {
 	// Buttons
 	var checkBtn, downloadBtn, installBtn *widget.Button
 
-	checkBtn = widget.NewButton("🔍 Tjek igen", func() {})
+	checkBtn = widget.NewButtonWithIcon("Tjek igen", theme.SearchIcon(), func() {})
 	checkBtn.Hide()
 
-	downloadBtn = widget.NewButton("📥 Download opdatering", func() {})
+	downloadBtn = widget.NewButtonWithIcon("Download opdatering", theme.DownloadIcon(), func() {})
 	downloadBtn.Importance = widget.HighImportance
 	downloadBtn.Hide()
 
-	installBtn = widget.NewButton("🚀 Installer og genstart", func() {})
+	installBtn = widget.NewButtonWithIcon("Installer og genstart", theme.DownloadIcon(), func() {})
 	installBtn.Importance = widget.DangerImportance
 	installBtn.Hide()
 
@@ -1189,7 +1170,7 @@ func showUpdateDialog(window fyne.Window) {
 		versionInfo, err := u.FetchVersionInfo()
 		fyne.Do(func() {
 			if err != nil {
-				statusLabel.SetText(fmt.Sprintf("❌ Kunne ikke hente versions-info: %v", err))
+				statusLabel.SetText(fmt.Sprintf("Kunne ikke hente versions-info: %v", err))
 				controllerAvailableLabel.SetText("  Tilgængelig:  Fejl")
 				agentAvailableLabel.SetText("  Tilgængelig:  Fejl")
 				checkBtn.Show()
@@ -1205,12 +1186,12 @@ func showUpdateDialog(window fyne.Window) {
 			remoteCtrl, _ := updater.ParseVersion(versionInfo.ControllerVersion)
 
 			if remoteCtrl.IsNewerThan(currentCtrl) {
-				controllerStatusLabel.SetText("  🆕 NY VERSION TILGÆNGELIG")
+				controllerStatusLabel.SetText("  NY VERSION TILGÆNGELIG")
 				statusLabel.SetText(fmt.Sprintf("Ny controller version: %s → %s", Version, versionInfo.ControllerVersion))
 				downloadBtn.Show()
 			} else {
-				controllerStatusLabel.SetText("  ✅ Opdateret")
-				statusLabel.SetText("✅ Du har den nyeste version!")
+				controllerStatusLabel.SetText("  Opdateret")
+				statusLabel.SetText("Du har den nyeste version!")
 			}
 			checkBtn.Show()
 		})
@@ -1230,7 +1211,7 @@ func showUpdateDialog(window fyne.Window) {
 			if err != nil {
 				fyne.Do(func() {
 					checkBtn.Enable()
-					statusLabel.SetText(fmt.Sprintf("❌ Fejl: %v", err))
+					statusLabel.SetText(fmt.Sprintf("Fejl: %v", err))
 				})
 				return
 			}
@@ -1247,12 +1228,12 @@ func showUpdateDialog(window fyne.Window) {
 				remoteCtrl, _ := updater.ParseVersion(versionInfo.ControllerVersion)
 
 				if remoteCtrl.IsNewerThan(currentCtrl) {
-					controllerStatusLabel.SetText("  🆕 NY VERSION TILGÆNGELIG")
+					controllerStatusLabel.SetText("  NY VERSION TILGÆNGELIG")
 					statusLabel.SetText(fmt.Sprintf("Ny controller version: %s → %s", Version, versionInfo.ControllerVersion))
 					downloadBtn.Show()
 				} else {
-					controllerStatusLabel.SetText("  ✅ Opdateret")
-					statusLabel.SetText("✅ Du har den nyeste version!")
+					controllerStatusLabel.SetText("  Opdateret")
+					statusLabel.SetText("Du har den nyeste version!")
 				}
 			})
 		}()
@@ -1282,12 +1263,12 @@ func showUpdateDialog(window fyne.Window) {
 			fyne.Do(func() {
 				progressBar.Hide()
 				if err != nil {
-					statusLabel.SetText(fmt.Sprintf("❌ Download fejlede: %v", err))
+					statusLabel.SetText(fmt.Sprintf("Download fejlede: %v", err))
 					downloadBtn.Enable()
 					return
 				}
 
-				statusLabel.SetText("✅ Download færdig! Klar til installation.")
+				statusLabel.SetText("Download færdig! Klar til installation.")
 				downloadBtn.Hide()
 				installBtn.Show()
 			})
@@ -1310,7 +1291,7 @@ func showUpdateDialog(window fyne.Window) {
 					err := u.InstallUpdate()
 					if err != nil {
 						fyne.Do(func() {
-							statusLabel.SetText(fmt.Sprintf("❌ Installation fejlede: %v", err))
+							statusLabel.SetText(fmt.Sprintf("Installation fejlede: %v", err))
 							installBtn.Enable()
 						})
 						return
@@ -1325,7 +1306,7 @@ func showUpdateDialog(window fyne.Window) {
 
 	// Layout - version comparison list
 	content := container.NewVBox(
-		widget.NewLabelWithStyle("🔄 Opdateringer", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("Opdateringer", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		widget.NewSeparator(),
 
 		widget.NewLabelWithStyle("Controller (denne app):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),

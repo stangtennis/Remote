@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -189,7 +190,7 @@ func (v *Viewer) buildUI() {
 // createToolbar builds the top toolbar
 func (v *Viewer) createToolbar() *fyne.Container {
 	// Connection status
-	v.statusLabel = widget.NewLabel("🔴 Disconnected")
+	v.statusLabel = widget.NewLabel("Disconnected")
 	v.statusLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	// Connect button
@@ -205,22 +206,22 @@ func (v *Viewer) createToolbar() *fyne.Container {
 	disconnectBtn.Importance = widget.DangerImportance
 
 	// Fullscreen toggle
-	v.fullscreenBtn = widget.NewButton("⛶ Fullscreen", func() {
+	v.fullscreenBtn = widget.NewButtonWithIcon("Fullscreen", theme.ViewFullScreenIcon(), func() {
 		v.toggleFullscreen()
 	})
 
 	// File transfer button - opens Total Commander style browser
-	fileTransferBtn := widget.NewButton("📁 File Browser", func() {
+	fileTransferBtn := widget.NewButtonWithIcon("File Browser", theme.FolderOpenIcon(), func() {
 		v.OpenFileBrowser()
 	})
 
 	// Clipboard sync button
-	clipboardBtn := widget.NewButton("📋 Sync Clipboard", func() {
+	clipboardBtn := widget.NewButtonWithIcon("Sync Clipboard", theme.ContentCopyIcon(), func() {
 		v.handleClipboardSync()
 	})
 
 	// H.264 mode toggle button
-	h264Btn := widget.NewButton("🎬 H.264", func() {
+	h264Btn := widget.NewButtonWithIcon("H.264", theme.MediaVideoIcon(), func() {
 		v.toggleH264Mode()
 	})
 
@@ -234,7 +235,7 @@ func (v *Viewer) createToolbar() *fyne.Container {
 	}
 
 	// Settings button
-	settingsBtn := widget.NewButton("⚙️ Settings", func() {
+	settingsBtn := widget.NewButtonWithIcon("Settings", theme.SettingsIcon(), func() {
 		v.showSettings()
 	})
 
@@ -279,7 +280,7 @@ func (v *Viewer) createStatusBar() *fyne.Container {
 	v.bandwidthLabel = widget.NewLabel("0.0 Mbit/s")
 
 	// Streaming mode indicator
-	v.modeLabel = widget.NewLabel("📺 JPEG")
+	v.modeLabel = widget.NewLabel("JPEG")
 	v.modeLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	// Quality/Scale/CPU indicators
@@ -288,15 +289,15 @@ func (v *Viewer) createStatusBar() *fyne.Container {
 	v.cpuLabel = widget.NewLabel("CPU: -")
 
 	// Keyboard/Mouse status
-	inputLabel := widget.NewLabel("🖱️ Mouse & ⌨️ Keyboard Active")
+	inputLabel := widget.NewLabel("Mouse & Keyboard Active")
 
 	// Fullscreen toggle button for status bar
-	fullscreenToggleBtn := widget.NewButton("⛶ Fullscreen", func() {
+	fullscreenToggleBtn := widget.NewButtonWithIcon("Fullscreen", theme.ViewFullScreenIcon(), func() {
 		v.toggleFullscreen()
 	})
 
 	// Keyboard shortcuts hint
-	shortcutsLabel := widget.NewLabel("💡 F11 | ESC")
+	shortcutsLabel := widget.NewLabel("F11 | ESC")
 	shortcutsLabel.TextStyle = fyne.TextStyle{Italic: true}
 
 	// Initialize bandwidth tracking
@@ -346,9 +347,9 @@ func (v *Viewer) UpdateStatus(connected bool) {
 	v.connected = connected
 	fyne.Do(func() {
 		if connected {
-			v.statusLabel.SetText("🟢 Connected")
+			v.statusLabel.SetText("Connected")
 		} else {
-			v.statusLabel.SetText("🔴 Disconnected")
+			v.statusLabel.SetText("Disconnected")
 		}
 	})
 }
@@ -426,11 +427,11 @@ func (v *Viewer) UpdateStreamingMode(mode string) {
 	fyne.Do(func() {
 		switch mode {
 		case "h264":
-			v.modeLabel.SetText("🎬 H.264")
+			v.modeLabel.SetText("H.264")
 		case "hybrid":
-			v.modeLabel.SetText("🔀 Hybrid")
+			v.modeLabel.SetText("Hybrid")
 		default:
-			v.modeLabel.SetText("📺 JPEG")
+			v.modeLabel.SetText("JPEG")
 		}
 	})
 }
@@ -475,9 +476,9 @@ func (v *Viewer) toggleH264Mode() {
 			// Update mode label in UI
 			fyne.Do(func() {
 				if newMode == "h264" {
-					v.modeLabel.SetText("🎬 H.264")
+					v.modeLabel.SetText("H.264")
 				} else {
-					v.modeLabel.SetText("📺 JPEG")
+					v.modeLabel.SetText("JPEG")
 				}
 			})
 			// If we switched away from H.264, stop local decoder (kills ffmpeg process)
@@ -520,7 +521,7 @@ func (v *Viewer) handleDisconnect() {
 	// Update status
 	v.connected = false
 	fyne.Do(func() {
-		v.statusLabel.SetText("🔴 Disconnected")
+		v.statusLabel.SetText("Disconnected")
 	})
 
 	// Call disconnect callback if set
@@ -539,11 +540,11 @@ func (v *Viewer) toggleFullscreen() {
 	fyne.Do(func() {
 		if v.fullscreen {
 			// In fullscreen, use overlay toolbar that auto-hides
-			v.fullscreenBtn.SetText("⛶ Exit Fullscreen")
+			v.fullscreenBtn.SetText("Exit Fullscreen")
 			v.enterFullscreenMode()
 		} else {
 			// Windowed mode, show toolbars
-			v.fullscreenBtn.SetText("⛶ Fullscreen")
+			v.fullscreenBtn.SetText("Fullscreen")
 			v.exitFullscreenMode()
 		}
 	})
@@ -589,29 +590,29 @@ func (v *Viewer) createOverlayToolbar() {
 	bg := canvas.NewRectangle(color.NRGBA{R: 30, G: 30, B: 30, A: 230})
 	
 	// Exit fullscreen button
-	exitBtn := widget.NewButton("⛶ Exit Fullscreen (ESC)", func() {
+	exitBtn := widget.NewButtonWithIcon("Exit Fullscreen (ESC)", theme.ViewFullScreenIcon(), func() {
 		v.toggleFullscreen()
 	})
 	exitBtn.Importance = widget.HighImportance
 	
 	// File browser button
-	fileBtn := widget.NewButton("📁 Files", func() {
+	fileBtn := widget.NewButtonWithIcon("Files", theme.FolderOpenIcon(), func() {
 		v.OpenFileBrowser()
 	})
 	
 	// Clipboard button
-	clipboardBtn := widget.NewButton("📋 Clipboard", func() {
+	clipboardBtn := widget.NewButtonWithIcon("Clipboard", theme.ContentCopyIcon(), func() {
 		v.handleClipboardSync()
 	})
 	
 	// Disconnect button
-	disconnectBtn := widget.NewButton("🔌 Disconnect", func() {
+	disconnectBtn := widget.NewButton("Disconnect", func() {
 		v.handleDisconnect()
 	})
 	disconnectBtn.Importance = widget.DangerImportance
 	
 	// Status info
-	statusInfo := widget.NewLabel("💡 Move mouse to top to show toolbar")
+	statusInfo := widget.NewLabel("Move mouse to top to show toolbar")
 	statusInfo.TextStyle = fyne.TextStyle{Italic: true}
 	
 	// Layout
@@ -819,7 +820,7 @@ func (v *Viewer) showSettings() {
 	)
 
 	content := container.NewVBox(
-		widget.NewLabelWithStyle("⚙️ Session Settings", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("Session Settings", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		widget.NewSeparator(),
 		fpsLabel,
 		fpsSlider,

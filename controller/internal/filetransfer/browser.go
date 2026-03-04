@@ -69,7 +69,7 @@ func NewFileBrowser(app fyne.App, manager *Manager, onClose func()) *FileBrowser
 	}
 	
 	// Create window
-	fb.window = app.NewWindow("📁 Filoverførsel")
+	fb.window = app.NewWindow("Filoverførsel")
 	fb.window.Resize(fyne.NewSize(1200, 700))
 	
 	// Set up manager callbacks
@@ -146,7 +146,7 @@ func (fb *FileBrowser) buildUI() {
 	}
 	
 	localPane := container.NewBorder(localHeader, nil, nil, nil, fb.localList)
-	localCard := widget.NewCard("💻 Lokal", "", localPane)
+	localCard := widget.NewCard("Lokal", "", localPane)
 	
 	// Remote pane
 	fb.remotePathLabel = widget.NewLabel("Venter på forbindelse...")
@@ -207,28 +207,28 @@ func (fb *FileBrowser) buildUI() {
 	}
 	
 	remotePane := container.NewBorder(remoteHeader, nil, nil, nil, fb.remoteList)
-	remoteCard := widget.NewCard("🌐 Fjerncomputer", "", remotePane)
+	remoteCard := widget.NewCard("Fjerncomputer", "", remotePane)
 	
 	// Split view
 	split := container.NewHSplit(localCard, remoteCard)
 	split.SetOffset(0.5)
 	
 	// Toolbar
-	downloadBtn := widget.NewButtonWithIcon("⬇️ Download", theme.DownloadIcon(), func() {
+	downloadBtn := widget.NewButtonWithIcon("Download", theme.DownloadIcon(), func() {
 		fb.doDownload()
 	})
 	downloadBtn.Importance = widget.HighImportance
 	
-	uploadBtn := widget.NewButtonWithIcon("⬆️ Upload", theme.UploadIcon(), func() {
+	uploadBtn := widget.NewButtonWithIcon("Upload", theme.UploadIcon(), func() {
 		fb.doUpload()
 	})
 	uploadBtn.Importance = widget.HighImportance
 	
-	newFolderBtn := widget.NewButtonWithIcon("📁 Ny mappe", theme.FolderNewIcon(), func() {
+	newFolderBtn := widget.NewButtonWithIcon("Ny mappe", theme.FolderNewIcon(), func() {
 		fb.doNewFolder()
 	})
 	
-	deleteBtn := widget.NewButtonWithIcon("🗑️ Slet", theme.DeleteIcon(), func() {
+	deleteBtn := widget.NewButtonWithIcon("Slet", theme.DeleteIcon(), func() {
 		fb.doDelete()
 	})
 	
