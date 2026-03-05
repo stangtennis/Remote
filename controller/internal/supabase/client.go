@@ -37,14 +37,15 @@ type User struct {
 
 // Device represents a remote device
 type Device struct {
-	DeviceID   string    `json:"device_id"`
-	DeviceName string    `json:"device_name"`
-	Platform   string    `json:"platform"`
-	OwnerID    string    `json:"owner_id"`
-	Status     string    `json:"status"`
-	LastSeen   time.Time `json:"last_seen"`
-	CreatedAt  time.Time `json:"created_at"`
-	AssignedAt time.Time `json:"assigned_at"`
+	DeviceID     string    `json:"device_id"`
+	DeviceName   string    `json:"device_name"`
+	Platform     string    `json:"platform"`
+	OwnerID      string    `json:"owner_id"`
+	Status       string    `json:"status"`
+	AgentVersion string    `json:"agent_version"`
+	LastSeen     time.Time `json:"last_seen"`
+	CreatedAt    time.Time `json:"created_at"`
+	AssignedAt   time.Time `json:"assigned_at"`
 }
 
 // NewClient creates a new Supabase client

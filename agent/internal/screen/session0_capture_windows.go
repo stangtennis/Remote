@@ -279,87 +279,52 @@ func (c *Session0PipeCapturer) launchHelper() error {
 	var dupToken windows.Token
 	var tokenMethod string
 
+	// Always prefer SYSTEM token — it provides SYSTEM integrity which:
+	// 1. Bypasses UIPI for ALL windows (admin, elevated, Winlogon/lock screen)
+	// 2. Allows SeTcbPrivilege (required for SendInput on secure desktop)
+	// 3. Can access Winlogon desktop DACL (which blocks non-SYSTEM processes)
+	// The elevated linked token (High integrity) bypasses UIPI for admin windows
+	// but NOT for the Winlogon desktop (lock screen), so SYSTEM is always preferred.
+
 	var userToken windows.Token
 	ret, _, wtsErr := procWTSQueryUserToken.Call(sessionID, uintptr(unsafe.Pointer(&userToken)))
 	if ret != 0 {
-		// User is logged in — try elevated token first (bypasses UIPI for admin windows)
 		defer userToken.Close()
+		log.Printf("📋 User is logged in (session %d)", sessionID)
 
-		// Try to get elevated linked token (like TeamViewer/RDP — allows SendInput to admin windows)
-		const tokenElevationType = 18  // TOKEN_INFORMATION_CLASS
-		const tokenLinkedToken = 19    // TOKEN_INFORMATION_CLASS
-		const elevationTypeLimited = 3 // TokenElevationTypeLimited
-		const elevationTypeFull = 2    // TokenElevationTypeFull (already elevated)
-
-		var elevationType uint32
-		var retLen uint32
-		getErr := windows.GetTokenInformation(userToken, tokenElevationType,
-			(*byte)(unsafe.Pointer(&elevationType)), 4, &retLen)
-
-		log.Printf("🔍 Token elevation type: %d (err: %v) — 1=Default, 2=Full, 3=Limited/filtered", elevationType, getErr)
-
-		if getErr == nil && elevationType == elevationTypeLimited {
-			// Admin user with filtered token — get linked elevated token
-			var linkedToken windows.Token
-			getErr = windows.GetTokenInformation(userToken, tokenLinkedToken,
-				(*byte)(unsafe.Pointer(&linkedToken)),
-				uint32(unsafe.Sizeof(linkedToken)), &retLen)
-			if getErr == nil {
-				defer linkedToken.Close()
-				if err := windows.DuplicateTokenEx(
-					linkedToken,
-					_MAXIMUM_ALLOWED,
-					nil,
-					windows.SecurityImpersonation,
-					windows.TokenPrimary,
-					&dupToken,
+		// Always use SYSTEM token with session ID — highest privilege level
+		log.Printf("🛡️ Using SYSTEM token for session %d (UIPI bypass + Winlogon desktop access)", sessionID)
+		var processToken windows.Token
+		process, _ := windows.GetCurrentProcess()
+		if err := windows.OpenProcessToken(process, windows.TOKEN_ALL_ACCESS, &processToken); err == nil {
+			defer processToken.Close()
+			if err := windows.DuplicateTokenEx(
+				processToken,
+				_MAXIMUM_ALLOWED,
+				nil,
+				windows.SecurityImpersonation,
+				windows.TokenPrimary,
+				&dupToken,
+			); err == nil {
+				sid := uint32(sessionID)
+				if err := windows.SetTokenInformation(
+					dupToken,
+					windows.TokenSessionId,
+					(*byte)(unsafe.Pointer(&sid)),
+					uint32(unsafe.Sizeof(sid)),
 				); err == nil {
-					tokenMethod = "user-elevated"
-					log.Printf("🛡️ Using elevated linked token — helper can interact with admin windows (UIPI bypass)")
+					tokenMethod = "system"
 				} else {
-					log.Printf("⚠️ DuplicateTokenEx (linked token): %v — falling back to SYSTEM token", err)
+					log.Printf("⚠️ SetTokenInformation(SessionId): %v — falling back to user token", err)
+					dupToken.Close()
+					dupToken = 0
 				}
 			} else {
-				log.Printf("⚠️ GetTokenInformation(TokenLinkedToken): %v — falling back to SYSTEM token", getErr)
+				log.Printf("⚠️ DuplicateTokenEx (system): %v — falling back to user token", err)
 			}
 		}
 
-		// If token is not elevated yet: use SYSTEM token with session ID (always high integrity)
-		if dupToken == 0 && elevationType != elevationTypeFull {
-			log.Printf("🛡️ Using SYSTEM token for session %d (ensures UIPI bypass for admin windows)", sessionID)
-			var processToken windows.Token
-			process, _ := windows.GetCurrentProcess()
-			if err := windows.OpenProcessToken(process, windows.TOKEN_ALL_ACCESS, &processToken); err == nil {
-				defer processToken.Close()
-				if err := windows.DuplicateTokenEx(
-					processToken,
-					_MAXIMUM_ALLOWED,
-					nil,
-					windows.SecurityImpersonation,
-					windows.TokenPrimary,
-					&dupToken,
-				); err == nil {
-					// Set session ID on the SYSTEM token
-					sid := uint32(sessionID)
-					if err := windows.SetTokenInformation(
-						dupToken,
-						windows.TokenSessionId,
-						(*byte)(unsafe.Pointer(&sid)),
-						uint32(unsafe.Sizeof(sid)),
-					); err == nil {
-						tokenMethod = "system-elevated"
-					} else {
-						log.Printf("⚠️ SetTokenInformation(SessionId): %v — falling back to user token", err)
-						dupToken.Close()
-						dupToken = 0
-					}
-				} else {
-					log.Printf("⚠️ DuplicateTokenEx (system): %v — falling back to user token", err)
-				}
-			}
-		}
-
-		// Final fallback: regular user token (medium integrity — can't interact with admin windows)
+		// Fallback: regular user token (medium integrity — can't interact with admin/Winlogon)
 		if dupToken == 0 {
 			tokenMethod = "user"
 			if err := windows.DuplicateTokenEx(
