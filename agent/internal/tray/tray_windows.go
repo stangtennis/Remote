@@ -14,9 +14,10 @@ import (
 	"github.com/getlantern/systray"
 	"github.com/stangtennis/remote-agent/internal/device"
 	"github.com/stangtennis/remote-agent/internal/updater"
+	"github.com/stangtennis/remote-agent/internal/version"
 )
 
-// Version information - injected at build time via -ldflags -X
+// Version aliases for backwards compatibility (ldflags still inject here)
 var (
 	Version       = "dev"
 	BuildDate     = "unknown"
@@ -24,6 +25,15 @@ var (
 )
 
 func init() {
+	// Sync: if ldflags injected here, propagate to version package
+	if Version != "dev" {
+		version.Version = Version
+		version.BuildDate = BuildDate
+	} else if version.Version != "dev" {
+		// version package was set directly
+		Version = version.Version
+		BuildDate = version.BuildDate
+	}
 	if VersionString == "" {
 		VersionString = Version + " (built " + BuildDate + ")"
 	}

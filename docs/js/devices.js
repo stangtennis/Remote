@@ -104,8 +104,9 @@ function createDeviceCard(device) {
     `🆔 ${device.device_id}`,
     `💻 ${device.platform || 'Unknown'} (${device.arch || 'Unknown'})`,
     `🖥️ ${device.cpu_count || '?'} CPUs`,
+    device.agent_version ? `📦 Agent ${device.agent_version}` : null,
     `📅 Last seen: ${lastSeen}`
-  ];
+  ].filter(Boolean);
   infoLines.forEach(text => {
     const div = document.createElement('div');
     div.textContent = text;

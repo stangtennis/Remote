@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 	"unsafe"
@@ -74,15 +75,38 @@ func isForegroundConsole() bool {
 	return name == "ConsoleWindowClass" || name == "CASCADIA_HOSTING_WINDOW_CLASS"
 }
 
+// lastInputDesktop holds the handle to the current input desktop.
+// We keep it open because closing it can detach the thread.
+var lastInputDesktop uintptr
+
 // switchToInputDesktop attaches the calling thread to the current input desktop.
 // This ensures input events reach the correct desktop (Winlogon at login screen, Default after login).
 func switchToInputDesktop() {
-	desk, _, _ := procOpenInputDesktop.Call(0, 0, 0x10000000) // GENERIC_ALL
+	// Use the same specific access flags as GDI capture (not GENERIC_ALL which
+	// can be denied on the Winlogon desktop's DACL)
+	desk, _, err := procOpenInputDesktop.Call(
+		0,          // dwFlags
+		uintptr(1), // fInherit = TRUE
+		0x0001|0x0002|0x0004| // DESKTOP_READOBJECTS | DESKTOP_CREATEWINDOW | DESKTOP_CREATEMENU
+			0x0008|0x0010|0x0020| // DESKTOP_HOOKCONTROL | DESKTOP_JOURNALRECORD | DESKTOP_JOURNALPLAYBACK
+			0x0040|0x0080|0x0100, // DESKTOP_ENUMERATE | DESKTOP_WRITEOBJECTS | DESKTOP_SWITCHDESKTOP
+	)
 	if desk == 0 {
+		log.Printf("⚠️ OpenInputDesktop failed: %v", err)
 		return
 	}
-	procSetThreadDesktop.Call(desk)
-	procCloseDesktop.Call(desk)
+	ret, _, err := procSetThreadDesktop.Call(desk)
+	if ret == 0 {
+		log.Printf("⚠️ SetThreadDesktop failed: %v", err)
+		procCloseDesktop.Call(desk)
+		return
+	}
+	// Close the previous desktop handle (if any) and keep the new one open.
+	// Closing it immediately after SetThreadDesktop can detach the thread.
+	if lastInputDesktop != 0 {
+		procCloseDesktop.Call(lastInputDesktop)
+	}
+	lastInputDesktop = desk
 }
 
 // makeMouseInput builds a 40-byte INPUT struct for mouse events.
@@ -440,6 +464,13 @@ func mapCodeToVK(code string) uint16 {
 // via GDI (which works in the user session), and sends frames on demand.
 // It also handles input events forwarded from the service.
 func RunCaptureHelper(pipeName string) error {
+	// Lock this goroutine to a single OS thread. Both GDI capture (C code) and
+	// input injection call SetThreadDesktop which is per-OS-thread. Without this,
+	// Go's scheduler could move the goroutine to a different thread, losing the
+	// desktop attachment and causing capture/input to silently fail.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	// Set up logging to temp file
 	logDir := filepath.Join(os.TempDir(), "RemoteDesktopAgent")
 	os.MkdirAll(logDir, 0755)
@@ -455,6 +486,12 @@ func RunCaptureHelper(pipeName string) error {
 
 	log.Printf("Capture helper starting, pipe: %s", pipeName)
 	log.Printf("   PID: %d, Session: user session", os.Getpid())
+
+	// Enable SeTcbPrivilege — required for SendInput on the Winlogon (secure) desktop.
+	// The helper is launched with SYSTEM token which has this privilege available.
+	if err := enablePrivilege("SeTcbPrivilege"); err != nil {
+		log.Printf("⚠️ enablePrivilege(SeTcbPrivilege): %v (input on lock screen may not work)", err)
+	}
 
 	// Connect to the named pipe (retry for up to 30 seconds)
 	pipeNameUTF16, _ := windows.UTF16PtrFromString(pipeName)

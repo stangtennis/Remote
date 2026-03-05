@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/stangtennis/remote-agent/internal/version"
 )
 
 // RegistrationConfig holds Supabase configuration
@@ -56,13 +58,14 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 
 	// Create payload
 	payload := map[string]interface{}{
-		"device_id":   device.DeviceID,
-		"device_name": device.DeviceName,
-		"platform":    device.Platform,
-		"arch":        "amd64",
-		"owner_id":    config.UserID,
-		"is_online":   true,
-		"last_seen":   time.Now().Format(time.RFC3339),
+		"device_id":      device.DeviceID,
+		"device_name":    device.DeviceName,
+		"platform":       device.Platform,
+		"arch":           "amd64",
+		"owner_id":       config.UserID,
+		"is_online":      true,
+		"last_seen":      time.Now().Format(time.RFC3339),
+		"agent_version":  version.Version,
 	}
 
 	jsonData, err := json.Marshal(payload)
@@ -96,10 +99,11 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 		updateURL := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, device.DeviceID)
 
 		updatePayload := map[string]interface{}{
-			"device_name": device.DeviceName,
-			"owner_id":    config.UserID,
-			"is_online":   true,
-			"last_seen":   time.Now().Format(time.RFC3339),
+			"device_name":   device.DeviceName,
+			"owner_id":      config.UserID,
+			"is_online":     true,
+			"last_seen":     time.Now().Format(time.RFC3339),
+			"agent_version": version.Version,
 		}
 
 		updateData, _ := json.Marshal(updatePayload)
@@ -138,8 +142,9 @@ func UpdateHeartbeat(config RegistrationConfig, deviceID string, isOnline bool) 
 
 	now := time.Now().Format(time.RFC3339)
 	payload := map[string]interface{}{
-		"is_online": isOnline,
-		"last_seen": now,
+		"is_online":     isOnline,
+		"last_seen":     now,
+		"agent_version": version.Version,
 	}
 
 	jsonData, err := json.Marshal(payload)

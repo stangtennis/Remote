@@ -536,7 +536,11 @@ func createModernUI(window fyne.Window) *fyne.Container {
 
 			dot.FillColor = statusColor
 			dot.Refresh()
-			label.SetText(fmt.Sprintf("%s (%s) - %s", device.DeviceName, device.Platform, statusText))
+			versionStr := ""
+			if device.AgentVersion != "" {
+				versionStr = " " + device.AgentVersion
+			}
+			label.SetText(fmt.Sprintf("%s (%s%s) - %s", device.DeviceName, device.Platform, versionStr, statusText))
 
 			// Configure connect button based on REAL online status
 			if !isReallyOnline {
