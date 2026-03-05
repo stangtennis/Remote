@@ -220,6 +220,16 @@ if (document.getElementById('logoutBtn')) {
     e.preventDefault();
     debug('🚪 Logout button clicked');
     try {
+      // End all active sessions BEFORE signing out
+      if (window.SessionManager && window.SessionManager.getSessionCount() > 0) {
+        debug('🔌 Ending all active sessions before logout...');
+        const deviceIds = [...window.SessionManager.sessions.keys()];
+        for (const deviceId of deviceIds) {
+          await window.endSession(deviceId);
+        }
+        debug('✅ All sessions ended');
+      }
+
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('Logout error:', error);

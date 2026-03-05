@@ -114,11 +114,10 @@ async function startSession(device) {
   }
 
   try {
-    // Get current auth session token
-    const { data: { session } } = await supabase.auth.getSession();
-
-    if (!session) {
-      throw new Error('Not authenticated. Please log in again.');
+    // Get fresh auth session token (refresh to avoid expired tokens)
+    const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError || !session) {
+      throw new Error('Session udløbet. Log venligst ind igen.');
     }
 
     // Generate a unique controller ID for this dashboard instance
@@ -161,24 +160,47 @@ async function startSession(device) {
       console.error('Full error object:', error);
       console.error('Error context:', error.context);
 
+      // Check if auth error — try refreshing token and retrying once
+      let errorMsg = error.message || '';
       if (error.context && error.context instanceof Response) {
         const errorText = await error.context.text();
         console.error('Response body:', errorText);
+        errorMsg = errorText;
+      }
+
+      if (errorMsg.includes('Unauthorized') || errorMsg.includes('expired') || errorMsg.includes('JWT')) {
+        debug('🔄 Auth error detected, refreshing token and retrying...');
+        const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+        if (refreshed) {
+          const { data: retryData, error: retryError } = await supabase.functions.invoke('session-token', {
+            body: { device_id: device.device_id, use_pin: true },
+            headers: { Authorization: `Bearer ${refreshed.access_token}` }
+          });
+          if (retryError) throw retryError;
+          // Use retryData instead — skip to session data assignment below
+          ctx.sessionData = retryData;
+          ctx.sessionData.device_id = device.device_id;
+          window.currentSession = ctx.sessionData;
+        } else {
+          throw new Error('Session udløbet. Log venligst ind igen.');
+        }
+      } else {
         try {
-          const errorJson = JSON.parse(errorText);
-          console.error('Parsed error:', errorJson);
+          const errorJson = JSON.parse(errorMsg);
           throw new Error(errorJson.error || errorJson.message || 'Unknown error');
         } catch (e) {
-          throw new Error(errorText || error.message);
+          if (e.message && !e.message.includes('JSON')) throw e;
+          throw new Error(errorMsg || error.message);
         }
       }
-      throw error;
     }
 
-    // Store session data on ctx
-    ctx.sessionData = data;
-    ctx.sessionData.device_id = device.device_id;
-    window.currentSession = ctx.sessionData;
+    // Store session data on ctx (skip if already set by retry path)
+    if (!error) {
+      ctx.sessionData = data;
+      ctx.sessionData.device_id = device.device_id;
+      window.currentSession = ctx.sessionData;
+    }
 
     // Show preview UI elements
     const previewIdle = document.getElementById('previewIdle');
@@ -199,7 +221,7 @@ async function startSession(device) {
       const sessionPin = document.getElementById('sessionPin');
       const sessionStatus = document.getElementById('sessionStatus');
       if (sessionDeviceName) sessionDeviceName.textContent = device.device_name;
-      if (sessionPin) sessionPin.textContent = data.pin;
+      if (sessionPin) sessionPin.textContent = ctx.sessionData.pin;
       if (sessionStatus) {
         sessionStatus.textContent = 'Connecting...';
         sessionStatus.className = 'status-badge pending';
@@ -311,17 +333,14 @@ window.addEventListener('beforeunload', (e) => {
     cleanupInputCapture();
   }
 
+  // Collect session IDs for beacon cleanup
+  const sessionIds = [];
+
   // Iterate all sessions and clean up
   for (const [deviceId, ctx] of window.SessionManager.sessions) {
     const sessionId = ctx.sessionData?.session_id;
     if (sessionId) {
-      // Try to update DB (async, may not complete)
-      supabase
-        .from('remote_sessions')
-        .update({ status: 'ended', ended_at: new Date().toISOString() })
-        .eq('id', sessionId)
-        .then(() => debug('Session ended:', sessionId))
-        .catch(err => console.error('Session end error:', err));
+      sessionIds.push(sessionId);
     }
 
     // Close peer connection
@@ -346,6 +365,18 @@ window.addEventListener('beforeunload', (e) => {
     if (ctx.statsInterval) {
       clearInterval(ctx.statsInterval);
     }
+  }
+
+  // Use sendBeacon for reliable DB cleanup (guaranteed to fire during unload)
+  if (sessionIds.length > 0) {
+    const blob = new Blob(
+      [JSON.stringify({ session_ids: sessionIds })],
+      { type: 'application/json' }
+    );
+    navigator.sendBeacon(
+      `${SUPABASE_CONFIG.url}/functions/v1/session-cleanup-beacon`,
+      blob
+    );
   }
 });
 
@@ -427,11 +458,12 @@ async function reconnectSession(deviceId) {
       ctx.signalingChannel = null;
     }
 
-    // Get fresh auth session
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      debug('❌ No auth session for reconnect');
+    // Get fresh auth session (refresh to avoid expired tokens)
+    const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError || !session) {
+      debug('❌ No auth session for reconnect (token expired?)');
       ctx.reconnectState = 'gave_up';
+      showToast('Session udløbet. Log venligst ind igen.', 'error');
       return;
     }
 
