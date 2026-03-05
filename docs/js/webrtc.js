@@ -13,7 +13,7 @@ let iceConfig = {
 // Fetch dynamic TURN credentials from backend
 async function fetchTurnCredentials() {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.refreshSession();
     if (!session) {
       debug('⚠️ No session, using STUN only');
       return;
