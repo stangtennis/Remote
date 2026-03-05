@@ -166,38 +166,46 @@ func checkForUpdates() {
 		return
 	}
 
-	versionInfo, err := u.FetchVersionInfo()
-	if err != nil {
-		log.Printf("Could not fetch version info: %v", err)
-		showAlert("Error", fmt.Sprintf("Could not fetch version info:\n%v", err))
+	if err := u.CheckForUpdate(); err != nil {
+		log.Printf("Update check failed: %v", err)
+		showAlert("Error", fmt.Sprintf("Could not check for updates:\n%v", err))
 		return
 	}
 
-	currentAgent, _ := updater.ParseVersion(Version)
-	remoteAgent, _ := updater.ParseVersion(versionInfo.AgentVersion)
-
-	agentStatus := "Up to date"
-	if remoteAgent.IsNewerThan(currentAgent) {
-		agentStatus = "NEW VERSION"
+	info := u.GetAvailableUpdate()
+	if info == nil {
+		showAlert("Up to date", fmt.Sprintf("Agent %s is the latest version.", Version))
+		return
 	}
 
-	msg := fmt.Sprintf(
-		"Agent (this):\n  Installed: %s\n  Available: %s  %s\n\nController:\n  Available: %s",
-		Version,
-		versionInfo.AgentVersion, agentStatus,
-		versionInfo.ControllerVersion,
-	)
+	// Ask user to confirm
+	if !showConfirmDialog("Update Available",
+		fmt.Sprintf("A new version is available: %s\nCurrent: %s\n\nDownload and install now?", info.TagName, Version)) {
+		return
+	}
 
-	if remoteAgent.IsNewerThan(currentAgent) {
-		msg += "\n\nDo you want to download and install the update?"
-		// Use osascript for yes/no
-		showAlert("Update Available", msg)
-	} else {
-		showAlert("Updates", msg)
+	log.Printf("User confirmed update to %s", info.TagName)
+
+	if err := u.DownloadUpdate(); err != nil {
+		log.Printf("Download failed: %v", err)
+		showAlert("Download Failed", fmt.Sprintf("Could not download update:\n%v", err))
+		return
+	}
+
+	if err := u.InstallUpdate(); err != nil {
+		log.Printf("Install failed: %v", err)
+		showAlert("Install Failed", fmt.Sprintf("Could not install update:\n%v", err))
+		return
 	}
 }
 
 func showAlert(title, message string) {
 	script := fmt.Sprintf(`display alert "%s" message "%s"`, title, message)
 	exec.Command("osascript", "-e", script).Run()
+}
+
+func showConfirmDialog(title, message string) bool {
+	script := fmt.Sprintf(`display alert "%s" message "%s" buttons {"Cancel", "Update"} default button "Update"`, title, message)
+	err := exec.Command("osascript", "-e", script).Run()
+	return err == nil // Cancel returns exit code 1
 }

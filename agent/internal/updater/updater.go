@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -235,7 +236,11 @@ func (u *Updater) DownloadUpdate() error {
 		return err
 	}
 
-	exePath := filepath.Join(versionDir, fmt.Sprintf("remote-agent-%s.exe", info.TagName))
+	ext := ".exe"
+	if runtime.GOOS == "darwin" {
+		ext = ""
+	}
+	exePath := filepath.Join(versionDir, fmt.Sprintf("remote-agent-%s%s", info.TagName, ext))
 	log.Printf("📥 Downloading %s to %s", info.ExeURL, exePath)
 
 	if err := u.downloader.DownloadFile(info.ExeURL, exePath, info.ExeSize); err != nil {
@@ -280,7 +285,8 @@ func (u *Updater) DownloadUpdate() error {
 }
 
 // InstallUpdate installs the downloaded update
-// The new exe is started with --update-from flag, which handles the replacement
+// On Windows: launches new exe with --update-from flag
+// On macOS: replaces current binary in-place and restarts
 func (u *Updater) InstallUpdate() error {
 	if u.state.DownloadPath == "" {
 		return fmt.Errorf("no update downloaded")
@@ -299,8 +305,11 @@ func (u *Updater) InstallUpdate() error {
 		return err
 	}
 
-	// Launch the NEW exe with --update-from flag
-	// The new exe will wait for us to exit, then replace us
+	if runtime.GOOS == "darwin" {
+		return u.installMacOS(currentExe)
+	}
+
+	// Windows: launch the NEW exe with --update-from flag
 	log.Printf("🚀 Starting new version with update mode: %s --update-from %s", u.state.DownloadPath, currentExe)
 	cmd := exec.Command(u.state.DownloadPath, "--update-from", currentExe)
 
@@ -315,6 +324,58 @@ func (u *Updater) InstallUpdate() error {
 	u.saveState()
 
 	log.Println("✅ New version started, exiting for update...")
+	return nil
+}
+
+// installMacOS replaces the current binary and restarts
+func (u *Updater) installMacOS(currentExe string) error {
+	downloadPath := u.state.DownloadPath
+
+	// Make downloaded binary executable
+	if err := os.Chmod(downloadPath, 0755); err != nil {
+		u.lastError = fmt.Errorf("chmod failed: %w", err)
+		u.setStatus(StatusError)
+		return u.lastError
+	}
+
+	// Backup current binary
+	backupPath := currentExe + ".bak"
+	if err := os.Rename(currentExe, backupPath); err != nil {
+		u.lastError = fmt.Errorf("backup failed: %w", err)
+		u.setStatus(StatusError)
+		return u.lastError
+	}
+
+	// Move new binary to current location
+	if err := os.Rename(downloadPath, currentExe); err != nil {
+		// Restore backup on failure
+		os.Rename(backupPath, currentExe)
+		u.lastError = fmt.Errorf("replace failed: %w", err)
+		u.setStatus(StatusError)
+		return u.lastError
+	}
+
+	// Clean up backup
+	os.Remove(backupPath)
+
+	u.state.DownloadedVersion = ""
+	u.state.DownloadPath = ""
+	u.saveState()
+
+	log.Println("✅ Binary replaced, restarting...")
+
+	// Restart self
+	cmd := exec.Command(currentExe)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		u.lastError = fmt.Errorf("restart failed: %w", err)
+		u.setStatus(StatusError)
+		return u.lastError
+	}
+
+	log.Println("✅ New version started, exiting...")
+	os.Exit(0)
 	return nil
 }
 
