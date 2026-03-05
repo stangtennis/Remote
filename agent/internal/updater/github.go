@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -141,6 +142,8 @@ type VersionInfo struct {
 	AgentURL          string `json:"agent_url"`
 	ControllerURL     string `json:"controller_url"`
 	AgentSHA256       string `json:"agent_sha256,omitempty"`
+	AgentURLMacOS     string `json:"agent_url_macos,omitempty"`
+	AgentSHA256MacOS  string `json:"agent_sha256_macos,omitempty"`
 }
 
 // CheckForUpdate checks if an update is available for the agent
@@ -181,12 +184,20 @@ func (c *GitHubClient) CheckForUpdate(currentVersion string, channel string) (*U
 		return nil, nil
 	}
 
+	// Pick platform-specific URL and hash
+	agentURL := versionInfo.AgentURL
+	agentHash := versionInfo.AgentSHA256
+	if runtime.GOOS == "darwin" && versionInfo.AgentURLMacOS != "" {
+		agentURL = versionInfo.AgentURLMacOS
+		agentHash = versionInfo.AgentSHA256MacOS
+	}
+
 	info := &UpdateInfo{
 		Version:      remoteVersion,
 		TagName:      versionInfo.AgentVersion,
-		ExeURL:       versionInfo.AgentURL,
+		ExeURL:       agentURL,
 		ExeSize:      0, // Size will be determined during download
-		SHA256Hash:   versionInfo.AgentSHA256,
+		SHA256Hash:   agentHash,
 		IsPrerelease: false,
 	}
 

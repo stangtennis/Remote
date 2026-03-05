@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -144,7 +145,18 @@ func VerifySHA256(filePath string, expectedHash string) error {
 
 // GetUpdateDirectory returns the directory for storing updates
 func GetUpdateDirectory() (string, error) {
-	// Use %PROGRAMDATA%\RemoteDesktopAgent\updates for service-friendly access
+	// macOS: use ~/Library/Application Support/RemoteDesktopAgent/updates
+	if runtime.GOOS == "darwin" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			updateDir := filepath.Join(home, "Library", "Application Support", "RemoteDesktopAgent", "updates")
+			if err := os.MkdirAll(updateDir, 0755); err == nil {
+				return updateDir, nil
+			}
+		}
+	}
+
+	// Windows: use %PROGRAMDATA%\RemoteDesktopAgent\updates for service-friendly access
 	programData := os.Getenv("PROGRAMDATA")
 	if programData != "" {
 		updateDir := filepath.Join(programData, "RemoteDesktopAgent", "updates")
