@@ -45,11 +45,10 @@ jobs:
             echo ""
             echo "### Downloads"
             echo ""
-            echo "Windows installer og exe-filer: https://updates.hawkeye123.dk"
-            echo ""
             echo "| Fil | Beskrivelse |"
             echo "|-----|-------------|"
             echo "| RemoteDesktopAgent-Setup.exe | Agent installer (GUI + Console + OpenH264) |"
+            echo "| RemoteDesktopAgentConsole-Setup.exe | Agent Console installer (Console + OpenH264) |"
             echo "| RemoteDesktopController-Setup.exe | Controller installer (Controller + FFmpeg) |"
             echo "| remote-agent.exe | Agent standalone (GUI mode) |"
             echo "| remote-agent-console.exe | Agent standalone (Console mode) |"
@@ -62,7 +61,40 @@ jobs:
             echo "RELEASE_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create Release
+      - name: Download Windows executables from Caddy
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          BASE_URL="https://updates.hawkeye123.dk"
+          mkdir -p release-assets
+
+          # Download Windows exe files (versioned names → clean release names)
+          FILES=(
+            "remote-agent-${TAG}.exe:remote-agent.exe"
+            "remote-agent-console-${TAG}.exe:remote-agent-console.exe"
+            "controller-${TAG}.exe:controller.exe"
+            "RemoteDesktopAgent-${TAG}-Setup.exe:RemoteDesktopAgent-Setup.exe"
+            "RemoteDesktopAgentConsole-${TAG}-Setup.exe:RemoteDesktopAgentConsole-Setup.exe"
+            "RemoteDesktopController-${TAG}-Setup.exe:RemoteDesktopController-Setup.exe"
+          )
+
+          for entry in "${FILES[@]}"; do
+            SRC="${entry%%:*}"
+            DST="${entry##*:}"
+            echo "⬇️  Downloading ${SRC} → ${DST}"
+            if curl -sfL -o "release-assets/${DST}" "${BASE_URL}/${SRC}"; then
+              SIZE=$(stat -c%s "release-assets/${DST}" 2>/dev/null || stat -f%z "release-assets/${DST}")
+              echo "   ✅ ${DST} (${SIZE} bytes)"
+            else
+              echo "   ⚠️  ${DST} not available (skipping)"
+              rm -f "release-assets/${DST}"
+            fi
+          done
+
+          echo ""
+          echo "📦 Release assets:"
+          ls -lh release-assets/
+
+      - name: Create Release with assets
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
@@ -70,5 +102,68 @@ jobs:
           body: ${{ steps.notes.outputs.body }}
           draft: false
           prerelease: false
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Build macOS binaries and attach to the same release
+  build-macos:
+    runs-on: macos-14  # Apple Silicon M1
+    needs: release
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: |
+            agent/go.sum
+            controller/go.sum
+
+      - name: Build macOS binaries
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          BUILD_DATE=$(date +%Y-%m-%d)
+          mkdir -p release-assets
+
+          # Agent arm64
+          cd agent
+          go mod tidy && go mod download
+          CGO_ENABLED=1 GOARCH=arm64 go build \
+            -ldflags "-s -w -X 'github.com/stangtennis/remote-agent/internal/tray.Version=${TAG}' -X 'github.com/stangtennis/remote-agent/internal/tray.BuildDate=${BUILD_DATE}'" \
+            -o ../release-assets/remote-agent-macos-arm64 ./cmd/remote-agent
+          echo "✅ Agent arm64 built"
+
+          # Agent amd64
+          CGO_ENABLED=1 GOARCH=amd64 go build \
+            -ldflags "-s -w -X 'github.com/stangtennis/remote-agent/internal/tray.Version=${TAG}' -X 'github.com/stangtennis/remote-agent/internal/tray.BuildDate=${BUILD_DATE}'" \
+            -o ../release-assets/remote-agent-macos-amd64 ./cmd/remote-agent
+          echo "✅ Agent amd64 built"
+          cd ..
+
+          # Controller arm64
+          cd controller
+          go mod tidy && go mod download
+          CGO_ENABLED=1 GOARCH=arm64 go build \
+            -ldflags "-s -w -X 'main.Version=${TAG}' -X 'main.BuildDate=${BUILD_DATE}'" \
+            -o ../release-assets/controller-macos-arm64 .
+          echo "✅ Controller arm64 built"
+
+          # Controller amd64
+          CGO_ENABLED=1 GOARCH=amd64 go build \
+            -ldflags "-s -w -X 'main.Version=${TAG}' -X 'main.BuildDate=${BUILD_DATE}'" \
+            -o ../release-assets/controller-macos-amd64 .
+          echo "✅ Controller amd64 built"
+          cd ..
+
+          ls -lh release-assets/
+
+      - name: Upload macOS binaries to release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
