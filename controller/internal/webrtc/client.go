@@ -205,12 +205,10 @@ func (c *Client) CreateOffer() (string, error) {
 
 	log.Println("📡 Data channel created")
 
-	// Create control channel for low-latency input (unordered, no retransmits)
-	ordered := false
-	maxRetransmits := uint16(0)
+	// Create control channel for input (ordered + reliable, same as dashboard)
+	orderedTrue := true
 	controlOpts := &webrtc.DataChannelInit{
-		Ordered:        &ordered,
-		MaxRetransmits: &maxRetransmits,
+		Ordered: &orderedTrue,
 	}
 	cc, err := c.peerConnection.CreateDataChannel("control", controlOpts)
 	if err != nil {
@@ -218,13 +216,16 @@ func (c *Client) CreateOffer() (string, error) {
 	} else {
 		c.controlChannel = cc
 		cc.OnOpen(func() {
-			log.Println("🎮 Control channel OPENED (low-latency input)")
+			log.Println("🎮 Control channel OPENED (ordered, reliable)")
 		})
 		cc.OnMessage(func(msg webrtc.DataChannelMessage) {
 			c.handleDataChannelMessage(msg.Data)
 		})
-		log.Println("🎮 Control channel created (ordered=false, maxRetransmits=0)")
+		log.Println("🎮 Control channel created (ordered=true, reliable)")
 	}
+
+	ordered := false
+	maxRetransmits := uint16(0)
 
 	// Create video channel for low-latency video (unreliable, unordered)
 	// This avoids head-of-line blocking when packets are lost
