@@ -1892,22 +1892,26 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 	m.frameID++
 	frameID := m.frameID
 
-	// Use video channel if available (unreliable = lower latency)
-	// Fall back to data channel for compatibility
-	sendChannel := m.dataChannel
-	if m.videoChannel != nil && m.videoChannel.ReadyState() == webrtc.DataChannelStateOpen {
-		sendChannel = m.videoChannel
-	}
-	if sendChannel == nil || sendChannel.ReadyState() != webrtc.DataChannelStateOpen {
+	// Channel selection strategy:
+	// - Single-message frames (< 60KB): use video channel (unreliable = lower latency)
+	// - Chunked frames (>= 60KB): use data channel (reliable) because lost chunks
+	//   on unreliable channels cause entire frames to be dropped (especially over WiFi)
+	reliableChannel := m.dataChannel
+	if reliableChannel == nil || reliableChannel.ReadyState() != webrtc.DataChannelStateOpen {
 		return fmt.Errorf("no channel available for sending")
 	}
 
 	// If data fits in one message, send directly (no chunking needed)
 	if len(data) <= maxChunkSize {
+		// Prefer unreliable video channel for single messages (lower latency)
+		sendChannel := reliableChannel
+		if m.videoChannel != nil && m.videoChannel.ReadyState() == webrtc.DataChannelStateOpen {
+			sendChannel = m.videoChannel
+		}
 		return sendChannel.Send(data)
 	}
 
-	// Otherwise, chunk it with frame ID for robustness
+	// Chunked frames MUST use reliable channel to ensure all chunks arrive
 	totalChunks := (len(data) + maxChunkSize - 1) / maxChunkSize
 
 	for i := 0; i < totalChunks; i++ {
@@ -1927,7 +1931,7 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 		chunk[4] = byte(totalChunks)    // Total chunks
 		copy(chunk[5:], data[start:end])
 
-		if err := sendChannel.Send(chunk); err != nil {
+		if err := reliableChannel.Send(chunk); err != nil {
 			return err
 		}
 	}

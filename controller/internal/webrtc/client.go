@@ -513,6 +513,15 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 		return
 	}
 
+	// Raw JPEG detection: JPEG starts with FF D8 (SOI marker).
+	// Must check BEFORE old chunk format since JPEG's 0xFF collides with chunkMagicOld.
+	if len(data) >= 2 && data[0] == 0xFF && data[1] == 0xD8 {
+		if c.onFrame != nil {
+			c.onFrame(data)
+		}
+		return
+	}
+
 	// Check for old chunk format (backwards compatibility)
 	if len(data) >= 3 && data[0] == chunkMagicOld {
 		chunkIndex := int(data[1])
