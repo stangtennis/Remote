@@ -583,11 +583,70 @@ func (v *Viewer) SendKeyPress(key string, pressed bool, ctrl, shift, alt bool) {
 		"alt":   alt,
 	}
 
+	// Add "char" field for printable characters on keydown
+	// This makes the agent use the Unicode input path (ForwardUnicodeChar)
+	// which works reliably on lock screen / Winlogon desktop
+	if pressed && !ctrl && !alt {
+		if ch := jsCodeToChar(key, shift); ch != "" {
+			event["char"] = ch
+		}
+	}
+
 	eventJSON, _ := json.Marshal(event)
 
 	if client, ok := v.webrtcClient.(*rtc.Client); ok {
 		client.SendInput(string(eventJSON))
 	}
+}
+
+// jsCodeToChar converts a JS key code to the character it produces
+func jsCodeToChar(code string, shift bool) string {
+	if len(code) == 4 && code[:3] == "Key" {
+		ch := code[3]
+		if shift {
+			return string(ch) // Uppercase
+		}
+		return string(ch + 32) // Lowercase
+	}
+	if len(code) == 6 && code[:5] == "Digit" {
+		d := code[5]
+		if shift {
+			// Shifted digits (US layout — agent resolves via VkKeyScanW)
+			shiftMap := map[byte]string{
+				'1': "!", '2': "@", '3': "#", '4': "$", '5': "%",
+				'6': "^", '7': "&", '8': "*", '9': "(", '0': ")",
+			}
+			if s, ok := shiftMap[d]; ok {
+				return s
+			}
+		}
+		return string(d)
+	}
+	// Space
+	if code == "Space" {
+		return " "
+	}
+	// Common punctuation
+	unshifted := map[string]string{
+		"Comma": ",", "Period": ".", "Slash": "/", "Semicolon": ";",
+		"Quote": "'", "BracketLeft": "[", "BracketRight": "]",
+		"Backslash": "\\", "Minus": "-", "Equal": "=", "Backquote": "`",
+	}
+	shifted := map[string]string{
+		"Comma": "<", "Period": ">", "Slash": "?", "Semicolon": ":",
+		"Quote": "\"", "BracketLeft": "{", "BracketRight": "}",
+		"Backslash": "|", "Minus": "_", "Equal": "+", "Backquote": "~",
+	}
+	if shift {
+		if s, ok := shifted[code]; ok {
+			return s
+		}
+	} else {
+		if s, ok := unshifted[code]; ok {
+			return s
+		}
+	}
+	return ""
 }
 
 // mapFyneKeyToJSCode maps Fyne key names to JavaScript KeyboardEvent.code format
