@@ -438,6 +438,50 @@ func (c *Client) UnassignDevice(deviceID, userID string) error {
 	return nil
 }
 
+// RenameDevice updates the device_name for a device
+func (c *Client) RenameDevice(deviceID, newName string) error {
+	logger.Debug("[RenameDevice] Renaming device %s to '%s'", deviceID, newName)
+
+	if c.AuthToken == "" {
+		return fmt.Errorf("not authenticated")
+	}
+
+	url := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", c.URL, deviceID)
+
+	payload := map[string]string{
+		"device_name": newName,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=minimal")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to rename device: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	logger.Info("[RenameDevice] Successfully renamed device %s to '%s'", deviceID, newName)
+	return nil
+}
+
 // DeleteDevice permanently deletes a device from the database
 func (c *Client) DeleteDevice(deviceID string) error {
 	logger.Debug("[DeleteDevice] Deleting device %s", deviceID)

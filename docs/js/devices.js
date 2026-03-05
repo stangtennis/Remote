@@ -130,6 +130,15 @@ function createDeviceCard(device) {
     actions.appendChild(connectBtn);
   }
 
+  const renameBtn = document.createElement('button');
+  renameBtn.className = 'btn btn-secondary rename-btn';
+  renameBtn.textContent = 'Rename';
+  renameBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await renameDevice(device);
+  });
+  actions.appendChild(renameBtn);
+
   const deleteBtn = document.createElement('button');
   deleteBtn.className = 'btn btn-danger delete-btn';
   deleteBtn.textContent = 'Delete';
@@ -202,6 +211,27 @@ async function claimDevice(device) {
   } catch (error) {
     console.error('Failed to claim device:', error);
     showToast('Kunne ikke tilknytte enhed: ' + error.message, 'error');
+  }
+}
+
+async function renameDevice(device) {
+  const currentName = device.device_name || device.device_id;
+  const newName = prompt(`Nyt navn for "${currentName}":`, currentName);
+  if (!newName || newName === currentName) return;
+
+  try {
+    const { error } = await supabase
+      .from('remote_devices')
+      .update({ device_name: newName })
+      .eq('device_id', device.device_id);
+
+    if (error) throw error;
+
+    showToast(`Enhed omdøbt til "${newName}"`, 'success');
+    await loadDevices();
+  } catch (error) {
+    console.error('Failed to rename device:', error);
+    showToast('Kunne ikke omdøbe enhed: ' + error.message, 'error');
   }
 }
 

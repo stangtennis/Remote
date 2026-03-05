@@ -486,6 +486,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 				dot,
 				widget.NewLabel("Device Name"),
 				widget.NewButton("Connect", func() {}),
+				widget.NewButton("Rename", func() {}),
 				widget.NewButtonWithIcon("Remove", theme.DeleteIcon(), func() {}),
 			)
 		},
@@ -500,7 +501,8 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			dot := box.Objects[0].(*canvas.Circle)
 			label := box.Objects[1].(*widget.Label)
 			connectBtn := box.Objects[2].(*widget.Button)
-			removeBtn := box.Objects[3].(*widget.Button)
+			renameBtn := box.Objects[3].(*widget.Button)
+			removeBtn := box.Objects[4].(*widget.Button)
 
 			// Calculate REAL status based on last_seen (not trusting is_online flag)
 			var statusColor color.Color
@@ -554,6 +556,43 @@ func createModernUI(window fyne.Window) *fyne.Container {
 					logger.Info("Initiating connection to device: %s (ID: %s)", device.DeviceName, device.DeviceID)
 					connectToDevice(device)
 				}
+			}
+
+			// Configure rename button
+			renameBtn.OnTapped = func() {
+				entry := widget.NewEntry()
+				entry.SetText(device.DeviceName)
+				dialog.ShowForm("Rename Device", "Rename", "Cancel",
+					[]*widget.FormItem{
+						widget.NewFormItem("New name", entry),
+					},
+					func(confirmed bool) {
+						newName := entry.Text
+						if !confirmed || newName == "" || newName == device.DeviceName {
+							return
+						}
+						go func() {
+							err := supabaseClient.RenameDevice(device.DeviceID, newName)
+							if err != nil {
+								logger.Error("Failed to rename device: %v", err)
+								fyne.Do(func() {
+									dialog.ShowError(fmt.Errorf("Failed to rename device: %v", err), window)
+								})
+							} else {
+								logger.Info("✅ Device renamed: %s → %s", device.DeviceName, newName)
+								fyne.Do(func() {
+									dialog.ShowInformation("Success", fmt.Sprintf("Device renamed to '%s'!", newName), window)
+									go func() {
+										devices, _ := supabaseClient.GetDevices(currentUser.ID)
+										devicesData = devices
+										fyne.Do(func() {
+											deviceListWidget.Refresh()
+										})
+									}()
+								})
+							}
+						}()
+					}, window)
 			}
 
 			// Configure remove button
