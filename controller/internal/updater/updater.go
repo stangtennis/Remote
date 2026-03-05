@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 )
@@ -263,12 +262,11 @@ func (u *Updater) InstallUpdate() error {
 		return err
 	}
 
-	// Launch the NEW exe with --update-from flag
-	// The new exe will wait for us to exit, then replace us
-	log.Printf("🚀 Starting new version with update mode: %s --update-from %s", state.DownloadPath, currentExe)
-	cmd := exec.Command(state.DownloadPath, "--update-from", currentExe)
+	args := fmt.Sprintf("--update-from \"%s\"", currentExe)
+	log.Printf("🚀 Starting new version with update mode: %s %s", state.DownloadPath, args)
 
-	if err := cmd.Start(); err != nil {
+	// Launch elevated (runas) — needed when installed in Program Files
+	if err := launchElevated(state.DownloadPath, args); err != nil {
 		u.lastError = err
 		u.setStatus(StatusError)
 		return err
