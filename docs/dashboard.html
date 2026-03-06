@@ -163,20 +163,20 @@
             <h2>📥 Downloads</h2>
           </div>
           <div id="downloadsGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-            <a href="#" onclick="signedDownload('remote-agent.exe'); return false;" 
-               class="btn btn-primary" 
+            <a href="#" onclick="signedDownload('remote-agent.exe'); return false;"
+               class="btn btn-primary"
                style="text-decoration: none; text-align: center;">
-              🖥️ Windows Agent
+              🖥️ Client Agent
             </a>
-            <a href="agent.html" 
-               class="btn btn-primary" 
+            <a href="agent.html"
+               class="btn btn-primary"
                style="text-decoration: none; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
               🌐 Web Agent
             </a>
             <!-- Controller link added dynamically for admins -->
           </div>
           <p id="downloadsDescription" style="margin-top: 0.5rem; font-size: 0.875rem; color: #888; text-align: center;">
-            Windows Agent (anbefalet) • Web Agent (browser-baseret, ingen installation)
+            Client Agent: installér på den PC der skal fjernstyres • Web Agent: browser-baseret alternativ
           </p>
         </section>
 
@@ -199,9 +199,9 @@
             <p>📱 Ingen enheder registreret endnu</p>
             <p class="muted">Download og kør agenten på en computer for at komme i gang</p>
             <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="#" onclick="signedDownload('remote-agent.exe'); return false;" 
-                 class="btn btn-primary" style="text-decoration: none;">🖥️ Hent Windows Agent</a>
-              <a href="agent.html" 
+              <a href="#" onclick="signedDownload('remote-agent.exe'); return false;"
+                 class="btn btn-primary" style="text-decoration: none;">🖥️ Hent Client Agent</a>
+              <a href="agent.html"
                  class="btn btn-primary" style="text-decoration: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">🌐 Web Agent</a>
             </div>
           </div>
@@ -280,6 +280,36 @@
         <h3 style="margin: 0;">🆘 Quick Support</h3>
         <button class="btn btn-icon" onclick="closeSupportModal()" title="Luk">&times;</button>
       </div>
+
+      <!-- Public Support Link Toggle -->
+      <div id="publicSupportSection" style="margin-bottom: 20px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong>Public Support Link</strong>
+            <p style="opacity: 0.7; margin: 4px 0 0; font-size: 0.85rem;">
+              Permanent link som folk kan bruge til at dele skærm
+            </p>
+          </div>
+          <label style="position: relative; display: inline-block; width: 48px; height: 26px; cursor: pointer;">
+            <input type="checkbox" id="publicSupportToggle" onchange="togglePublicSupport()" style="opacity: 0; width: 0; height: 0;">
+            <span style="position: absolute; inset: 0; background: #444; border-radius: 26px; transition: 0.3s;"></span>
+            <span id="publicToggleKnob" style="position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: 0.3s;"></span>
+          </label>
+        </div>
+        <div id="publicLinkSection" style="display: none; margin-top: 12px;">
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" id="publicSupportLink" readonly
+                   value="https://stangtennis.github.io/Remote/support.html?public"
+                   style="flex: 1; padding: 0.6rem; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-size: 0.85rem;">
+            <button class="btn btn-secondary" onclick="copyPublicLink()">Kopier</button>
+          </div>
+        </div>
+      </div>
+
+      <style>
+        #publicSupportToggle:checked + span { background: var(--primary, #6366f1) !important; }
+        #publicSupportToggle:checked ~ #publicToggleKnob { transform: translateX(22px); }
+      </style>
 
       <!-- Step: Create -->
       <div id="supportStep_create" class="support-step">
@@ -394,7 +424,7 @@
   <script src="js/sessions.js?v=8"></script>
   <script src="js/webrtc.js?v=9"></script>
   <script src="js/signaling.js?v=7"></script>
-  <script src="js/support-viewer.js?v=3"></script>
+  <script src="js/support-viewer.js?v=4"></script>
   
   <!-- Fullscreen Preview Script -->
   <script>

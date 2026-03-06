@@ -205,11 +205,11 @@ if (document.getElementById('logoutBtn')) {
         controllerLink.onclick = function() { signedDownload('controller.exe'); return false; };
         controllerLink.className = 'btn btn-secondary';
         controllerLink.style.cssText = 'text-decoration: none; text-align: center;';
-        controllerLink.innerHTML = '🎮 Controller';
+        controllerLink.innerHTML = '🎮 Admin Controller';
         downloadsGrid.appendChild(controllerLink);
-        
+
         if (downloadsDescription) {
-          downloadsDescription.textContent = 'Windows Agent (anbefalet) • Web Agent (browser) • Controller (kontrol enheder)';
+          downloadsDescription.textContent = 'Client Agent: installér på den PC der skal fjernstyres • Web Agent: browser-baseret alternativ • Admin Controller: styr enheder fra din PC';
         }
       }
     }
