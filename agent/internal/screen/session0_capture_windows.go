@@ -241,15 +241,22 @@ func NewSession0PipeCapturer() (*Session0PipeCapturer, error) {
 		c.Close()
 		return nil, fmt.Errorf("failed to read initial resolution: %w", err)
 	}
-	c.width = int(binary.LittleEndian.Uint32(resoBuf[0:4]))
-	c.height = int(binary.LittleEndian.Uint32(resoBuf[4:8]))
+	w := int(binary.LittleEndian.Uint32(resoBuf[0:4]))
+	h := int(binary.LittleEndian.Uint32(resoBuf[4:8]))
+	// Validate resolution bounds (max 8K to prevent OOM from corrupt pipe data)
+	if w <= 0 || h <= 0 || w > 7680 || h > 4320 {
+		c.Close()
+		return nil, fmt.Errorf("invalid resolution from helper: %dx%d", w, h)
+	}
+	c.width = w
+	c.height = h
 
 	// Remember current session ID for session monitor
 	c.sessionID, _, _ = procWTSGetActiveConsoleSessionId.Call()
 
 	log.Printf("✅ Session 0 pipe capturer ready: %dx%d (helper in user session %d)", c.width, c.height, c.sessionID)
 
-	// Start session monitor goroutine
+	// Start session monitor goroutine (also monitors helper process health)
 	go c.monitorSession()
 
 	return c, nil
@@ -473,8 +480,12 @@ func (c *Session0PipeCapturer) CaptureRGBA() (*image.RGBA, error) {
 
 		w := int(binary.LittleEndian.Uint32(hdr[0:4]))
 		h := int(binary.LittleEndian.Uint32(hdr[4:8]))
-		if w == 0 || h == 0 {
+		if w <= 0 || h <= 0 {
 			resultCh <- readResult{err: fmt.Errorf("capture helper reported capture error")}
+			return
+		}
+		if w > 7680 || h > 4320 {
+			resultCh <- readResult{err: fmt.Errorf("invalid resolution from helper: %dx%d (max 8K)", w, h)}
 			return
 		}
 
@@ -637,6 +648,7 @@ func (c *Session0PipeCapturer) SendUnicodeChar(char rune) error {
 // --- Session monitor ---
 
 // monitorSession polls the active console session and relaunches the helper if it changes.
+// Also monitors the helper process health and auto-restarts on crash.
 func (c *Session0PipeCapturer) monitorSession() {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
@@ -653,6 +665,21 @@ func (c *Session0PipeCapturer) monitorSession() {
 			if newSession != c.sessionID {
 				log.Printf("🔄 Console session changed: %d → %d, relaunching helper...", c.sessionID, newSession)
 				c.relaunchHelper(newSession)
+				continue
+			}
+
+			// Check if helper process is still alive
+			c.mu.Lock()
+			helperProc := c.helperProc
+			c.mu.Unlock()
+			if helperProc != 0 {
+				exitEvent, _ := windows.WaitForSingleObject(helperProc, 0)
+				if exitEvent == 0 { // WAIT_OBJECT_0 = already exited
+					var exitCode uint32
+					windows.GetExitCodeProcess(helperProc, &exitCode)
+					log.Printf("⚠️ Capture helper crashed (exit code %d), auto-restarting...", exitCode)
+					c.relaunchHelper(c.sessionID)
+				}
 			}
 		}
 	}
@@ -751,8 +778,14 @@ func (c *Session0PipeCapturer) relaunchHelper(newSession uintptr) {
 		log.Printf("❌ relaunchHelper: failed to read resolution: %v", err)
 		return
 	}
-	c.width = int(binary.LittleEndian.Uint32(resoBuf[0:4]))
-	c.height = int(binary.LittleEndian.Uint32(resoBuf[4:8]))
+	w := int(binary.LittleEndian.Uint32(resoBuf[0:4]))
+	h := int(binary.LittleEndian.Uint32(resoBuf[4:8]))
+	if w <= 0 || h <= 0 || w > 7680 || h > 4320 {
+		log.Printf("❌ relaunchHelper: invalid resolution: %dx%d", w, h)
+		return
+	}
+	c.width = w
+	c.height = h
 
 	log.Printf("✅ Helper relaunched in session %d: %dx%d", newSession, c.width, c.height)
 }

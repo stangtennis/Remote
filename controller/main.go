@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"os"
 	"os/exec"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -45,6 +46,7 @@ var (
 	myWindow              fyne.Window
 	appSettings           *settings.Settings
 	devicesData           []supabase.Device
+	devicesMu             sync.Mutex
 	deviceListWidget      *widget.List
 	refreshPendingDevices func()
 )
@@ -168,6 +170,15 @@ func main() {
 			)
 		})
 	}()
+
+	// Save window size on close
+	myWindow.SetOnClosed(func() {
+		size := myWindow.Canvas().Size()
+		appSettings.WindowWidth = int(size.Width)
+		appSettings.WindowHeight = int(size.Height)
+		settings.Save(appSettings)
+		logger.Info("Window size saved: %dx%d", appSettings.WindowWidth, appSettings.WindowHeight)
+	})
 
 	// Show and run
 	logger.Info("Launching application window")
@@ -308,11 +319,13 @@ func createModernUI(window fyne.Window) *fyne.Container {
 						i+1, device.DeviceName, device.DeviceID, device.Platform, device.Status)
 				}
 
+				devicesMu.Lock()
 				devicesData = devices
+				devicesMu.Unlock()
 				fyne.Do(func() {
 					if deviceListWidget != nil {
 						deviceListWidget.Refresh()
-						logger.Debug("Device list widget refreshed with %d devices", len(devicesData))
+						logger.Debug("Device list widget refreshed with %d devices", len(devices))
 					} else {
 						logger.Error("Device list widget is nil")
 					}
@@ -358,7 +371,9 @@ func createModernUI(window fyne.Window) *fyne.Container {
 		// Stop device refresh ticker
 		stopDeviceRefreshTicker()
 		currentUser = nil
+		devicesMu.Lock()
 		devicesData = nil
+		devicesMu.Unlock()
 		if deviceListWidget != nil {
 			deviceListWidget.Refresh()
 		}
@@ -478,6 +493,8 @@ func createModernUI(window fyne.Window) *fyne.Container {
 	// Device list section with modern styling
 	deviceListWidget = widget.NewList(
 		func() int {
+			devicesMu.Lock()
+			defer devicesMu.Unlock()
 			return len(devicesData)
 		},
 		func() fyne.CanvasObject {
@@ -488,14 +505,17 @@ func createModernUI(window fyne.Window) *fyne.Container {
 				widget.NewButton("Connect", func() {}),
 				widget.NewButton("Rename", func() {}),
 				widget.NewButtonWithIcon("Remove", theme.DeleteIcon(), func() {}),
+				widget.NewButtonWithIcon("Delete", theme.DeleteIcon(), func() {}),
 			)
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			devicesMu.Lock()
 			if id >= len(devicesData) {
+				devicesMu.Unlock()
 				return
 			}
-
 			device := devicesData[id]
+			devicesMu.Unlock()
 
 			box := obj.(*fyne.Container)
 			dot := box.Objects[0].(*canvas.Circle)
@@ -503,6 +523,7 @@ func createModernUI(window fyne.Window) *fyne.Container {
 			connectBtn := box.Objects[2].(*widget.Button)
 			renameBtn := box.Objects[3].(*widget.Button)
 			removeBtn := box.Objects[4].(*widget.Button)
+			deleteBtn := box.Objects[5].(*widget.Button)
 
 			// Calculate REAL status based on last_seen (not trusting is_online flag)
 			var statusColor color.Color
@@ -584,7 +605,9 @@ func createModernUI(window fyne.Window) *fyne.Container {
 									dialog.ShowInformation("Success", fmt.Sprintf("Device renamed to '%s'!", newName), window)
 									go func() {
 										devices, _ := supabaseClient.GetDevices(currentUser.ID)
+										devicesMu.Lock()
 										devicesData = devices
+										devicesMu.Unlock()
 										fyne.Do(func() {
 											deviceListWidget.Refresh()
 										})
@@ -616,7 +639,43 @@ func createModernUI(window fyne.Window) *fyne.Container {
 										// Refresh device list
 										go func() {
 											devices, _ := supabaseClient.GetDevices(currentUser.ID)
+											devicesMu.Lock()
 											devicesData = devices
+											devicesMu.Unlock()
+											fyne.Do(func() {
+												deviceListWidget.Refresh()
+											})
+										}()
+									})
+								}
+							}()
+						}
+					}, window)
+			}
+
+			// Configure delete button (permanent deletion)
+			deleteBtn.Importance = widget.DangerImportance
+			deleteBtn.OnTapped = func() {
+				dialog.ShowConfirm("Delete Device Permanently",
+					fmt.Sprintf("Permanently delete device '%s'?\n\nThis cannot be undone. The device will need to re-register.", device.DeviceName),
+					func(confirmed bool) {
+						if confirmed {
+							go func() {
+								err := supabaseClient.DeleteDevice(device.DeviceID)
+								if err != nil {
+									logger.Error("Failed to delete device: %v", err)
+									fyne.Do(func() {
+										dialog.ShowError(fmt.Errorf("Failed to delete device: %v", err), window)
+									})
+								} else {
+									logger.Info("✅ Device permanently deleted: %s", device.DeviceName)
+									fyne.Do(func() {
+										dialog.ShowInformation("Success", "Device permanently deleted!", window)
+										go func() {
+											devices, _ := supabaseClient.GetDevices(currentUser.ID)
+											devicesMu.Lock()
+											devicesData = devices
+											devicesMu.Unlock()
 											fyne.Do(func() {
 												deviceListWidget.Refresh()
 											})
@@ -713,7 +772,9 @@ func createModernUI(window fyne.Window) *fyne.Container {
 										if deviceListWidget != nil {
 											go func() {
 												devices, _ := supabaseClient.GetDevices(currentUser.ID)
+												devicesMu.Lock()
 												devicesData = devices
+												devicesMu.Unlock()
 												fyne.Do(func() {
 													deviceListWidget.Refresh()
 												})
@@ -881,11 +942,12 @@ func createSettingsTab() *fyne.Container {
 	})
 	adaptiveBitrateCheck.Checked = appSettings.AdaptiveBitrate
 
-	hardwareAccelCheck := widget.NewCheck("Hardware Acceleration", func(checked bool) {
+	hardwareAccelCheck := widget.NewCheck("Hardware Acceleration (coming soon)", func(checked bool) {
 		appSettings.HardwareAcceleration = checked
 		settings.Save(appSettings)
 	})
 	hardwareAccelCheck.Checked = appSettings.HardwareAcceleration
+	hardwareAccelCheck.Disable() // Not yet implemented
 
 	lowLatencyCheck := widget.NewCheck("Low Latency Mode", func(checked bool) {
 		appSettings.LowLatencyMode = checked
@@ -905,11 +967,12 @@ func createSettingsTab() *fyne.Container {
 	})
 	clipboardCheck.Checked = appSettings.EnableClipboardSync
 
-	audioCheck := widget.NewCheck("Enable Audio Streaming", func(checked bool) {
+	audioCheck := widget.NewCheck("Enable Audio Streaming (coming soon)", func(checked bool) {
 		appSettings.EnableAudio = checked
 		settings.Save(appSettings)
 	})
 	audioCheck.Checked = appSettings.EnableAudio
+	audioCheck.Disable() // Not yet implemented
 
 	// Theme Selection
 	themeSelect := widget.NewSelect([]string{"dark", "light"}, nil)
@@ -918,12 +981,17 @@ func createSettingsTab() *fyne.Container {
 	// Now attach the callback after setting initial value
 	themeSelect.OnChanged = func(value string) {
 		if value == appSettings.Theme {
-			return // No change, don't show dialog
+			return // No change
 		}
 		appSettings.Theme = value
 		settings.Save(appSettings)
-		dialog.ShowInformation("Theme Changed", "Please restart the application to apply the new theme.", myWindow)
-		logger.Info("Theme changed to: %s", value)
+		// Apply theme immediately without restart
+		if value == "light" {
+			myApp.Settings().SetTheme(theme.LightTheme())
+		} else {
+			myApp.Settings().SetTheme(&ui.CyberTheme{})
+		}
+		logger.Info("Theme changed to: %s (applied immediately)", value)
 	}
 
 	// Reset to Defaults Button
@@ -1072,6 +1140,7 @@ func connectToDevice(device supabase.Device) {
 
 	// Create and show the modern viewer
 	v := viewer.NewViewer(myApp, device.DeviceID, device.DeviceName)
+	v.SetStreamSettings(appSettings.TargetFPS, appSettings.MaxBitrate)
 	v.Show()
 
 	logger.Info("Viewer window opened for device: %s", device.DeviceID)
@@ -1104,6 +1173,7 @@ func startDeviceRefreshTicker() {
 	
 	go func() {
 		logger.Info("📡 Started device refresh ticker (every 5 seconds)")
+		refreshErrors := 0
 		for {
 			select {
 			case <-deviceRefreshTicker.C:
@@ -1113,10 +1183,19 @@ func startDeviceRefreshTicker() {
 				// Fetch updated device list
 				devices, err := supabaseClient.GetDevices(currentUser.ID)
 				if err != nil {
+					refreshErrors++
 					logger.Debug("Device refresh failed: %v", err)
+					// Show notification on first error and every 12th (once per minute)
+					if refreshErrors == 1 || refreshErrors%12 == 0 {
+						fyne.Do(func() {
+							dialog.ShowError(fmt.Errorf("Device refresh failed: %v", err), myWindow)
+						})
+					}
 					continue
 				}
-				
+				refreshErrors = 0
+
+				devicesMu.Lock()
 				// Check if any device changed (count, status, or last_seen)
 				if len(devices) != len(devicesData) {
 					logger.Info("📡 Device count changed: %d -> %d", len(devicesData), len(devices))
@@ -1124,12 +1203,10 @@ func startDeviceRefreshTicker() {
 					for i, d := range devices {
 						if i < len(devicesData) {
 							old := devicesData[i]
-							// Check status change
 							if d.Status != old.Status {
 								logger.Info("📡 Device %s status changed: %s -> %s", d.DeviceName, old.Status, d.Status)
 								break
 							}
-							// Check last_seen change (device came online/offline)
 							if d.LastSeen != old.LastSeen {
 								logger.Debug("📡 Device %s last_seen updated", d.DeviceName)
 								break
@@ -1137,8 +1214,8 @@ func startDeviceRefreshTicker() {
 						}
 					}
 				}
-				
 				devicesData = devices
+				devicesMu.Unlock()
 				// Always refresh UI to update "X minutes ago" text
 				if deviceListWidget != nil {
 					fyne.Do(func() {

@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/widget"
 	"github.com/pion/webrtc/v3"
 	"github.com/stangtennis/Remote/controller/internal/clipboard"
 	"github.com/stangtennis/Remote/controller/internal/filebrowser"
@@ -342,13 +344,20 @@ func (v *Viewer) setupInputForwarding() {
 
 	// Hook up keyboard with modifier support (separate down/up events)
 	v.interactiveCanvas.SetOnKeyDown(func(key *fyne.KeyEvent, modifier desktop.Modifier) {
-		// Intercept ESC for local fullscreen exit
+		// Double-ESC for local fullscreen exit, single-ESC forwarded to remote
 		if key.Name == fyne.KeyEscape && v.fullscreen {
-			log.Println("🔑 ESC pressed - exiting fullscreen locally")
-			fyne.Do(func() {
-				v.toggleFullscreen()
-			})
-			return // Don't send to remote
+			now := time.Now()
+			if now.Sub(v.lastEscTime) < 500*time.Millisecond {
+				// Double-ESC: exit fullscreen locally
+				log.Println("🔑 Double-ESC - exiting fullscreen locally")
+				v.lastEscTime = time.Time{} // Reset
+				fyne.Do(func() {
+					v.toggleFullscreen()
+				})
+				return
+			}
+			v.lastEscTime = now
+			// Single ESC: forward to remote (fall through)
 		}
 
 		// Intercept F11 for local fullscreen toggle
@@ -803,27 +812,46 @@ func (v *Viewer) SendFile() {
 
 // showFileTransferProgress shows a progress dialog for file transfer
 func (v *Viewer) showFileTransferProgress(transfer *filetransfer.Transfer) {
+	progressBar := widget.NewProgressBar()
+	progressBar.Min = 0
+	progressBar.Max = 1.0
+
+	statusLabel := widget.NewLabel("Starting transfer...")
+	filenameLabel := widget.NewLabel(transfer.Filename)
+	filenameLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+	content := container.NewVBox(
+		filenameLabel,
+		progressBar,
+		statusLabel,
+	)
+
 	progressDialog := dialog.NewCustom(
 		"File Transfer",
 		"Cancel",
-		nil, // TODO: Add progress bar widget
+		content,
 		v.window,
 	)
 
 	// Set up progress callback
 	transfer.SetOnProgress(func(progress, total int64) {
-		// TODO: Update progress bar
-		log.Printf("📊 Transfer progress: %d%%", (progress*100)/total)
+		pct := float64(progress) / float64(total)
+		fyne.Do(func() {
+			progressBar.SetValue(pct)
+			statusLabel.SetText(fmt.Sprintf("%d%% (%d / %d bytes)", int(pct*100), progress, total))
+		})
 	})
 
 	// Set up completion callback
 	transfer.SetOnComplete(func(success bool, err error) {
-		progressDialog.Hide()
-		if success {
-			dialog.ShowInformation("Success", "File transferred successfully!", v.window)
-		} else {
-			dialog.ShowError(err, v.window)
-		}
+		fyne.Do(func() {
+			progressDialog.Hide()
+			if success {
+				dialog.ShowInformation("Success", "File transferred successfully!", v.window)
+			} else {
+				dialog.ShowError(err, v.window)
+			}
+		})
 	})
 
 	progressDialog.Show()
@@ -1089,6 +1117,20 @@ func (v *Viewer) handleDataChannelMessage(msg []byte) {
 		}
 		if cpu, ok := data["cpu"].(float64); ok {
 			v.UpdateCPU(cpu)
+		}
+
+	case "monitor_list":
+		// Handle monitor list from agent
+		if monitorsRaw, ok := data["monitors"]; ok {
+			monitorsJSON, _ := json.Marshal(monitorsRaw)
+			var monitors []MonitorInfo
+			if err := json.Unmarshal(monitorsJSON, &monitors); err == nil {
+				activeIndex := 0
+				if ai, ok := data["active"].(float64); ok {
+					activeIndex = int(ai)
+				}
+				v.UpdateMonitorList(monitors, activeIndex)
+			}
 		}
 
 	case "file_transfer_start", "file_transfer_chunk", "file_transfer_complete", "file_transfer_error":
