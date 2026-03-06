@@ -7,19 +7,30 @@ import (
 	"path/filepath"
 )
 
+const (
+	maxLogSize    = 10 * 1024 * 1024 // 10 MB
+	maxLogBackups = 3
+)
+
 var (
 	InfoLogger  *log.Logger
 	ErrorLogger *log.Logger
 	DebugLogger *log.Logger
 	logFile     *os.File
+	logFilePath string
 )
 
-// syncWriter wraps a file and syncs after every write
+// syncWriter wraps a file, syncs after every write, and rotates on size limit
 type syncWriter struct {
 	file *os.File
 }
 
 func (w *syncWriter) Write(p []byte) (n int, err error) {
+	// Check if rotation is needed
+	if info, statErr := w.file.Stat(); statErr == nil && info.Size() > maxLogSize {
+		rotateLog()
+		w.file = logFile // Update to new file after rotation
+	}
 	n, err = w.file.Write(p)
 	if err == nil {
 		w.file.Sync() // Flush to disk immediately
@@ -29,7 +40,7 @@ func (w *syncWriter) Write(p []byte) (n int, err error) {
 
 // Init initializes the logger with both file and console output
 func Init() error {
-	var logFilePath string
+	var resolvedPath string
 
 	// Try macOS ~/Library/Logs first, then Windows APPDATA, then exe directory
 	if home, err := os.UserHomeDir(); err == nil {
@@ -37,27 +48,30 @@ func Init() error {
 			// macOS: ~/Library/Logs/RemoteDesktopController/
 			logDir := filepath.Join(home, "Library", "Logs", "RemoteDesktopController")
 			os.MkdirAll(logDir, 0755)
-			logFilePath = filepath.Join(logDir, "controller.log")
+			resolvedPath = filepath.Join(logDir, "controller.log")
 		}
 	}
-	if logFilePath == "" && os.Getenv("APPDATA") != "" {
+	if resolvedPath == "" && os.Getenv("APPDATA") != "" {
 		// Windows: %APPDATA%/RemoteDesktopController/
 		logDir := filepath.Join(os.Getenv("APPDATA"), "RemoteDesktopController")
 		os.MkdirAll(logDir, 0755)
-		logFilePath = filepath.Join(logDir, "controller.log")
+		resolvedPath = filepath.Join(logDir, "controller.log")
 	}
-	if logFilePath == "" {
+	if resolvedPath == "" {
 		// Fallback to executable directory
 		exePath, err := os.Executable()
 		if err != nil {
 			exePath = "."
 		}
-		logFilePath = filepath.Join(filepath.Dir(exePath), "controller.log")
+		resolvedPath = filepath.Join(filepath.Dir(exePath), "controller.log")
 	}
+
+	// Store path for rotation
+	logFilePath = resolvedPath
 
 	// Open log file (truncate on each run)
 	var err error
-	logFile, err = os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	logFile, err = os.OpenFile(resolvedPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
 		return fmt.Errorf("failed to open log file %s: %w", logFilePath, err)
 	}
@@ -81,6 +95,38 @@ func Init() error {
 
 	InfoLogger.Printf("Logger initialized. Log file: %s", logFilePath)
 	return nil
+}
+
+// rotateLog rotates log files: controller.log → controller.1.log → controller.2.log → ...
+func rotateLog() {
+	if logFilePath == "" || logFile == nil {
+		return
+	}
+
+	// Close current log file
+	logFile.Close()
+
+	// Rotate existing backups
+	ext := filepath.Ext(logFilePath)
+	base := logFilePath[:len(logFilePath)-len(ext)]
+	for i := maxLogBackups - 1; i >= 1; i-- {
+		src := fmt.Sprintf("%s.%d%s", base, i, ext)
+		dst := fmt.Sprintf("%s.%d%s", base, i+1, ext)
+		os.Rename(src, dst) // Ignore errors (file may not exist)
+	}
+
+	// Rename current log to .1
+	os.Rename(logFilePath, fmt.Sprintf("%s.1%s", base, ext))
+
+	// Open new log file
+	var err error
+	logFile, err = os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	if err != nil {
+		return
+	}
+
+	logFile.WriteString("=== Log rotated ===\n")
+	logFile.Sync()
 }
 
 // Close closes the log file

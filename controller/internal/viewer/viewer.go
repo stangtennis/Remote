@@ -78,9 +78,31 @@ type Viewer struct {
 	authToken   string
 	userID      string
 
+	// Streaming settings
+	targetFPS      int
+	maxBitrateKbps int
+
+	// ESC double-tap tracking
+	lastEscTime time.Time
+
+	// Multi-monitor
+	monitorSelect *widget.Select
+	monitors      []MonitorInfo
+	activeMonitor int
+
 	// Callbacks
 	onDisconnect   func()
 	onFileTransfer func()
+}
+
+// MonitorInfo represents a remote display
+type MonitorInfo struct {
+	Name    string `json:"name"`
+	Width   int    `json:"width"`
+	Height  int    `json:"height"`
+	Primary bool   `json:"primary"`
+	OffsetX int    `json:"offsetX"`
+	OffsetY int    `json:"offsetY"`
 }
 
 // NewViewer creates a new remote desktop viewer
@@ -92,6 +114,8 @@ func NewViewer(app fyne.App, deviceID, deviceName string) *Viewer {
 		fullscreen:           false,
 		toolbarVisible:       true,
 		currentStreamingMode: "jpeg", // Default to JPEG mode
+		targetFPS:            30,     // Default, overridden by SetStreamSettings
+		maxBitrateKbps:       4000,   // Default, overridden by SetStreamSettings
 	}
 
 	// Create window - start at reasonable size, user can resize
@@ -141,7 +165,7 @@ func (v *Viewer) buildUI() {
 
 	v.window.SetContent(v.mainContent)
 
-	// Setup keyboard shortcuts
+	// Setup keyboard shortcuts (fallback, primary input goes through interactiveCanvas)
 	v.window.Canvas().SetOnTypedKey(func(key *fyne.KeyEvent) {
 		// Home to toggle toolbar visibility
 		if key.Name == fyne.KeyHome {
@@ -151,9 +175,15 @@ func (v *Viewer) buildUI() {
 		if key.Name == fyne.KeyF11 {
 			v.toggleFullscreen()
 		}
-		// Escape to exit fullscreen
+		// Double-ESC to exit fullscreen (single ESC goes to remote)
 		if key.Name == fyne.KeyEscape && v.fullscreen {
-			v.toggleFullscreen()
+			now := time.Now()
+			if now.Sub(v.lastEscTime) < 500*time.Millisecond {
+				v.lastEscTime = time.Time{}
+				v.toggleFullscreen()
+			} else {
+				v.lastEscTime = now
+			}
 		}
 	})
 
@@ -225,6 +255,12 @@ func (v *Viewer) createToolbar() *fyne.Container {
 		v.toggleH264Mode()
 	})
 
+	// Monitor selector
+	v.monitorSelect = widget.NewSelect([]string{"Monitor 1"}, func(selected string) {
+		v.handleMonitorSwitch(selected)
+	})
+	v.monitorSelect.SetSelected("Monitor 1")
+
 	// Quality control
 	qualityLabel := widget.NewLabel("Quality:")
 	v.qualitySlider = widget.NewSlider(1, 100)
@@ -252,6 +288,7 @@ func (v *Viewer) createToolbar() *fyne.Container {
 		fileTransferBtn,
 		clipboardBtn,
 		h264Btn,
+		v.monitorSelect,
 	)
 
 	rightSection := container.NewHBox(
@@ -553,19 +590,22 @@ func (v *Viewer) toggleFullscreen() {
 func (v *Viewer) enterFullscreenMode() {
 	v.toolbarVisible = false
 	v.overlayVisible = false
-	
+
 	// Create overlay toolbar if not exists
 	if v.overlayToolbar == nil {
 		v.createOverlayToolbar()
 	}
-	
+
 	// Create fullscreen content with overlay
 	v.fullscreenContent = container.NewStack(
 		v.videoContainer,
 	)
-	
+
 	v.window.SetContent(v.fullscreenContent)
-	
+
+	// Re-focus interactive canvas after SetContent (prevents keyboard focus loss)
+	v.window.Canvas().Focus(v.interactiveCanvas)
+
 	// Show hint briefly
 	v.showOverlayToolbar()
 	v.scheduleOverlayHide(3 * time.Second)
@@ -574,15 +614,18 @@ func (v *Viewer) enterFullscreenMode() {
 func (v *Viewer) exitFullscreenMode() {
 	v.toolbarVisible = true
 	v.overlayVisible = false
-	
+
 	// Cancel any pending hide timer
 	if v.overlayHideTimer != nil {
 		v.overlayHideTimer.Stop()
 		v.overlayHideTimer = nil
 	}
-	
+
 	// Restore full layout with toolbar and statusbar
 	v.window.SetContent(v.mainContent)
+
+	// Re-focus interactive canvas after SetContent
+	v.window.Canvas().Focus(v.interactiveCanvas)
 }
 
 func (v *Viewer) createOverlayToolbar() {
@@ -637,9 +680,9 @@ func (v *Viewer) showOverlayToolbar() {
 	if !v.fullscreen || v.overlayVisible {
 		return
 	}
-	
+
 	v.overlayVisible = true
-	
+
 	// Add overlay to top of fullscreen content
 	fyne.Do(func() {
 		v.fullscreenContent = container.NewBorder(
@@ -650,6 +693,7 @@ func (v *Viewer) showOverlayToolbar() {
 			v.videoContainer, // center
 		)
 		v.window.SetContent(v.fullscreenContent)
+		v.window.Canvas().Focus(v.interactiveCanvas)
 	})
 }
 
@@ -657,13 +701,14 @@ func (v *Viewer) hideOverlayToolbar() {
 	if !v.fullscreen || !v.overlayVisible {
 		return
 	}
-	
+
 	v.overlayVisible = false
-	
+
 	// Remove overlay, show only video
 	fyne.Do(func() {
 		v.fullscreenContent = container.NewStack(v.videoContainer)
 		v.window.SetContent(v.fullscreenContent)
+		v.window.Canvas().Focus(v.interactiveCanvas)
 	})
 }
 
@@ -730,8 +775,8 @@ func (v *Viewer) handleClipboardSync() {
 
 func (v *Viewer) handleQualityChange(value float64) {
 	log.Printf("Quality changed to: %.0f%%", value)
-	// Send stream params to agent
-	v.sendStreamParams(int(value), 30, 1.0, 4000)
+	// Send stream params to agent using configured settings
+	v.sendStreamParams(int(value), v.targetFPS, 1.0, v.maxBitrateKbps)
 }
 
 // sendStreamParams sends streaming parameters to the agent
@@ -779,30 +824,32 @@ func (v *Viewer) sendStreamParams(maxQuality, maxFPS int, maxScale float64, h264
 func (v *Viewer) showSettings() {
 	log.Println("Opening settings...")
 
-	// Store current values for sending combined updates
-	currentFPS := 30
-	currentQuality := 70
+	// Use viewer's current settings
+	currentFPS := v.targetFPS
+	currentQuality := int(v.qualitySlider.Value)
+	currentBitrate := v.maxBitrateKbps
 
 	// FPS display
-	fpsLabel := widget.NewLabel("Target FPS: 30")
+	fpsLabel := widget.NewLabel(fmt.Sprintf("Target FPS: %d", currentFPS))
 	fpsSlider := widget.NewSlider(10, 60)
-	fpsSlider.Value = 30
+	fpsSlider.Value = float64(currentFPS)
 	fpsSlider.Step = 5
 	fpsSlider.OnChanged = func(value float64) {
 		fpsLabel.SetText(fmt.Sprintf("Target FPS: %.0f", value))
 		currentFPS = int(value)
-		v.sendStreamParams(currentQuality, currentFPS, 1.0, 4000)
+		v.targetFPS = currentFPS
+		v.sendStreamParams(currentQuality, currentFPS, 1.0, currentBitrate)
 	}
 
 	// Quality display
-	qualityLabel := widget.NewLabel("JPEG Quality: 70%")
+	qualityLabel := widget.NewLabel(fmt.Sprintf("JPEG Quality: %d%%", currentQuality))
 	qualitySlider := widget.NewSlider(30, 95)
-	qualitySlider.Value = 70
+	qualitySlider.Value = float64(currentQuality)
 	qualitySlider.Step = 5
 	qualitySlider.OnChanged = func(value float64) {
 		qualityLabel.SetText(fmt.Sprintf("JPEG Quality: %.0f%%", value))
 		currentQuality = int(value)
-		v.sendStreamParams(currentQuality, currentFPS, 1.0, 4000)
+		v.sendStreamParams(currentQuality, currentFPS, 1.0, currentBitrate)
 	}
 
 	// Connection info
@@ -848,6 +895,58 @@ func (v *Viewer) SetOnDisconnect(callback func()) {
 // SetOnFileTransfer sets the file transfer callback
 func (v *Viewer) SetOnFileTransfer(callback func()) {
 	v.onFileTransfer = callback
+}
+
+// UpdateMonitorList updates the monitor dropdown from agent data
+func (v *Viewer) UpdateMonitorList(monitors []MonitorInfo, activeIndex int) {
+	v.monitors = monitors
+	v.activeMonitor = activeIndex
+
+	var options []string
+	for i, m := range monitors {
+		label := fmt.Sprintf("Monitor %d (%dx%d)", i+1, m.Width, m.Height)
+		if m.Primary {
+			label += " *"
+		}
+		options = append(options, label)
+	}
+
+	fyne.Do(func() {
+		v.monitorSelect.Options = options
+		if activeIndex < len(options) {
+			v.monitorSelect.SetSelected(options[activeIndex])
+		}
+	})
+}
+
+// handleMonitorSwitch sends a switch_monitor command to the agent
+func (v *Viewer) handleMonitorSwitch(selected string) {
+	if !v.connected || v.webrtcClient == nil {
+		return
+	}
+
+	// Find the index from the selected label
+	for i, opt := range v.monitorSelect.Options {
+		if opt == selected && i != v.activeMonitor {
+			v.activeMonitor = i
+			msg := map[string]interface{}{
+				"type":  "switch_monitor",
+				"index": i,
+			}
+			data, _ := json.Marshal(msg)
+			if client, ok := v.webrtcClient.(interface{ SendInput(string) error }); ok {
+				client.SendInput(string(data))
+				log.Printf("📺 Switched to monitor %d", i)
+			}
+			break
+		}
+	}
+}
+
+// SetStreamSettings configures streaming parameters from app settings
+func (v *Viewer) SetStreamSettings(targetFPS, maxBitrateMbps int) {
+	v.targetFPS = targetFPS
+	v.maxBitrateKbps = maxBitrateMbps * 1000 // Convert Mbps to Kbps
 }
 
 // startCanvasRefreshLoop periodically checks if canvas needs refresh (for minimize/restore)

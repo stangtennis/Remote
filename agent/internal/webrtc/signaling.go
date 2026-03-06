@@ -193,11 +193,9 @@ func (m *Manager) ListenForSessions() {
 		}
 
 		// 1. Check webrtc_sessions (Go controller)
-		pollFailed := false
 		sessions, err := m.fetchPendingSessions()
 		if err != nil {
 			errorCount++
-			pollFailed = true
 			if errorCount%30 == 1 {
 				log.Printf("⚠️  Error fetching webrtc_sessions (count: %d): %v", errorCount, err)
 			}
@@ -206,7 +204,6 @@ func (m *Manager) ListenForSessions() {
 		// 2. Check session_signaling (Web dashboard)
 		webSessions, err2 := m.fetchWebDashboardSessions()
 		if err2 != nil {
-			pollFailed = true
 			// Only log occasionally
 			if errorCount%30 == 1 {
 				log.Printf("⚠️  Error fetching session_signaling: %v", err2)
@@ -214,8 +211,12 @@ func (m *Manager) ListenForSessions() {
 		}
 
 		// Update health status based on poll results
-		if pollFailed && err != nil {
-			// Both controller poll failed — track errors
+		// Mark healthy if EITHER controller OR dashboard poll succeeds
+		anySuccess := (err == nil) || (err2 == nil)
+		allFailed := (err != nil) && (err2 != nil)
+
+		if allFailed {
+			// Both polls failed — track errors
 			if errorCount >= 5 && wasHealthy {
 				m.pollingHealthy.Store(false)
 				wasHealthy = false
@@ -227,8 +228,8 @@ func (m *Manager) ListenForSessions() {
 				pollInterval = maxPollInterval
 			}
 			continue
-		} else if err == nil {
-			// Controller poll succeeded — healthy
+		} else if anySuccess {
+			// At least one poll succeeded — healthy
 			if errorCount > 0 {
 				log.Printf("✅ Polling recovered after %d errors (backoff was %s)", errorCount, pollInterval)
 			}

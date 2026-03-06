@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/stangtennis/Remote/controller/internal/logger"
@@ -13,10 +14,13 @@ import (
 
 // Client represents a Supabase client
 type Client struct {
-	URL       string
-	AnonKey   string
-	AuthToken string
-	client    *http.Client
+	URL          string
+	AnonKey      string
+	AuthToken    string
+	RefreshTok   string
+	tokenExpiry  time.Time
+	mu           sync.Mutex
+	client       *http.Client
 }
 
 // AuthResponse represents the authentication response
@@ -120,12 +124,114 @@ func (c *Client) SignIn(email, password string) (*AuthResponse, error) {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	// Store the auth token
+	// Store the auth token and refresh token
+	c.mu.Lock()
 	c.AuthToken = authResp.AccessToken
-	logger.Debug("[SignIn] Auth token stored, length: %d", len(c.AuthToken))
+	c.RefreshTok = authResp.RefreshToken
+	c.tokenExpiry = time.Now().Add(time.Duration(authResp.ExpiresIn-60) * time.Second) // Refresh 60s before expiry
+	c.mu.Unlock()
+	logger.Debug("[SignIn] Auth token stored, length: %d, expires in %ds", len(c.AuthToken), authResp.ExpiresIn)
 	logger.Info("[SignIn] Authentication successful for user: %s", authResp.User.Email)
 
+	// Start background token refresh
+	go c.autoRefreshToken()
+
 	return &authResp, nil
+}
+
+// RefreshToken refreshes the auth token using the refresh token
+func (c *Client) RefreshToken() error {
+	c.mu.Lock()
+	refreshToken := c.RefreshTok
+	c.mu.Unlock()
+
+	if refreshToken == "" {
+		return fmt.Errorf("no refresh token available")
+	}
+
+	logger.Debug("[RefreshToken] Refreshing auth token...")
+	url := fmt.Sprintf("%s/auth/v1/token?grant_type=refresh_token", c.URL)
+
+	payload := map[string]string{
+		"refresh_token": refreshToken,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("apikey", c.AnonKey)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("token refresh failed: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	var authResp AuthResponse
+	if err := json.Unmarshal(body, &authResp); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	c.mu.Lock()
+	c.AuthToken = authResp.AccessToken
+	c.RefreshTok = authResp.RefreshToken
+	c.tokenExpiry = time.Now().Add(time.Duration(authResp.ExpiresIn-60) * time.Second)
+	c.mu.Unlock()
+
+	logger.Info("[RefreshToken] Token refreshed successfully, expires in %ds", authResp.ExpiresIn)
+	return nil
+}
+
+// autoRefreshToken runs in background and refreshes token before expiry
+func (c *Client) autoRefreshToken() {
+	for {
+		c.mu.Lock()
+		sleepDuration := time.Until(c.tokenExpiry)
+		c.mu.Unlock()
+
+		if sleepDuration <= 0 {
+			sleepDuration = 30 * time.Second
+		}
+
+		time.Sleep(sleepDuration)
+
+		if err := c.RefreshToken(); err != nil {
+			logger.Error("[autoRefreshToken] Failed to refresh token: %v", err)
+			// Retry in 30 seconds
+			time.Sleep(30 * time.Second)
+		}
+	}
+}
+
+// ensureValidToken checks if token needs refresh and refreshes if needed
+func (c *Client) ensureValidToken() {
+	c.mu.Lock()
+	expired := time.Now().After(c.tokenExpiry)
+	c.mu.Unlock()
+
+	if expired && c.RefreshTok != "" {
+		logger.Debug("[ensureValidToken] Token expired, refreshing...")
+		if err := c.RefreshToken(); err != nil {
+			logger.Error("[ensureValidToken] Token refresh failed: %v", err)
+		}
+	}
 }
 
 // isAdmin checks if the current user has admin or super_admin role
@@ -155,6 +261,7 @@ func (c *Client) isAdmin(userID string) bool {
 // Admins see all devices, regular users see only their assigned devices
 func (c *Client) GetDevices(userID string) ([]Device, error) {
 	logger.Debug("[GetDevices] Starting device fetch for user: %s", userID)
+	c.ensureValidToken()
 
 	if c.AuthToken == "" {
 		logger.Error("[GetDevices] Not authenticated - auth token is empty")
@@ -214,7 +321,8 @@ func (c *Client) GetDevices(userID string) ([]Device, error) {
 // GetAllDevices fetches all devices (including unassigned ones)
 func (c *Client) GetAllDevices() ([]Device, error) {
 	logger.Debug("[GetAllDevices] Fetching all devices")
-	
+	c.ensureValidToken()
+
 	if c.AuthToken == "" {
 		logger.Error("[GetAllDevices] Not authenticated")
 		return nil, fmt.Errorf("not authenticated")
@@ -264,7 +372,8 @@ func (c *Client) GetAllDevices() ([]Device, error) {
 // AssignDevice assigns a device to the current user (approves it)
 func (c *Client) AssignDevice(deviceID, userID string) error {
 	logger.Debug("[AssignDevice] Assigning device %s to user %s", deviceID, userID)
-	
+	c.ensureValidToken()
+
 	if c.AuthToken == "" {
 		logger.Error("[AssignDevice] Not authenticated")
 		return fmt.Errorf("not authenticated")
@@ -359,7 +468,8 @@ func (c *Client) AssignDevice(deviceID, userID string) error {
 // UnassignDevice removes a device assignment (unassigns from user)
 func (c *Client) UnassignDevice(deviceID, userID string) error {
 	logger.Debug("[UnassignDevice] Unassigning device %s from user %s", deviceID, userID)
-	
+	c.ensureValidToken()
+
 	if c.AuthToken == "" {
 		logger.Error("[UnassignDevice] Not authenticated")
 		return fmt.Errorf("not authenticated")
@@ -441,6 +551,7 @@ func (c *Client) UnassignDevice(deviceID, userID string) error {
 // RenameDevice updates the device_name for a device
 func (c *Client) RenameDevice(deviceID, newName string) error {
 	logger.Debug("[RenameDevice] Renaming device %s to '%s'", deviceID, newName)
+	c.ensureValidToken()
 
 	if c.AuthToken == "" {
 		return fmt.Errorf("not authenticated")
@@ -485,7 +596,8 @@ func (c *Client) RenameDevice(deviceID, newName string) error {
 // DeleteDevice permanently deletes a device from the database
 func (c *Client) DeleteDevice(deviceID string) error {
 	logger.Debug("[DeleteDevice] Deleting device %s", deviceID)
-	
+	c.ensureValidToken()
+
 	if c.AuthToken == "" {
 		logger.Error("[DeleteDevice] Not authenticated")
 		return fmt.Errorf("not authenticated")
@@ -534,6 +646,7 @@ type SupportSession struct {
 // CreateSupportSession calls the create-support-session Edge Function
 func (c *Client) CreateSupportSession() (*SupportSession, error) {
 	logger.Debug("[CreateSupportSession] Creating support session")
+	c.ensureValidToken()
 
 	if c.AuthToken == "" {
 		return nil, fmt.Errorf("not authenticated")
@@ -577,7 +690,8 @@ func (c *Client) CreateSupportSession() (*SupportSession, error) {
 // CheckApproval checks if the user is approved
 func (c *Client) CheckApproval(userID string) (bool, error) {
 	logger.Debug("[CheckApproval] Checking approval for user: %s", userID)
-	
+	c.ensureValidToken()
+
 	if c.AuthToken == "" {
 		logger.Error("[CheckApproval] Not authenticated - auth token is empty")
 		return false, fmt.Errorf("not authenticated")
