@@ -157,23 +157,15 @@ function createDeviceCard(device) {
   const card = document.createElement('div');
   card.className = `device-card ${device.is_online ? '' : 'offline'}`;
   card.dataset.deviceId = device.device_id;
+  // Compact single-row layout
+  card.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; cursor: pointer;';
 
-  const statusClass = device.is_online ? 'online' : 'offline';
-  const statusText = device.is_online ? 'Online' : 'Offline';
-
-  const lastSeen = device.last_seen
-    ? new Date(device.last_seen).toLocaleString()
-    : 'Never';
-
-  // Build DOM safely (no innerHTML with user data)
-  const header = document.createElement('div');
-  header.className = 'device-header';
+  const isFav = !!_userFavorites[device.device_id];
 
   // Favorite star
   const starBtn = document.createElement('button');
-  starBtn.className = 'btn btn-icon device-fav-btn';
-  starBtn.style.cssText = 'font-size: 1.1rem; padding: 0 0.25rem; min-width: auto; margin-right: 0.25rem;';
-  const isFav = !!_userFavorites[device.device_id];
+  starBtn.className = 'btn btn-icon';
+  starBtn.style.cssText = 'font-size: 1rem; padding: 0; min-width: auto; flex-shrink: 0;';
   starBtn.textContent = isFav ? '★' : '☆';
   starBtn.title = isFav ? 'Fjern fra favoritter' : 'Tilføj til favoritter';
   if (isFav) starBtn.style.color = '#f59e0b';
@@ -182,56 +174,54 @@ function createDeviceCard(device) {
     toggleFavorite(device.device_id);
   });
 
+  // Status dot
+  const dot = document.createElement('span');
+  dot.style.cssText = `width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: ${device.is_online ? '#22c55e' : '#666'};`;
+  if (device.is_online) dot.style.boxShadow = '0 0 6px rgba(34,197,94,0.5)';
+
+  // Name + subtitle
+  const nameCol = document.createElement('div');
+  nameCol.style.cssText = 'flex: 1; min-width: 0; overflow: hidden;';
   const nameEl = document.createElement('div');
-  nameEl.className = 'device-name';
+  nameEl.style.cssText = 'font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem;';
   nameEl.textContent = device.device_name || device.device_id;
-  const badge = document.createElement('span');
-  badge.className = `status-badge ${statusClass}`;
-  badge.textContent = statusText;
-  header.append(starBtn, nameEl, badge);
+  const subtitle = document.createElement('div');
+  subtitle.style.cssText = 'font-size: 0.7rem; color: var(--text-muted, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+  const parts = [device.platform || 'Unknown'];
+  if (device.agent_version) parts.push(device.agent_version);
+  subtitle.textContent = parts.join(' · ');
+  nameCol.append(nameEl, subtitle);
 
-  const info = document.createElement('div');
-  info.className = 'device-info';
-  const infoLines = [
-    `💻 ${device.platform || 'Unknown'} (${device.arch || 'Unknown'})`,
-    `🖥️ ${device.cpu_count || '?'} CPUs`,
-    device.agent_version ? `📦 Agent ${device.agent_version}` : null,
-    `📅 Last seen: ${lastSeen}`
-  ].filter(Boolean);
-  infoLines.forEach(text => {
-    const div = document.createElement('div');
-    div.textContent = text;
-    info.appendChild(div);
-  });
-
-  // Tag badges
+  // Tag badges (inline, compact)
   const tags = _deviceTags[device.device_id] || [];
-  if (tags.length > 0) {
-    const tagsRow = document.createElement('div');
-    tagsRow.style.cssText = 'display: flex; gap: 0.25rem; flex-wrap: wrap; margin-top: 0.25rem;';
-    for (const tag of tags) {
-      const tagBadge = document.createElement('span');
-      tagBadge.style.cssText = 'background: rgba(99,102,241,0.2); color: var(--primary, #6366f1); padding: 0.1rem 0.4rem; border-radius: 9999px; font-size: 0.7rem; cursor: pointer;';
-      tagBadge.textContent = tag;
-      tagBadge.title = 'Klik for at fjerne tag';
-      tagBadge.addEventListener('click', (e) => {
-        e.stopPropagation();
-        removeTag(device.device_id, tag);
-      });
-      tagsRow.appendChild(tagBadge);
-    }
-    info.appendChild(tagsRow);
+  const tagsContainer = document.createElement('div');
+  tagsContainer.style.cssText = 'display: flex; gap: 0.2rem; flex-shrink: 0; align-items: center;';
+  for (const tag of tags.slice(0, 3)) {
+    const tagBadge = document.createElement('span');
+    tagBadge.style.cssText = 'background: rgba(99,102,241,0.2); color: var(--primary, #6366f1); padding: 0.05rem 0.35rem; border-radius: 9999px; font-size: 0.65rem; cursor: pointer;';
+    tagBadge.textContent = tag;
+    tagBadge.title = 'Klik for at fjerne';
+    tagBadge.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeTag(device.device_id, tag);
+    });
+    tagsContainer.appendChild(tagBadge);
+  }
+  if (tags.length > 3) {
+    const more = document.createElement('span');
+    more.style.cssText = 'font-size: 0.65rem; color: var(--text-muted, #888);';
+    more.textContent = `+${tags.length - 3}`;
+    tagsContainer.appendChild(more);
   }
 
-  card.append(header, info);
-
-  // Action buttons
+  // Action buttons (compact)
   const actions = document.createElement('div');
-  actions.className = 'device-actions';
+  actions.style.cssText = 'display: flex; gap: 0.3rem; flex-shrink: 0; align-items: center;';
 
   if (device.is_online) {
     const connectBtn = document.createElement('button');
-    connectBtn.className = 'btn btn-primary connect-btn';
+    connectBtn.className = 'btn btn-primary btn-sm';
+    connectBtn.style.cssText = 'padding: 0.2rem 0.6rem; font-size: 0.75rem;';
     connectBtn.textContent = 'Connect';
     connectBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -240,54 +230,78 @@ function createDeviceCard(device) {
     actions.appendChild(connectBtn);
   }
 
-  const tagBtn = document.createElement('button');
-  tagBtn.className = 'btn btn-secondary';
-  tagBtn.textContent = '🏷️';
-  tagBtn.title = 'Tilføj tag';
-  tagBtn.style.minWidth = 'auto';
-  tagBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    addTagPrompt(device.device_id);
-  });
-  actions.appendChild(tagBtn);
-
-  const renameBtn = document.createElement('button');
-  renameBtn.className = 'btn btn-secondary rename-btn';
-  renameBtn.textContent = 'Rename';
-  renameBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    await renameDevice(device);
-  });
-  actions.appendChild(renameBtn);
-
-  const deleteBtn = document.createElement('button');
-  deleteBtn.className = 'btn btn-danger delete-btn';
-  deleteBtn.textContent = 'Delete';
-  deleteBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    await deleteDevice(device);
-  });
-  actions.appendChild(deleteBtn);
-  card.appendChild(actions);
-
   if (!device.owner_id) {
-    const claimActions = document.createElement('div');
-    claimActions.className = 'device-actions';
-    const unassigned = document.createElement('span');
-    unassigned.className = 'status-badge pending';
-    unassigned.textContent = 'Unassigned';
     const claimBtn = document.createElement('button');
-    claimBtn.className = 'btn btn-primary claim-btn';
-    claimBtn.textContent = '🔗 Claim Device';
+    claimBtn.className = 'btn btn-secondary btn-sm';
+    claimBtn.style.cssText = 'padding: 0.2rem 0.5rem; font-size: 0.75rem;';
+    claimBtn.textContent = '🔗 Claim';
     claimBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       await claimDevice(device);
     });
-    claimActions.append(unassigned, claimBtn);
-    card.appendChild(claimActions);
+    actions.appendChild(claimBtn);
   }
 
+  // Overflow menu (rename, delete, tag)
+  const menuBtn = document.createElement('button');
+  menuBtn.className = 'btn btn-icon';
+  menuBtn.style.cssText = 'font-size: 1rem; padding: 0 0.2rem; min-width: auto; position: relative;';
+  menuBtn.textContent = '⋮';
+  menuBtn.title = 'Flere muligheder';
+  menuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showDeviceMenu(menuBtn, device);
+  });
+  actions.appendChild(menuBtn);
+
+  card.append(starBtn, dot, nameCol, tagsContainer, actions);
   return card;
+}
+
+function showDeviceMenu(anchor, device) {
+  // Remove any existing menu
+  document.querySelectorAll('.device-context-menu').forEach(m => m.remove());
+
+  const menu = document.createElement('div');
+  menu.className = 'device-context-menu';
+  menu.style.cssText = 'position: absolute; z-index: 100; background: var(--surface, #1e1e2e); border: 1px solid var(--border, #333); border-radius: 6px; padding: 0.25rem 0; min-width: 120px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);';
+
+  const items = [
+    { label: '🏷️ Tag', action: () => addTagPrompt(device.device_id) },
+    { label: '✏️ Omdøb', action: () => renameDevice(device) },
+    { label: '🗑️ Slet', action: () => deleteDevice(device), danger: true }
+  ];
+
+  for (const item of items) {
+    const btn = document.createElement('button');
+    btn.style.cssText = `display: block; width: 100%; text-align: left; padding: 0.35rem 0.75rem; background: none; border: none; color: ${item.danger ? '#ef4444' : 'var(--text, #fff)'}; cursor: pointer; font-size: 0.8rem;`;
+    btn.textContent = item.label;
+    btn.addEventListener('mouseenter', () => btn.style.background = 'rgba(255,255,255,0.05)');
+    btn.addEventListener('mouseleave', () => btn.style.background = 'none');
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menu.remove();
+      item.action();
+    });
+    menu.appendChild(btn);
+  }
+
+  // Position relative to anchor
+  const rect = anchor.getBoundingClientRect();
+  menu.style.position = 'fixed';
+  menu.style.top = rect.bottom + 4 + 'px';
+  menu.style.right = (window.innerWidth - rect.right) + 'px';
+
+  document.body.appendChild(menu);
+
+  // Close on click outside
+  const closeMenu = (e) => {
+    if (!menu.contains(e.target)) {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', closeMenu), 0);
 }
 
 // ==================== FAVORITES ====================
