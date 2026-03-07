@@ -28,6 +28,8 @@ import (
 	"github.com/stangtennis/remote-agent/internal/input"
 	"github.com/stangtennis/remote-agent/internal/monitor"
 	"github.com/stangtennis/remote-agent/internal/screen"
+	"github.com/stangtennis/remote-agent/internal/updater"
+	"github.com/stangtennis/remote-agent/internal/version"
 	"github.com/stangtennis/remote-agent/internal/video"
 	"github.com/stangtennis/remote-agent/internal/video/encoder"
 )
@@ -956,6 +958,13 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 			}
 			return
 		}
+	}
+
+	// Handle force update from dashboard
+	if msgType, ok := event["type"].(string); ok && msgType == "force_update" {
+		log.Println("🔄 Force update requested from dashboard")
+		go m.handleForceUpdate()
+		return
 	}
 
 	// Check if this is a file transfer or file browser message
@@ -2107,6 +2116,64 @@ func (m *Manager) Close() {
 	if pc != nil {
 		pc.Close()
 	}
+}
+
+// handleForceUpdate checks for updates, downloads and installs if available
+func (m *Manager) handleForceUpdate() {
+	// Send status back to dashboard
+	sendStatus := func(status, message string) {
+		msg := map[string]interface{}{
+			"type":    "update_status",
+			"status":  status,
+			"message": message,
+		}
+		if data, err := json.Marshal(msg); err == nil {
+			if m.dataChannel != nil && m.dataChannel.ReadyState() == webrtc.DataChannelStateOpen {
+				m.dataChannel.Send(data)
+			}
+		}
+	}
+
+	sendStatus("checking", "Tjekker for opdateringer...")
+
+	u, err := updater.NewUpdater(version.Version)
+	if err != nil {
+		log.Printf("❌ Force update: could not create updater: %v", err)
+		sendStatus("error", "Kunne ikke initialisere opdatering: "+err.Error())
+		return
+	}
+
+	if err := u.CheckForUpdate(); err != nil {
+		log.Printf("❌ Force update: check failed: %v", err)
+		sendStatus("error", "Fejl ved tjek: "+err.Error())
+		return
+	}
+
+	if u.GetAvailableUpdate() == nil {
+		log.Println("✅ Force update: already up to date")
+		sendStatus("up_to_date", "Agent er allerede opdateret ("+version.Version+")")
+		return
+	}
+
+	info := u.GetAvailableUpdate()
+	sendStatus("downloading", "Downloader "+info.TagName+"...")
+
+	if err := u.DownloadUpdate(); err != nil {
+		log.Printf("❌ Force update: download failed: %v", err)
+		sendStatus("error", "Download fejlede: "+err.Error())
+		return
+	}
+
+	sendStatus("installing", "Installerer "+info.TagName+"...")
+
+	if err := u.InstallUpdate(); err != nil {
+		log.Printf("❌ Force update: install failed: %v", err)
+		sendStatus("error", "Installation fejlede: "+err.Error())
+		return
+	}
+
+	sendStatus("restarting", "Genstarter agent med "+info.TagName+"...")
+	log.Printf("✅ Force update: installed %s, agent will restart", info.TagName)
 }
 
 // handleDirListRequest handles directory listing requests from controller

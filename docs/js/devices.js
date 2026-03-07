@@ -271,8 +271,9 @@ function showDeviceMenu(anchor, device) {
   const items = [
     { label: '🏷️ Tag', action: () => addTagPrompt(device.device_id) },
     { label: '✏️ Omdøb', action: () => renameDevice(device) },
+    { label: '🔄 Opdater agent', action: () => forceUpdateDevice(device), show: device.is_online },
     { label: '🗑️ Slet', action: () => deleteDevice(device), danger: true }
-  ];
+  ].filter(i => i.show !== false);
 
   for (const item of items) {
     const btn = document.createElement('button');
@@ -365,6 +366,20 @@ async function removeTag(deviceId, tag) {
   } catch (e) {
     console.error('Remove tag failed:', e);
   }
+}
+
+// ==================== FORCE UPDATE ====================
+
+async function forceUpdateDevice(device) {
+  // Check if we have an active session to this device
+  const ctx = window.SessionManager?.sessions.get(device.device_id);
+  if (!ctx || !ctx.dataChannel || ctx.dataChannel.readyState !== 'open') {
+    showToast('Du skal have en aktiv forbindelse til enheden for at opdatere', 'error');
+    return;
+  }
+
+  ctx.dataChannel.send(JSON.stringify({ type: 'force_update' }));
+  showToast('Opdatering startet på ' + (device.device_name || device.device_id), 'info');
 }
 
 // ==================== DEVICE OPERATIONS ====================
