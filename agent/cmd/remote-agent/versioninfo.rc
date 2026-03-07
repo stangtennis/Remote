@@ -27,4 +27,6 @@ BEGIN
     END
 END
 
+IDI_ICON1 ICON "agent.ico"
+
 1 24 "remote-agent.manifest"

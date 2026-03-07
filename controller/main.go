@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"image/color"
 	"os"
@@ -25,6 +26,9 @@ import (
 	"github.com/stangtennis/Remote/controller/internal/updater"
 	"github.com/stangtennis/Remote/controller/internal/viewer"
 )
+
+//go:embed Icon.png
+var appIconPNG []byte
 
 // Version information - injected at build time via -ldflags -X
 var (
@@ -107,6 +111,7 @@ func main() {
 	// Create application with theme from settings
 	logger.Info("Creating Fyne application...")
 	myApp = app.New()
+	myApp.SetIcon(fyne.NewStaticResource("icon.png", appIconPNG))
 	myApp.Settings().SetTheme(&ui.CyberTheme{})
 
 	windowTitle := "Remote Desktop Controller " + Version
