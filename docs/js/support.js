@@ -53,12 +53,43 @@ function setState(newState) {
   debug('Support state:', newState);
 }
 
-// Check for token in URL
-(function init() {
+// Check for token or public mode in URL
+const isPublicMode = new URLSearchParams(window.location.search).has('public');
+
+(async function init() {
   const params = new URLSearchParams(window.location.search);
   const urlToken = params.get('token');
 
-  if (urlToken) {
+  if (isPublicMode) {
+    // Public mode - check if enabled, then show direct share button
+    pinSection.style.display = 'none';
+    showStatus('Checker tilgængelighed...', 'info');
+    try {
+      const res = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/support-signal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_CONFIG.anonKey },
+        body: JSON.stringify({ action: 'check-public' }),
+      });
+      const { enabled } = await res.json();
+
+      if (!enabled) {
+        showStatus('Support link er ikke aktivt lige nu. Kontakt administrator.', 'error');
+        supportDesc.textContent = 'Support er ikke tilgængeligt';
+        return;
+      }
+
+      // Show direct share button (skip PIN step)
+      hideStatus();
+      supportDesc.textContent = 'Klik knappen for at dele din skærm med support';
+      document.querySelector('.support-card h1').textContent = 'Support — Del din skærm';
+      shareBtn.style.display = 'inline-flex';
+      shareBtn.focus();
+      setState('READY');
+      setStep(2);
+    } catch (error) {
+      showStatus('Kunne ikke kontakte server: ' + error.message, 'error');
+    }
+  } else if (urlToken) {
     // Token provided in URL - validate it
     supportToken = urlToken;
     pinSection.style.display = 'none';
@@ -151,6 +182,23 @@ async function startSharing() {
   showStatus('Vælg den skærm du vil dele...', 'info');
 
   try {
+    // In public mode, create session first
+    if (isPublicMode && !supportToken) {
+      showStatus('Opretter session...', 'info');
+      const res = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/support-signal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_CONFIG.anonKey },
+        body: JSON.stringify({ action: 'create-public' }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Kunne ikke oprette session');
+      }
+      supportSession = { session_id: data.session_id, token: data.token };
+      supportToken = data.token;
+      showStatus('Vælg den skærm du vil dele...', 'info');
+    }
+
     // Request screen capture
     mediaStream = await navigator.mediaDevices.getDisplayMedia({
       video: { cursor: 'always' },

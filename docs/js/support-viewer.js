@@ -53,6 +53,7 @@ function showSupportModal() {
   if (modal) {
     modal.style.display = 'flex';
     showSupportStep('create');
+    loadPublicSupportState();
   }
 }
 
@@ -672,6 +673,149 @@ function endSupportSession() {
   }
 })();
 
+// ============================================================================
+// Public Support Link — Auto-connect listener
+// ============================================================================
+
+let publicSupportChannel = null;
+
+function startPublicSupportListener() {
+  if (publicSupportChannel) return; // already listening
+
+  publicSupportChannel = supabase
+    .channel('public-support-sessions')
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'support_sessions',
+      filter: 'is_public=eq.true',
+    }, (payload) => {
+      if (payload.new.status === 'active' && payload.old.status === 'pending') {
+        debug('Public support session became active:', payload.new.id);
+        handleIncomingPublicSession(payload.new);
+      }
+    })
+    .subscribe();
+
+  debug('Public support listener started');
+}
+
+function stopPublicSupportListener() {
+  if (publicSupportChannel) {
+    supabase.removeChannel(publicSupportChannel);
+    publicSupportChannel = null;
+    debug('Public support listener stopped');
+  }
+}
+
+async function handleIncomingPublicSession(session) {
+  // Don't auto-connect if already viewing a support session
+  if (currentSupportSession) {
+    showToast('Ny public support session venter (allerede i session)', 'warning');
+    return;
+  }
+
+  showToast('Indkommende support session...', 'info');
+
+  currentSupportSession = {
+    session_id: session.id,
+    token: session.token,
+  };
+
+  // Show modal and go directly to viewer step
+  showSupportModal();
+  showSupportStep('viewer');
+
+  // Auto-connect as offerer
+  await connectToSupport(session.id);
+}
+
+// Load public support toggle state
+async function loadPublicSupportState() {
+  try {
+    const res = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/support-signal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_CONFIG.anonKey },
+      body: JSON.stringify({ action: 'check-public' }),
+    });
+    const { enabled } = await res.json();
+    const toggle = document.getElementById('publicSupportToggle');
+    if (toggle) toggle.checked = enabled;
+    updatePublicSupportUI(enabled);
+    return enabled;
+  } catch (e) {
+    console.error('Failed to load public support state:', e);
+    return false;
+  }
+}
+
+async function togglePublicSupport() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    showToast('Du skal være logget ind', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/support-signal`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'toggle-public' }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      throw new Error(data.error || 'Kunne ikke ændre indstilling');
+    }
+    updatePublicSupportUI(data.enabled);
+    showToast(data.enabled ? 'Public support link aktiveret' : 'Public support link deaktiveret', 'success');
+  } catch (error) {
+    showToast('Fejl: ' + error.message, 'error');
+    // Revert toggle
+    const toggle = document.getElementById('publicSupportToggle');
+    if (toggle) toggle.checked = !toggle.checked;
+  }
+}
+
+function updatePublicSupportUI(enabled) {
+  const linkSection = document.getElementById('publicLinkSection');
+  if (linkSection) linkSection.style.display = enabled ? 'block' : 'none';
+
+  // Start/stop listener based on enabled state
+  if (enabled) {
+    startPublicSupportListener();
+  } else {
+    stopPublicSupportListener();
+  }
+}
+
+function copyPublicLink() {
+  const input = document.getElementById('publicSupportLink');
+  if (!input) return;
+  navigator.clipboard.writeText(input.value).then(() => {
+    const btn = input.nextElementSibling;
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'Kopieret!';
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  });
+}
+
+// Auto-start listener on page load if public support is enabled
+document.addEventListener('DOMContentLoaded', () => {
+  // Delay slightly to ensure auth is ready
+  setTimeout(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const enabled = await loadPublicSupportState();
+      if (enabled) startPublicSupportListener();
+    }
+  }, 1000);
+});
+
 // Export
 window.showSupportModal = showSupportModal;
 window.closeSupportModal = closeSupportModal;
@@ -679,3 +823,6 @@ window.onCreateSupportSession = onCreateSupportSession;
 window.copySupportLink = copySupportLink;
 window.endSupportSession = endSupportSession;
 window.toggleSupportFullscreen = toggleSupportFullscreen;
+window.togglePublicSupport = togglePublicSupport;
+window.loadPublicSupportState = loadPublicSupportState;
+window.copyPublicLink = copyPublicLink;

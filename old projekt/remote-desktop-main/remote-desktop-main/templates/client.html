@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Remote Desktop - Client</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .error {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Remote Desktop Client</h1>
+        <div id="status" class="status disconnected">Disconnected</div>
+        <button id="startSharing" onclick="startSharing()" disabled>Start Sharing</button>
+        <button id="stopSharing" onclick="stopSharing()" disabled>Stop Sharing</button>
+        <p id="message"></p>
+    </div>
+
+    <script>
+        let socket = null;
+        let sharing = false;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        let frameRateController = null;
+        let lastFrameTime = 0;
+        let frameInterval = 1000 / 30; // 30 FPS target
+        let adaptiveQuality = 0.7;
+        let adaptiveScale = 1.0;
+        let framesSent = 0;
+        let frameErrors = 0;
+        let lastStatsReset = Date.now();
+        
+        function connect() {
+            try {
+                // Get the current hostname and port from the URL
+                const host = window.location.hostname;
+                const port = window.location.port;
+                
+                // Socket.IO connection with SSL settings
+                socket = io({
+                    secure: true,
+                    rejectUnauthorized: false,
+                    transports: ['websocket'],
+                    reconnection: true,
+                    reconnectionAttempts: 5,
+                    reconnectionDelay: 1000,
+                    reconnectionDelayMax: 5000,
+                    timeout: 20000,
+                    forceNew: true,
+                    path: '/socket.io'
+                });
+
+                // Connection event handlers
+                socket.on('connect', () => {
+                    console.log('Connected to server');
+                    document.getElementById('status').className = 'status connected';
+                    document.getElementById('status').innerText = 'Connected';
+                    document.getElementById('startSharing').disabled = false;
+                    reconnectAttempts = 0;
+                });
+
+                socket.on('disconnect', () => {
+                    console.log('Disconnected from server');
+                    document.getElementById('status').className = 'status disconnected';
+                    document.getElementById('status').innerText = 'Disconnected';
+                    document.getElementById('startSharing').disabled = true;
+                    document.getElementById('stopSharing').disabled = true;
+                    sharing = false;
+                });
+
+                socket.on('connect_error', (error) => {
+                    console.error('Connection error:', error);
+                    document.getElementById('status').className = 'status error';
+                    document.getElementById('status').innerText = 'Connection Error';
+                    reconnectAttempts++;
+                    
+                    if (reconnectAttempts >= maxReconnectAttempts) {
+                        console.log('Max reconnection attempts reached');
+                        document.getElementById('message').innerText = 'Could not connect to server. Please refresh the page to try again.';
+                    } else {
+                        document.getElementById('message').innerText = `Connection failed. Retrying... (${reconnectAttempts}/${maxReconnectAttempts})`;
+                    }
+                });
+
+                socket.on('error', (error) => {
+                    console.error('Socket.IO error:', error);
+                    document.getElementById('status').className = 'status error';
+                    document.getElementById('status').innerText = 'Error: ' + error;
+                });
+
+                // Custom event handlers
+                socket.on('controller_connected', () => {
+                    document.getElementById('message').innerText = 'Controller connected! Sharing screen...';
+                });
+
+                socket.on('controller_disconnected', () => {
+                    document.getElementById('message').innerText = 'Controller disconnected. Waiting for new controller...';
+                });
+
+                // Mouse and keyboard control handlers
+                socket.on('mouse_command', (data) => {
+                    try {
+                        const { x, y, type, button } = data;
+                        socket.emit('execute_command', {
+                            type: 'mouse',
+                            command: type,
+                            x: Math.round(x * window.screen.width),
+                            y: Math.round(y * window.screen.height),
+                            button: button
+                        });
+                    } catch (error) {
+                        console.error('Mouse command error:', error);
+                    }
+                });
+
+                socket.on('keyboard_command', (data) => {
+                    try {
+                        socket.emit('execute_command', {
+                            type: 'keyboard',
+                            ...data
+                        });
+                    } catch (error) {
+                        console.error('Keyboard command error:', error);
+                    }
+                });
+            } catch (error) {
+                console.error('Setup error:', error);
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').innerText = 'Setup Error: ' + error.message;
+            }
+        }
+
+        // Performance monitoring
+        function updatePerformanceStats() {
+            const now = Date.now();
+            const elapsed = now - lastStatsReset;
+            
+            if (elapsed >= 5000) { // Every 5 seconds
+                const fps = framesSent / (elapsed / 1000);
+                const errorRate = frameErrors / framesSent;
+                
+                // Adapt quality based on error rate
+                if (errorRate > 0.1) { // More than 10% errors
+                    adaptiveQuality = Math.max(0.1, adaptiveQuality - 0.1);
+                    adaptiveScale = Math.max(0.5, adaptiveScale - 0.1);
+                } else if (errorRate < 0.01 && fps >= 25) { // Less than 1% errors and good FPS
+                    adaptiveQuality = Math.min(0.9, adaptiveQuality + 0.1);
+                    adaptiveScale = Math.min(1.0, adaptiveScale + 0.1);
+                }
+                
+                // Reset counters
+                framesSent = 0;
+                frameErrors = 0;
+                lastStatsReset = now;
+                
+                console.log(`Performance: ${fps.toFixed(1)} FPS, Error Rate: ${(errorRate * 100).toFixed(1)}%, Quality: ${(adaptiveQuality * 100).toFixed(0)}%, Scale: ${(adaptiveScale * 100).toFixed(0)}%`);
+            }
+        }
+
+        function startSharing() {
+            if (!socket || !socket.connected) {
+                console.error('Not connected to server');
+                return;
+            }
+            
+            sharing = true;
+            document.getElementById('startSharing').disabled = true;
+            document.getElementById('stopSharing').disabled = false;
+            document.getElementById('message').innerText = 'Screen sharing started. Waiting for controller...';
+            
+            // Start screen capture with cursor
+            navigator.mediaDevices.getDisplayMedia({ 
+                video: {
+                    cursor: "always",
+                    displaySurface: "monitor"
+                }
+            }).then(stream => {
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    video.play();
+                    
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    
+                    // Set canvas size based on video dimensions
+                    const updateCanvasSize = () => {
+                        const videoAspect = video.videoWidth / video.videoHeight;
+                        const maxWidth = 1920 * adaptiveScale;
+                        const maxHeight = 1080 * adaptiveScale;
+                        
+                        if (video.videoWidth > maxWidth || video.videoHeight > maxHeight) {
+                            if (videoAspect > maxWidth / maxHeight) {
+                                canvas.width = maxWidth;
+                                canvas.height = maxWidth / videoAspect;
+                            } else {
+                                canvas.height = maxHeight;
+                                canvas.width = maxHeight * videoAspect;
+                            }
+                        } else {
+                            canvas.width = video.videoWidth * adaptiveScale;
+                            canvas.height = video.videoHeight * adaptiveScale;
+                        }
+                    };
+                    
+                    // Initial size
+                    updateCanvasSize();
+                    
+                    // Handle screen resolution changes
+                    video.addEventListener('resize', updateCanvasSize);
+                    
+                    function sendFrame() {
+                        if (!sharing) {
+                            stream.getTracks().forEach(track => track.stop());
+                            if (frameRateController) {
+                                cancelAnimationFrame(frameRateController);
+                                frameRateController = null;
+                            }
+                            return;
+                        }
+                        
+                        const now = performance.now();
+                        const elapsed = now - lastFrameTime;
+                        
+                        if (elapsed >= frameInterval) { // Respect frame rate limit
+                            try {
+                                // Update canvas size if needed
+                                updateCanvasSize();
+                                
+                                // Draw video frame to canvas
+                                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                                
+                                // Send frame data with adaptive quality
+                                const imageData = canvas.toDataURL('image/jpeg', adaptiveQuality);
+                                socket.emit('screen_data', { 
+                                    image: imageData,
+                                    timestamp: Date.now(),
+                                    dimensions: {
+                                        width: canvas.width,
+                                        height: canvas.height,
+                                        scale: adaptiveScale,
+                                        quality: adaptiveQuality
+                                    }
+                                });
+                                
+                                framesSent++;
+                                lastFrameTime = now;
+                                
+                            } catch (error) {
+                                console.error('Frame capture error:', error);
+                                frameErrors++;
+                                
+                                // Only stop sharing on critical errors
+                                if (frameErrors > 50) { // Stop after 50 consecutive errors
+                                    stopSharing();
+                                    return;
+                                }
+                            }
+                            
+                            // Update performance stats
+                            updatePerformanceStats();
+                        }
+                        
+                        // Schedule next frame
+                        frameRateController = requestAnimationFrame(sendFrame);
+                    }
+                    
+                    // Start frame capture
+                    sendFrame();
+                    
+                    // Handle stream end
+                    stream.getVideoTracks()[0].onended = () => {
+                        console.log('Screen share ended by user');
+                        stopSharing();
+                    };
+                };
+            }).catch(error => {
+                console.error('Screen capture error:', error);
+                document.getElementById('message').innerText = 'Failed to start screen sharing: ' + error.message;
+                stopSharing();
+            });
+        }
+
+        function stopSharing() {
+            sharing = false;
+            if (frameRateController) {
+                cancelAnimationFrame(frameRateController);
+                frameRateController = null;
+            }
+            document.getElementById('startSharing').disabled = false;
+            document.getElementById('stopSharing').disabled = true;
+            document.getElementById('message').innerText = 'Screen sharing stopped';
+            
+            // Reset adaptive parameters
+            adaptiveQuality = 0.7;
+            adaptiveScale = 1.0;
+            framesSent = 0;
+            frameErrors = 0;
+            lastStatsReset = Date.now();
+        }
+
+        // Start connection when page loads
+        window.onload = connect;
+    </script>
+</body>
+</html>

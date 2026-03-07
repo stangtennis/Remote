@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	Version = "v1.0.0"
+	Version = "v1.1.0"
 	Port    = 9877
 )
 
@@ -72,9 +72,11 @@ type InputEvent struct {
 	// Key
 	Code  string `json:"code,omitempty"`
 	Key   string `json:"key,omitempty"`
+	Char  string `json:"char,omitempty"` // Unicode character to type
 	Ctrl  bool   `json:"ctrl,omitempty"`
 	Shift bool   `json:"shift,omitempty"`
 	Alt   bool   `json:"alt,omitempty"`
+	Meta  bool   `json:"meta,omitempty"`
 
 	// Clipboard
 	Direction string `json:"direction,omitempty"`
@@ -233,7 +235,15 @@ func (h *InputHelper) handleEvent(conn *websocket.Conn, session *Session, event 
 		if !session.keyEnabled {
 			return &Response{Type: "ack", Seq: event.Seq, OK: false, Error: "keyboard not enabled"}
 		}
-		h.injector.KeyEvent(event.Code, event.Down, event.Ctrl, event.Shift, event.Alt)
+		// If char is provided, use Unicode input (handles æøå, @, #, emoji, AltGr, etc.)
+		if event.Char != "" {
+			runes := []rune(event.Char)
+			for _, r := range runes {
+				h.injector.TypeUnicode(uint16(r))
+			}
+		} else if event.Code != "" {
+			h.injector.KeyEvent(event.Code, event.Down, event.Ctrl, event.Shift, event.Alt, event.Meta)
+		}
 		return &Response{Type: "ack", Seq: event.Seq, OK: true}
 
 	case "clipboard":

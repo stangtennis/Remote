@@ -28,8 +28,12 @@ func (i *InputInjector) MouseWheel(dx, dy int) {
 	log.Printf("MouseWheel: dx=%d dy=%d (stub)", dx, dy)
 }
 
-func (i *InputInjector) KeyEvent(code string, down bool, ctrl, shift, alt bool) {
-	log.Printf("KeyEvent: %s down=%v ctrl=%v shift=%v alt=%v (stub)", code, down, ctrl, shift, alt)
+func (i *InputInjector) KeyEvent(code string, down bool, ctrl, shift, alt, meta bool) {
+	log.Printf("KeyEvent: %s down=%v ctrl=%v shift=%v alt=%v meta=%v (stub)", code, down, ctrl, shift, alt, meta)
+}
+
+func (i *InputInjector) TypeUnicode(char uint16) {
+	log.Printf("TypeUnicode: U+%04X (stub)", char)
 }
 
 func (i *InputInjector) SetClipboard(text string) {
