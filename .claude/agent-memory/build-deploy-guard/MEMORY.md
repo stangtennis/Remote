@@ -1,9 +1,9 @@
 # Build & Deploy Guard - Memory
 
 ## Current State
-- **Version:** v2.90.0 (deployed 2026-03-04)
-- **Changes:** Moderniseret Controller GUI — hi-tech dark theme med cyan accenter, card layouts, SVG ikoner
-- **Agent SHA256:** 7e8692e2d1958f5fe014a6a5db01bf6984020dd3d4252dae03689cb6373882c4
+- **Version:** v2.91.0 (deployed 2026-03-05)
+- **Changes:** Fix sort skaerm paa macOS (WiFi): reliable channel til chunked frames + JPEG/0xFF kollisions-fix
+- **Agent SHA256:** bf74f868e4e630e764434b46e74a248aa1bf633fbb45ffbf6457cc3ed977acb7
 
 ## Key Facts
 - Version injection via `-ldflags -X` in `build-local.sh` (NOT in source code)
@@ -13,6 +13,7 @@
 - Always update info repo after any release
 
 ## Version History (recent)
+- v2.91.0 - Fix sort skaerm paa macOS (WiFi): reliable channel til chunked frames, JPEG/0xFF kollisions-fix
 - v2.90.0 - Moderniseret Controller GUI: dark theme, cyan accenter, card layouts, SVG ikoner, ny internal/ui package
 - v2.89.0 - Hybrid AltGr, UIPI bypass, Dashboard AltGr, Cloudflare TURN, Session 0 fixes
 - v2.88.0 - Connection Health Watchdog: token refresh, health-aware heartbeat, eksponentiel backoff, stale session cleanup

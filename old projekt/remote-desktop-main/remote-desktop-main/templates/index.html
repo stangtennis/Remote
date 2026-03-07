@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Remote Desktop Support</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .button {
+            display: inline-block;
+            padding: 15px 30px;
+            margin: 10px;
+            font-size: 18px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+            cursor: pointer;
+            border: none;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        #status {
+            margin: 20px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        #sessionInfo {
+            margin: 20px;
+            padding: 20px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            display: none;
+        }
+        #sessionId {
+            font-size: 24px;
+            color: #007bff;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        #preview {
+            max-width: 100%;
+            margin-top: 20px;
+            display: none;
+        }
+        #browserWarning {
+            margin: 20px;
+            padding: 20px;
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+            border-radius: 5px;
+            display: none;
+        }
+        .help-steps {
+            text-align: left;
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .help-steps li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Remote Desktop Support</h1>
+    <div>
+        <button class="button" id="shareButton">Get Support</button>
+        <button class="button" id="disconnectButton" style="display:none">Disconnect</button>
+        <a href="/controller" class="button">Provide Support</a>
+    </div>
+    <div id="browserWarning">
+        <h3>Screen Sharing Permission Required</h3>
+        <p>If you're seeing this message, please try these steps:</p>
+        <ol class="help-steps">
+            <li>Try accessing via localhost:
+                <ul>
+                    <li>Instead of using IP address ({{ local_ip }}:7080)</li>
+                    <li>Use: <a href="http://localhost:7080">http://localhost:7080</a></li>
+                </ul>
+            </li>
+            <li>Or try these browser settings:
+                <ul>
+                    <li>Type <code>chrome://flags</code> in your address bar</li>
+                    <li>Search for "Insecure origins treated as secure"</li>
+                    <li>Add <code>http://{{ local_ip }}:7080</code> to the list</li>
+                    <li>Change dropdown to "Enabled"</li>
+                    <li>Click "Relaunch" to restart Chrome</li>
+                </ul>
+            </li>
+            <li>If still not working:
+                <ul>
+                    <li>Make sure you're using latest Chrome or Edge</li>
+                    <li>Try clearing browser cache and cookies</li>
+                    <li>Try in Incognito/Private mode</li>
+                </ul>
+            </li>
+        </ol>
+        <button onclick="retryScreenShare()" class="button">Try Again</button>
+    </div>
+    <div id="status"></div>
+    <div id="sessionInfo">
+        <h3>Your Session Information</h3>
+        <div id="sessionId"></div>
+        <p>Share this session ID with your support provider</p>
+    </div>
+    <video id="preview" autoplay muted></video>
+
+    <script>
+        // Check if we're in a secure context
+        const isSecureContext = window.isSecureContext;
+        const isLocalhost = window.location.hostname === 'localhost' || 
+                          window.location.hostname === '127.0.0.1' || 
+                          window.location.hostname === '{{ local_ip }}';
+        
+        console.log('Security Context Check:');
+        console.log('isSecureContext:', isSecureContext);
+        console.log('isLocalhost:', isLocalhost);
+        console.log('hostname:', window.location.hostname);
+        console.log('protocol:', window.location.protocol);
+        console.log('local_ip:', '{{ local_ip }}');
+
+        // Initialize variables
+        const socket = io({
+            transports: ['websocket', 'polling'],
+            path: '/socket.io',
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            reconnectionAttempts: 5
+        });
+
+        const statusDiv = document.getElementById('status');
+        const shareButton = document.getElementById('shareButton');
+        const disconnectButton = document.getElementById('disconnectButton');
+        const sessionInfo = document.getElementById('sessionInfo');
+        const sessionIdDiv = document.getElementById('sessionId');
+        const preview = document.getElementById('preview');
+        const browserWarning = document.getElementById('browserWarning');
+        
+        let mediaStream = null;
+        let captureInterval = null;
+        let currentSessionId = null;
+
+        // Show status message
+        function showStatus(message, isError = false) {
+            statusDiv.textContent = message;
+            statusDiv.className = isError ? 'error' : 'success';
+            statusDiv.style.display = 'block';
+        }
+
+        // Screen sharing
+        async function startSharing(sessionId) {
+            try {
+                console.log('Starting screen share for session:', sessionId);
+                mediaStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        cursor: "always",
+                        frameRate: 30
+                    }
+                });
+
+                const videoTrack = mediaStream.getVideoTracks()[0];
+                
+                // Create video element
+                const video = document.createElement('video');
+                video.srcObject = mediaStream;
+                video.play();
+
+                // Set up canvas for capturing
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+
+                // Function to capture and send frame
+                async function captureAndSendFrame() {
+                    try {
+                        if (!mediaStream || !currentSessionId) return;
+
+                        // Set canvas size to match video dimensions but scaled down for better performance
+                        const scaleFactor = 0.75; // Scale to 75% of original size
+                        canvas.width = video.videoWidth * scaleFactor;
+                        canvas.height = video.videoHeight * scaleFactor;
+                        
+                        // Draw video frame to canvas with smoothing disabled for better performance
+                        ctx.imageSmoothingEnabled = false;
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        
+                        // Get image data with optimized quality (0.6 gives good balance between quality and size)
+                        const imageData = canvas.toDataURL('image/jpeg', 0.6);
+                        
+                        // Send to server
+                        socket.emit('screen_data', {
+                            session_id: currentSessionId,
+                            image: imageData,
+                            timestamp: Date.now()
+                        });
+                    } catch (error) {
+                        console.error('Error capturing frame:', error);
+                        if (error.name === 'InvalidStateError') {
+                            stopSharing();
+                        }
+                    }
+                }
+
+                // Start capture loop
+                captureInterval = setInterval(captureAndSendFrame, 1000 / 30); // 30 FPS
+
+                // Handle stream ending
+                videoTrack.addEventListener('ended', () => {
+                    console.log('Screen sharing ended by user');
+                    stopSharing();
+                });
+
+                showStatus('Sharing screen');
+                shareButton.style.display = 'none';
+                disconnectButton.style.display = 'block';
+                statusDiv.style.display = 'block';
+
+            } catch (error) {
+                console.error('Error starting screen share:', error);
+                showStatus('Failed to start screen sharing: ' + error.message, true);
+            }
+        }
+
+        function stopSharing() {
+            console.log('Stopping screen share');
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            if (captureInterval) {
+                clearInterval(captureInterval);
+                captureInterval = null;
+            }
+            shareButton.style.display = 'block';
+            disconnectButton.style.display = 'none';
+            showStatus('Screen sharing stopped');
+            socket.emit('stop_sharing', { session_id: currentSessionId });
+            currentSessionId = null;
+        }
+
+        // Retry screen sharing
+        function retryScreenShare() {
+            browserWarning.style.display = 'none';
+            startSharing(currentSessionId);
+        }
+
+        // Handle mouse events from controller
+        socket.on('mouse_event', (data) => {
+            if (data.type === 'move') {
+                const event = new MouseEvent('mousemove', {
+                    clientX: Math.round(data.x * window.innerWidth),
+                    clientY: Math.round(data.y * window.innerHeight),
+                    bubbles: true
+                });
+                document.dispatchEvent(event);
+            } else if (data.type === 'down' || data.type === 'up') {
+                const buttonMap = {
+                    'left': 0,
+                    'middle': 1,
+                    'right': 2
+                };
+                const event = new MouseEvent(data.type === 'down' ? 'mousedown' : 'mouseup', {
+                    clientX: Math.round(data.x * window.innerWidth),
+                    clientY: Math.round(data.y * window.innerHeight),
+                    button: buttonMap[data.button] || 0,
+                    bubbles: true
+                });
+                document.dispatchEvent(event);
+            } else if (data.type === 'wheel') {
+                const event = new WheelEvent('wheel', {
+                    deltaX: data.deltaX,
+                    deltaY: data.deltaY,
+                    deltaMode: data.deltaMode,
+                    clientX: Math.round(data.x * window.innerWidth),
+                    clientY: Math.round(data.y * window.innerHeight),
+                    bubbles: true
+                });
+                document.dispatchEvent(event);
+            }
+        });
+
+        // Handle keyboard events from controller
+        socket.on('keyboard_event', (data) => {
+            const event = new KeyboardEvent(data.type === 'down' ? 'keydown' : 'keyup', {
+                key: data.key,
+                code: data.key,
+                keyCode: data.key.length === 1 ? data.key.charCodeAt(0) : 0,
+                shiftKey: data.shift,
+                ctrlKey: data.ctrl,
+                altKey: data.alt,
+                metaKey: data.meta,
+                bubbles: true
+            });
+            document.dispatchEvent(event);
+        });
+
+        // Button click handlers
+        shareButton.addEventListener('click', () => {
+            console.log('Share button clicked');
+            socket.emit('start_sharing');
+        });
+
+        disconnectButton.addEventListener('click', () => {
+            console.log('Disconnect button clicked');
+            stopSharing();
+        });
+
+        // Socket event handlers
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            showStatus('Connected to server');
+            shareButton.style.display = 'block';
+            disconnectButton.style.display = 'none';
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            showStatus('Disconnected from server', true);
+            if (mediaStream) {
+                stopSharing();
+            }
+        });
+
+        socket.on('session_id', (sessionId) => {
+            console.log('Received session ID:', sessionId);
+            currentSessionId = sessionId;
+            sessionIdDiv.textContent = sessionId;
+            sessionInfo.style.display = 'block';
+            shareButton.style.display = 'none';
+            disconnectButton.style.display = 'block';
+            startSharing(sessionId);
+        });
+
+        socket.on('controller_joined', () => {
+            console.log('Controller joined the session');
+            showStatus('Support provider connected');
+        });
+
+        socket.on('controller_left', () => {
+            console.log('Controller left the session');
+            showStatus('Support provider disconnected');
+        });
+
+        // Initial status message
+        if (!isSecureContext && !isLocalhost) {
+            showStatus('Please use localhost:7080 for screen sharing to work', true);
+            browserWarning.style.display = 'block';
+        } else if (!navigator.mediaDevices) {
+            showStatus('Screen capture not supported in this browser or context', true);
+            browserWarning.style.display = 'block';
+        } else {
+            showStatus('Ready to share screen');
+        }
+    </script>
+</body>
+</html>

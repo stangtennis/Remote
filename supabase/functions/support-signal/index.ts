@@ -1,6 +1,6 @@
 // Support Signal Edge Function
 // POST, no auth required - validates via support token.
-// Actions: validate, ready, turn
+// Actions: validate, ready, turn, check-public, create-public, toggle-public
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -32,6 +32,155 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
+
+    // --- Public support actions (no token/pin needed) ---
+
+    if (action === 'check-public') {
+      const { data } = await supabase
+        .from('support_settings')
+        .select('public_link_enabled')
+        .limit(1)
+        .single()
+
+      return new Response(
+        JSON.stringify({ enabled: data?.public_link_enabled ?? false }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      )
+    }
+
+    if (action === 'create-public') {
+      // Check if public link is enabled
+      const { data: settings } = await supabase
+        .from('support_settings')
+        .select('public_link_enabled')
+        .limit(1)
+        .single()
+
+      if (!settings?.public_link_enabled) {
+        return new Response(
+          JSON.stringify({ error: 'Public support link is not enabled' }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 403,
+          }
+        )
+      }
+
+      // Generate PIN (not used for public, but column is required)
+      const pin = String(Math.floor(100000 + Math.random() * 900000))
+
+      // Create public support session
+      const { data: newSession, error: insertError } = await supabase
+        .from('support_sessions')
+        .insert({
+          created_by: null,
+          status: 'pending',
+          pin,
+          expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          is_public: true,
+        })
+        .select()
+        .single()
+
+      if (insertError || !newSession) {
+        throw new Error('Failed to create public session: ' + (insertError?.message || 'unknown'))
+      }
+
+      return new Response(
+        JSON.stringify({
+          session_id: newSession.id,
+          token: newSession.token,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      )
+    }
+
+    if (action === 'toggle-public') {
+      // Requires auth - extract Bearer token
+      const authHeader = req.headers.get('Authorization')
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(
+          JSON.stringify({ error: 'Authentication required' }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 401,
+          }
+        )
+      }
+
+      const jwt = authHeader.replace('Bearer ', '')
+      // Create authenticated client to verify user
+      const authClient = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: `Bearer ${jwt}` } } }
+      )
+      const { data: { user }, error: userError } = await authClient.auth.getUser()
+      if (userError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid token' }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 401,
+          }
+        )
+      }
+
+      // Check admin role
+      const { data: approval } = await supabase
+        .from('user_approvals')
+        .select('role')
+        .eq('user_id', user.id)
+        .single()
+
+      if (!approval || !['admin', 'super_admin'].includes(approval.role)) {
+        return new Response(
+          JSON.stringify({ error: 'Admin access required' }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 403,
+          }
+        )
+      }
+
+      // Get current state
+      const { data: current } = await supabase
+        .from('support_settings')
+        .select('id, public_link_enabled')
+        .limit(1)
+        .single()
+
+      if (!current) {
+        throw new Error('support_settings not found')
+      }
+
+      const newEnabled = !current.public_link_enabled
+
+      await supabase
+        .from('support_settings')
+        .update({
+          public_link_enabled: newEnabled,
+          updated_by: user.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', current.id)
+
+      return new Response(
+        JSON.stringify({ enabled: newEnabled }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      )
+    }
+
+    // --- Token/PIN-based actions (validate, ready, turn) ---
 
     // Validate token or PIN
     let session

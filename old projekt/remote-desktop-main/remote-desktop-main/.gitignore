@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+*.code-workspace
+
+# Certificates
+certs/
+
+# Logs
+*.log
+
+# Local configuration
+*.local
+*.local.*
