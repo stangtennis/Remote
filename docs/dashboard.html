@@ -26,6 +26,7 @@
     <div class="header-content">
       <h1>🖥️ Fjernskrivebord</h1>
       <div class="header-actions">
+        <button id="notificationToggleBtn" class="btn btn-icon" onclick="BrowserNotifications.toggle()" title="Notifikationer">🔔</button>
         <button id="quickSupportBtn" class="btn btn-secondary" style="margin-right: 10px; display: none;" onclick="showSupportModal()">🆘 Quick Support</button>
         <a href="admin.html" id="adminLink" class="btn btn-secondary" style="margin-right: 10px; display: none;">🔐 Adminpanel</a>
         <span id="userEmail" class="user-info"></span>
@@ -113,7 +114,7 @@
               </div>
               <div class="toolbar-center">
                 <button class="toolbar-btn" title="Synkroniser udklipsholder">📋</button>
-                <button class="toolbar-btn" title="Filøverførsel">📁</button>
+                <button class="toolbar-btn" title="Filøverførsel" onclick="FileTransfer.open()">📁</button>
                 <button class="toolbar-btn" title="Skærmbillede">📸</button>
                 <button class="toolbar-btn" id="qualityToggleBtn" title="Skift H264/JPEG tilstand">🎚️</button>
                 <span id="monitorSelectContainer" style="display: none; align-items: center; gap: 4px;">
@@ -189,6 +190,16 @@
             </button>
           </div>
 
+          <!-- Search & Filter Bar -->
+          <div class="device-filters" style="display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
+            <input type="text" id="deviceSearchInput" placeholder="Søg enheder..." style="flex: 1; min-width: 150px; padding: 0.5rem 0.75rem; background: var(--surface, #1a1a2e); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); font-size: 0.85rem;">
+            <select id="deviceStatusFilter" style="padding: 0.5rem; background: var(--surface, #1a1a2e); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); font-size: 0.85rem; cursor: pointer;">
+              <option value="all">Alle</option>
+              <option value="online">Online</option>
+              <option value="offline">Offline</option>
+            </select>
+          </div>
+
           <!-- Device List -->
           <div id="devicesList" class="devices-list">
             <!-- Devices will be inserted here -->
@@ -210,6 +221,26 @@
           <div id="loadingDevices" class="loading" style="display: none;">
             <div class="spinner"></div>
             <p>Indlæser enheder...</p>
+          </div>
+        </section>
+
+        <!-- Activity Log Section -->
+        <section id="activityLogSection" class="activity-log-section" style="margin-top: 1.5rem;">
+          <div class="section-header" style="cursor: pointer;">
+            <h2>
+              <span id="activityLogToggle" style="display: inline-block; width: 1.2em; text-align: center; font-size: 0.8em;">▶</span>
+              Seneste aktivitet
+            </h2>
+            <select id="activityLogFilter" style="padding: 0.3rem 0.5rem; background: var(--surface, #1a1a2e); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); font-size: 0.8rem; cursor: pointer;">
+              <option value="all">Alle</option>
+              <option value="sessions">Sessions</option>
+              <option value="devices">Enheder</option>
+              <option value="support">Support</option>
+            </select>
+          </div>
+          <div id="activityLogContent" style="display: none;">
+            <div id="activityLogList"></div>
+            <button id="activityLoadMore" class="btn btn-secondary btn-sm" style="display: none; width: 100%; margin-top: 0.5rem;">Indlæs mere</button>
           </div>
         </section>
       </div>
@@ -365,6 +396,61 @@
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 
+  <!-- File Transfer Modal -->
+  <div id="fileTransferModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 700px; max-height: 80vh; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+        <h3 style="margin: 0;">📁 Filoversigt</h3>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn btn-secondary btn-sm" onclick="fileUploadInput.click()" title="Upload fil">⬆️ Upload</button>
+          <button class="btn btn-secondary btn-sm" onclick="promptNewFolder()" title="Ny mappe">📁+</button>
+          <button class="btn btn-icon" onclick="FileTransfer.close()" title="Luk">&times;</button>
+        </div>
+      </div>
+
+      <!-- Breadcrumb -->
+      <div id="fileBreadcrumb" style="font-size: 0.8rem; margin-bottom: 0.5rem; padding: 0.3rem 0; border-bottom: 1px solid var(--border, #333);"></div>
+
+      <!-- Drop Zone & File List -->
+      <div id="fileDropZone" style="flex: 1; overflow-y: auto; min-height: 200px; border: 2px dashed transparent; border-radius: var(--radius-sm, 6px); transition: border-color 0.2s;">
+        <div id="fileList"></div>
+      </div>
+
+      <!-- Progress -->
+      <div id="fileProgressContainer" style="display: none; margin-top: 0.5rem;">
+        <div id="fileProgressLabel" style="font-size: 0.8rem; color: var(--text-muted, #888); margin-bottom: 0.25rem;"></div>
+        <div style="background: var(--border, #333); border-radius: 4px; height: 6px; overflow: hidden;">
+          <div id="fileProgressBar" style="height: 100%; background: var(--primary, #6366f1); width: 0%; transition: width 0.2s;"></div>
+        </div>
+      </div>
+
+      <!-- Hidden upload input -->
+      <input type="file" id="fileUploadInput" multiple style="display: none;" onchange="handleFileUpload(this.files)">
+    </div>
+  </div>
+
+  <style>
+    #fileDropZone.drag-over { border-color: var(--primary, #6366f1); background: rgba(99,102,241,0.05); }
+  </style>
+
+  <script>
+    function promptNewFolder() {
+      const name = prompt('Ny mappe navn:');
+      if (!name) return;
+      const sep = FileTransfer._currentPath.includes('/') ? '/' : '\\';
+      FileTransfer.createDirectory(FileTransfer._currentPath + sep + name);
+    }
+
+    function handleFileUpload(files) {
+      if (!files.length || !FileTransfer.isReady()) return;
+      const sep = FileTransfer._currentPath.includes('/') ? '/' : '\\';
+      for (const file of files) {
+        FileTransfer.uploadFile(file, FileTransfer._currentPath + sep + file.name);
+      }
+      document.getElementById('fileUploadInput').value = '';
+    }
+  </script>
+
   <!-- PIN Modal -->
   <div id="pinModal" class="modal" style="display: none;">
     <div class="modal-content">
@@ -420,10 +506,13 @@
   <script src="js/config.js?v=6"></script>
   <script src="js/auth.js?v=6"></script>
   <script src="js/app.js?v=8"></script>
-  <script src="js/devices.js?v=7"></script>
+  <script src="js/devices.js?v=8"></script>
   <script src="js/sessions.js?v=8"></script>
   <script src="js/webrtc.js?v=9"></script>
   <script src="js/signaling.js?v=7"></script>
+  <script src="js/notifications.js?v=1"></script>
+  <script src="js/activity-log.js?v=1"></script>
+  <script src="js/file-transfer.js?v=1"></script>
   <script src="js/support-viewer.js?v=4"></script>
   
   <!-- Fullscreen Preview Script -->

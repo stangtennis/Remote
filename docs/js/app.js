@@ -14,6 +14,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize modules
   await initDevices();
 
+  // Initialize activity log
+  if (window.ActivityLog) ActivityLog.init();
+
   // Set up event listeners
   setupEventListeners();
 
@@ -270,6 +273,19 @@ async function endSession(deviceId) {
         .from('remote_sessions')
         .update({ status: 'ended', ended_at: new Date().toISOString() })
         .eq('id', sessionId);
+
+      // Log session ended
+      try {
+        await supabase.rpc('log_audit_event', {
+          p_session_id: sessionId,
+          p_device_id: deviceId,
+          p_event: 'SESSION_ENDED',
+          p_details: { device_name: ctx.deviceName },
+          p_severity: 'info'
+        });
+      } catch (e) {
+        console.warn('Audit log failed:', e);
+      }
     }
 
     // Stop signaling for this session

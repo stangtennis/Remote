@@ -68,6 +68,12 @@ function cleanupSessionWebRTC(ctx) {
     ctx.dataChannel = null;
   }
 
+  // Close file channel
+  if (ctx.fileChannel) {
+    try { ctx.fileChannel.close(); } catch (e) {}
+    ctx.fileChannel = null;
+  }
+
   // Close peer connection
   if (ctx.peerConnection) {
     try { ctx.peerConnection.close(); } catch (e) {}
@@ -155,6 +161,13 @@ async function initWebRTC(sessionData, ctx) {
       window.dataChannel = ctx.dataChannel;
     }
     debug('✅ Data channel created');
+
+    // Create file transfer data channel (reliable, ordered)
+    ctx.fileChannel = ctx.peerConnection.createDataChannel('file', {
+      ordered: true
+    });
+    setupFileChannelHandlers(ctx);
+    debug('✅ File data channel created');
 
     // Create offer
     debug('📝 Creating offer...');
@@ -1274,6 +1287,37 @@ function handleMonitorSwitched(msg) {
   if (select) select.value = index;
 
   showToast(`Skiftet til monitor ${index + 1} (${width}x${height})`, 'success');
+}
+
+// ==================== FILE CHANNEL ====================
+
+function setupFileChannelHandlers(ctx) {
+  const dc = ctx.fileChannel;
+  if (!dc) return;
+
+  dc.onopen = () => {
+    debug('📁 File channel opened for', ctx.id);
+    // Connect to FileTransfer module if this is the active session
+    if (window.SessionManager?.activeSessionId === ctx.id && window.FileTransfer) {
+      FileTransfer.setChannel(dc);
+      FileTransfer.setupDragDrop();
+    }
+  };
+
+  dc.onclose = () => {
+    debug('📁 File channel closed for', ctx.id);
+  };
+
+  dc.onerror = (error) => {
+    console.error('File channel error for', ctx.id, ':', error);
+  };
+
+  dc.onmessage = (event) => {
+    // Route to FileTransfer module
+    if (window.FileTransfer && window.SessionManager?.activeSessionId === ctx.id) {
+      FileTransfer._handleMessage(event);
+    }
+  };
 }
 
 // Export
