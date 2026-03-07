@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 
@@ -101,7 +102,7 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 		"device_id":      device.DeviceID,
 		"device_name":    device.DeviceName,
 		"platform":       device.Platform,
-		"arch":           "amd64",
+		"arch":           runtime.GOARCH,
 		"owner_id":       config.UserID,
 		"is_online":      true,
 		"last_seen":      time.Now().Format(time.RFC3339),
