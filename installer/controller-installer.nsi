@@ -22,8 +22,8 @@ VIAddVersionKey "LegalCopyright" "StangTennis"
 
 ; Interface Settings
 !define MUI_ABORTWARNING
-!define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
-!define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
+!define MUI_ICON "controller.ico"
+!define MUI_UNICON "controller.ico"
 
 ; Pages
 !insertmacro MUI_PAGE_WELCOME

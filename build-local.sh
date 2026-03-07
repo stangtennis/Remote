@@ -115,6 +115,11 @@ build_installer() {
     # Copy LICENSE
     cp installer/LICENSE.txt "$STAGING/"
 
+    # Copy icon files if present
+    for ico in installer/*.ico; do
+        [ -f "$ico" ] && cp "$ico" "$STAGING/"
+    done
+
     # Create versioned .nsi copy (sed version + VIProductVersion + OutFile)
     sed -e "s/!define VERSION \"[^\"]*\"/!define VERSION \"${NSI_VERSION}\"/" \
         -e "s/VIProductVersion \"[^\"]*\"/VIProductVersion \"${NSI_VERSION}.0\"/" \

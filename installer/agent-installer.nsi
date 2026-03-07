@@ -21,8 +21,8 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 
 ; Interface Settings
 !define MUI_ABORTWARNING
-!define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
-!define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
+!define MUI_ICON "agent.ico"
+!define MUI_UNICON "agent.ico"
 
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
