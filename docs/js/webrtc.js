@@ -1151,6 +1151,13 @@ function handleAgentMessage(msg) {
       handleMonitorSwitched(msg);
       break;
 
+    case 'update_status':
+      if (msg.message) {
+        const type = msg.status === 'error' ? 'error' : (msg.status === 'up_to_date' ? 'success' : 'info');
+        showToast(msg.message, type);
+      }
+      break;
+
     case 'clipboard_text':
       if (msg.content) {
         navigator.clipboard.writeText(msg.content).then(() => {
