@@ -371,15 +371,28 @@ async function removeTag(deviceId, tag) {
 // ==================== FORCE UPDATE ====================
 
 async function forceUpdateDevice(device) {
-  // Check if we have an active session to this device
+  // Try WebRTC data channel first (gives real-time status feedback)
   const ctx = window.SessionManager?.sessions.get(device.device_id);
-  if (!ctx || !ctx.dataChannel || ctx.dataChannel.readyState !== 'open') {
-    showToast('Du skal have en aktiv forbindelse til enheden for at opdatere', 'error');
+  if (ctx && ctx.dataChannel && ctx.dataChannel.readyState === 'open') {
+    ctx.dataChannel.send(JSON.stringify({ type: 'force_update' }));
+    showToast('Opdatering startet på ' + (device.device_name || device.device_id), 'info');
     return;
   }
 
-  ctx.dataChannel.send(JSON.stringify({ type: 'force_update' }));
-  showToast('Opdatering startet på ' + (device.device_name || device.device_id), 'info');
+  // Fallback: set pending_command via Supabase (agent picks it up at next heartbeat)
+  try {
+    const { error } = await supabase
+      .from('remote_devices')
+      .update({ pending_command: 'force_update' })
+      .eq('device_id', device.device_id);
+
+    if (error) throw error;
+
+    showToast('Opdatering sat i kø for ' + (device.device_name || device.device_id) + ' (agent tjekker inden 30 sek)', 'info');
+  } catch (e) {
+    console.error('Force update failed:', e);
+    showToast('Kunne ikke sende opdateringskommando: ' + e.message, 'error');
+  }
 }
 
 // ==================== DEVICE OPERATIONS ====================
