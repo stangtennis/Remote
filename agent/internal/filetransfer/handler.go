@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -46,21 +47,47 @@ func sanitizePath(path string) (string, error) {
 // isProtectedPath checks if a path is a critical system directory that should not be deleted or overwritten.
 func isProtectedPath(path string) bool {
 	p := strings.ToLower(filepath.Clean(path))
-	// Block drive roots (C:\, D:\, etc.)
-	if len(p) <= 3 {
-		return true
-	}
-	protected := []string{
-		`c:\windows`,
-		`c:\program files`,
-		`c:\program files (x86)`,
-		`c:\programdata`,
-		`c:\users`,
-		`c:\system volume information`,
-	}
-	for _, pp := range protected {
-		if p == pp {
+
+	if runtime.GOOS == "windows" {
+		// Block drive roots (C:\, D:\, etc.)
+		if len(p) <= 3 {
 			return true
+		}
+		protected := []string{
+			`c:\windows`,
+			`c:\program files`,
+			`c:\program files (x86)`,
+			`c:\programdata`,
+			`c:\users`,
+			`c:\system volume information`,
+		}
+		for _, pp := range protected {
+			if p == pp {
+				return true
+			}
+		}
+	} else {
+		// macOS / Linux
+		if p == "/" {
+			return true
+		}
+		protected := []string{
+			"/system",
+			"/usr",
+			"/bin",
+			"/sbin",
+			"/etc",
+			"/var",
+			"/tmp",
+			"/private",
+			"/applications",
+			"/library",
+			"/users",
+		}
+		for _, pp := range protected {
+			if p == pp {
+				return true
+			}
 		}
 	}
 	return false
@@ -255,16 +282,45 @@ func (h *Handler) handleListOp(path string) error {
 // handleDrivesOp lists available drives
 func (h *Handler) handleDrivesOp() error {
 	log.Println("📂 handleDrivesOp called - listing drives...")
-	
+
 	drives := make([]Entry, 0)
-	for _, letter := range "CDEFGHIJKLMNOPQRSTUVWXYZ" {
-		path := string(letter) + ":\\"
-		if _, err := os.Stat(path); err == nil {
+
+	if runtime.GOOS == "windows" {
+		for _, letter := range "CDEFGHIJKLMNOPQRSTUVWXYZ" {
+			path := string(letter) + ":\\"
+			if _, err := os.Stat(path); err == nil {
+				drives = append(drives, Entry{
+					Name:  string(letter) + ":",
+					Path:  path,
+					IsDir: true,
+				})
+			}
+		}
+	} else {
+		// macOS: list /Volumes/*, plus home dir
+		home, _ := os.UserHomeDir()
+		if home != "" {
 			drives = append(drives, Entry{
-				Name:  string(letter) + ":",
-				Path:  path,
+				Name:  "Home",
+				Path:  home,
 				IsDir: true,
 			})
+		}
+		drives = append(drives, Entry{
+			Name:  "/",
+			Path:  "/",
+			IsDir: true,
+		})
+		if entries, err := os.ReadDir("/Volumes"); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					drives = append(drives, Entry{
+						Name:  e.Name(),
+						Path:  filepath.Join("/Volumes", e.Name()),
+						IsDir: true,
+					})
+				}
+			}
 		}
 	}
 
@@ -762,7 +818,11 @@ func (h *Handler) handleListDirectory(message map[string]interface{}) error {
 	if path == "" || path == "~" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			path = "C:\\"
+			if runtime.GOOS == "windows" {
+				path = "C:\\"
+			} else {
+				path = "/"
+			}
 		} else {
 			path = home
 		}
@@ -969,22 +1029,40 @@ func (h *Handler) sendOperationResult(requestID, operation, path string, success
 	h.sendData(responseJSON)
 }
 
-// GetDrives returns available drives (Windows)
+// GetDrives returns available drives/volumes
 func (h *Handler) GetDrives() []FileInfo {
 	drives := []FileInfo{}
-	
-	// Check common drive letters
-	for _, letter := range "CDEFGHIJKLMNOPQRSTUVWXYZ" {
-		path := string(letter) + ":\\"
-		if _, err := os.Stat(path); err == nil {
-			drives = append(drives, FileInfo{
-				Name:  string(letter) + ":",
-				Path:  path,
-				IsDir: true,
-			})
+
+	if runtime.GOOS == "windows" {
+		for _, letter := range "CDEFGHIJKLMNOPQRSTUVWXYZ" {
+			path := string(letter) + ":\\"
+			if _, err := os.Stat(path); err == nil {
+				drives = append(drives, FileInfo{
+					Name:  string(letter) + ":",
+					Path:  path,
+					IsDir: true,
+				})
+			}
+		}
+	} else {
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			drives = append(drives, FileInfo{Name: "Home", Path: home, IsDir: true})
+		}
+		drives = append(drives, FileInfo{Name: "/", Path: "/", IsDir: true})
+		if entries, err := os.ReadDir("/Volumes"); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					drives = append(drives, FileInfo{
+						Name:  e.Name(),
+						Path:  filepath.Join("/Volumes", e.Name()),
+						IsDir: true,
+					})
+				}
+			}
 		}
 	}
-	
+
 	return drives
 }
 
