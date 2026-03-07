@@ -189,6 +189,8 @@ function createDeviceCard(device) {
   subtitle.style.cssText = 'font-size: 0.7rem; color: var(--text-muted, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
   const parts = [device.platform || 'Unknown'];
   if (device.agent_version) parts.push(device.agent_version);
+  if (device.public_ip) parts.push(device.public_ip);
+  if (device.isp) parts.push(device.isp);
   subtitle.textContent = parts.join(' · ');
   nameCol.append(nameEl, subtitle);
 
