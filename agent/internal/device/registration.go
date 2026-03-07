@@ -178,9 +178,17 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 	return fmt.Errorf("registration failed: %s (status: %d)", string(body), resp.StatusCode)
 }
 
+// HeartbeatResult contains information read back from the heartbeat response.
+type HeartbeatResult struct {
+	PendingCommand string // Non-empty if dashboard sent a command (e.g. "force_update")
+}
+
 // UpdateHeartbeat updates the device heartbeat using authenticated token.
 // isOnline indicates whether the agent is healthy and reachable.
-func UpdateHeartbeat(config RegistrationConfig, deviceID string, isOnline bool) error {
+// Returns a HeartbeatResult with any pending commands from the dashboard.
+func UpdateHeartbeat(config RegistrationConfig, deviceID string, isOnline bool) (*HeartbeatResult, error) {
+	result := &HeartbeatResult{}
+
 	url := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, deviceID)
 
 	now := time.Now().Format(time.RFC3339)
@@ -195,12 +203,59 @@ func UpdateHeartbeat(config RegistrationConfig, deviceID string, isOnline bool) 
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
+		return result, fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
 	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return result, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("apikey", config.AnonKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=representation")
+	if config.AccessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+config.AccessToken)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return result, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return result, fmt.Errorf("heartbeat failed: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	// Parse response to check for pending commands
+	if len(body) > 0 {
+		var rows []struct {
+			PendingCommand *string `json:"pending_command"`
+		}
+		if err := json.Unmarshal(body, &rows); err == nil && len(rows) > 0 && rows[0].PendingCommand != nil {
+			result.PendingCommand = *rows[0].PendingCommand
+		}
+	}
+
+	return result, nil
+}
+
+// ClearPendingCommand clears the pending_command column after processing.
+func ClearPendingCommand(config RegistrationConfig, deviceID string) error {
+	url := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, deviceID)
+
+	payload := map[string]interface{}{
+		"pending_command": nil,
+	}
+
+	jsonData, _ := json.Marshal(payload)
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
 	}
 
 	req.Header.Set("apikey", config.AnonKey)
@@ -209,18 +264,12 @@ func UpdateHeartbeat(config RegistrationConfig, deviceID string, isOnline bool) 
 		req.Header.Set("Authorization", "Bearer "+config.AccessToken)
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
+		return err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("heartbeat failed: %s (status: %d)", string(body), resp.StatusCode)
-	}
-
 	return nil
 }
 
