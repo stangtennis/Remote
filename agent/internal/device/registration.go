@@ -5,11 +5,48 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/stangtennis/remote-agent/internal/version"
 )
+
+// ipInfo caches the public IP and ISP
+var cachedIPInfo struct {
+	IP  string
+	ISP string
+}
+
+// fetchPublicIPInfo gets public IP and ISP from ip-api.com (free, no key needed)
+func fetchPublicIPInfo() (ip, isp string) {
+	if cachedIPInfo.IP != "" {
+		return cachedIPInfo.IP, cachedIPInfo.ISP
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("http://ip-api.com/json/?fields=query,isp")
+	if err != nil {
+		log.Printf("⚠️ IP lookup failed: %v", err)
+		return "", ""
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Query string `json:"query"`
+		ISP   string `json:"isp"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("⚠️ IP lookup parse failed: %v", err)
+		return "", ""
+	}
+
+	cachedIPInfo.IP = strings.TrimSpace(result.Query)
+	cachedIPInfo.ISP = strings.TrimSpace(result.ISP)
+	log.Printf("🌐 Public IP: %s (%s)", cachedIPInfo.IP, cachedIPInfo.ISP)
+	return cachedIPInfo.IP, cachedIPInfo.ISP
+}
 
 // RegistrationConfig holds Supabase configuration
 type RegistrationConfig struct {
@@ -56,6 +93,9 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 	// Use direct REST API with user's access token for authenticated registration
 	url := fmt.Sprintf("%s/rest/v1/remote_devices", config.SupabaseURL)
 
+	// Fetch public IP and ISP
+	publicIP, isp := fetchPublicIPInfo()
+
 	// Create payload
 	payload := map[string]interface{}{
 		"device_id":      device.DeviceID,
@@ -66,6 +106,8 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 		"is_online":      true,
 		"last_seen":      time.Now().Format(time.RFC3339),
 		"agent_version":  version.Version,
+		"public_ip":      publicIP,
+		"isp":            isp,
 	}
 
 	jsonData, err := json.Marshal(payload)
@@ -141,10 +183,13 @@ func UpdateHeartbeat(config RegistrationConfig, deviceID string, isOnline bool) 
 	url := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, deviceID)
 
 	now := time.Now().Format(time.RFC3339)
+	publicIP, isp := fetchPublicIPInfo()
 	payload := map[string]interface{}{
 		"is_online":     isOnline,
 		"last_seen":     now,
 		"agent_version": version.Version,
+		"public_ip":     publicIP,
+		"isp":           isp,
 	}
 
 	jsonData, err := json.Marshal(payload)
