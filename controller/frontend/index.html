@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Remote Desktop Controller</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+  <!-- Animated Background -->
+  <div class="animated-bg">
+    <div class="gradient-orb orb-1"></div>
+    <div class="gradient-orb orb-2"></div>
+    <div class="gradient-orb orb-3"></div>
+  </div>
+
+  <!-- ==================== LOGIN VIEW ==================== -->
+  <div id="loginView" class="view">
+    <div class="login-container">
+      <div class="login-card glass">
+        <div class="login-header">
+          <div class="app-icon"><i class="fas fa-desktop"></i></div>
+          <h1>Remote Desktop</h1>
+          <p class="subtitle">Controller <span id="loginVersion"></span></p>
+        </div>
+        <form id="loginForm" class="auth-form" onsubmit="return false;">
+          <div class="form-group">
+            <label for="email"><i class="fas fa-envelope"></i> Email</label>
+            <input type="email" id="email" placeholder="din@email.dk" autocomplete="email" required>
+          </div>
+          <div class="form-group">
+            <label for="password"><i class="fas fa-lock"></i> Adgangskode</label>
+            <input type="password" id="password" placeholder="Adgangskode" autocomplete="current-password" required>
+          </div>
+          <label class="checkbox-label">
+            <input type="checkbox" id="rememberMe" checked>
+            <span>Husk mig</span>
+          </label>
+          <button type="submit" id="loginBtn" class="btn btn-primary btn-block">
+            <span class="btn-text">Log ind</span>
+            <span class="btn-loading" style="display:none;"><i class="fas fa-spinner fa-spin"></i> Logger ind...</span>
+          </button>
+          <p id="loginStatus" class="status-text"></p>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MAIN VIEW ==================== -->
+  <div id="mainView" class="view" style="display:none;">
+    <!-- Header -->
+    <header class="app-header glass">
+      <div class="header-left">
+        <i class="fas fa-desktop header-icon"></i>
+        <h1>Remote Desktop <span class="version-badge" id="headerVersion"></span></h1>
+      </div>
+      <div class="header-right">
+        <span id="userEmail" class="user-badge"><i class="fas fa-user"></i> <span></span></span>
+        <button class="btn btn-icon" id="supportBtn" title="Quick Support"><i class="fas fa-life-ring"></i></button>
+        <button class="btn btn-icon" id="updateBtn" title="Tjek opdatering"><i class="fas fa-sync-alt"></i></button>
+        <button class="btn btn-icon" id="settingsBtn" title="Indstillinger"><i class="fas fa-cog"></i></button>
+        <button class="btn btn-icon" id="logoutBtn" title="Log ud"><i class="fas fa-sign-out-alt"></i></button>
+      </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="devices"><i class="fas fa-laptop"></i> Mine enheder</button>
+      <button class="tab-btn" data-tab="pending"><i class="fas fa-clock"></i> Ventende</button>
+      <button class="tab-btn" data-tab="viewer"><i class="fas fa-tv"></i> Fjernsession</button>
+      <button class="tab-btn" data-tab="settings"><i class="fas fa-sliders-h"></i> Indstillinger</button>
+    </nav>
+
+    <!-- Tab Content -->
+    <main class="tab-content">
+
+      <!-- DEVICES TAB -->
+      <section id="devicesTab" class="tab-pane active">
+        <div class="section-header">
+          <h2><i class="fas fa-laptop"></i> Mine enheder</h2>
+          <button class="btn btn-sm btn-secondary" id="refreshDevicesBtn"><i class="fas fa-sync-alt"></i> Opdater</button>
+        </div>
+        <div id="deviceList" class="device-grid">
+          <div class="empty-state">
+            <i class="fas fa-plug"></i>
+            <p>Ingen enheder endnu. Installer agent-software på den computer du vil fjernstyre.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- PENDING DEVICES TAB -->
+      <section id="pendingTab" class="tab-pane">
+        <div class="section-header">
+          <h2><i class="fas fa-clock"></i> Ventende enheder</h2>
+          <button class="btn btn-sm btn-secondary" id="refreshPendingBtn"><i class="fas fa-sync-alt"></i> Opdater</button>
+        </div>
+        <div id="pendingList" class="device-grid">
+          <div class="empty-state">
+            <i class="fas fa-check-circle"></i>
+            <p>Ingen ventende enheder.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEWER TAB -->
+      <section id="viewerTab" class="tab-pane">
+        <div class="viewer-container" id="viewerContainer">
+          <div class="viewer-idle" id="viewerIdle">
+            <div class="viewer-idle-content">
+              <i class="fas fa-desktop viewer-icon"></i>
+              <h3>Ingen aktiv forbindelse</h3>
+              <p>Klik "Connect" på en enhed for at starte en fjernsession</p>
+              <div class="feature-tags">
+                <span class="tag"><i class="fas fa-lock"></i> Krypteret</span>
+                <span class="tag"><i class="fas fa-bolt"></i> Lav forsinkelse</span>
+                <span class="tag"><i class="fas fa-mouse-pointer"></i> Fuld kontrol</span>
+              </div>
+            </div>
+          </div>
+          <div class="viewer-connecting" id="viewerConnecting" style="display:none;">
+            <div class="connecting-spinner"></div>
+            <p>Opretter forbindelse til <span id="connectingDeviceName"></span>...</p>
+          </div>
+          <div class="viewer-active" id="viewerActive" style="display:none;">
+            <div class="viewer-toolbar">
+              <span id="viewerDeviceName" class="viewer-device-label"></span>
+              <div class="viewer-stats" id="viewerStats"></div>
+              <button class="btn btn-sm btn-icon" id="viewerFullscreenBtn" title="Fuldskærm"><i class="fas fa-expand"></i></button>
+              <button class="btn btn-sm btn-danger" id="viewerDisconnectBtn">Afbryd</button>
+            </div>
+            <div class="viewer-screen" id="viewerScreen">
+              <video id="viewerVideo" autoplay playsinline></video>
+              <canvas id="viewerCanvas" tabindex="0"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SETTINGS TAB -->
+      <section id="settingsTab" class="tab-pane">
+        <div class="settings-grid">
+          <!-- Performance -->
+          <div class="settings-card glass">
+            <h3><i class="fas fa-tachometer-alt"></i> Ydelse</h3>
+            <div class="preset-buttons">
+              <button class="btn btn-sm btn-primary" onclick="App.applyPreset('ultra')">Ultra (4K, 60 FPS)</button>
+              <button class="btn btn-sm btn-secondary" onclick="App.applyPreset('high')">Høj (1440p, 60 FPS)</button>
+              <button class="btn btn-sm btn-secondary" onclick="App.applyPreset('low')">Lav (1080p, 30 FPS)</button>
+            </div>
+          </div>
+
+          <!-- Video -->
+          <div class="settings-card glass">
+            <h3><i class="fas fa-video"></i> Video</h3>
+            <div class="form-group">
+              <label>Opløsning</label>
+              <select id="settResolution">
+                <option value="720p">720p</option>
+                <option value="1080p">1080p</option>
+                <option value="1440p">1440p</option>
+                <option value="4K">4K</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Target FPS</label>
+              <select id="settFPS">
+                <option value="30">30</option>
+                <option value="60">60</option>
+                <option value="120">120</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Codec</label>
+              <select id="settCodec">
+                <option value="H.264">H.264</option>
+                <option value="H.265">H.265</option>
+                <option value="VP9">VP9</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Videokvalitet: <span id="qualityValue">80</span>%</label>
+              <input type="range" id="settQuality" min="1" max="100" step="5" value="80">
+            </div>
+          </div>
+
+          <!-- Network -->
+          <div class="settings-card glass">
+            <h3><i class="fas fa-network-wired"></i> Netværk</h3>
+            <div class="form-group">
+              <label>Max bitrate: <span id="bitrateValue">50</span> Mbps</label>
+              <input type="range" id="settBitrate" min="5" max="100" step="5" value="50">
+            </div>
+            <label class="checkbox-label">
+              <input type="checkbox" id="settAdaptive" checked>
+              <span>Adaptiv bitrate</span>
+            </label>
+          </div>
+
+          <!-- Features -->
+          <div class="settings-card glass">
+            <h3><i class="fas fa-puzzle-piece"></i> Funktioner</h3>
+            <label class="checkbox-label">
+              <input type="checkbox" id="settFileTransfer" checked>
+              <span>Filoverførsel</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="settClipboard" checked>
+              <span>Udklipsholder synkronisering</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="settLowLatency" checked>
+              <span>Lav forsinkelsestilstand</span>
+            </label>
+          </div>
+
+          <!-- System -->
+          <div class="settings-card glass">
+            <h3><i class="fas fa-tools"></i> System</h3>
+            <div class="system-buttons">
+              <button class="btn btn-sm btn-secondary" id="installBtn"><i class="fas fa-download"></i> Installer</button>
+              <button class="btn btn-sm btn-secondary" id="restartBtn"><i class="fas fa-redo"></i> Genstart</button>
+              <button class="btn btn-sm btn-secondary" id="viewLogBtn"><i class="fas fa-file-alt"></i> Vis log</button>
+              <button class="btn btn-sm btn-danger" id="resetSettingsBtn"><i class="fas fa-undo"></i> Nulstil</button>
+            </div>
+            <p class="settings-info" id="settingsInfo"></p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- Support Modal -->
+  <div id="supportModal" class="modal" style="display:none;">
+    <div class="modal-content glass">
+      <div class="modal-header">
+        <h2><i class="fas fa-life-ring"></i> Quick Support</h2>
+        <button class="modal-close" onclick="closeModal('supportModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="supportModalBody">
+        <p>Opretter support session...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Update Modal -->
+  <div id="updateModal" class="modal" style="display:none;">
+    <div class="modal-content glass">
+      <div class="modal-header">
+        <h2><i class="fas fa-sync-alt"></i> Opdateringer</h2>
+        <button class="modal-close" onclick="closeModal('updateModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="updateModalBody">
+        <p>Tjekker for opdateringer...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log Modal -->
+  <div id="logModal" class="modal" style="display:none;">
+    <div class="modal-content modal-large glass">
+      <div class="modal-header">
+        <h2><i class="fas fa-file-alt"></i> Controller Log</h2>
+        <button class="modal-close" onclick="closeModal('logModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <pre id="logContent" class="log-viewer"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="/js/app.js"></script>
+  <script src="/js/viewer.js"></script>
+</body>
+</html>

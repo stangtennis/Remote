@@ -11,11 +11,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/widget"
-
 	"github.com/stangtennis/Remote/controller/internal/logger"
 )
 
@@ -24,8 +19,6 @@ import (
 const (
 	controllerInstallDir = "/Applications"
 	controllerExeName    = "RemoteDesktopController"
-	controllerRegRunKey  = "" // Not used on macOS
-	controllerRegValue   = "" // Not used on macOS
 )
 
 const launchAgentLabel = "dk.hawkeye.remote-controller"
@@ -50,10 +43,14 @@ func isInstalledAsProgram() bool {
 	if err == nil {
 		return true
 	}
-	// Also check for .app bundle
 	targetApp := filepath.Join(controllerInstallDir, controllerExeName+".app")
 	_, err = os.Stat(targetApp)
 	return err == nil
+}
+
+// getInstalledExePath returns the full path to the installed exe
+func getInstalledExePath() string {
+	return filepath.Join(controllerInstallDir, controllerExeName)
 }
 
 // stopRunningController kills any running controller processes (except this one)
@@ -61,8 +58,6 @@ func stopRunningController() {
 	myPID := os.Getpid()
 	log.Printf("Stopper koerende controller-processer (vores PID: %d)...", myPID)
 
-	// Use pkill to kill all instances except ours
-	// First try killall which is more reliable on macOS
 	cmd := exec.Command("bash", "-c", fmt.Sprintf(
 		"pgrep -f '%s' | grep -v '^%d$' | xargs -r kill -9 2>/dev/null || true",
 		controllerExeName, myPID))
@@ -78,10 +73,8 @@ func installControllerAsProgram() error {
 		return fmt.Errorf("administrator rettigheder kraeves")
 	}
 
-	// Stop any running controller first
 	stopRunningController()
 
-	// Get current exe path
 	currentExe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("kunne ikke finde exe: %w", err)
@@ -89,22 +82,18 @@ func installControllerAsProgram() error {
 
 	targetExe := filepath.Join(controllerInstallDir, controllerExeName)
 
-	// Copy exe to /Applications
 	if err := copyFileSimple(currentExe, targetExe); err != nil {
 		return fmt.Errorf("kunne ikke kopiere: %w", err)
 	}
 
-	// Make executable
 	if err := os.Chmod(targetExe, 0755); err != nil {
 		return fmt.Errorf("kunne ikke saette eksekverbar: %w", err)
 	}
 
-	// Add LaunchAgent for autostart
 	if err := setControllerAutostart(targetExe); err != nil {
 		return fmt.Errorf("kunne ikke saette autostart: %w", err)
 	}
 
-	// Start the controller from /Applications
 	log.Printf("Starter controller fra: %s", targetExe)
 	startCmd := exec.Command(targetExe)
 	if err := startCmd.Start(); err != nil {
@@ -121,22 +110,14 @@ func uninstallControllerProgram() error {
 		return fmt.Errorf("administrator rettigheder kraeves")
 	}
 
-	// Stop any running controller first
 	stopRunningController()
-
-	// Remove autostart LaunchAgent
 	removeControllerAutostart()
-
-	// Remove shortcuts (symlinks)
 	removeShortcuts()
 
-	// Remove executable from /Applications
 	targetExe := filepath.Join(controllerInstallDir, controllerExeName)
 	if err := os.Remove(targetExe); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("kunne ikke fjerne executable: %w", err)
 	}
-
-	// Also try removing .app bundle if it exists
 	targetApp := filepath.Join(controllerInstallDir, controllerExeName+".app")
 	os.RemoveAll(targetApp)
 
@@ -172,7 +153,6 @@ func setControllerAutostart(exePath string) error {
 
 	plistPath := launchAgentPath()
 
-	// Ensure LaunchAgents directory exists
 	if err := os.MkdirAll(filepath.Dir(plistPath), 0755); err != nil {
 		return fmt.Errorf("kunne ikke oprette LaunchAgents mappe: %w", err)
 	}
@@ -181,9 +161,8 @@ func setControllerAutostart(exePath string) error {
 		return fmt.Errorf("kunne ikke skrive plist: %w", err)
 	}
 
-	// Load the LaunchAgent
 	cmd := exec.Command("launchctl", "load", plistPath)
-	cmd.Run() // Ignore errors - may already be loaded
+	cmd.Run()
 
 	return nil
 }
@@ -191,13 +170,9 @@ func setControllerAutostart(exePath string) error {
 // removeControllerAutostart removes the LaunchAgent plist and unloads it
 func removeControllerAutostart() {
 	plistPath := launchAgentPath()
-
-	// Unload the LaunchAgent
 	cmd := exec.Command("launchctl", "unload", plistPath)
-	cmd.Run() // Ignore errors
-
-	// Remove the plist file
-	os.Remove(plistPath) // Ignore errors
+	cmd.Run()
+	os.Remove(plistPath)
 }
 
 // copyFileSimple copies a file from src to dst
@@ -218,15 +193,8 @@ func copyFileSimple(src, dst string) error {
 	return err
 }
 
-// createShortcut is a no-op on macOS (shortcuts are not a concept)
-func createShortcut(shortcutPath, targetExe, description string) error {
-	// macOS does not use .lnk shortcuts; create a symlink instead
-	return os.Symlink(targetExe, shortcutPath)
-}
-
-// createStartMenuShortcut is a no-op on macOS (no Start Menu)
+// createStartMenuShortcut is a no-op on macOS
 func createStartMenuShortcut(targetExe string) error {
-	// macOS has no Start Menu concept
 	return nil
 }
 
@@ -236,134 +204,20 @@ func createDesktopShortcut(targetExe string) error {
 	desktopDir := filepath.Join(homeDir, "Desktop")
 	symlinkPath := filepath.Join(desktopDir, controllerExeName)
 	log.Printf("Opretter Desktop symlink: %s", symlinkPath)
-
-	// Remove existing symlink if present
 	os.Remove(symlinkPath)
-
 	return os.Symlink(targetExe, symlinkPath)
 }
 
 // removeShortcuts removes Desktop symlinks
 func removeShortcuts() {
 	homeDir, _ := os.UserHomeDir()
-
-	// Desktop symlink
 	desktopLink := filepath.Join(homeDir, "Desktop", controllerExeName)
 	if err := os.Remove(desktopLink); err == nil {
 		log.Printf("Desktop symlink fjernet")
 	}
 }
 
-// showInstallDialog shows the install/uninstall dialog for the controller
-func showInstallDialog(window fyne.Window) {
-	installed := isInstalledAsProgram()
-
-	if installed {
-		// Show uninstall option
-		dialog.ShowConfirm("Afinstaller Controller",
-			"Controller er installeret i:\n"+controllerInstallDir+"/"+controllerExeName+"\n\n"+
-				"Dette vil:\n"+
-				"  Stoppe koerende controller\n"+
-				"  Fjerne autostart (LaunchAgent)\n"+
-				"  Slette installationen\n\n"+
-				"Fortsaet?",
-			func(ok bool) {
-				if !ok {
-					return
-				}
-				if !isAdmin() {
-					dialog.ShowConfirm("Administrator kraeves",
-						"Afinstallation kraever administrator rettigheder.\n\nGenstart som administrator?",
-						func(ok bool) {
-							if ok {
-								runAsAdmin()
-								myApp.Quit()
-							}
-						}, window)
-					return
-				}
-				go func() {
-					err := uninstallControllerProgram()
-					fyne.Do(func() {
-						if err != nil {
-							dialog.ShowError(fmt.Errorf("Kunne ikke afinstallere: %v", err), window)
-						} else {
-							dialog.ShowInformation("Afinstallation faerdig",
-								"Controller afinstalleret.\n\nAutostart og genveje er fjernet.", window)
-						}
-					})
-				}()
-			}, window)
-	} else {
-		// Show install option with desktop shortcut checkbox
-		desktopCheck := widget.NewCheck("Opret genvej paa skrivebordet", nil)
-		desktopCheck.SetChecked(true)
-
-		content := container.NewVBox(
-			widget.NewLabelWithStyle("Installer Controller", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-			widget.NewSeparator(),
-			widget.NewLabel("Dette vil:"),
-			widget.NewLabel("  Kopiere controller til /Applications"),
-			widget.NewLabel("  Oprette LaunchAgent til autostart"),
-			widget.NewLabel("  Stoppe evt. koerende gammel version"),
-			widget.NewSeparator(),
-			desktopCheck,
-			widget.NewSeparator(),
-			widget.NewLabel("Installationsmappe:"),
-			widget.NewLabel(controllerInstallDir),
-		)
-
-		d := dialog.NewCustomConfirm("Installer Controller", "Installer", "Annuller", content,
-			func(ok bool) {
-				if !ok {
-					return
-				}
-				createDesktop := desktopCheck.Checked
-				if !isAdmin() {
-					dialog.ShowConfirm("Administrator kraeves",
-						"Installation kraever administrator rettigheder.\n\nGenstart som administrator?",
-						func(ok bool) {
-							if ok {
-								runAsAdmin()
-								myApp.Quit()
-							}
-						}, window)
-					return
-				}
-				go func() {
-					err := installControllerAsProgram()
-					if err == nil {
-						targetExe := filepath.Join(controllerInstallDir, controllerExeName)
-						// Optionally create Desktop shortcut (symlink)
-						if createDesktop {
-							if dErr := createDesktopShortcut(targetExe); dErr != nil {
-								log.Printf("Desktop genvej fejlede: %v", dErr)
-							}
-						}
-					}
-					fyne.Do(func() {
-						if err != nil {
-							dialog.ShowError(fmt.Errorf("Kunne ikke installere: %v", err), window)
-						} else {
-							d := dialog.NewInformation("Installation faerdig",
-								"Controller installeret og startet!\n\n"+
-									"Starter automatisk ved login (LaunchAgent)\n"+
-									"Installeret i: "+controllerInstallDir+"\n\n"+
-									"Dette vindue lukkes nu.", window)
-							d.SetOnClosed(func() {
-								myApp.Quit()
-							})
-							d.Show()
-						}
-					})
-				}()
-			}, window)
-		d.Resize(fyne.NewSize(400, 350))
-		d.Show()
-	}
-}
-
-// openBrowser opens a URL in the default browser (macOS implementation)
+// openBrowser opens a URL in the default browser
 func openBrowser(url string) {
 	logger.Info("Opening browser: %s", url)
 	cmd := exec.Command("open", url)
@@ -372,50 +226,110 @@ func openBrowser(url string) {
 	}
 }
 
-// restartApplication restarts the application (macOS implementation)
+// restartApplication restarts the application
 func restartApplication() {
 	logger.Info("Restarting application...")
 
-	// Show progress dialog
-	progressDialog := dialog.NewCustom("Restarting", "Cancel",
-		container.NewVBox(
-			widget.NewLabel("Restarting application..."),
-			widget.NewProgressBarInfinite(),
-		), myWindow)
-	progressDialog.Show()
-
-	// Get the current executable path
 	executable, err := os.Executable()
 	if err != nil {
 		logger.Error("Failed to get executable path: %v", err)
-		progressDialog.Hide()
-		dialog.ShowError(fmt.Errorf("Failed to restart: %v", err), myWindow)
 		return
 	}
 
-	logger.Info("Executable path: %s", executable)
+	cmd := exec.Command(executable)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
-	// Start a new instance in background
-	go func() {
-		// Small delay to ensure UI updates
-		time.Sleep(500 * time.Millisecond)
+	if err := cmd.Start(); err != nil {
+		logger.Error("Failed to start new instance: %v", err)
+		return
+	}
 
-		cmd := exec.Command(executable)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+	logger.Info("New instance started, exiting current")
+	os.Exit(0)
+}
 
-		logger.Info("Starting new instance with command: %v", cmd.Args)
+// runUpdateMode runs when started with --update-from flag
+func runUpdateMode(oldExePath string) {
+	logFile := oldExePath + ".update.log"
+	f, _ := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if f != nil {
+		defer f.Close()
+	}
 
-		if err := cmd.Start(); err != nil {
-			logger.Error("Failed to start new instance: %v", err)
-			progressDialog.Hide()
-			dialog.ShowError(fmt.Errorf("Failed to restart: %v", err), myWindow)
-			return
+	logMsg := func(msg string) {
+		line := fmt.Sprintf("[%s] %s\n", time.Now().Format("15:04:05"), msg)
+		if f != nil {
+			f.WriteString(line)
 		}
+	}
 
-		logger.Info("New instance started successfully, shutting down current instance")
+	logMsg("Update mode started")
+	logMsg(fmt.Sprintf("Old exe: %s", oldExePath))
 
-		// Exit current instance immediately
-		myApp.Quit()
-	}()
+	currentExe, err := os.Executable()
+	if err != nil {
+		logMsg(fmt.Sprintf("ERROR: Failed to get current exe path: %v", err))
+		return
+	}
+	logMsg(fmt.Sprintf("New exe: %s", currentExe))
+
+	// Wait for old exe to exit
+	logMsg("Waiting for old exe to exit...")
+	for i := 0; i < 100; i++ {
+		file, err := os.OpenFile(oldExePath, os.O_RDWR, 0)
+		if err == nil {
+			file.Close()
+			logMsg("Old exe is unlocked")
+			break
+		}
+		if os.IsNotExist(err) {
+			logMsg("Old exe already deleted")
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	logMsg("Deleting old exe...")
+	if err := os.Remove(oldExePath); err != nil {
+		if !os.IsNotExist(err) {
+			logMsg(fmt.Sprintf("WARNING: Failed to delete old exe: %v", err))
+		}
+	} else {
+		logMsg("Old exe deleted")
+	}
+
+	logMsg(fmt.Sprintf("Moving %s to %s", currentExe, oldExePath))
+	srcFile, err := os.Open(currentExe)
+	if err != nil {
+		logMsg(fmt.Sprintf("ERROR: Failed to open source: %v", err))
+		return
+	}
+	dstFile, err := os.Create(oldExePath)
+	if err != nil {
+		srcFile.Close()
+		logMsg(fmt.Sprintf("ERROR: Failed to create destination: %v", err))
+		return
+	}
+	_, err = dstFile.ReadFrom(srcFile)
+	srcFile.Close()
+	dstFile.Close()
+	if err != nil {
+		logMsg(fmt.Sprintf("ERROR: Failed to copy: %v", err))
+		return
+	}
+	logMsg("Copy complete")
+
+	if err := os.Chmod(oldExePath, 0755); err != nil {
+		logMsg(fmt.Sprintf("WARNING: chmod failed: %v", err))
+	}
+
+	logMsg("Starting controller from original location...")
+	cmd := exec.Command(oldExePath)
+	if err := cmd.Start(); err != nil {
+		logMsg(fmt.Sprintf("ERROR: Failed to start: %v", err))
+		return
+	}
+
+	logMsg("Update complete!")
 }

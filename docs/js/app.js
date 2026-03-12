@@ -57,6 +57,18 @@ function setupEventListeners() {
     });
   }
 
+  // Toggle session info panel
+  const toggleSessionInfo = document.getElementById('toggleSessionInfo');
+  if (toggleSessionInfo) {
+    toggleSessionInfo.addEventListener('click', () => {
+      const info = document.querySelector('.session-info');
+      if (info) {
+        info.classList.toggle('expanded');
+        toggleSessionInfo.textContent = info.classList.contains('expanded') ? 'Skjul' : 'Detaljer';
+      }
+    });
+  }
+
   // Disconnect button (new preview toolbar)
   const disconnectBtn = document.getElementById('disconnectBtn');
   if (disconnectBtn) {
