@@ -56,7 +56,7 @@
             <div class="tabs-container" id="tabsContainer">
               <!-- Tabs will be added dynamically -->
             </div>
-            <button class="tab-add-btn" id="tabAddBtn" title="Opret forbindelse til en anden enhed" style="display: none;">+</button>
+            <button class="tab-add-btn" id="tabAddBtn" title="Opret forbindelse til en anden enhed">+</button>
           </div>
           
           <div class="remote-preview-container" id="remotePreviewContainer">
@@ -250,7 +250,10 @@
     <section class="session-section" id="sessionSection" style="display: none;">
       <div class="section-header">
         <h2>Aktiv session</h2>
-        <button id="endSessionBtn" class="btn btn-danger">Afslut session</button>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button id="toggleSessionInfo" class="btn btn-icon" title="Vis session-detaljer" style="font-size: 0.85rem; padding: 0.4rem 0.6rem;">Detaljer</button>
+          <button id="endSessionBtn" class="btn btn-danger">Afslut session</button>
+        </div>
       </div>
 
       <!-- Session Info -->

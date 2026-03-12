@@ -19,6 +19,9 @@ const SessionManager = {
       });
     }
 
+    // Show tab bar immediately
+    this.updateUI();
+
     debug('📑 Session Manager initialized');
   },
 
@@ -306,15 +309,29 @@ const SessionManager = {
 
   // Update UI elements
   updateUI() {
-    // Show/hide add button
-    if (this.tabAddBtn) {
-      this.tabAddBtn.style.display = this.sessions.size > 0 ? 'flex' : 'none';
-    }
-
-    // Show tabs container only if there are sessions
+    // Always show tab bar and "+" button
     const sessionTabs = document.getElementById('sessionTabs');
     if (sessionTabs) {
-      sessionTabs.style.display = this.sessions.size > 0 ? 'flex' : 'none';
+      sessionTabs.style.display = 'flex';
+    }
+    if (this.tabAddBtn) {
+      this.tabAddBtn.style.display = 'flex';
+    }
+
+    // Show empty hint when no sessions
+    const tabsContainer = document.getElementById('tabsContainer');
+    if (tabsContainer) {
+      let hint = tabsContainer.querySelector('.tabs-empty-hint');
+      if (this.sessions.size === 0) {
+        if (!hint) {
+          hint = document.createElement('span');
+          hint.className = 'tabs-empty-hint';
+          hint.textContent = 'Klik Connect for at starte en session';
+          tabsContainer.appendChild(hint);
+        }
+      } else if (hint) {
+        hint.remove();
+      }
     }
   },
 
