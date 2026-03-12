@@ -23,7 +23,7 @@ CONTROLLER_LDFLAGS="-s -w -H windowsgui -X 'main.Version=$VERSION' -X 'main.Buil
 echo ""
 echo "📦 Building Controller (Windows)..."
 cd controller
-timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -ldflags \"$CONTROLLER_LDFLAGS\" -o ../builds/controller-$VERSION.exe ." && echo "✅ Controller built" || echo "❌ Controller build failed"
+timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -tags desktop,production -ldflags \"$CONTROLLER_LDFLAGS\" -o ../builds/controller-$VERSION.exe ." && echo "✅ Controller built" || echo "❌ Controller build failed"
 cd ..
 
 # Build Agent (Windows) - requires Windows or proper cross-compile setup
@@ -72,10 +72,10 @@ MACOS_CTRL_LDFLAGS="-s -w -X 'main.Version=$VERSION' -X 'main.BuildDate=$BUILD_D
 cd controller
 if command -v o64-clang &> /dev/null; then
     # Cross-compile via osxcross
-    timeout $TIMEOUT bash -c "GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=oa64-clang CXX=oa64-clang++ go build -ldflags \"$MACOS_CTRL_LDFLAGS\" -o ../builds/controller-macos-arm64-$VERSION ." 2>&1 && echo "✅ macOS Controller (arm64) built" || echo "⚠️  macOS Controller arm64 build failed"
-    timeout $TIMEOUT bash -c "GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC=o64-clang CXX=o64-clang++ go build -ldflags \"$MACOS_CTRL_LDFLAGS\" -o ../builds/controller-macos-amd64-$VERSION ." 2>&1 && echo "✅ macOS Controller (amd64) built" || echo "⚠️  macOS Controller amd64 build failed"
+    timeout $TIMEOUT bash -c "GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=oa64-clang CXX=oa64-clang++ go build -tags desktop,production -ldflags \"$MACOS_CTRL_LDFLAGS\" -o ../builds/controller-macos-arm64-$VERSION ." 2>&1 && echo "✅ macOS Controller (arm64) built" || echo "⚠️  macOS Controller arm64 build failed"
+    timeout $TIMEOUT bash -c "GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC=o64-clang CXX=o64-clang++ go build -tags desktop,production -ldflags \"$MACOS_CTRL_LDFLAGS\" -o ../builds/controller-macos-amd64-$VERSION ." 2>&1 && echo "✅ macOS Controller (amd64) built" || echo "⚠️  macOS Controller amd64 build failed"
 elif [[ "$(uname -s)" == "Darwin" ]]; then
-    timeout $TIMEOUT bash -c "CGO_ENABLED=1 go build -ldflags \"$MACOS_CTRL_LDFLAGS\" -o ../builds/controller-macos-$VERSION ." 2>&1 && echo "✅ macOS Controller built (native)" || echo "⚠️  macOS Controller build failed"
+    timeout $TIMEOUT bash -c "CGO_ENABLED=1 go build -tags desktop,production -ldflags \"$MACOS_CTRL_LDFLAGS\" -o ../builds/controller-macos-$VERSION ." 2>&1 && echo "✅ macOS Controller built (native)" || echo "⚠️  macOS Controller build failed"
 else
     echo "⏭️  Skipping macOS Controller build (no osxcross and not on macOS)"
 fi
