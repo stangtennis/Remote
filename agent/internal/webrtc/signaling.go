@@ -150,11 +150,11 @@ func (m *Manager) ListenForSessions() {
 	wasHealthy := true
 
 	// Dynamic polling interval with exponential backoff
-	pollInterval := 2 * time.Second
-	basePollInterval := 2 * time.Second
+	pollInterval := 500 * time.Millisecond
+	basePollInterval := 500 * time.Millisecond
 	maxPollInterval := 30 * time.Second
 
-	log.Println("🔄 Session polling started (checking every 2 seconds)")
+	log.Println("🔄 Session polling started (checking every 500ms)")
 	log.Println("   Listening on: webrtc_sessions (controller) + session_signaling (dashboard)")
 	log.Printf("   Device ID: %s", m.device.ID)
 	log.Printf("   Supabase URL: %s", m.cfg.SupabaseURL)

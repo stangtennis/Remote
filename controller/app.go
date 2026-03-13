@@ -321,6 +321,18 @@ func (a *App) ApplyPreset(preset string) *settings.Settings {
 
 // ==================== SYSTEM ====================
 
+// ToggleFullscreen toggles between fullscreen and windowed mode
+func (a *App) ToggleFullscreen() {
+	if a.ctx == nil {
+		return
+	}
+	if runtime.WindowIsFullscreen(a.ctx) {
+		runtime.WindowUnfullscreen(a.ctx)
+	} else {
+		runtime.WindowFullscreen(a.ctx)
+	}
+}
+
 // GetVersion returns the current version
 func (a *App) GetVersion() string {
 	return Version
