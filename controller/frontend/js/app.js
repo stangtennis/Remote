@@ -561,9 +561,23 @@ const App = {
 
       window.runtime.EventsOn('update-progress', (percent) => {
         const fill = document.getElementById('updateProgressFill');
-        const status = document.getElementById('updateStatus');
         if (fill) fill.style.width = percent + '%';
-        if (status) status.textContent = `Downloader... ${Math.round(percent)}%`;
+        const status = document.getElementById('updateStatus');
+        if (status && !status.dataset.phase) {
+          status.textContent = `Downloader... ${Math.round(percent)}%`;
+        }
+      });
+
+      window.runtime.EventsOn('update-status', (msg) => {
+        const status = document.getElementById('updateStatus');
+        if (status) {
+          status.textContent = msg;
+          if (msg.includes('UAC') || msg.includes('Installerer')) {
+            status.dataset.phase = 'install';
+          } else {
+            delete status.dataset.phase;
+          }
+        }
       });
     }
   },

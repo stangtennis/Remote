@@ -376,6 +376,8 @@ func (a *App) DownloadAndInstallUpdate() error {
 		return err
 	}
 
+	runtime.EventsEmit(a.ctx, "update-status", "Tjekker for opdateringer...")
+
 	if err := u.CheckForUpdate(); err != nil {
 		return err
 	}
@@ -385,9 +387,14 @@ func (a *App) DownloadAndInstallUpdate() error {
 		runtime.EventsEmit(a.ctx, "update-progress", p.Percent)
 	})
 
+	runtime.EventsEmit(a.ctx, "update-status", "Downloader...")
+
 	if err := u.DownloadUpdate(); err != nil {
 		return err
 	}
+
+	runtime.EventsEmit(a.ctx, "update-status", "Installerer — godkend UAC-dialogen...")
+	runtime.EventsEmit(a.ctx, "update-progress", float64(100))
 
 	return u.InstallUpdate()
 }
