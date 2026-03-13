@@ -17,6 +17,7 @@ const App = {
     this.setupHeader();
     this.setupSettings();
     this.setupModals();
+    this.setupKeyboardShortcuts();
     this.setupBackendEvents();
 
     // Try auto-login
@@ -194,11 +195,19 @@ const App = {
   },
 
   async connectDevice(deviceId, deviceName) {
-    // Switch to viewer tab
-    this.switchToTab('viewer');
-    // Initialize viewer connection
-    if (window.Viewer) {
-      window.Viewer.connect(deviceId, deviceName);
+    try {
+      console.log('connectDevice called:', deviceId, deviceName);
+      // Switch to viewer tab
+      this.switchToTab('viewer');
+      // Initialize viewer connection
+      if (window.Viewer) {
+        window.Viewer.connect(deviceId, deviceName);
+      } else {
+        showToast('FEJL: Viewer ikke loaded', 'error');
+      }
+    } catch (err) {
+      console.error('connectDevice error:', err);
+      showToast('Connect fejl: ' + err.message, 'error');
     }
   },
 
@@ -542,6 +551,30 @@ const App = {
     } catch (err) {
       content.textContent = 'Fejl: ' + err.message;
     }
+  },
+
+  // ==================== KEYBOARD SHORTCUTS ====================
+  setupKeyboardShortcuts() {
+    document.addEventListener('keydown', async (e) => {
+      // Ctrl+1/2/3: Connect to device #1/#2/#3
+      if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
+        e.preventDefault();
+        const index = parseInt(e.key) - 1;
+        try {
+          const devices = await window.go.main.App.GetDevices();
+          const onlineDevices = devices.filter(d => d.is_online);
+          if (index < onlineDevices.length) {
+            const d = onlineDevices[index];
+            showToast(`Ctrl+${e.key}: Forbinder til ${d.device_name}...`, 'info');
+            this.connectDevice(d.device_id, d.device_name);
+          } else {
+            showToast(`Ctrl+${e.key}: Ingen online enhed #${index + 1}`, 'warning');
+          }
+        } catch (err) {
+          showToast('Fejl: ' + err.message, 'error');
+        }
+      }
+    });
   },
 
   // ==================== BACKEND EVENTS ====================
