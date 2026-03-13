@@ -449,8 +449,19 @@ func (m *Manager) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	})
 
 	// Set up connection state handler
+	// Capture current peer connection to detect stale callbacks from old connections
+	thisPC := pc
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("🔄 Connection state changed: %s", state.String())
+
+		// Ignore callbacks from old peer connections that fired after a new connection was created
+		m.mu.Lock()
+		isCurrentPC := m.peerConnection == thisPC
+		m.mu.Unlock()
+		if !isCurrentPC && (state == webrtc.PeerConnectionStateClosed || state == webrtc.PeerConnectionStateFailed) {
+			log.Printf("🔄 Ignoring stale %s callback from old peer connection", state.String())
+			return
+		}
 
 		switch state {
 		case webrtc.PeerConnectionStateConnected:

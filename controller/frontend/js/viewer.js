@@ -1,6 +1,6 @@
-// Remote Desktop Viewer — Phase 2
+// Remote Desktop Viewer
 // Handles WebRTC connection, video display, and input capture
-// Uses browser-native WebRTC (no Go pion stack needed)
+// Uses browser-native WebRTC with TURN relay
 
 const Viewer = {
   deviceId: null,
@@ -19,7 +19,6 @@ const Viewer = {
 
   // Frame state
   frameChunks: {},
-  currentFrameId: -1,
   screenWidth: 0,
   screenHeight: 0,
   videoChannel: null,
@@ -57,20 +56,18 @@ const Viewer = {
         : null;
 
       if (this.supabase) {
-        // Set auth token
         await this.supabase.auth.setSession({
           access_token: cfg.auth_token,
           refresh_token: cfg.refresh_token
         });
       }
 
-      // Store normalized config for later use
       this.config = cfg;
 
       // Fetch TURN credentials
       await this.fetchTurnCredentials(cfg);
 
-      // Create session token
+      // Create session
       await this.createSession(cfg);
 
       // Setup WebRTC
@@ -127,7 +124,9 @@ const Viewer = {
   },
 
   async setupPeerConnection() {
-    this.peerConnection = new RTCPeerConnection(this.iceConfig);
+    // Force relay-only to avoid mDNS host candidate issues between browser and pion
+    const config = { ...this.iceConfig, iceTransportPolicy: 'relay' };
+    this.peerConnection = new RTCPeerConnection(config);
 
     // ICE candidates
     this.peerConnection.onicecandidate = (event) => {
@@ -161,22 +160,20 @@ const Viewer = {
         const canvas = document.getElementById('viewerCanvas');
         video.srcObject = event.streams[0];
         video.style.display = '';
-        // H.264 track: show video, hide canvas overlay
         canvas.style.pointerEvents = 'auto';
         canvas.style.background = 'transparent';
       }
     };
 
-    // Data channels from agent (agent-created channels)
+    // Data channels from agent
     this.peerConnection.ondatachannel = (event) => {
       const dc = event.channel;
-      console.log('Data channel received from agent:', dc.label);
+      console.log('Data channel received:', dc.label);
 
       if (dc.label === 'video') {
         this.videoChannel = dc;
         dc.binaryType = 'arraybuffer';
         dc.onmessage = (event) => this.handleDataMessage(event);
-        dc.onopen = () => console.log('Video data channel open (unreliable)');
       } else if (dc.label === 'control' || dc.label === 'screen') {
         this.dataChannel = dc;
         dc.binaryType = 'arraybuffer';
@@ -193,7 +190,6 @@ const Viewer = {
       console.log('Control data channel open');
       this.dataChannel = controlDC;
     };
-    // Agent sends frames back on this same channel
     controlDC.onmessage = (event) => this.handleDataMessage(event);
   },
 
@@ -202,11 +198,10 @@ const Viewer = {
       const data = new Uint8Array(event.data);
       if (data.length === 0) return;
 
-      // Check if this is JSON (starts with '{' = 0x7B)
+      // JSON messages (screen_info etc.)
       if (data[0] === 0x7B) {
         try {
-          const text = new TextDecoder().decode(data);
-          const msg = JSON.parse(text);
+          const msg = JSON.parse(new TextDecoder().decode(data));
           if (msg.type === 'screen_info' || msg.type === 'frame_meta') {
             this.screenWidth = msg.width;
             this.screenHeight = msg.height;
@@ -215,11 +210,14 @@ const Viewer = {
         return;
       }
 
-      const CHUNK_MAGIC = 0xFE;
-      const FRAME_TYPE_REGION = 0x02;
+      // Full frame: [0x01, frameID_hi, frameID_lo, ...jpeg_data]
+      if (data.length > 3 && data[0] === 0x01) {
+        this.renderFrame(data.slice(3).buffer);
+        return;
+      }
 
-      // Dirty region update (type 0x02)
-      if (data.length > 9 && data[0] === FRAME_TYPE_REGION) {
+      // Dirty region: [0x02, x_lo, x_hi, y_lo, y_hi, w_lo, w_hi, h_lo, h_hi, ...jpeg]
+      if (data.length > 9 && data[0] === 0x02) {
         const x = data[1] | (data[2] << 8);
         const y = data[3] | (data[4] << 8);
         const w = data[5] | (data[6] << 8);
@@ -228,8 +226,8 @@ const Viewer = {
         return;
       }
 
-      // Chunked frame (magic byte 0xFE)
-      if (data.length > 5 && data[0] === CHUNK_MAGIC) {
+      // Chunked frame: [0xFE, frameID_hi, frameID_lo, chunkIdx, totalChunks, ...data]
+      if (data.length > 5 && data[0] === 0xFE) {
         const frameId = (data[1] << 8) | data[2];
         const chunkIndex = data[3];
         const totalChunks = data[4];
@@ -252,7 +250,6 @@ const Viewer = {
             offset += chunk.length;
           }
           delete this.frameChunks[frameId];
-          // Clean up old incomplete frames
           for (const id of Object.keys(this.frameChunks)) {
             if (Number(id) < frameId - 5) delete this.frameChunks[id];
           }
@@ -261,7 +258,7 @@ const Viewer = {
         return;
       }
 
-      // Single JPEG frame (raw, starts with FF D8)
+      // Raw JPEG (starts with FF D8)
       this.renderFrame(event.data);
     } else if (event.data instanceof Blob) {
       event.data.arrayBuffer().then(buf => this.handleDataMessage({ data: buf }));
@@ -278,11 +275,12 @@ const Viewer = {
 
   renderFrame(data) {
     const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
-    if (blob.size < 100) return; // Too small, corrupt
+    if (blob.size < 100) return;
 
     const img = new Image();
     img.onload = () => {
       const canvas = document.getElementById('viewerCanvas');
+      if (!canvas) return;
       const ctx = canvas.getContext('2d');
       if (canvas.width !== img.width || canvas.height !== img.height) {
         canvas.width = img.width;
@@ -359,23 +357,25 @@ const Viewer = {
       )
       .subscribe();
 
-    // Polling fallback
+    // Polling fallback (500ms)
     this.pollingInterval = setInterval(async () => {
-      const { data } = await this.supabase
-        .from('session_signaling')
-        .select('*')
-        .eq('session_id', sessionId)
-        .in('from_side', ['agent', 'system'])
-        .order('created_at', { ascending: true });
+      try {
+        const { data } = await this.supabase
+          .from('session_signaling')
+          .select('*')
+          .eq('session_id', sessionId)
+          .in('from_side', ['agent', 'system'])
+          .order('created_at', { ascending: true });
 
-      if (data) {
-        for (const signal of data) {
-          if (!this.processedSignalIds.has(signal.id)) {
-            this.processedSignalIds.add(signal.id);
-            await this.handleSignal(signal);
+        if (data) {
+          for (const signal of data) {
+            if (!this.processedSignalIds.has(signal.id)) {
+              // Don't add to processedSignalIds here — handleSignal manages dedup
+              await this.handleSignal(signal);
+            }
           }
         }
-      }
+      } catch (e) { console.error('Poll error:', e); }
     }, 500);
   },
 
@@ -392,7 +392,6 @@ const Viewer = {
         case 'answer':
           if (pc.signalingState === 'have-local-offer') {
             await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
-            // Flush buffered ICE
             for (const c of this.pendingIceCandidates) {
               await pc.addIceCandidate(new RTCIceCandidate(c));
             }
@@ -401,12 +400,11 @@ const Viewer = {
           break;
 
         case 'ice':
-          const candidate = signal.payload.candidate ? signal.payload : signal.payload;
-          if (candidate && candidate.candidate) {
+          if (signal.payload && signal.payload.candidate) {
             if (!pc.remoteDescription) {
-              this.pendingIceCandidates.push(candidate);
+              this.pendingIceCandidates.push(signal.payload);
             } else {
-              await pc.addIceCandidate(new RTCIceCandidate(candidate));
+              await pc.addIceCandidate(new RTCIceCandidate(signal.payload));
             }
           }
           break;
@@ -429,7 +427,6 @@ const Viewer = {
     document.getElementById('viewerDeviceName').textContent = this.deviceName;
     showToast(`Forbundet til ${this.deviceName}`, 'success');
 
-    // Setup input handlers
     this.setupInput();
   },
 
@@ -441,7 +438,6 @@ const Viewer = {
   },
 
   disconnect() {
-    // Cleanup
     if (this.pollingInterval) { clearInterval(this.pollingInterval); this.pollingInterval = null; }
     if (this.signalingChannel) { this.supabase?.removeChannel(this.signalingChannel); }
     if (this.peerConnection) { this.peerConnection.close(); this.peerConnection = null; }
@@ -455,7 +451,6 @@ const Viewer = {
     this.connected = false;
     this.isFullscreen = false;
 
-    // Reset UI
     document.getElementById('viewerIdle').style.display = 'flex';
     document.getElementById('viewerConnecting').style.display = 'none';
     document.getElementById('viewerActive').style.display = 'none';
@@ -464,10 +459,8 @@ const Viewer = {
   // ==================== INPUT ====================
   setupInput() {
     const canvas = document.getElementById('viewerCanvas');
-    const video = document.getElementById('viewerVideo');
     canvas.focus();
 
-    // Ensure canvas gets focus for keyboard input
     canvas.addEventListener('click', () => canvas.focus());
 
     // Mouse events
@@ -481,10 +474,8 @@ const Viewer = {
     canvas.addEventListener('keydown', (e) => { e.preventDefault(); this.sendKeyEvent('keydown', e); });
     canvas.addEventListener('keyup', (e) => { e.preventDefault(); this.sendKeyEvent('keyup', e); });
 
-    // Disconnect button
+    // Toolbar buttons
     document.getElementById('viewerDisconnectBtn').addEventListener('click', () => this.disconnect());
-
-    // Fullscreen via Wails runtime
     document.getElementById('viewerFullscreenBtn').addEventListener('click', () => this.toggleFullscreen());
   },
 
@@ -494,11 +485,7 @@ const Viewer = {
       this.isFullscreen = !this.isFullscreen;
       const toolbar = document.querySelector('.viewer-toolbar');
       if (toolbar) {
-        if (this.isFullscreen) {
-          toolbar.classList.add('fullscreen-autohide');
-        } else {
-          toolbar.classList.remove('fullscreen-autohide');
-        }
+        toolbar.classList.toggle('fullscreen-autohide', this.isFullscreen);
       }
     } catch (e) {
       console.error('Fullscreen toggle failed:', e);
@@ -533,16 +520,10 @@ const Viewer = {
   sendKeyEvent(type, e) {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
 
-    // Intercept F11 and ESC locally for fullscreen toggle
+    // Intercept F11/ESC locally for fullscreen
     if (type === 'keydown') {
-      if (e.code === 'F11') {
-        this.toggleFullscreen();
-        return;
-      }
-      if (e.code === 'Escape' && this.isFullscreen) {
-        this.toggleFullscreen();
-        return;
-      }
+      if (e.code === 'F11') { this.toggleFullscreen(); return; }
+      if (e.code === 'Escape' && this.isFullscreen) { this.toggleFullscreen(); return; }
     }
 
     this.dataChannel.send(JSON.stringify({
