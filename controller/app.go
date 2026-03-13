@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -396,7 +397,23 @@ func (a *App) DownloadAndInstallUpdate() error {
 	runtime.EventsEmit(a.ctx, "update-status", "Installerer — godkend UAC-dialogen...")
 	runtime.EventsEmit(a.ctx, "update-progress", float64(100))
 
-	return u.InstallUpdate()
+	// Minimize window so UAC dialog appears on top
+	runtime.WindowMinimise(a.ctx)
+
+	err = u.InstallUpdate()
+	if err != nil {
+		// Restore window on failure
+		runtime.WindowShow(a.ctx)
+		return err
+	}
+
+	// Update successful — exit so the new version can replace us
+	logger.Info("Update installed, exiting for replacement...")
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		os.Exit(0)
+	}()
+	return nil
 }
 
 // InstallController installs the controller to Program Files / Applications
