@@ -18,11 +18,13 @@ const Viewer = {
   iceConfig: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] },
 
   // Frame state
-  frameChunks: [],
-  expectedChunks: 0,
+  frameChunks: {},
   currentFrameId: -1,
   screenWidth: 0,
   screenHeight: 0,
+  videoChannel: null,
+  usingH264: false,
+  isFullscreen: false,
 
   async connect(deviceId, deviceName) {
     this.deviceId = deviceId;
@@ -154,73 +156,121 @@ const Viewer = {
     this.peerConnection.ontrack = (event) => {
       console.log('Track received:', event.track.kind);
       if (event.track.kind === 'video') {
+        this.usingH264 = true;
         const video = document.getElementById('viewerVideo');
+        const canvas = document.getElementById('viewerCanvas');
         video.srcObject = event.streams[0];
         video.style.display = '';
+        // H.264 track: show video, hide canvas overlay
+        canvas.style.pointerEvents = 'auto';
+        canvas.style.background = 'transparent';
       }
     };
 
-    // Data channels
+    // Data channels from agent (agent-created channels)
     this.peerConnection.ondatachannel = (event) => {
       const dc = event.channel;
-      console.log('Data channel received:', dc.label);
+      console.log('Data channel received from agent:', dc.label);
 
-      if (dc.label === 'control' || dc.label === 'screen') {
+      if (dc.label === 'video') {
+        this.videoChannel = dc;
+        dc.binaryType = 'arraybuffer';
+        dc.onmessage = (event) => this.handleDataMessage(event);
+        dc.onopen = () => console.log('Video data channel open (unreliable)');
+      } else if (dc.label === 'control' || dc.label === 'screen') {
         this.dataChannel = dc;
-        this.setupDataChannel(dc);
-      } else if (dc.label === 'file-transfer') {
+        dc.binaryType = 'arraybuffer';
+        dc.onmessage = (event) => this.handleDataMessage(event);
+      } else if (dc.label === 'file-transfer' || dc.label === 'file') {
         this.fileChannel = dc;
       }
     };
 
-    // Create control data channel (for sending input)
+    // Create control data channel (for sending input + receiving frames)
     const controlDC = this.peerConnection.createDataChannel('control', { ordered: true });
+    controlDC.binaryType = 'arraybuffer';
     controlDC.onopen = () => {
       console.log('Control data channel open');
       this.dataChannel = controlDC;
     };
-  },
-
-  setupDataChannel(dc) {
-    dc.onmessage = (event) => {
-      this.handleDataMessage(event);
-    };
+    // Agent sends frames back on this same channel
+    controlDC.onmessage = (event) => this.handleDataMessage(event);
   },
 
   handleDataMessage(event) {
-    // Handle JPEG frame data from agent
-    if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
-      // Binary frame data
-      this.handleFrameData(event.data);
+    if (event.data instanceof ArrayBuffer) {
+      const buf = event.data;
+      if (buf.byteLength === 0) return;
+      const view = new Uint8Array(buf);
+
+      // Check for chunked frame (magic byte 0xFE)
+      if (view[0] === 0xFE && buf.byteLength > 5) {
+        const frameId = (view[1] << 8) | view[2];
+        const chunkIndex = view[3];
+        const totalChunks = view[4];
+        const chunkData = buf.slice(5);
+
+        if (!this.frameChunks[frameId]) {
+          this.frameChunks[frameId] = { chunks: new Array(totalChunks), received: 0, total: totalChunks };
+        }
+        const frame = this.frameChunks[frameId];
+        if (!frame.chunks[chunkIndex]) {
+          frame.chunks[chunkIndex] = chunkData;
+          frame.received++;
+        }
+        if (frame.received === frame.total) {
+          // All chunks received — reassemble and render
+          const totalSize = frame.chunks.reduce((s, c) => s + c.byteLength, 0);
+          const assembled = new Uint8Array(totalSize);
+          let offset = 0;
+          for (const chunk of frame.chunks) {
+            assembled.set(new Uint8Array(chunk), offset);
+            offset += chunk.byteLength;
+          }
+          delete this.frameChunks[frameId];
+          // Clean up old incomplete frames
+          for (const id of Object.keys(this.frameChunks)) {
+            if (Number(id) < frameId - 5) delete this.frameChunks[id];
+          }
+          this.renderFrame(assembled.buffer);
+        }
+      } else {
+        // Single JPEG frame (no chunking)
+        this.renderFrame(buf);
+      }
+    } else if (event.data instanceof Blob) {
+      event.data.arrayBuffer().then(buf => this.handleDataMessage({ data: buf }));
     } else if (typeof event.data === 'string') {
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'frame_meta') {
+        if (msg.type === 'screen_info' || msg.type === 'frame_meta') {
           this.screenWidth = msg.width;
           this.screenHeight = msg.height;
-          this.expectedChunks = msg.chunks;
-          this.currentFrameId = msg.frame_id;
-          this.frameChunks = [];
         }
       } catch (e) {
-        // Not JSON, might be frame data
+        // Not JSON
       }
     }
   },
 
-  async handleFrameData(data) {
-    // Render on canvas
-    const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
-    const bitmap = await createImageBitmap(blob);
-    const canvas = document.getElementById('viewerCanvas');
-    const ctx = canvas.getContext('2d');
+  async renderFrame(buffer) {
+    try {
+      const blob = new Blob([buffer], { type: 'image/jpeg' });
+      const bitmap = await createImageBitmap(blob);
+      const canvas = document.getElementById('viewerCanvas');
+      const ctx = canvas.getContext('2d');
 
-    if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
+      if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        this.screenWidth = bitmap.width;
+        this.screenHeight = bitmap.height;
+      }
+      ctx.drawImage(bitmap, 0, 0);
+      bitmap.close();
+    } catch (e) {
+      // Invalid JPEG data, skip frame
     }
-    ctx.drawImage(bitmap, 0, 0);
-    bitmap.close();
   },
 
   async createOffer() {
@@ -359,9 +409,13 @@ const Viewer = {
     if (this.peerConnection) { this.peerConnection.close(); this.peerConnection = null; }
     this.dataChannel = null;
     this.fileChannel = null;
+    this.videoChannel = null;
+    this.frameChunks = {};
+    this.usingH264 = false;
     this.processedSignalIds.clear();
     this.pendingIceCandidates = [];
     this.connected = false;
+    this.isFullscreen = false;
 
     // Reset UI
     document.getElementById('viewerIdle').style.display = 'flex';
@@ -372,7 +426,11 @@ const Viewer = {
   // ==================== INPUT ====================
   setupInput() {
     const canvas = document.getElementById('viewerCanvas');
+    const video = document.getElementById('viewerVideo');
     canvas.focus();
+
+    // Ensure canvas gets focus for keyboard input
+    canvas.addEventListener('click', () => canvas.focus());
 
     // Mouse events
     canvas.addEventListener('mousemove', (e) => this.sendMouseEvent('mousemove', e));
@@ -388,15 +446,25 @@ const Viewer = {
     // Disconnect button
     document.getElementById('viewerDisconnectBtn').addEventListener('click', () => this.disconnect());
 
-    // Fullscreen
-    document.getElementById('viewerFullscreenBtn').addEventListener('click', () => {
-      const container = document.getElementById('viewerContainer');
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        container.requestFullscreen();
+    // Fullscreen via Wails runtime
+    document.getElementById('viewerFullscreenBtn').addEventListener('click', () => this.toggleFullscreen());
+  },
+
+  async toggleFullscreen() {
+    try {
+      await window.go.main.App.ToggleFullscreen();
+      this.isFullscreen = !this.isFullscreen;
+      const toolbar = document.querySelector('.viewer-toolbar');
+      if (toolbar) {
+        if (this.isFullscreen) {
+          toolbar.classList.add('fullscreen-autohide');
+        } else {
+          toolbar.classList.remove('fullscreen-autohide');
+        }
       }
-    });
+    } catch (e) {
+      console.error('Fullscreen toggle failed:', e);
+    }
   },
 
   sendMouseEvent(type, e) {
@@ -426,6 +494,19 @@ const Viewer = {
 
   sendKeyEvent(type, e) {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
+
+    // Intercept F11 and ESC locally for fullscreen toggle
+    if (type === 'keydown') {
+      if (e.code === 'F11') {
+        this.toggleFullscreen();
+        return;
+      }
+      if (e.code === 'Escape' && this.isFullscreen) {
+        this.toggleFullscreen();
+        return;
+      }
+    }
+
     this.dataChannel.send(JSON.stringify({
       type: type,
       code: e.code,
