@@ -199,16 +199,41 @@ const Viewer = {
 
   handleDataMessage(event) {
     if (event.data instanceof ArrayBuffer) {
-      const buf = event.data;
-      if (buf.byteLength === 0) return;
-      const view = new Uint8Array(buf);
+      const data = new Uint8Array(event.data);
+      if (data.length === 0) return;
 
-      // Check for chunked frame (magic byte 0xFE)
-      if (view[0] === 0xFE && buf.byteLength > 5) {
-        const frameId = (view[1] << 8) | view[2];
-        const chunkIndex = view[3];
-        const totalChunks = view[4];
-        const chunkData = buf.slice(5);
+      // Check if this is JSON (starts with '{' = 0x7B)
+      if (data[0] === 0x7B) {
+        try {
+          const text = new TextDecoder().decode(data);
+          const msg = JSON.parse(text);
+          if (msg.type === 'screen_info' || msg.type === 'frame_meta') {
+            this.screenWidth = msg.width;
+            this.screenHeight = msg.height;
+          }
+        } catch (e) { /* not JSON */ }
+        return;
+      }
+
+      const CHUNK_MAGIC = 0xFE;
+      const FRAME_TYPE_REGION = 0x02;
+
+      // Dirty region update (type 0x02)
+      if (data.length > 9 && data[0] === FRAME_TYPE_REGION) {
+        const x = data[1] | (data[2] << 8);
+        const y = data[3] | (data[4] << 8);
+        const w = data[5] | (data[6] << 8);
+        const h = data[7] | (data[8] << 8);
+        this.renderRegion(data.slice(9).buffer, x, y, w, h);
+        return;
+      }
+
+      // Chunked frame (magic byte 0xFE)
+      if (data.length > 5 && data[0] === CHUNK_MAGIC) {
+        const frameId = (data[1] << 8) | data[2];
+        const chunkIndex = data[3];
+        const totalChunks = data[4];
+        const chunkData = data.slice(5);
 
         if (!this.frameChunks[frameId]) {
           this.frameChunks[frameId] = { chunks: new Array(totalChunks), received: 0, total: totalChunks };
@@ -219,13 +244,12 @@ const Viewer = {
           frame.received++;
         }
         if (frame.received === frame.total) {
-          // All chunks received — reassemble and render
-          const totalSize = frame.chunks.reduce((s, c) => s + c.byteLength, 0);
+          const totalSize = frame.chunks.reduce((s, c) => s + c.length, 0);
           const assembled = new Uint8Array(totalSize);
           let offset = 0;
           for (const chunk of frame.chunks) {
-            assembled.set(new Uint8Array(chunk), offset);
-            offset += chunk.byteLength;
+            assembled.set(chunk, offset);
+            offset += chunk.length;
           }
           delete this.frameChunks[frameId];
           // Clean up old incomplete frames
@@ -234,10 +258,11 @@ const Viewer = {
           }
           this.renderFrame(assembled.buffer);
         }
-      } else {
-        // Single JPEG frame (no chunking)
-        this.renderFrame(buf);
+        return;
       }
+
+      // Single JPEG frame (raw, starts with FF D8)
+      this.renderFrame(event.data);
     } else if (event.data instanceof Blob) {
       event.data.arrayBuffer().then(buf => this.handleDataMessage({ data: buf }));
     } else if (typeof event.data === 'string') {
@@ -247,30 +272,43 @@ const Viewer = {
           this.screenWidth = msg.width;
           this.screenHeight = msg.height;
         }
-      } catch (e) {
-        // Not JSON
-      }
+      } catch (e) { /* not JSON */ }
     }
   },
 
-  async renderFrame(buffer) {
-    try {
-      const blob = new Blob([buffer], { type: 'image/jpeg' });
-      const bitmap = await createImageBitmap(blob);
+  renderFrame(data) {
+    const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
+    if (blob.size < 100) return; // Too small, corrupt
+
+    const img = new Image();
+    img.onload = () => {
       const canvas = document.getElementById('viewerCanvas');
       const ctx = canvas.getContext('2d');
-
-      if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
-        canvas.width = bitmap.width;
-        canvas.height = bitmap.height;
-        this.screenWidth = bitmap.width;
-        this.screenHeight = bitmap.height;
+      if (canvas.width !== img.width || canvas.height !== img.height) {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        this.screenWidth = img.width;
+        this.screenHeight = img.height;
       }
-      ctx.drawImage(bitmap, 0, 0);
-      bitmap.close();
-    } catch (e) {
-      // Invalid JPEG data, skip frame
-    }
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => URL.revokeObjectURL(img.src);
+    img.src = URL.createObjectURL(blob);
+  },
+
+  renderRegion(data, x, y, w, h) {
+    const canvas = document.getElementById('viewerCanvas');
+    if (canvas.width === 0 || canvas.height === 0) return;
+    const ctx = canvas.getContext('2d');
+    const blob = new Blob([data], { type: 'image/jpeg' });
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, x, y);
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => URL.revokeObjectURL(img.src);
+    img.src = URL.createObjectURL(blob);
   },
 
   async createOffer() {
