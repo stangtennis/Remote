@@ -229,9 +229,11 @@ html, body {
 /* ===== TAB CONTENT ===== */
 .tab-content {
   flex: 1; overflow-y: auto; padding: 1rem 1.25rem;
+  display: flex; flex-direction: column; min-height: 0;
 }
 .tab-pane { display: none; }
 .tab-pane.active { display: block; }
+#viewerTab.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
 .section-header {
   display: flex; align-items: center; justify-content: space-between;
