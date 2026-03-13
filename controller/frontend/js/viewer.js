@@ -179,6 +179,7 @@ class ViewerSession {
       }
     };
 
+    // Create all data channels the agent expects
     const controlDC = this.peerConnection.createDataChannel('control', { ordered: true });
     controlDC.binaryType = 'arraybuffer';
     controlDC.onopen = () => {
@@ -186,6 +187,20 @@ class ViewerSession {
       this.dataChannel = controlDC;
     };
     controlDC.onmessage = (e) => this.handleDataMessage(e);
+
+    // Unreliable video channel for low-latency small frames
+    const videoDC = this.peerConnection.createDataChannel('video', { ordered: false, maxRetransmits: 0 });
+    videoDC.binaryType = 'arraybuffer';
+    videoDC.onopen = () => console.log(`[${this.deviceName}] Video data channel open`);
+    videoDC.onmessage = (e) => this.handleDataMessage(e);
+
+    // Reliable file transfer channel
+    const fileDC = this.peerConnection.createDataChannel('file', { ordered: true });
+    fileDC.binaryType = 'arraybuffer';
+    fileDC.onopen = () => {
+      console.log(`[${this.deviceName}] File data channel open`);
+      this.fileChannel = fileDC;
+    };
   }
 
   handleDataMessage(event) {
@@ -491,17 +506,23 @@ class ViewerSession {
     const x = Math.round((e.clientX - rect.left) * scaleX);
     const y = Math.round((e.clientY - rect.top) * scaleY);
 
-    this.dataChannel.send(JSON.stringify({
-      type: type, x: x, y: y, button: e.button
-    }));
+    // Agent expects: t=mouse_move/mouse_click, button as string, down as bool
+    const buttonNames = ['left', 'right', 'middle'];
+    if (type === 'mousemove') {
+      this.dataChannel.send(JSON.stringify({ t: 'mouse_move', x: x, y: y }));
+    } else if (type === 'mousedown') {
+      this.dataChannel.send(JSON.stringify({ t: 'mouse_click', x: x, y: y, button: buttonNames[e.button] || 'left', down: true }));
+    } else if (type === 'mouseup') {
+      this.dataChannel.send(JSON.stringify({ t: 'mouse_click', x: x, y: y, button: buttonNames[e.button] || 'left', down: false }));
+    }
   }
 
   sendWheelEvent(e) {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
+    // Agent expects: t=mouse_scroll, delta (positive=up, negative=down)
     this.dataChannel.send(JSON.stringify({
-      type: 'wheel',
-      deltaX: Math.round(e.deltaX),
-      deltaY: Math.round(e.deltaY)
+      t: 'mouse_scroll',
+      delta: -Math.round(e.deltaY)
     }));
   }
 
@@ -513,9 +534,17 @@ class ViewerSession {
       if (e.code === 'Escape' && this.isFullscreen) { this.toggleFullscreen(); return; }
     }
 
+    // Agent expects: t=key, down=bool, code, char for text input
     this.dataChannel.send(JSON.stringify({
-      type: type, code: e.code, key: e.key,
-      shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey
+      t: 'key',
+      code: e.code,
+      key: e.key,
+      down: type === 'keydown',
+      shift: e.shiftKey,
+      ctrl: e.ctrlKey,
+      alt: e.altKey,
+      meta: e.metaKey,
+      char: (type === 'keydown' && e.key.length === 1) ? e.key : ''
     }));
   }
 
@@ -545,10 +574,12 @@ const SessionManager = {
   },
 
   connect(deviceId, deviceName) {
+    console.log('SessionManager.connect:', deviceId, deviceName);
+    showToast(`Forbinder til ${deviceName}...`, 'info');
+
     // Check if already connected to this device
     for (const [id, session] of this.sessions) {
       if (session.deviceId === deviceId) {
-        // Switch to existing session
         this.switchTo(id);
         showToast(`Allerede forbundet til ${deviceName}`, 'info');
         return;
@@ -559,7 +590,12 @@ const SessionManager = {
     document.getElementById('viewerIdle').style.display = 'none';
 
     // Create new session
-    const session = new ViewerSession(deviceId, deviceName, this.getContainer());
+    const container = this.getContainer();
+    if (!container) {
+      showToast('FEJL: sessionContainer element ikke fundet!', 'error');
+      return;
+    }
+    const session = new ViewerSession(deviceId, deviceName, container);
     this.sessions.set(session.id, session);
 
     // Add tab
