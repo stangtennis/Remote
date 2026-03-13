@@ -38,9 +38,18 @@ const Viewer = {
       // Get connection config from Go backend
       const config = await window.go.main.App.GetConnectionConfig();
 
+      // Normalize config keys (Wails returns PascalCase, JSON returns snake_case)
+      const cfg = {
+        supabase_url: config.supabase_url || config.SupabaseURL,
+        anon_key: config.anon_key || config.AnonKey,
+        auth_token: config.auth_token || config.AuthToken,
+        user_id: config.user_id || config.UserID,
+        refresh_token: config.refresh_token || config.RefreshToken,
+      };
+
       // Initialize Supabase client for signaling
       this.supabase = window.supabase
-        ? window.supabase.createClient(config.supabase_url, config.anon_key, {
+        ? window.supabase.createClient(cfg.supabase_url, cfg.anon_key, {
             auth: { persistSession: false }
           })
         : null;
@@ -48,16 +57,19 @@ const Viewer = {
       if (this.supabase) {
         // Set auth token
         await this.supabase.auth.setSession({
-          access_token: config.auth_token,
-          refresh_token: config.refresh_token
+          access_token: cfg.auth_token,
+          refresh_token: cfg.refresh_token
         });
       }
 
+      // Store normalized config for later use
+      this.config = cfg;
+
       // Fetch TURN credentials
-      await this.fetchTurnCredentials(config);
+      await this.fetchTurnCredentials(cfg);
 
       // Create session token
-      await this.createSession(config);
+      await this.createSession(cfg);
 
       // Setup WebRTC
       await this.setupPeerConnection();
@@ -75,12 +87,12 @@ const Viewer = {
     }
   },
 
-  async fetchTurnCredentials(config) {
+  async fetchTurnCredentials(cfg) {
     try {
-      const response = await fetch(`${config.supabase_url}/functions/v1/turn-credentials`, {
+      const response = await fetch(`${cfg.supabase_url}/functions/v1/turn-credentials`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${config.auth_token}`,
+          'Authorization': `Bearer ${cfg.auth_token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -94,11 +106,11 @@ const Viewer = {
     }
   },
 
-  async createSession(config) {
-    const response = await fetch(`${config.supabase_url}/functions/v1/session-token`, {
+  async createSession(cfg) {
+    const response = await fetch(`${cfg.supabase_url}/functions/v1/session-token`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${config.auth_token}`,
+        'Authorization': `Bearer ${cfg.auth_token}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ device_id: this.deviceId })
