@@ -1,45 +1,63 @@
-// Remote Desktop Viewer
-// Handles WebRTC connection, video display, and input capture
-// Uses browser-native WebRTC with TURN relay
+// Remote Desktop Viewer — Multi-Session Support
+// Each ViewerSession is an independent WebRTC connection with its own canvas/video
 
-const Viewer = {
-  deviceId: null,
-  deviceName: null,
-  peerConnection: null,
-  dataChannel: null,
-  fileChannel: null,
-  signalingChannel: null,
-  pollingInterval: null,
-  processedSignalIds: new Set(),
-  pendingIceCandidates: [],
-  sessionData: null,
-  supabase: null,
-  connected: false,
-  iceConfig: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] },
-
-  // Frame state
-  frameChunks: {},
-  screenWidth: 0,
-  screenHeight: 0,
-  videoChannel: null,
-  usingH264: false,
-  isFullscreen: false,
-
-  async connect(deviceId, deviceName) {
+class ViewerSession {
+  constructor(deviceId, deviceName, container) {
+    this.id = crypto.randomUUID();
     this.deviceId = deviceId;
     this.deviceName = deviceName;
+    this.peerConnection = null;
+    this.dataChannel = null;
+    this.fileChannel = null;
+    this.videoChannel = null;
+    this.signalingChannel = null;
+    this.pollingInterval = null;
+    this.processedSignalIds = new Set();
+    this.pendingIceCandidates = [];
+    this.sessionData = null;
+    this.supabase = null;
+    this.config = null;
+    this.connected = false;
+    this.iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+    this.frameChunks = {};
+    this.screenWidth = 0;
+    this.screenHeight = 0;
+    this.usingH264 = false;
+    this.isFullscreen = false;
+    this.inputSetup = false;
 
-    // Show connecting state
-    document.getElementById('viewerIdle').style.display = 'none';
-    document.getElementById('viewerConnecting').style.display = 'flex';
-    document.getElementById('viewerActive').style.display = 'none';
-    document.getElementById('connectingDeviceName').textContent = deviceName;
+    // Create DOM elements for this session
+    this.wrapper = document.createElement('div');
+    this.wrapper.className = 'session-wrapper';
+    this.wrapper.dataset.sessionId = this.id;
+    this.wrapper.innerHTML = `
+      <div class="viewer-connecting" style="display:flex;">
+        <div class="connecting-spinner"></div>
+        <p>Opretter forbindelse til <span class="connecting-name">${deviceName}</span>...</p>
+      </div>
+      <div class="viewer-active" style="display:none;">
+        <div class="viewer-toolbar">
+          <span class="viewer-device-label">${deviceName}</span>
+          <button class="btn btn-sm btn-icon session-fullscreen-btn" title="Fuldskærm"><i class="fas fa-expand"></i></button>
+          <button class="btn btn-sm btn-danger session-disconnect-btn">Afbryd</button>
+        </div>
+        <div class="viewer-screen">
+          <video autoplay playsinline muted></video>
+          <canvas tabindex="0"></canvas>
+        </div>
+      </div>
+    `;
+    container.appendChild(this.wrapper);
 
+    this.connectingEl = this.wrapper.querySelector('.viewer-connecting');
+    this.activeEl = this.wrapper.querySelector('.viewer-active');
+    this.videoEl = this.wrapper.querySelector('video');
+    this.canvasEl = this.wrapper.querySelector('canvas');
+  }
+
+  async connect() {
     try {
-      // Get connection config from Go backend
       const config = await window.go.main.App.GetConnectionConfig();
-
-      // Normalize config keys (Wails returns PascalCase, JSON returns snake_case)
       const cfg = {
         supabase_url: config.supabase_url || config.SupabaseURL,
         anon_key: config.anon_key || config.AnonKey,
@@ -48,7 +66,6 @@ const Viewer = {
         refresh_token: config.refresh_token || config.RefreshToken,
       };
 
-      // Initialize Supabase client for signaling
       this.supabase = window.supabase
         ? window.supabase.createClient(cfg.supabase_url, cfg.anon_key, {
             auth: { persistSession: false }
@@ -63,28 +80,17 @@ const Viewer = {
       }
 
       this.config = cfg;
-
-      // Fetch TURN credentials
       await this.fetchTurnCredentials(cfg);
-
-      // Create session
       await this.createSession(cfg);
-
-      // Setup WebRTC
       await this.setupPeerConnection();
-
-      // Subscribe to signaling
       this.subscribeToSignaling();
-
-      // Create and send offer
       await this.createOffer();
-
     } catch (err) {
-      console.error('Connection failed:', err);
-      showToast('Forbindelse fejlede: ' + err.message, 'error');
+      console.error(`[${this.deviceName}] Connection failed:`, err);
+      showToast(`Forbindelse til ${this.deviceName} fejlede: ${err.message}`, 'error');
       this.disconnect();
     }
-  },
+  }
 
   async fetchTurnCredentials(cfg) {
     try {
@@ -98,12 +104,12 @@ const Viewer = {
       if (response.ok) {
         const data = await response.json();
         this.iceConfig = { iceServers: data.iceServers };
-        console.log('TURN credentials fetched');
+        console.log(`[${this.deviceName}] TURN credentials fetched`);
       }
     } catch (e) {
-      console.warn('TURN fetch failed, using STUN only:', e);
+      console.warn(`[${this.deviceName}] TURN fetch failed, using STUN only:`, e);
     }
-  },
+  }
 
   async createSession(cfg) {
     const response = await fetch(`${cfg.supabase_url}/functions/v1/session-token`, {
@@ -115,20 +121,15 @@ const Viewer = {
       body: JSON.stringify({ device_id: this.deviceId })
     });
 
-    if (!response.ok) {
-      throw new Error('Kunne ikke oprette session');
-    }
-
+    if (!response.ok) throw new Error('Kunne ikke oprette session');
     this.sessionData = await response.json();
-    console.log('Session created:', this.sessionData.session_id);
-  },
+    console.log(`[${this.deviceName}] Session created:`, this.sessionData.session_id);
+  }
 
   async setupPeerConnection() {
-    // Force relay-only to avoid mDNS host candidate issues between browser and pion
     const config = { ...this.iceConfig, iceTransportPolicy: 'relay' };
     this.peerConnection = new RTCPeerConnection(config);
 
-    // ICE candidates
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         this.sendSignal({
@@ -140,10 +141,9 @@ const Viewer = {
       }
     };
 
-    // Connection state
     this.peerConnection.onconnectionstatechange = () => {
-      const state = this.peerConnection.connectionState;
-      console.log('Connection state:', state);
+      const state = this.peerConnection?.connectionState;
+      console.log(`[${this.deviceName}] Connection state:`, state);
       if (state === 'connected') {
         this.onConnected();
       } else if (state === 'disconnected' || state === 'failed') {
@@ -151,54 +151,48 @@ const Viewer = {
       }
     };
 
-    // Media tracks (H.264 video)
     this.peerConnection.ontrack = (event) => {
-      console.log('Track received:', event.track.kind);
+      console.log(`[${this.deviceName}] Track received:`, event.track.kind);
       if (event.track.kind === 'video') {
         this.usingH264 = true;
-        const video = document.getElementById('viewerVideo');
-        const canvas = document.getElementById('viewerCanvas');
-        video.srcObject = event.streams[0];
-        video.style.display = '';
-        canvas.style.pointerEvents = 'auto';
-        canvas.style.background = 'transparent';
+        this.videoEl.srcObject = event.streams[0];
+        this.videoEl.style.display = '';
+        this.canvasEl.style.pointerEvents = 'auto';
+        this.canvasEl.style.background = 'transparent';
       }
     };
 
-    // Data channels from agent
     this.peerConnection.ondatachannel = (event) => {
       const dc = event.channel;
-      console.log('Data channel received:', dc.label);
+      console.log(`[${this.deviceName}] Data channel received:`, dc.label);
 
       if (dc.label === 'video') {
         this.videoChannel = dc;
         dc.binaryType = 'arraybuffer';
-        dc.onmessage = (event) => this.handleDataMessage(event);
+        dc.onmessage = (e) => this.handleDataMessage(e);
       } else if (dc.label === 'control' || dc.label === 'screen') {
         this.dataChannel = dc;
         dc.binaryType = 'arraybuffer';
-        dc.onmessage = (event) => this.handleDataMessage(event);
+        dc.onmessage = (e) => this.handleDataMessage(e);
       } else if (dc.label === 'file-transfer' || dc.label === 'file') {
         this.fileChannel = dc;
       }
     };
 
-    // Create control data channel (for sending input + receiving frames)
     const controlDC = this.peerConnection.createDataChannel('control', { ordered: true });
     controlDC.binaryType = 'arraybuffer';
     controlDC.onopen = () => {
-      console.log('Control data channel open');
+      console.log(`[${this.deviceName}] Control data channel open`);
       this.dataChannel = controlDC;
     };
-    controlDC.onmessage = (event) => this.handleDataMessage(event);
-  },
+    controlDC.onmessage = (e) => this.handleDataMessage(e);
+  }
 
   handleDataMessage(event) {
     if (event.data instanceof ArrayBuffer) {
       const data = new Uint8Array(event.data);
       if (data.length === 0) return;
 
-      // JSON messages (screen_info etc.)
       if (data[0] === 0x7B) {
         try {
           const msg = JSON.parse(new TextDecoder().decode(data));
@@ -210,13 +204,11 @@ const Viewer = {
         return;
       }
 
-      // Full frame: [0x01, frameID_hi, frameID_lo, ...jpeg_data]
       if (data.length > 3 && data[0] === 0x01) {
         this.renderFrame(data.slice(3).buffer);
         return;
       }
 
-      // Dirty region: [0x02, x_lo, x_hi, y_lo, y_hi, w_lo, w_hi, h_lo, h_hi, ...jpeg]
       if (data.length > 9 && data[0] === 0x02) {
         const x = data[1] | (data[2] << 8);
         const y = data[3] | (data[4] << 8);
@@ -226,7 +218,6 @@ const Viewer = {
         return;
       }
 
-      // Chunked frame: [0xFE, frameID_hi, frameID_lo, chunkIdx, totalChunks, ...data]
       if (data.length > 5 && data[0] === 0xFE) {
         const frameId = (data[1] << 8) | data[2];
         const chunkIndex = data[3];
@@ -258,7 +249,6 @@ const Viewer = {
         return;
       }
 
-      // Raw JPEG (starts with FF D8)
       this.renderFrame(event.data);
     } else if (event.data instanceof Blob) {
       event.data.arrayBuffer().then(buf => this.handleDataMessage({ data: buf }));
@@ -271,7 +261,7 @@ const Viewer = {
         }
       } catch (e) { /* not JSON */ }
     }
-  },
+  }
 
   renderFrame(data) {
     const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
@@ -279,7 +269,7 @@ const Viewer = {
 
     const img = new Image();
     img.onload = () => {
-      const canvas = document.getElementById('viewerCanvas');
+      const canvas = this.canvasEl;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
       if (canvas.width !== img.width || canvas.height !== img.height) {
@@ -293,10 +283,10 @@ const Viewer = {
     };
     img.onerror = () => URL.revokeObjectURL(img.src);
     img.src = URL.createObjectURL(blob);
-  },
+  }
 
   renderRegion(data, x, y, w, h) {
-    const canvas = document.getElementById('viewerCanvas');
+    const canvas = this.canvasEl;
     if (canvas.width === 0 || canvas.height === 0) return;
     const ctx = canvas.getContext('2d');
     const blob = new Blob([data], { type: 'image/jpeg' });
@@ -307,7 +297,7 @@ const Viewer = {
     };
     img.onerror = () => URL.revokeObjectURL(img.src);
     img.src = URL.createObjectURL(blob);
-  },
+  }
 
   async createOffer() {
     const offer = await this.peerConnection.createOffer({
@@ -322,10 +312,9 @@ const Viewer = {
       type: 'offer',
       sdp: offer.sdp
     });
-    console.log('Offer sent');
-  },
+    console.log(`[${this.deviceName}] Offer sent`);
+  }
 
-  // ==================== SIGNALING ====================
   async sendSignal(payload) {
     if (!this.supabase) return;
 
@@ -342,13 +331,12 @@ const Viewer = {
       msg_type: payload.type,
       payload: signalPayload
     });
-  },
+  }
 
   subscribeToSignaling() {
     if (!this.supabase || !this.sessionData) return;
     const sessionId = this.sessionData.session_id;
 
-    // Realtime subscription
     this.signalingChannel = this.supabase
       .channel(`session:${sessionId}`)
       .on('postgres_changes',
@@ -357,7 +345,6 @@ const Viewer = {
       )
       .subscribe();
 
-    // Polling fallback (500ms)
     this.pollingInterval = setInterval(async () => {
       try {
         const { data } = await this.supabase
@@ -370,14 +357,13 @@ const Viewer = {
         if (data) {
           for (const signal of data) {
             if (!this.processedSignalIds.has(signal.id)) {
-              // Don't add to processedSignalIds here — handleSignal manages dedup
               await this.handleSignal(signal);
             }
           }
         }
       } catch (e) { console.error('Poll error:', e); }
     }, 500);
-  },
+  }
 
   async handleSignal(signal) {
     if (signal.from_side === 'dashboard') return;
@@ -410,36 +396,37 @@ const Viewer = {
           break;
 
         case 'kick':
-          showToast('Afkoblet — en anden controller har overtaget.', 'warning');
+          showToast(`${this.deviceName}: Afkoblet — en anden controller har overtaget.`, 'warning');
           this.disconnect();
           break;
       }
     } catch (e) {
-      console.error('Signal handling error:', e);
+      console.error(`[${this.deviceName}] Signal handling error:`, e);
     }
-  },
+  }
 
-  // ==================== CONNECTED STATE ====================
   onConnected() {
     this.connected = true;
-    document.getElementById('viewerConnecting').style.display = 'none';
-    document.getElementById('viewerActive').style.display = 'flex';
-    document.getElementById('viewerDeviceName').textContent = this.deviceName;
+    this.connectingEl.style.display = 'none';
+    this.activeEl.style.display = 'flex';
     showToast(`Forbundet til ${this.deviceName}`, 'success');
-
     this.setupInput();
-  },
+    // Notify session manager
+    if (window.SessionManager) {
+      window.SessionManager.onSessionConnected(this.id);
+    }
+  }
 
   onDisconnected() {
     if (!this.connected) return;
     this.connected = false;
-    showToast('Forbindelse tabt', 'warning');
+    showToast(`Forbindelse til ${this.deviceName} tabt`, 'warning');
     this.disconnect();
-  },
+  }
 
   disconnect() {
     if (this.pollingInterval) { clearInterval(this.pollingInterval); this.pollingInterval = null; }
-    if (this.signalingChannel) { this.supabase?.removeChannel(this.signalingChannel); }
+    if (this.signalingChannel && this.supabase) { this.supabase.removeChannel(this.signalingChannel); }
     if (this.peerConnection) { this.peerConnection.close(); this.peerConnection = null; }
     this.dataChannel = null;
     this.fileChannel = null;
@@ -451,50 +438,53 @@ const Viewer = {
     this.connected = false;
     this.isFullscreen = false;
 
-    document.getElementById('viewerIdle').style.display = 'flex';
-    document.getElementById('viewerConnecting').style.display = 'none';
-    document.getElementById('viewerActive').style.display = 'none';
-  },
+    // Remove DOM
+    if (this.wrapper && this.wrapper.parentNode) {
+      this.wrapper.remove();
+    }
 
-  // ==================== INPUT ====================
+    // Notify session manager
+    if (window.SessionManager) {
+      window.SessionManager.onSessionDisconnected(this.id);
+    }
+  }
+
   setupInput() {
-    const canvas = document.getElementById('viewerCanvas');
+    if (this.inputSetup) return;
+    this.inputSetup = true;
+
+    const canvas = this.canvasEl;
     canvas.focus();
 
     canvas.addEventListener('click', () => canvas.focus());
-
-    // Mouse events
     canvas.addEventListener('mousemove', (e) => this.sendMouseEvent('mousemove', e));
     canvas.addEventListener('mousedown', (e) => { e.preventDefault(); this.sendMouseEvent('mousedown', e); });
     canvas.addEventListener('mouseup', (e) => this.sendMouseEvent('mouseup', e));
     canvas.addEventListener('wheel', (e) => { e.preventDefault(); this.sendWheelEvent(e); }, { passive: false });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-
-    // Keyboard events
     canvas.addEventListener('keydown', (e) => { e.preventDefault(); this.sendKeyEvent('keydown', e); });
     canvas.addEventListener('keyup', (e) => { e.preventDefault(); this.sendKeyEvent('keyup', e); });
 
-    // Toolbar buttons
-    document.getElementById('viewerDisconnectBtn').addEventListener('click', () => this.disconnect());
-    document.getElementById('viewerFullscreenBtn').addEventListener('click', () => this.toggleFullscreen());
-  },
+    this.wrapper.querySelector('.session-disconnect-btn').addEventListener('click', () => this.disconnect());
+    this.wrapper.querySelector('.session-fullscreen-btn').addEventListener('click', () => this.toggleFullscreen());
+  }
 
   async toggleFullscreen() {
     try {
       await window.go.main.App.ToggleFullscreen();
       this.isFullscreen = !this.isFullscreen;
-      const toolbar = document.querySelector('.viewer-toolbar');
+      const toolbar = this.wrapper.querySelector('.viewer-toolbar');
       if (toolbar) {
         toolbar.classList.toggle('fullscreen-autohide', this.isFullscreen);
       }
     } catch (e) {
       console.error('Fullscreen toggle failed:', e);
     }
-  },
+  }
 
   sendMouseEvent(type, e) {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
-    const canvas = e.target;
+    const canvas = this.canvasEl;
     const rect = canvas.getBoundingClientRect();
     const scaleX = (this.screenWidth || canvas.width) / rect.width;
     const scaleY = (this.screenHeight || canvas.height) / rect.height;
@@ -502,11 +492,9 @@ const Viewer = {
     const y = Math.round((e.clientY - rect.top) * scaleY);
 
     this.dataChannel.send(JSON.stringify({
-      type: type,
-      x: x, y: y,
-      button: e.button
+      type: type, x: x, y: y, button: e.button
     }));
-  },
+  }
 
   sendWheelEvent(e) {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
@@ -515,27 +503,160 @@ const Viewer = {
       deltaX: Math.round(e.deltaX),
       deltaY: Math.round(e.deltaY)
     }));
-  },
+  }
 
   sendKeyEvent(type, e) {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
 
-    // Intercept F11/ESC locally for fullscreen
     if (type === 'keydown') {
       if (e.code === 'F11') { this.toggleFullscreen(); return; }
       if (e.code === 'Escape' && this.isFullscreen) { this.toggleFullscreen(); return; }
     }
 
     this.dataChannel.send(JSON.stringify({
-      type: type,
-      code: e.code,
-      key: e.key,
-      shift: e.shiftKey,
-      ctrl: e.ctrlKey,
-      alt: e.altKey,
-      meta: e.metaKey
+      type: type, code: e.code, key: e.key,
+      shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey
     }));
+  }
+
+  show() {
+    this.wrapper.style.display = 'flex';
+    if (this.connected && this.canvasEl) {
+      this.canvasEl.focus();
+    }
+  }
+
+  hide() {
+    this.wrapper.style.display = 'none';
+  }
+}
+
+// Session Manager — handles multiple concurrent sessions
+const SessionManager = {
+  sessions: new Map(),  // id -> ViewerSession
+  activeSessionId: null,
+
+  getContainer() {
+    return document.getElementById('sessionContainer');
+  },
+
+  getTabBar() {
+    return document.getElementById('sessionTabs');
+  },
+
+  connect(deviceId, deviceName) {
+    // Check if already connected to this device
+    for (const [id, session] of this.sessions) {
+      if (session.deviceId === deviceId) {
+        // Switch to existing session
+        this.switchTo(id);
+        showToast(`Allerede forbundet til ${deviceName}`, 'info');
+        return;
+      }
+    }
+
+    // Hide idle state
+    document.getElementById('viewerIdle').style.display = 'none';
+
+    // Create new session
+    const session = new ViewerSession(deviceId, deviceName, this.getContainer());
+    this.sessions.set(session.id, session);
+
+    // Add tab
+    this.addTab(session);
+
+    // Switch to new session
+    this.switchTo(session.id);
+
+    // Start connection
+    session.connect();
+  },
+
+  addTab(session) {
+    const tabBar = this.getTabBar();
+    tabBar.style.display = 'flex';
+
+    const tab = document.createElement('button');
+    tab.className = 'session-tab active';
+    tab.dataset.sessionId = session.id;
+    tab.innerHTML = `
+      <span class="session-tab-dot connecting"></span>
+      <span class="session-tab-name">${session.deviceName}</span>
+      <span class="session-tab-close" title="Afbryd">&times;</span>
+    `;
+
+    tab.addEventListener('click', (e) => {
+      if (e.target.classList.contains('session-tab-close')) {
+        session.disconnect();
+      } else {
+        this.switchTo(session.id);
+      }
+    });
+
+    tabBar.appendChild(tab);
+  },
+
+  switchTo(sessionId) {
+    this.activeSessionId = sessionId;
+
+    // Update tabs
+    this.getTabBar().querySelectorAll('.session-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.sessionId === sessionId);
+    });
+
+    // Show/hide session wrappers
+    for (const [id, session] of this.sessions) {
+      if (id === sessionId) {
+        session.show();
+      } else {
+        session.hide();
+      }
+    }
+  },
+
+  onSessionConnected(sessionId) {
+    const tab = this.getTabBar().querySelector(`[data-session-id="${sessionId}"]`);
+    if (tab) {
+      const dot = tab.querySelector('.session-tab-dot');
+      dot.classList.remove('connecting');
+      dot.classList.add('connected');
+    }
+  },
+
+  onSessionDisconnected(sessionId) {
+    this.sessions.delete(sessionId);
+
+    // Remove tab
+    const tab = this.getTabBar().querySelector(`[data-session-id="${sessionId}"]`);
+    if (tab) tab.remove();
+
+    // If no sessions left, show idle
+    if (this.sessions.size === 0) {
+      document.getElementById('viewerIdle').style.display = 'flex';
+      this.getTabBar().style.display = 'none';
+      this.activeSessionId = null;
+    } else if (this.activeSessionId === sessionId) {
+      // Switch to another session
+      const nextId = this.sessions.keys().next().value;
+      this.switchTo(nextId);
+    }
+  },
+
+  disconnectAll() {
+    for (const [id, session] of this.sessions) {
+      session.disconnect();
+    }
   }
 };
 
-window.Viewer = Viewer;
+window.SessionManager = SessionManager;
+
+// Backwards compat — Viewer.connect still works
+window.Viewer = {
+  connect(deviceId, deviceName) {
+    SessionManager.connect(deviceId, deviceName);
+  },
+  disconnect() {
+    SessionManager.disconnectAll();
+  }
+};
