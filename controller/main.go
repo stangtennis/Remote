@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"os"
 
+	"runtime"
+
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
 //go:embed all:frontend
@@ -44,9 +48,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Window title
+	title := "Remote Desktop Controller " + Version
+	if runtime.GOOS == "darwin" {
+		title = "Remote Desktop " + Version
+	}
+
 	// Run Wails application
 	err = wails.Run(&options.App{
-		Title:     "Remote Desktop Controller " + Version,
+		Title:     title,
 		Width:     1100,
 		Height:    750,
 		MinWidth:  800,
@@ -54,11 +64,26 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: frontendFS,
 		},
-		BackgroundColour: &options.RGBA{R: 3, G: 7, B: 18, A: 255}, // --background: #030712
+		BackgroundColour: &options.RGBA{R: 3, G: 7, B: 18, A: 255},
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		Bind: []interface{}{
 			app,
+		},
+		Mac: &mac.Options{
+			TitleBar: mac.TitleBarHiddenInset(),
+			Appearance: mac.NSAppearanceNameDarkAqua,
+			WebviewIsTransparent: false,
+			WindowIsTranslucent:  false,
+			About: &mac.AboutInfo{
+				Title:   "Remote Desktop Controller",
+				Message: "v" + Version,
+			},
+		},
+		Windows: &windows.Options{
+			WebviewIsTransparent: false,
+			WindowIsTranslucent:  false,
+			DisableWindowIcon:    false,
 		},
 	})
 
