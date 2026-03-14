@@ -177,6 +177,11 @@ class ViewerSession {
         this.videoEl.style.display = '';
         this.canvasEl.style.pointerEvents = 'auto';
         this.canvasEl.style.background = 'transparent';
+      } else if (event.track.kind === 'audio') {
+        console.log(`[${this.deviceName}] Audio track received — playing`);
+        const audio = new Audio();
+        audio.srcObject = event.streams[0];
+        audio.play().catch(e => console.warn('Audio autoplay blocked:', e));
       }
     };
 
@@ -358,7 +363,7 @@ class ViewerSession {
   async createOffer() {
     const offer = await this.peerConnection.createOffer({
       offerToReceiveVideo: true,
-      offerToReceiveAudio: false
+      offerToReceiveAudio: true
     });
     await this.peerConnection.setLocalDescription(offer);
 
@@ -903,6 +908,278 @@ class ViewerSession {
     this.dataChannel.send(JSON.stringify(evt));
     e.preventDefault();
     e.stopPropagation();
+  }
+
+  // ==================== SUPPORT SESSION (VIEW-ONLY) ====================
+
+  async connectAsSupport(supportSessionId) {
+    this.isSupportSession = true;
+    this.supportSessionId = supportSessionId;
+
+    try {
+      // Get connection config for Supabase + TURN
+      const config = await window.go.main.App.GetConnectionConfig();
+      const cfg = {
+        supabase_url: config.supabase_url || config.SupabaseURL,
+        anon_key: config.anon_key || config.AnonKey,
+        auth_token: config.auth_token || config.AuthToken,
+        user_id: config.user_id || config.UserID,
+        refresh_token: config.refresh_token || config.RefreshToken,
+      };
+
+      this.supabase = window.supabase
+        ? window.supabase.createClient(cfg.supabase_url, cfg.anon_key, {
+            auth: { persistSession: false }
+          })
+        : null;
+
+      if (this.supabase) {
+        await this.supabase.auth.setSession({
+          access_token: cfg.auth_token,
+          refresh_token: cfg.refresh_token
+        });
+      }
+
+      this.config = cfg;
+
+      // Use support session ID directly (no session-token call needed)
+      this.sessionData = { session_id: supportSessionId };
+
+      // Fetch TURN credentials
+      await this.fetchTurnCredentials(cfg);
+
+      // Wait for sharer to be ready, then connect
+      await this.waitForSupportReady(supportSessionId);
+
+    } catch (err) {
+      console.error(`[${this.deviceName}] Support connection failed:`, err);
+      showToast(`Support forbindelse fejlede: ${err.message}`, 'error');
+      this.disconnect();
+    }
+  }
+
+  async waitForSupportReady(sessionId) {
+    console.log(`[${this.deviceName}] Waiting for support sharer to be ready...`);
+
+    // Check if session is already active (sharer already connected)
+    const { data: existingSignals } = await this.supabase
+      .from('session_signaling')
+      .select('*')
+      .eq('session_id', sessionId)
+      .eq('from_side', 'support')
+      .eq('msg_type', 'answer');
+
+    const alreadyReady = existingSignals && existingSignals.some(s => s.payload?.type === 'ready');
+
+    if (alreadyReady) {
+      console.log(`[${this.deviceName}] Sharer already ready, connecting now`);
+      await this.connectToSupportSession(sessionId);
+      return;
+    }
+
+    // Subscribe to signaling for ready signal
+    this.signalingChannel = this.supabase
+      .channel(`support-viewer-${sessionId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'session_signaling',
+        filter: `session_id=eq.${sessionId}`,
+      }, async (payload) => {
+        const signal = payload.new;
+        if (signal.from_side === 'support' && signal.msg_type === 'answer' && signal.payload?.type === 'ready') {
+          console.log(`[${this.deviceName}] Sharer is ready!`);
+          if (this.pollingInterval) { clearInterval(this.pollingInterval); this.pollingInterval = null; }
+          await this.connectToSupportSession(sessionId);
+        }
+      })
+      .subscribe();
+
+    // Polling fallback
+    this.pollingInterval = setInterval(async () => {
+      const { data } = await this.supabase
+        .from('session_signaling')
+        .select('*')
+        .eq('session_id', sessionId)
+        .eq('from_side', 'support')
+        .eq('msg_type', 'answer');
+
+      if (data && data.some(s => s.payload?.type === 'ready' && !this.processedSignalIds.has(s.id))) {
+        console.log(`[${this.deviceName}] Polled: sharer is ready!`);
+        clearInterval(this.pollingInterval);
+        this.pollingInterval = null;
+        await this.connectToSupportSession(sessionId);
+      }
+    }, 1500);
+  }
+
+  async connectToSupportSession(sessionId) {
+    console.log(`[${this.deviceName}] Connecting to support session as viewer (offerer)`);
+
+    // Setup peer connection (receive video only, no data channels for input)
+    const config = { ...this.iceConfig };
+    this.peerConnection = new RTCPeerConnection(config);
+
+    // Handle remote video track
+    this.peerConnection.ontrack = (event) => {
+      console.log(`[${this.deviceName}] Support: received track`, event.track.kind);
+      if (event.track.kind === 'video' && event.streams[0]) {
+        this.usingH264 = true;
+        this.videoEl.srcObject = event.streams[0];
+        this.videoEl.style.display = '';
+        // Hide canvas for video-track-based sessions
+        this.canvasEl.style.display = 'none';
+      }
+    };
+
+    // Send ICE candidates
+    this.peerConnection.onicecandidate = async (event) => {
+      if (event.candidate) {
+        await this.supabase.from('session_signaling').insert({
+          session_id: sessionId,
+          from_side: 'dashboard',
+          msg_type: 'ice',
+          payload: event.candidate.toJSON(),
+        });
+      }
+    };
+
+    // Connection state
+    this.peerConnection.onconnectionstatechange = () => {
+      const state = this.peerConnection?.connectionState;
+      console.log(`[${this.deviceName}] Support connection state:`, state);
+      if (state === 'connected') {
+        this.onSupportConnected();
+      } else if (state === 'disconnected' || state === 'failed') {
+        this.onDisconnected();
+      }
+    };
+
+    // Create offer (receive video only)
+    const offer = await this.peerConnection.createOffer({
+      offerToReceiveVideo: true,
+      offerToReceiveAudio: false,
+    });
+    await this.peerConnection.setLocalDescription(offer);
+
+    // Send offer
+    await this.supabase.from('session_signaling').insert({
+      session_id: sessionId,
+      from_side: 'dashboard',
+      msg_type: 'offer',
+      payload: { type: 'offer', sdp: offer.sdp },
+    });
+
+    console.log(`[${this.deviceName}] Support offer sent`);
+
+    // Subscribe to answer/ICE from support sharer
+    this.subscribeSupportSignaling(sessionId);
+  }
+
+  subscribeSupportSignaling(sessionId) {
+    // Reset processed IDs for signaling (keep ready signal IDs)
+    this.processedSignalIds.clear();
+
+    // Stop any previous polling
+    if (this.pollingInterval) { clearInterval(this.pollingInterval); this.pollingInterval = null; }
+
+    this.pollingInterval = setInterval(async () => {
+      try {
+        const { data } = await this.supabase
+          .from('session_signaling')
+          .select('*')
+          .eq('session_id', sessionId)
+          .eq('from_side', 'support')
+          .order('created_at', { ascending: true });
+
+        if (!data) return;
+
+        for (const signal of data) {
+          if (this.processedSignalIds.has(signal.id)) continue;
+          this.processedSignalIds.add(signal.id);
+          await this.handleSupportSignal(signal);
+        }
+      } catch (e) {
+        console.error('Support signaling poll error:', e);
+      }
+    }, 500);
+  }
+
+  async handleSupportSignal(signal) {
+    if (signal.from_side !== 'support') return;
+    if (!this.peerConnection) return;
+
+    try {
+      switch (signal.msg_type) {
+        case 'answer': {
+          // Skip ready signals
+          if (signal.payload?.type === 'ready') return;
+
+          if (this.peerConnection.signalingState !== 'have-local-offer') {
+            console.log(`[${this.deviceName}] Skipping answer, state:`, this.peerConnection.signalingState);
+            return;
+          }
+
+          const answer = new RTCSessionDescription(signal.payload);
+          await this.peerConnection.setRemoteDescription(answer);
+          console.log(`[${this.deviceName}] Support: remote description set`);
+
+          // Flush buffered ICE
+          for (const c of this.pendingIceCandidates) {
+            await this.peerConnection.addIceCandidate(new RTCIceCandidate(c));
+          }
+          this.pendingIceCandidates = [];
+          break;
+        }
+
+        case 'ice': {
+          let iceCandidate = signal.payload;
+          if (signal.payload.candidate && typeof signal.payload.candidate === 'object') {
+            iceCandidate = signal.payload.candidate;
+          }
+
+          if (iceCandidate && iceCandidate.candidate) {
+            const ice = {
+              candidate: iceCandidate.candidate,
+              sdpMid: iceCandidate.sdpMid,
+              sdpMLineIndex: iceCandidate.sdpMLineIndex,
+            };
+            if (!this.peerConnection.remoteDescription) {
+              this.pendingIceCandidates.push(ice);
+            } else {
+              await this.peerConnection.addIceCandidate(new RTCIceCandidate(ice));
+            }
+          }
+          break;
+        }
+
+        case 'bye':
+          console.log(`[${this.deviceName}] Support sharer disconnected`);
+          showToast(`${this.deviceName}: Support session afsluttet`, 'info');
+          this.disconnect();
+          break;
+      }
+    } catch (e) {
+      console.error(`[${this.deviceName}] Support signal error:`, e);
+    }
+  }
+
+  onSupportConnected() {
+    this.connected = true;
+    this.connectingEl.style.display = 'none';
+    this.activeEl.style.display = 'flex';
+
+    showToast(`Forbundet til ${this.deviceName} (kun visning)`, 'success');
+    this.startStats();
+
+    // Hide input-related buttons (view-only session)
+    const filesBtn = this.wrapper.querySelector('.session-files-btn');
+    if (filesBtn) filesBtn.style.display = 'none';
+
+    // Notify session manager
+    if (window.SessionManager) {
+      window.SessionManager.onSessionConnected(this.id);
+    }
   }
 
   show() {

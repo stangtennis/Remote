@@ -2,31 +2,29 @@ package clipboard
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"image"
 	"image/png"
 	"log"
-	"time"
 
 	"golang.design/x/clipboard"
 )
 
-// Monitor watches the system clipboard for changes
+// Monitor watches the system clipboard for changes using native events
 type Monitor struct {
 	lastTextHash  string
 	lastImageHash string
 	onTextChange  func(text string)
 	onImageChange func(imageData []byte)
-	stopChan      chan bool
+	cancelFunc    context.CancelFunc
 	running       bool
 }
 
 // NewMonitor creates a new clipboard monitor
 func NewMonitor() *Monitor {
-	return &Monitor{
-		stopChan: make(chan bool),
-	}
+	return &Monitor{}
 }
 
 // SetOnTextChange sets the callback for text clipboard changes
@@ -39,17 +37,26 @@ func (m *Monitor) SetOnImageChange(callback func(imageData []byte)) {
 	m.onImageChange = callback
 }
 
-// Start begins monitoring the clipboard
+// Start begins monitoring the clipboard using native OS events (no polling)
 func (m *Monitor) Start() error {
-	// Initialize clipboard
 	err := clipboard.Init()
 	if err != nil {
 		return err
 	}
 
 	m.running = true
-	go m.monitorLoop()
-	log.Println("📋 Clipboard monitor started")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancelFunc = cancel
+
+	// Use clipboard.Watch for native event-driven monitoring (uses WM_CLIPBOARDUPDATE on Windows)
+	textCh := clipboard.Watch(ctx, clipboard.FmtText)
+	imgCh := clipboard.Watch(ctx, clipboard.FmtImage)
+
+	go m.watchText(textCh)
+	go m.watchImage(imgCh)
+
+	log.Println("📋 Clipboard monitor started (native events)")
 	return nil
 }
 
@@ -57,22 +64,53 @@ func (m *Monitor) Start() error {
 func (m *Monitor) Stop() {
 	if m.running {
 		m.running = false
-		close(m.stopChan)
+		if m.cancelFunc != nil {
+			m.cancelFunc()
+		}
 		log.Println("📋 Clipboard monitor stopped")
 	}
 }
 
-// monitorLoop continuously checks the clipboard for changes
-func (m *Monitor) monitorLoop() {
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-m.stopChan:
+// watchText monitors text clipboard changes via native events
+func (m *Monitor) watchText(ch <-chan []byte) {
+	for data := range ch {
+		if !m.running {
 			return
-		case <-ticker.C:
-			m.checkClipboard()
+		}
+		if len(data) == 0 || len(data) > 10*1024*1024 {
+			continue
+		}
+		text := string(data)
+		hash := hashString(text)
+		if hash != m.lastTextHash {
+			m.lastTextHash = hash
+			log.Printf("📋 Text clipboard changed (%d bytes)", len(text))
+			if m.onTextChange != nil {
+				m.onTextChange(text)
+			}
+		}
+	}
+}
+
+// watchImage monitors image clipboard changes via native events
+func (m *Monitor) watchImage(ch <-chan []byte) {
+	for data := range ch {
+		if !m.running {
+			return
+		}
+		if len(data) == 0 || len(data) > 50*1024*1024 {
+			continue
+		}
+		hash := hashBytes(data)
+		if hash != m.lastImageHash && m.onImageChange != nil {
+			m.lastImageHash = hash
+			pngData, err := convertImageToPNG(data)
+			if err != nil {
+				log.Printf("❌ Failed to convert image: %v", err)
+				continue
+			}
+			log.Printf("📋 Image clipboard changed (%d bytes)", len(pngData))
+			m.onImageChange(pngData)
 		}
 	}
 }

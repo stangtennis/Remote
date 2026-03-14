@@ -476,5 +476,39 @@ html, body {
   color: var(--text-muted); font-size: 0.8rem;
 }
 
+/* ===== LIGHT THEME ===== */
+[data-theme="light"] {
+  --background: #f1f5f9;
+  --background-secondary: #e2e8f0;
+  --surface: rgba(255, 255, 255, 0.8);
+  --surface-solid: #ffffff;
+  --surface-hover: rgba(241, 245, 249, 0.9);
+  --border: rgba(148, 163, 184, 0.3);
+  --border-light: rgba(148, 163, 184, 0.2);
+  --text: #0f172a;
+  --text-secondary: #1e293b;
+  --text-muted: #64748b;
+  --text-dim: #94a3b8;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(148, 163, 184, 0.2);
+  --gradient-surface: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(241,245,249,0.9) 100%);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] .animated-bg .gradient-orb {
+  opacity: 0.15;
+}
+
+[data-theme="light"] .tab-nav {
+  background: rgba(241, 245, 249, 0.8);
+}
+
+[data-theme="light"] .toast {
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--text);
+}
+
 /* ===== WAILS DRAG REGION ===== */
 .wails-drag { --wails-draggable: drag; }

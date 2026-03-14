@@ -59,6 +59,7 @@
         <span id="userEmail" class="user-badge"><i class="fas fa-user"></i> <span></span></span>
         <button class="btn btn-icon" id="supportBtn" title="Quick Support"><i class="fas fa-life-ring"></i></button>
         <button class="btn btn-icon" id="updateBtn" title="Tjek opdatering"><i class="fas fa-sync-alt"></i></button>
+        <button class="btn btn-icon" id="themeBtn" title="Skift tema"><i class="fas fa-moon"></i></button>
         <button class="btn btn-icon" id="settingsBtn" title="Indstillinger"><i class="fas fa-cog"></i></button>
         <button class="btn btn-icon" id="logoutBtn" title="Log ud"><i class="fas fa-sign-out-alt"></i></button>
       </div>
@@ -240,6 +241,18 @@
       </div>
       <div class="modal-body" id="supportModalBody">
         <p>Opretter support session...</p>
+      </div>
+      <div class="modal-body" style="border-top: 1px solid var(--border); margin-top: 0;">
+        <h3 style="margin-top:0; font-size:0.95rem;"><i class="fas fa-eye"></i> Vis Support Session</h3>
+        <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.5rem;">Indtast PIN fra en support session for at se fjernskrivebordet.</p>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <input type="text" id="supportPinInput" placeholder="6-cifret PIN" maxlength="6" pattern="[0-9]*" inputmode="numeric"
+                 style="flex:1; font-size:1.1rem; text-align:center; letter-spacing:0.3em; font-family:monospace;">
+          <button class="btn btn-primary" id="supportJoinBtn" onclick="App.joinSupportSession()">
+            <i class="fas fa-plug"></i> Forbind
+          </button>
+        </div>
+        <p id="supportJoinStatus" class="status-text" style="margin-top:0.4rem; font-size:0.8rem;"></p>
       </div>
     </div>
   </div>

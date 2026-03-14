@@ -20,6 +20,12 @@ agent/*.exe
 *.dylib
 *.test
 *.out
+*.pyd
+*.lib
+*.a
+*.o
+*.obj
+*.wasm
 vendor/
 
 # Test files
@@ -82,3 +88,9 @@ test-results/
 node_modules/
 package.json
 package-lock.json
+
+# Old project (legacy Python prototype, should not be tracked)
+old projekt/
+
+# Compiled Go binaries (non-exe, e.g. Linux/macOS builds)
+controller/mcp-server

@@ -11,6 +11,9 @@ const App = {
       document.getElementById('headerVersion').textContent = version;
     } catch (e) { console.error('GetVersion failed:', e); }
 
+    // Setup theme
+    this.initTheme();
+
     // Setup event listeners
     this.setupLogin();
     this.setupTabs();
@@ -505,6 +508,17 @@ const App = {
         }
       }
     });
+
+    // Enter key on support PIN input
+    const pinInput = document.getElementById('supportPinInput');
+    if (pinInput) {
+      pinInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.joinSupportSession();
+        }
+      });
+    }
   },
 
   async showSupportModal() {
@@ -512,6 +526,12 @@ const App = {
     const body = document.getElementById('supportModalBody');
     modal.style.display = 'flex';
     body.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Opretter support session...</p>';
+
+    // Clear previous join state
+    const pinInput = document.getElementById('supportPinInput');
+    const joinStatus = document.getElementById('supportJoinStatus');
+    if (pinInput) pinInput.value = '';
+    if (joinStatus) { joinStatus.textContent = ''; joinStatus.className = 'status-text'; }
 
     try {
       const info = await window.go.main.App.CreateSupportSession();
@@ -531,6 +551,70 @@ const App = {
       `;
     } catch (err) {
       body.innerHTML = `<p style="color:var(--danger)">Fejl: ${err.message}</p>`;
+    }
+  },
+
+  async joinSupportSession() {
+    const pinInput = document.getElementById('supportPinInput');
+    const statusEl = document.getElementById('supportJoinStatus');
+    const btn = document.getElementById('supportJoinBtn');
+    const pin = (pinInput ? pinInput.value : '').trim();
+
+    if (!pin || pin.length < 4) {
+      if (statusEl) { statusEl.textContent = 'Indtast en gyldig PIN'; statusEl.className = 'status-text error'; }
+      return;
+    }
+
+    // Show loading
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Forbinder...'; }
+    if (statusEl) { statusEl.textContent = 'Søger support session...'; statusEl.className = 'status-text'; }
+
+    try {
+      // Look up session by PIN via Go backend
+      const info = await window.go.main.App.JoinSupportSession(pin);
+
+      if (statusEl) { statusEl.textContent = 'Session fundet! Opretter forbindelse...'; statusEl.className = 'status-text'; }
+
+      // Close the support modal
+      closeModal('supportModal');
+
+      // Switch to viewer tab
+      this.switchToTab('viewer');
+
+      // Create a support viewer session using the existing ViewerSession/SessionManager
+      if (window.SessionManager) {
+        const deviceName = 'Support #' + pin;
+        const deviceId = 'support-' + info.session_id;
+
+        // Check if already viewing this session
+        for (const [id, session] of SessionManager.sessions) {
+          if (session.deviceId === deviceId) {
+            SessionManager.switchTo(id);
+            showToast('Allerede forbundet til denne support session', 'info');
+            return;
+          }
+        }
+
+        // Hide idle state
+        document.getElementById('viewerIdle').style.display = 'none';
+
+        // Create session and override its connect method for support flow
+        const container = SessionManager.getContainer();
+        const session = new ViewerSession(deviceId, deviceName, container);
+        SessionManager.sessions.set(session.id, session);
+        SessionManager.addTab(session);
+        SessionManager.switchTo(session.id);
+
+        // Override connect to use support session signaling (view-only WebRTC)
+        session.connectAsSupport(info.session_id);
+      } else {
+        showToast('FEJL: SessionManager ikke loaded', 'error');
+      }
+    } catch (err) {
+      console.error('joinSupportSession error:', err);
+      if (statusEl) { statusEl.textContent = 'Fejl: ' + (err.message || err); statusEl.className = 'status-text error'; }
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-plug"></i> Forbind'; }
     }
   },
 
@@ -663,6 +747,34 @@ const App = {
           }
         }
       });
+    }
+  },
+
+  // ==================== THEME ====================
+  initTheme() {
+    const saved = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    this.updateThemeIcon(saved);
+
+    document.getElementById('themeBtn').addEventListener('click', () => this.toggleTheme());
+  },
+
+  toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    this.updateThemeIcon(next);
+  },
+
+  updateThemeIcon(theme) {
+    const btn = document.getElementById('themeBtn');
+    if (!btn) return;
+    const icon = btn.querySelector('i');
+    if (theme === 'light') {
+      icon.className = 'fas fa-sun';
+    } else {
+      icon.className = 'fas fa-moon';
     }
   },
 
