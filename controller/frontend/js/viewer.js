@@ -127,7 +127,8 @@ class ViewerSession {
   }
 
   async setupPeerConnection() {
-    const config = { ...this.iceConfig, iceTransportPolicy: 'relay' };
+    // Only force relay if explicitly requested (matches dashboard behavior)
+    const config = { ...this.iceConfig };
     this.peerConnection = new RTCPeerConnection(config);
 
     this.peerConnection.onicecandidate = (event) => {
@@ -182,9 +183,10 @@ class ViewerSession {
     // Create all data channels the agent expects
     const controlDC = this.peerConnection.createDataChannel('control', { ordered: true });
     controlDC.binaryType = 'arraybuffer';
+    // Store reference immediately (like dashboard) — readyState checked before send
+    this.dataChannel = controlDC;
     controlDC.onopen = () => {
-      console.log(`[${this.deviceName}] Control data channel open`);
-      this.dataChannel = controlDC;
+      console.log(`[${this.deviceName}] Control data channel open — input enabled`);
     };
     controlDC.onmessage = (e) => this.handleDataMessage(e);
 
@@ -471,13 +473,15 @@ class ViewerSession {
     const canvas = this.canvasEl;
     canvas.focus();
 
+    canvas.tabIndex = 0;
+    canvas.style.outline = 'none';
     canvas.addEventListener('click', () => canvas.focus());
+    canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); });
     canvas.addEventListener('mousemove', (e) => this.sendMouseEvent('mousemove', e));
     canvas.addEventListener('mousedown', (e) => { e.preventDefault(); this.sendMouseEvent('mousedown', e); });
-    canvas.addEventListener('mouseup', (e) => this.sendMouseEvent('mouseup', e));
+    canvas.addEventListener('mouseup', (e) => { e.preventDefault(); this.sendMouseEvent('mouseup', e); });
     canvas.addEventListener('wheel', (e) => { e.preventDefault(); this.sendWheelEvent(e); }, { passive: false });
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    canvas.addEventListener('keydown', (e) => { e.preventDefault(); this.sendKeyEvent('keydown', e); });
+    canvas.addEventListener('keydown', (e) => this.sendKeyEvent('keydown', e));
     canvas.addEventListener('keyup', (e) => { e.preventDefault(); this.sendKeyEvent('keyup', e); });
 
     this.wrapper.querySelector('.session-disconnect-btn').addEventListener('click', () => this.disconnect());
@@ -499,21 +503,23 @@ class ViewerSession {
 
   sendMouseEvent(type, e) {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
-    const canvas = this.canvasEl;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = (this.screenWidth || canvas.width) / rect.width;
-    const scaleY = (this.screenHeight || canvas.height) / rect.height;
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top) * scaleY);
 
-    // Agent expects: t=mouse_move/mouse_click, button as string, down as bool
-    const buttonNames = ['left', 'right', 'middle'];
+    // Use relative coordinates (0.0-1.0) like dashboard — agent resolves to pixels
+    const target = this.canvasEl;
+    const rect = target.getBoundingClientRect();
+    const relX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const relY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    const x = Math.round(relX * 10000) / 10000;
+    const y = Math.round(relY * 10000) / 10000;
+
+    // e.button: 0=left, 1=middle, 2=right
+    const buttonNames = ['left', 'middle', 'right'];
     if (type === 'mousemove') {
-      this.dataChannel.send(JSON.stringify({ t: 'mouse_move', x: x, y: y }));
+      this.dataChannel.send(JSON.stringify({ t: 'mouse_move', x, y, rel: true }));
     } else if (type === 'mousedown') {
-      this.dataChannel.send(JSON.stringify({ t: 'mouse_click', x: x, y: y, button: buttonNames[e.button] || 'left', down: true }));
+      this.dataChannel.send(JSON.stringify({ t: 'mouse_click', x, y, button: buttonNames[e.button] || 'left', down: true, rel: true }));
     } else if (type === 'mouseup') {
-      this.dataChannel.send(JSON.stringify({ t: 'mouse_click', x: x, y: y, button: buttonNames[e.button] || 'left', down: false }));
+      this.dataChannel.send(JSON.stringify({ t: 'mouse_click', x, y, button: buttonNames[e.button] || 'left', down: false, rel: true }));
     }
   }
 
@@ -522,7 +528,7 @@ class ViewerSession {
     // Agent expects: t=mouse_scroll, delta (positive=up, negative=down)
     this.dataChannel.send(JSON.stringify({
       t: 'mouse_scroll',
-      delta: -Math.round(e.deltaY)
+      delta: e.deltaY > 0 ? -1 : 1
     }));
   }
 
@@ -534,18 +540,24 @@ class ViewerSession {
       if (e.code === 'Escape' && this.isFullscreen) { this.toggleFullscreen(); return; }
     }
 
-    // Agent expects: t=key, down=bool, code, char for text input
-    this.dataChannel.send(JSON.stringify({
+    const evt = {
       t: 'key',
       code: e.code,
-      key: e.key,
       down: type === 'keydown',
       shift: e.shiftKey,
       ctrl: e.ctrlKey,
-      alt: e.altKey,
-      meta: e.metaKey,
-      char: (type === 'keydown' && e.key.length === 1) ? e.key : ''
-    }));
+      alt: e.altKey
+    };
+
+    // AltGr on Windows sends ctrlKey+altKey — include the resolved char
+    // so agent uses ForwardUnicodeChar (hybrid AltGr handler)
+    if (e.ctrlKey && e.altKey && !e.metaKey && e.key.length === 1) {
+      evt.char = e.key;
+    }
+
+    this.dataChannel.send(JSON.stringify(evt));
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   show() {

@@ -453,10 +453,13 @@ const App = {
       });
     });
 
-    // ESC to close
+    // ESC to close modals (only when a modal is visible)
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+        const visibleModals = document.querySelectorAll('.modal[style*="display: flex"], .modal[style*="display:flex"]');
+        if (visibleModals.length > 0) {
+          visibleModals.forEach(m => m.style.display = 'none');
+        }
       }
     });
   },
@@ -556,6 +559,10 @@ const App = {
   // ==================== KEYBOARD SHORTCUTS ====================
   setupKeyboardShortcuts() {
     document.addEventListener('keydown', async (e) => {
+      // Only handle shortcuts when NOT on viewer tab (avoid stealing canvas events)
+      const viewerActive = document.getElementById('viewerTab')?.classList.contains('active');
+      if (viewerActive) return;
+
       // Ctrl+1/2/3: Connect to device #1/#2/#3
       if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
