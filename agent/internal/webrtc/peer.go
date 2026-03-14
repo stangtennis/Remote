@@ -135,6 +135,9 @@ type Manager struct {
 	// Polling health tracking (for heartbeat awareness)
 	pollingHealthy  atomic.Bool  // true = polling is working
 	lastPollSuccess atomic.Int64 // Unix timestamp of last successful poll
+
+	// Shared HTTP client with connection pooling (reused across all requests)
+	httpClient *http.Client
 }
 
 // IsPollingHealthy returns true if session polling is working normally.
@@ -250,6 +253,14 @@ func New(cfg *config.Config, dev *device.Device, tokenProvider *auth.TokenProvid
 		},
 		cpuAvg: make([]float64, 0, 6),       // 3 seconds at 500ms intervals
 		rttAvg: make([]time.Duration, 0, 6), // 3 seconds at 500ms intervals
+		httpClient: &http.Client{
+			Timeout: 5 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        10,
+				MaxIdleConnsPerHost: 5,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		},
 	}
 	mgr.pollingHealthy.Store(true) // Start healthy
 	mgr.lastPollSuccess.Store(time.Now().Unix())

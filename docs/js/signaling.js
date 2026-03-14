@@ -82,9 +82,28 @@ function subscribeToSessionSignaling(sessionId, ctx) {
 async function startPollingForSignals(sessionId, ctx) {
   debug('🔄 Starting polling fallback for signals...');
 
+  // Track how long connection has been stable
+  ctx._connectedSince = null;
+
   // Poll every 500ms
   ctx.pollingInterval = setInterval(async () => {
     try {
+      // Stop polling if connection has been stable for 10+ seconds
+      const pc = ctx.peerConnection;
+      if (pc && pc.connectionState === 'connected') {
+        if (!ctx._connectedSince) {
+          ctx._connectedSince = Date.now();
+        } else if (Date.now() - ctx._connectedSince >= 10000) {
+          debug('🛑 Stopping signal polling — connection stable for 10+ seconds');
+          clearInterval(ctx.pollingInterval);
+          ctx.pollingInterval = null;
+          return;
+        }
+      } else {
+        // Reset timer if connection drops
+        ctx._connectedSince = null;
+      }
+
       const { data, error } = await supabase
         .from('session_signaling')
         .select('*')

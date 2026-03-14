@@ -26,10 +26,22 @@ class ViewerSession {
     this.isFullscreen = false;
     this.inputSetup = false;
 
+    // Auto-reconnect state
+    this.reconnectState = 'idle';       // 'idle' | 'reconnecting' | 'gave_up'
+    this.reconnectAttempt = 0;
+    this.reconnectTimer = null;
+    this.reconnectStartedAt = null;
+    this.manualDisconnect = false;
+
     // Create DOM elements for this session
     this.wrapper = document.createElement('div');
     this.wrapper.className = 'session-wrapper';
     this.wrapper.dataset.sessionId = this.id;
+    // Stats tracking state
+    this.statsInterval = null;
+    this.prevBytesReceived = 0;
+    this.prevTimestamp = 0;
+
     this.wrapper.innerHTML = `
       <div class="viewer-connecting" style="display:flex;">
         <div class="connecting-spinner"></div>
@@ -38,6 +50,11 @@ class ViewerSession {
       <div class="viewer-active" style="display:none;">
         <div class="viewer-toolbar">
           <span class="viewer-device-label">${deviceName}</span>
+          <span class="viewer-stats" style="font-size:0.7rem; color:var(--text-muted); margin-left:auto;"></span>
+          <select class="session-monitor-select" title="Vælg skærm" style="font-size:0.75rem; padding:0.2rem 0.4rem; background:var(--background-secondary); border:1px solid var(--border); border-radius:4px; color:var(--text); display:none;">
+            <option value="0">Skærm 1</option>
+          </select>
+          <button class="btn btn-sm btn-icon session-files-btn" title="Filoverførsel"><i class="fas fa-folder-open"></i></button>
           <button class="btn btn-sm btn-icon session-fullscreen-btn" title="Fuldskærm"><i class="fas fa-expand"></i></button>
           <button class="btn btn-sm btn-danger session-disconnect-btn">Afbryd</button>
         </div>
@@ -275,9 +292,31 @@ class ViewerSession {
         if (msg.type === 'screen_info' || msg.type === 'frame_meta') {
           this.screenWidth = msg.width;
           this.screenHeight = msg.height;
+        } else if (msg.type === 'monitor_list') {
+          this.updateMonitorList(msg.monitors || [], msg.active || 0);
         }
       } catch (e) { /* not JSON */ }
     }
+  }
+
+  updateMonitorList(monitors, activeIndex) {
+    const select = this.wrapper.querySelector('.session-monitor-select');
+    if (!select || monitors.length <= 1) return;
+
+    select.style.display = '';
+    select.innerHTML = '';
+    monitors.forEach((mon, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = mon.name || `Skærm ${i + 1}`;
+      if (i === activeIndex) opt.selected = true;
+      select.appendChild(opt);
+    });
+  }
+
+  switchMonitor(index) {
+    if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
+    this.dataChannel.send(JSON.stringify({ type: 'switch_monitor', index: parseInt(index) }));
   }
 
   renderFrame(data) {
@@ -426,24 +465,298 @@ class ViewerSession {
     this.connected = true;
     this.connectingEl.style.display = 'none';
     this.activeEl.style.display = 'flex';
-    showToast(`Forbundet til ${this.deviceName}`, 'success');
+
+    // Handle successful reconnect
+    if (this.reconnectState === 'reconnecting') {
+      this.reconnectState = 'idle';
+      this.reconnectAttempt = 0;
+      this.reconnectStartedAt = null;
+      showToast(`Forbindelse til ${this.deviceName} genoprettet!`, 'success');
+      console.log(`[${this.deviceName}] Reconnect successful`);
+    } else {
+      showToast(`Forbundet til ${this.deviceName}`, 'success');
+    }
+
     this.setupInput();
+    this.startStats();
+    this.sendSettingsToAgent();
+
+    // Wire file channel to FileTransfer module
+    if (this.fileChannel && window.FileTransfer) {
+      window.FileTransfer.setChannel(this.fileChannel);
+    }
+
     // Notify session manager
     if (window.SessionManager) {
       window.SessionManager.onSessionConnected(this.id);
     }
   }
 
+  // Connection statistics — polls getStats() every second
+  startStats() {
+    this.prevBytesReceived = 0;
+    this.prevTimestamp = 0;
+    if (this.statsInterval) clearInterval(this.statsInterval);
+    this.statsInterval = setInterval(() => this.updateStats(), 1000);
+  }
+
+  async updateStats() {
+    if (!this.peerConnection || this.peerConnection.connectionState !== 'connected') return;
+
+    try {
+      const stats = await this.peerConnection.getStats();
+      let rtt = null;
+      let fps = null;
+      let bytesReceived = 0;
+      let timestamp = 0;
+
+      stats.forEach(report => {
+        // RTT from active candidate pair
+        if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.currentRoundTripTime != null) {
+          rtt = Math.round(report.currentRoundTripTime * 1000);
+        }
+        // FPS from inbound video track
+        if (report.type === 'inbound-rtp' && report.kind === 'video') {
+          if (report.framesPerSecond != null) {
+            fps = Math.round(report.framesPerSecond);
+          }
+          if (report.bytesReceived != null) {
+            bytesReceived = report.bytesReceived;
+            timestamp = report.timestamp;
+          }
+        }
+        // Also check transport-level for total bandwidth (includes data channels)
+        if (report.type === 'transport' && report.bytesReceived != null) {
+          if (report.bytesReceived > bytesReceived) {
+            bytesReceived = report.bytesReceived;
+            timestamp = report.timestamp;
+          }
+        }
+      });
+
+      // Calculate bandwidth
+      let bwText = '';
+      if (this.prevTimestamp > 0 && timestamp > this.prevTimestamp) {
+        const deltaBytes = bytesReceived - this.prevBytesReceived;
+        const deltaSec = (timestamp - this.prevTimestamp) / 1000;
+        const mbps = (deltaBytes * 8) / (deltaSec * 1000000);
+        bwText = mbps >= 1 ? `${mbps.toFixed(1)} Mbit/s` : `${(mbps * 1000).toFixed(0)} kbit/s`;
+      }
+      this.prevBytesReceived = bytesReceived;
+      this.prevTimestamp = timestamp;
+
+      // Build display string
+      const parts = [];
+      if (rtt != null) parts.push(`${rtt}ms`);
+      if (fps != null) parts.push(`${fps}fps`);
+      if (bwText) parts.push(bwText);
+
+      const statsEl = this.wrapper.querySelector('.viewer-stats');
+      if (statsEl) {
+        statsEl.textContent = parts.length > 0 ? parts.join(' | ') : '';
+      }
+    } catch (e) {
+      // getStats() can fail during teardown — ignore
+    }
+  }
+
+  // Send current settings to agent via data channel
+  async sendSettingsToAgent() {
+    try {
+      const settings = await window.go.main.App.GetSettings();
+      const msg = {
+        type: 'set_stream_params',
+        max_quality: settings.video_quality,
+        max_fps: settings.target_fps,
+        max_scale: 1.0
+      };
+
+      // Wait for data channel to be open (may still be opening)
+      const dc = this.dataChannel;
+      if (!dc) return;
+
+      const send = () => {
+        if (dc.readyState === 'open') {
+          dc.send(JSON.stringify(msg));
+          console.log(`[${this.deviceName}] Sent stream params to agent:`, msg);
+        }
+      };
+
+      if (dc.readyState === 'open') {
+        send();
+      } else {
+        dc.addEventListener('open', send, { once: true });
+      }
+    } catch (e) {
+      console.error(`[${this.deviceName}] Failed to send settings to agent:`, e);
+    }
+  }
+
   onDisconnected() {
     if (!this.connected) return;
     this.connected = false;
-    showToast(`Forbindelse til ${this.deviceName} tabt`, 'warning');
-    this.disconnect();
+
+    // Don't auto-reconnect if user manually disconnected or was kicked
+    if (this.manualDisconnect) return;
+
+    // Start auto-reconnect if not already in progress
+    if (this.reconnectState === 'idle' && this.sessionData) {
+      console.log(`[${this.deviceName}] Connection lost — starting auto-reconnect`);
+      showToast(`Forbindelse til ${this.deviceName} tabt — genopretter...`, 'warning');
+      this.reconnectState = 'reconnecting';
+      this.reconnectStartedAt = Date.now();
+      this.reconnectAttempt = 0;
+
+      // Show connecting overlay with reconnect status
+      this.activeEl.style.display = 'none';
+      this.connectingEl.style.display = 'flex';
+      const statusP = this.connectingEl.querySelector('p');
+      if (statusP) {
+        statusP.innerHTML = `Genopretter forbindelse til <span class="connecting-name">${this.deviceName}</span>... <br><small>Forsøg 1/8</small>`;
+      }
+
+      // Update tab dot to show reconnecting
+      if (window.SessionManager) {
+        const tab = window.SessionManager.getTabBar().querySelector(`[data-session-id="${this.id}"]`);
+        if (tab) {
+          const dot = tab.querySelector('.session-tab-dot');
+          if (dot) { dot.classList.remove('connected'); dot.classList.add('connecting'); }
+        }
+      }
+
+      this.attemptReconnect();
+    }
   }
 
-  disconnect() {
+  async attemptReconnect() {
+    const RECONNECT_MAX_ATTEMPTS = 8;
+    const RECONNECT_BACKOFF = [2000, 4000, 8000, 12000, 16000, 24000, 30000, 30000]; // ms, start 2s, max 30s
+
+    if (this.reconnectState !== 'reconnecting') return;
+
+    // Check max attempts
+    if (this.reconnectAttempt >= RECONNECT_MAX_ATTEMPTS) {
+      console.log(`[${this.deviceName}] Reconnect gave up after ${RECONNECT_MAX_ATTEMPTS} attempts`);
+      this.reconnectState = 'gave_up';
+      showToast(`Kunne ikke genoprette forbindelse til ${this.deviceName} efter ${RECONNECT_MAX_ATTEMPTS} forsøg.`, 'error');
+      this.disconnect();
+      return;
+    }
+
+    this.reconnectAttempt++;
+    const delay = RECONNECT_BACKOFF[Math.min(this.reconnectAttempt - 1, RECONNECT_BACKOFF.length - 1)];
+
+    console.log(`[${this.deviceName}] Reconnect attempt ${this.reconnectAttempt}/${RECONNECT_MAX_ATTEMPTS} (delay: ${delay}ms)`);
+
+    // Update overlay text
+    const statusP = this.connectingEl.querySelector('p');
+    if (statusP) {
+      statusP.innerHTML = `Genopretter forbindelse til <span class="connecting-name">${this.deviceName}</span>... <br><small>Forsøg ${this.reconnectAttempt}/${RECONNECT_MAX_ATTEMPTS}</small>`;
+    }
+
+    // Wait for backoff delay
+    await new Promise(resolve => {
+      this.reconnectTimer = setTimeout(resolve, delay);
+    });
+
+    // Check if reconnect was cancelled during wait
+    if (this.reconnectState !== 'reconnecting') {
+      console.log(`[${this.deviceName}] Reconnect cancelled during backoff`);
+      return;
+    }
+
+    try {
+      // Clean up existing WebRTC without removing DOM
+      this.cleanupConnection();
+
+      // Get fresh connection config (refreshes auth token)
+      const config = await window.go.main.App.GetConnectionConfig();
+      const cfg = {
+        supabase_url: config.supabase_url || config.SupabaseURL,
+        anon_key: config.anon_key || config.AnonKey,
+        auth_token: config.auth_token || config.AuthToken,
+        user_id: config.user_id || config.UserID,
+        refresh_token: config.refresh_token || config.RefreshToken,
+      };
+
+      this.supabase = window.supabase
+        ? window.supabase.createClient(cfg.supabase_url, cfg.anon_key, {
+            auth: { persistSession: false }
+          })
+        : null;
+
+      if (this.supabase) {
+        await this.supabase.auth.setSession({
+          access_token: cfg.auth_token,
+          refresh_token: cfg.refresh_token
+        });
+      }
+
+      this.config = cfg;
+
+      // Fetch fresh TURN credentials
+      await this.fetchTurnCredentials(cfg);
+
+      // Create new session
+      await this.createSession(cfg);
+
+      // Setup new peer connection
+      await this.setupPeerConnection();
+
+      // Subscribe to signaling
+      this.subscribeToSignaling();
+
+      // Create offer
+      await this.createOffer();
+
+      // Wait for connection (max 15s)
+      const connected = await this.waitForConnection(15000);
+      if (connected) {
+        console.log(`[${this.deviceName}] Reconnect succeeded on attempt ${this.reconnectAttempt}`);
+        // onConnected() handler will reset reconnect state
+        return;
+      }
+
+      // Timed out — try again
+      console.log(`[${this.deviceName}] Reconnect attempt ${this.reconnectAttempt} timed out`);
+      if (this.reconnectState === 'reconnecting') {
+        this.attemptReconnect();
+      }
+
+    } catch (err) {
+      console.error(`[${this.deviceName}] Reconnect attempt ${this.reconnectAttempt} failed:`, err);
+      if (this.reconnectState === 'reconnecting') {
+        this.attemptReconnect();
+      }
+    }
+  }
+
+  waitForConnection(timeout) {
+    return new Promise(resolve => {
+      const start = Date.now();
+      const check = () => {
+        if (!this.peerConnection) {
+          resolve(false);
+          return;
+        }
+        if (this.peerConnection.connectionState === 'connected') {
+          resolve(true);
+          return;
+        }
+        if (Date.now() - start > timeout) {
+          resolve(false);
+          return;
+        }
+        setTimeout(check, 500);
+      };
+      check();
+    });
+  }
+
+  cleanupConnection() {
+    if (this.statsInterval) { clearInterval(this.statsInterval); this.statsInterval = null; }
     if (this.pollingInterval) { clearInterval(this.pollingInterval); this.pollingInterval = null; }
-    if (this.signalingChannel && this.supabase) { this.supabase.removeChannel(this.signalingChannel); }
+    if (this.signalingChannel && this.supabase) { this.supabase.removeChannel(this.signalingChannel); this.signalingChannel = null; }
     if (this.peerConnection) { this.peerConnection.close(); this.peerConnection = null; }
     this.dataChannel = null;
     this.fileChannel = null;
@@ -452,6 +765,29 @@ class ViewerSession {
     this.usingH264 = false;
     this.processedSignalIds.clear();
     this.pendingIceCandidates = [];
+  }
+
+  cancelReconnect() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectState = 'idle';
+    this.reconnectAttempt = 0;
+    this.reconnectStartedAt = null;
+    console.log(`[${this.deviceName}] Reconnect cancelled`);
+  }
+
+  disconnect() {
+    // Mark as manual disconnect to prevent auto-reconnect triggering
+    this.manualDisconnect = true;
+
+    // Cancel any in-progress reconnect
+    this.cancelReconnect();
+
+    // Clean up connection resources
+    this.cleanupConnection();
+
     this.connected = false;
     this.isFullscreen = false;
 
@@ -484,8 +820,17 @@ class ViewerSession {
     canvas.addEventListener('keydown', (e) => this.sendKeyEvent('keydown', e));
     canvas.addEventListener('keyup', (e) => { e.preventDefault(); this.sendKeyEvent('keyup', e); });
 
-    this.wrapper.querySelector('.session-disconnect-btn').addEventListener('click', () => this.disconnect());
+    this.wrapper.querySelector('.session-disconnect-btn').addEventListener('click', () => { this.manualDisconnect = true; this.disconnect(); });
     this.wrapper.querySelector('.session-fullscreen-btn').addEventListener('click', () => this.toggleFullscreen());
+    this.wrapper.querySelector('.session-files-btn').addEventListener('click', () => {
+      if (window.FileTransfer) {
+        if (this.fileChannel) window.FileTransfer.setChannel(this.fileChannel);
+        window.FileTransfer.open();
+      }
+    });
+    this.wrapper.querySelector('.session-monitor-select').addEventListener('change', (e) => {
+      this.switchMonitor(e.target.value);
+    });
   }
 
   async toggleFullscreen() {
