@@ -687,6 +687,73 @@ func (c *Client) CreateSupportSession() (*SupportSession, error) {
 	return &session, nil
 }
 
+// JoinSupportSessionResult holds the info needed to view a support session
+type JoinSupportSessionResult struct {
+	SessionID string `json:"session_id"`
+	Token     string `json:"token"`
+	Status    string `json:"status"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+// JoinSupportSession looks up a support session by PIN via the support-signal Edge Function
+func (c *Client) JoinSupportSession(pin string) (*JoinSupportSessionResult, error) {
+	logger.Debug("[JoinSupportSession] Looking up session by PIN: %s", pin)
+	c.ensureValidToken()
+
+	if c.AuthToken == "" {
+		return nil, fmt.Errorf("not authenticated")
+	}
+
+	url := fmt.Sprintf("%s/functions/v1/support-signal", c.URL)
+
+	payload := map[string]string{
+		"action": "validate",
+		"pin":    pin,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("apikey", c.AnonKey)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
+			return nil, fmt.Errorf("%s", errResp.Error)
+		}
+		return nil, fmt.Errorf("failed to look up support session (status: %d)", resp.StatusCode)
+	}
+
+	var result JoinSupportSessionResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	logger.Info("[JoinSupportSession] Found session: ID=%s, Status=%s", result.SessionID, result.Status)
+	return &result, nil
+}
+
 // CheckApproval checks if the user is approved
 func (c *Client) CheckApproval(userID string) (bool, error) {
 	logger.Debug("[CheckApproval] Checking approval for user: %s", userID)

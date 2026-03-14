@@ -485,6 +485,31 @@ func (a *App) CreateSupportSession() (*SupportInfo, error) {
 	}, nil
 }
 
+// JoinSupportInfo holds the result of looking up a support session by PIN
+type JoinSupportInfo struct {
+	SessionID string `json:"session_id"`
+	Token     string `json:"token"`
+	Status    string `json:"status"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+// JoinSupportSession looks up a support session by PIN and returns connection info
+func (a *App) JoinSupportSession(pin string) (*JoinSupportInfo, error) {
+	if a.currentUser == nil || a.supabase == nil {
+		return nil, fmt.Errorf("not logged in")
+	}
+	result, err := a.supabase.JoinSupportSession(pin)
+	if err != nil {
+		return nil, err
+	}
+	return &JoinSupportInfo{
+		SessionID: result.SessionID,
+		Token:     result.Token,
+		Status:    result.Status,
+		ExpiresAt: result.ExpiresAt,
+	}, nil
+}
+
 // GetLogContent returns recent log entries
 func (a *App) GetLogContent(lines int) (string, error) {
 	if lines <= 0 {

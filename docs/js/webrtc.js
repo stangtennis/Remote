@@ -173,7 +173,7 @@ async function initWebRTC(sessionData, ctx) {
     debug('📝 Creating offer...');
     const offer = await ctx.peerConnection.createOffer({
       offerToReceiveVideo: true,
-      offerToReceiveAudio: false
+      offerToReceiveAudio: true
     });
     debug('✅ Offer created');
 
@@ -334,12 +334,19 @@ function setupPeerConnectionHandlers(ctx) {
   // Track handler (remote video/canvas)
   pc.ontrack = (event) => {
     debug('Remote track received:', event.track.kind, 'for device:', ctx.id);
-    // Only set video srcObject if this is the active session
-    if (window.SessionManager?.activeSessionId === ctx.id) {
-      const remoteVideo = document.getElementById('remoteVideo');
-      if (remoteVideo && event.streams[0]) {
-        remoteVideo.srcObject = event.streams[0];
+    if (event.track.kind === 'video') {
+      // Only set video srcObject if this is the active session
+      if (window.SessionManager?.activeSessionId === ctx.id) {
+        const remoteVideo = document.getElementById('remoteVideo');
+        if (remoteVideo && event.streams[0]) {
+          remoteVideo.srcObject = event.streams[0];
+        }
       }
+    } else if (event.track.kind === 'audio') {
+      debug('Audio track received — playing');
+      const audio = new Audio();
+      audio.srcObject = event.streams[0];
+      audio.play().catch(e => debug('Audio autoplay blocked:', e));
     }
   };
 
