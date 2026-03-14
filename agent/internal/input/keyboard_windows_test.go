@@ -5,61 +5,71 @@ import "testing"
 func TestMapKeyCode(t *testing.T) {
 	tests := []struct {
 		code string
-		want uint16
+		want string
 	}{
-		{"KeyA", 0x41},
-		{"KeyZ", 0x5A},
-		{"Digit0", 0x30},
-		{"Digit9", 0x39},
-		{"Enter", 0x0D},
-		{"Space", 0x20},
-		{"Backspace", 0x08},
-		{"Tab", 0x09},
-		{"Escape", 0x1B},
-		{"ArrowUp", 0x26},
-		{"ArrowDown", 0x28},
-		{"ArrowLeft", 0x25},
-		{"ArrowRight", 0x27},
-		{"F1", 0x70},
-		{"F12", 0x7B},
-		{"ShiftLeft", 0xA0},
-		{"ControlLeft", 0xA2},
-		{"AltLeft", 0xA4},
-		{"MetaLeft", 0x5B},
-		{"Delete", 0x2E},
-		{"Home", 0x24},
-		{"End", 0x23},
-		{"PageUp", 0x21},
-		{"PageDown", 0x22},
-		{"Insert", 0x2D},
+		{"KeyA", "a"},
+		{"KeyZ", "z"},
+		{"Digit0", "0"},
+		{"Digit9", "9"},
+		{"Enter", "enter"},
+		{"Space", "space"},
+		{"Backspace", "backspace"},
+		{"Tab", "tab"},
+		{"Escape", "esc"},
+		{"ArrowUp", "up"},
+		{"ArrowDown", "down"},
+		{"ArrowLeft", "left"},
+		{"ArrowRight", "right"},
+		{"F1", "f1"},
+		{"F12", "f12"},
+		{"ShiftLeft", "shift"},
+		{"ControlLeft", "ctrl"},
+		{"AltLeft", "alt"},
+		{"MetaLeft", "cmd"},
+		{"Delete", "delete"},
+		{"Home", "home"},
+		{"End", "end"},
+		{"PageUp", "pageup"},
+		{"PageDown", "pagedown"},
+		{"Insert", "insert"},
 		// Numpad keys (#10 improvement)
-		{"Numpad0", 0x60},
-		{"Numpad9", 0x69},
-		{"NumpadMultiply", 0x6A},
-		{"NumpadAdd", 0x6B},
-		{"NumpadSubtract", 0x6D},
-		{"NumpadDecimal", 0x6E},
-		{"NumpadDivide", 0x6F},
-		{"NumpadEnter", 0x0D},
-		{"NumLock", 0x90},
-		{"CapsLock", 0x14},
-		{"ScrollLock", 0x91},
-		{"PrintScreen", 0x2C},
+		{"Numpad0", "num0"},
+		{"Numpad9", "num9"},
+		{"NumpadMultiply", "num*"},
+		{"NumpadAdd", "num+"},
+		{"NumpadSubtract", "num-"},
+		{"NumpadDecimal", "num."},
+		{"NumpadDivide", "num/"},
+		{"NumpadEnter", "enter"},
+		{"NumLock", "num_lock"},
+		{"CapsLock", "caps_lock"},
+		{"ScrollLock", "scroll_lock"},
+		{"PrintScreen", "print_screen"},
+		{"ContextMenu", "menu"},
+		{"Backquote", "`"},
+		{"IntlBackslash", "\\"},
+		// Punctuation
+		{"Comma", ","},
+		{"Period", "."},
+		{"Semicolon", ";"},
+		{"Minus", "-"},
+		{"Equal", "="},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.code, func(t *testing.T) {
 			got := mapKeyCode(tt.code)
 			if got != tt.want {
-				t.Errorf("mapKeyCode(%q) = 0x%X, want 0x%X", tt.code, got, tt.want)
+				t.Errorf("mapKeyCode(%q) = %q, want %q", tt.code, got, tt.want)
 			}
 		})
 	}
 }
 
 func TestMapKeyCodeUnknown(t *testing.T) {
+	// Unknown keys should return lowercase version
 	got := mapKeyCode("UnknownKey123")
-	if got != 0 {
-		t.Errorf("mapKeyCode(unknown) = 0x%X, want 0", got)
+	if got != "unknownkey123" {
+		t.Errorf("mapKeyCode(unknown) = %q, want %q", got, "unknownkey123")
 	}
 }
