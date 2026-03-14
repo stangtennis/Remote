@@ -113,9 +113,9 @@
                 <span id="connectedDeviceName">Enhedsnavn</span>
               </div>
               <div class="toolbar-center">
-                <button class="toolbar-btn" title="Synkroniser udklipsholder">📋</button>
+                <button class="toolbar-btn" title="Synkroniser udklipsholder" onclick="sendClipboardToAgent()">📋</button>
                 <button class="toolbar-btn" title="Filøverførsel" onclick="FileTransfer.open()">📁</button>
-                <button class="toolbar-btn" title="Skærmbillede">📸</button>
+                <button class="toolbar-btn" title="Skærmbillede" onclick="saveScreenshot()">📸</button>
                 <button class="toolbar-btn" id="qualityToggleBtn" title="Skift H264/JPEG tilstand">🎚️</button>
                 <span id="monitorSelectContainer" style="display: none; align-items: center; gap: 4px;">
                   <label for="monitorSelect" style="font-size: 0.8rem; color: #aaa;">🖥️</label>
@@ -585,6 +585,18 @@
           }
         });
       }
+
+      // Screenshot: capture canvas content and download as PNG
+      window.saveScreenshot = function() {
+        const canvas = document.getElementById('previewCanvas');
+        if (!canvas || canvas.width === 0 || canvas.height === 0) return;
+        const link = document.createElement('a');
+        const now = new Date();
+        const ts = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        link.download = 'screenshot-' + ts + '.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      };
 
       // Cancel reconnect button
       const cancelReconnectBtn = document.getElementById('cancelReconnectBtn');

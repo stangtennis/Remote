@@ -81,6 +81,14 @@
           <h2><i class="fas fa-laptop"></i> Mine enheder</h2>
           <button class="btn btn-sm btn-secondary" id="refreshDevicesBtn"><i class="fas fa-sync-alt"></i> Opdater</button>
         </div>
+        <div style="display:flex; gap:0.5rem; margin-bottom:0.75rem;">
+          <input type="text" id="deviceSearch" placeholder="Søg enheder..." style="flex:1;">
+          <select id="deviceFilter">
+            <option value="all">Alle</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+          </select>
+        </div>
         <div id="deviceList" class="device-grid">
           <div class="empty-state">
             <i class="fas fa-plug"></i>
@@ -262,10 +270,42 @@
     </div>
   </div>
 
+  <!-- File Transfer Modal -->
+  <div id="fileTransferModal" class="modal" style="display:none;">
+    <div class="modal-content modal-large glass">
+      <div class="modal-header">
+        <h2><i class="fas fa-folder-open"></i> Filoverførsel</h2>
+        <button class="modal-close" onclick="FileTransfer.close()">&times;</button>
+      </div>
+      <div class="modal-body" style="padding:0;">
+        <div id="fileBreadcrumb" style="padding:0.5rem 0.75rem; font-size:0.8rem; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:0.25rem; flex-wrap:wrap;"></div>
+        <div id="fileDropZone" style="min-height:300px; max-height:50vh; overflow-y:auto;">
+          <div id="fileList"></div>
+        </div>
+        <div id="fileProgressContainer" style="display:none; padding:0.5rem 0.75rem; border-top:1px solid var(--border);">
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <span id="fileProgressLabel" style="font-size:0.8rem; flex:1;"></span>
+          </div>
+          <div class="progress-bar" style="margin-top:0.25rem;">
+            <div class="progress-bar-fill" id="fileProgressBar" style="width:0%"></div>
+          </div>
+        </div>
+        <div style="padding:0.5rem 0.75rem; border-top:1px solid var(--border); display:flex; gap:0.4rem;">
+          <label class="btn btn-sm btn-primary" style="cursor:pointer;">
+            <i class="fas fa-upload"></i> Upload fil
+            <input type="file" id="fileUploadInput" style="display:none;" multiple>
+          </label>
+          <button class="btn btn-sm btn-secondary" onclick="FileTransfer.createDirectoryPrompt()"><i class="fas fa-folder-plus"></i> Ny mappe</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/js/file-transfer.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/viewer.js"></script>
 </body>

@@ -20,12 +20,11 @@ func contains(s, substr string) bool {
 }
 
 // fetchTurnCredentials fetches TURN credentials from the Supabase Edge Function
-func fetchTurnCredentials(supabaseURL, anonKey, authToken string) []webrtc.ICEServer {
+func fetchTurnCredentials(supabaseURL, anonKey, authToken string, client *http.Client) []webrtc.ICEServer {
 	if supabaseURL == "" || authToken == "" {
 		return nil
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
 	req, err := http.NewRequest("POST", supabaseURL+"/functions/v1/turn-credentials", nil)
 	if err != nil {
 		return nil
@@ -87,7 +86,7 @@ func fetchTurnCredentials(supabaseURL, anonKey, authToken string) []webrtc.ICESe
 func (m *Manager) getICEServers() []webrtc.ICEServer {
 	// Try fetching from Edge Function first
 	authToken, _ := m.tokenProvider.GetToken()
-	if servers := fetchTurnCredentials(m.cfg.SupabaseURL, m.cfg.SupabaseAnonKey, authToken); len(servers) > 0 {
+	if servers := fetchTurnCredentials(m.cfg.SupabaseURL, m.cfg.SupabaseAnonKey, authToken, m.httpClient); len(servers) > 0 {
 		return servers
 	}
 
@@ -149,12 +148,13 @@ func (m *Manager) ListenForSessions() {
 	errorCount := 0
 	wasHealthy := true
 
-	// Dynamic polling interval with exponential backoff
-	pollInterval := 500 * time.Millisecond
-	basePollInterval := 500 * time.Millisecond
+	// Dynamic polling interval: 2s when idle, 500ms during active connection
+	idlePollInterval := 2 * time.Second
+	activePollInterval := 500 * time.Millisecond
+	pollInterval := idlePollInterval
 	maxPollInterval := 30 * time.Second
 
-	log.Println("🔄 Session polling started (checking every 500ms)")
+	log.Println("🔄 Session polling started (idle: 2s, active: 500ms)")
 	log.Println("   Listening on: webrtc_sessions (controller) + session_signaling (dashboard)")
 	log.Printf("   Device ID: %s", m.device.ID)
 	log.Printf("   Supabase URL: %s", m.cfg.SupabaseURL)
@@ -234,7 +234,12 @@ func (m *Manager) ListenForSessions() {
 				log.Printf("✅ Polling recovered after %d errors (backoff was %s)", errorCount, pollInterval)
 			}
 			errorCount = 0
-			pollInterval = basePollInterval
+			// Use fast polling during active connection, slow when idle
+			if isConnected {
+				pollInterval = activePollInterval
+			} else {
+				pollInterval = idlePollInterval
+			}
 			m.pollingHealthy.Store(true)
 			m.lastPollSuccess.Store(time.Now().Unix())
 			if !wasHealthy {
@@ -310,8 +315,7 @@ func (m *Manager) fetchWebDashboardSessions() ([]Session, error) {
 	q.Add("limit", "10")
 	req.URL.RawQuery = q.Encode()
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -382,8 +386,7 @@ func (m *Manager) checkSessionDevice(sessionID string) (bool, string) {
 	q.Add("limit", "1")
 	req.URL.RawQuery = q.Encode()
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		return false, ""
 	}
@@ -528,8 +531,7 @@ func (m *Manager) sendAnswerToSignaling(sessionID, sdp string) {
 	}
 	req.Header.Set("Prefer", "return=minimal")
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		log.Printf("❌ Failed to send answer to signaling: %v", err)
 		return
@@ -577,8 +579,7 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 	q.Add("limit", "1")
 	req.URL.RawQuery = q.Encode()
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -901,8 +902,7 @@ func (m *Manager) fetchSignalingMessages(sessionID, fromSide string) ([]SignalMe
 	q.Add("limit", "50")             // Increased to handle all ICE candidates
 	req.URL.RawQuery = q.Encode()
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -986,8 +986,7 @@ func (m *Manager) sendAnswer(sessionID, sdp string) {
 	q.Add("session_id", "eq."+sessionID)
 	req.URL.RawQuery = q.Encode()
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		log.Printf("❌ Failed to send answer: %v", err)
 		return
@@ -1037,8 +1036,7 @@ func (m *Manager) updateSessionStatus(status string) {
 	q.Add("id", "eq."+m.sessionID)
 	req.URL.RawQuery = q.Encode()
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		log.Printf("Failed to update session status: %v", err)
 		return
@@ -1102,8 +1100,7 @@ func (m *Manager) sendICECandidate(candidate *webrtc.ICECandidate) {
 	}
 	req.Header.Set("Prefer", "return=minimal")
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		log.Printf("❌ Failed to send ICE candidate: %v", err)
 		return
@@ -1170,8 +1167,7 @@ func (m *Manager) fetchKickSignals(sessionID string) ([]SignalMessage, error) {
 	q.Add("limit", "1")
 	req.URL.RawQuery = q.Encode()
 
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -1203,8 +1199,7 @@ func (m *Manager) checkIfKicked() bool {
 	if err == nil {
 		req.Header.Set("Content-Type", "application/json")
 		if err := m.setAuthHeaders(req); err == nil {
-			client := &http.Client{Timeout: 3 * time.Second}
-			resp, err := client.Do(req)
+			resp, err := m.httpClient.Do(req)
 			if err == nil {
 				defer resp.Body.Close()
 				var result map[string]interface{}
@@ -1232,8 +1227,7 @@ func (m *Manager) checkIfKicked() bool {
 	q.Add("limit", "1")
 	rsReq.URL.RawQuery = q.Encode()
 
-	client := &http.Client{Timeout: 3 * time.Second}
-	rsResp, err := client.Do(rsReq)
+	rsResp, err := m.httpClient.Do(rsReq)
 	if err != nil {
 		return false
 	}
@@ -1278,8 +1272,7 @@ func (m *Manager) cleanupStaleSessions() {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Prefer", "return=minimal")
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		log.Printf("⚠️  Stale session cleanup (webrtc_sessions) failed: %v", err)
 		return
@@ -1305,7 +1298,7 @@ func (m *Manager) cleanupStaleSessions() {
 	req2.Header.Set("Content-Type", "application/json")
 	req2.Header.Set("Prefer", "return=minimal")
 
-	resp2, err := client.Do(req2)
+	resp2, err := m.httpClient.Do(req2)
 	if err != nil {
 		log.Printf("⚠️  Stale session cleanup (remote_sessions) failed: %v", err)
 		return

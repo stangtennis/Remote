@@ -205,9 +205,38 @@ func mapKeyCode(code string) string {
 		"Quote":        "'",
 		"BracketLeft":  "[",
 		"BracketRight": "]",
-		"Backslash":    "\\",
-		"Minus":        "-",
-		"Equal":        "=",
+		"Backslash":      "\\",
+		"Minus":          "-",
+		"Equal":          "=",
+		"Backquote":      "`",
+		"IntlBackslash":  "\\",
+
+		// Lock keys
+		"NumLock":    "num_lock",
+		"ScrollLock": "scroll_lock",
+		"CapsLock":   "caps_lock",
+
+		// System keys
+		"PrintScreen": "print_screen",
+		"ContextMenu": "menu",
+
+		// Numpad
+		"Numpad0":          "num0",
+		"Numpad1":          "num1",
+		"Numpad2":          "num2",
+		"Numpad3":          "num3",
+		"Numpad4":          "num4",
+		"Numpad5":          "num5",
+		"Numpad6":          "num6",
+		"Numpad7":          "num7",
+		"Numpad8":          "num8",
+		"Numpad9":          "num9",
+		"NumpadMultiply":   "num*",
+		"NumpadDivide":     "num/",
+		"NumpadAdd":        "num+",
+		"NumpadSubtract":   "num-",
+		"NumpadDecimal":    "num.",
+		"NumpadEnter":      "enter",
 	}
 
 	if mapped, ok := keyMap[code]; ok {

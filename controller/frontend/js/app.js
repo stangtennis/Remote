@@ -19,6 +19,7 @@ const App = {
     this.setupModals();
     this.setupKeyboardShortcuts();
     this.setupBackendEvents();
+    this.setupDeviceFilter();
 
     // Try auto-login
     await this.tryAutoLogin();
@@ -149,14 +150,31 @@ const App = {
   },
 
   // ==================== DEVICES ====================
+  _allDevices: [],  // cached for search/filter
+
   async loadDevices() {
     const container = document.getElementById('deviceList');
     try {
       const devices = await window.go.main.App.GetDevices();
+      this._allDevices = devices || [];
       this.renderDevices(devices, container);
     } catch (err) {
       container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>${err.message}</p></div>`;
     }
+  },
+
+  setupDeviceFilter() {
+    const searchInput = document.getElementById('deviceSearch');
+    const filterSelect = document.getElementById('deviceFilter');
+    if (!searchInput || !filterSelect) return;
+
+    const applyFilter = () => {
+      const container = document.getElementById('deviceList');
+      this.renderDevices(this._allDevices, container);
+    };
+
+    searchInput.addEventListener('input', applyFilter);
+    filterSelect.addEventListener('change', applyFilter);
   },
 
   renderDevices(devices, container) {
@@ -165,7 +183,32 @@ const App = {
       return;
     }
 
-    container.innerHTML = devices.map(d => `
+    // Apply search filter
+    const searchEl = document.getElementById('deviceSearch');
+    const filterEl = document.getElementById('deviceFilter');
+    const searchText = (searchEl ? searchEl.value : '').toLowerCase().trim();
+    const statusFilter = filterEl ? filterEl.value : 'all';
+
+    let filtered = devices;
+    if (searchText) {
+      filtered = filtered.filter(d =>
+        (d.device_name || '').toLowerCase().includes(searchText) ||
+        (d.device_id || '').toLowerCase().includes(searchText) ||
+        (d.platform || '').toLowerCase().includes(searchText)
+      );
+    }
+    if (statusFilter === 'online') {
+      filtered = filtered.filter(d => d.is_online);
+    } else if (statusFilter === 'offline') {
+      filtered = filtered.filter(d => !d.is_online);
+    }
+
+    if (filtered.length === 0) {
+      container.innerHTML = '<div class="empty-state"><i class="fas fa-search"></i><p>Ingen enheder matcher filteret.</p></div>';
+      return;
+    }
+
+    container.innerHTML = filtered.map(d => `
       <div class="device-card" data-id="${d.device_id}">
         <div class="device-card-header">
           <div class="status-dot ${d.status}"></div>
@@ -589,6 +632,7 @@ const App = {
     // Listen for device updates from Go backend
     if (window.runtime) {
       window.runtime.EventsOn('devices-updated', (devices) => {
+        this._allDevices = devices || [];
         const container = document.getElementById('deviceList');
         if (container && document.getElementById('devicesTab').classList.contains('active')) {
           this.renderDevices(devices, container);

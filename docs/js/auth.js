@@ -85,7 +85,7 @@ if (document.getElementById('loginForm')) {
     const loginBtn = document.getElementById('loginBtn');
 
     loginBtn.disabled = true;
-    loginBtn.innerHTML = '<span>Signing in...</span>';
+    loginBtn.innerHTML = '<span>Logger ind...</span>';
     authMessage.style.display = 'none';
 
     try {
@@ -100,10 +100,10 @@ if (document.getElementById('loginForm')) {
       window.location.href = 'dashboard.html';
     } catch (error) {
       authMessage.className = 'message error';
-      authMessage.textContent = error.message;
+      authMessage.textContent = translateAuthError(error.message);
       authMessage.style.display = 'block';
       loginBtn.disabled = false;
-      loginBtn.innerHTML = '<span>Sign In</span>';
+      loginBtn.innerHTML = '<span>Log ind</span>';
     }
   });
 
@@ -117,20 +117,20 @@ if (document.getElementById('loginForm')) {
 
     if (password !== passwordConfirm) {
       authMessage.className = 'message error';
-      authMessage.textContent = 'Passwords do not match';
+      authMessage.textContent = 'Adgangskoderne stemmer ikke overens';
       authMessage.style.display = 'block';
       return;
     }
 
     if (password.length < 6) {
       authMessage.className = 'message error';
-      authMessage.textContent = 'Password must be at least 6 characters';
+      authMessage.textContent = 'Adgangskoden skal være mindst 6 tegn';
       authMessage.style.display = 'block';
       return;
     }
 
     signupBtn.disabled = true;
-    signupBtn.innerHTML = '<span>Creating account...</span>';
+    signupBtn.innerHTML = '<span>Opretter konto...</span>';
     authMessage.style.display = 'none';
 
     try {
@@ -145,20 +145,20 @@ if (document.getElementById('loginForm')) {
       if (error) throw error;
 
       authMessage.className = 'message success';
-      authMessage.textContent = 'Account created! Check your email to confirm.';
+      authMessage.textContent = 'Konto oprettet! Tjek din email for at bekræfte.';
       authMessage.style.display = 'block';
       signupForm.reset();
-      
+
       setTimeout(() => {
         backToLoginBtn.click();
       }, 3000);
     } catch (error) {
       authMessage.className = 'message error';
-      authMessage.textContent = error.message;
+      authMessage.textContent = translateAuthError(error.message);
       authMessage.style.display = 'block';
     } finally {
       signupBtn.disabled = false;
-      signupBtn.innerHTML = '<span>Create Account</span>';
+      signupBtn.innerHTML = '<span>Opret konto</span>';
     }
   });
 
@@ -244,6 +244,27 @@ if (document.getElementById('logoutBtn')) {
       window.location.href = 'login.html?status=logout';
     }
   });
+}
+
+// Translate Supabase auth error messages to Danish
+function translateAuthError(msg) {
+  const translations = {
+    'Invalid login credentials': 'Forkert email eller adgangskode',
+    'Email not confirmed': 'Email er ikke bekræftet — tjek din indbakke',
+    'User already registered': 'Brugeren er allerede registreret',
+    'Password should be at least 6 characters': 'Adgangskoden skal være mindst 6 tegn',
+    'Signup requires a valid password': 'Tilmelding kræver en gyldig adgangskode',
+    'Unable to validate email address: invalid format': 'Ugyldig email-adresse',
+    'Email rate limit exceeded': 'For mange forsøg — prøv igen senere',
+    'For security purposes, you can only request this after': 'Af sikkerhedshensyn kan du kun anmode om dette efter',
+    'Too many requests': 'For mange forsøg — vent venligst',
+    'Network error': 'Netværksfejl — tjek din forbindelse',
+  };
+
+  for (const [en, da] of Object.entries(translations)) {
+    if (msg.includes(en)) return da;
+  }
+  return msg;
 }
 
 // Export for use in other modules

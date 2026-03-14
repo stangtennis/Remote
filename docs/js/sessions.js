@@ -228,12 +228,19 @@ const SessionManager = {
   },
 
   // Display a frame on both canvases (preview + viewer)
+  // Uses createObjectURL (fast) instead of base64 data URI (slow)
   displayFrame(frameData) {
     const canvases = [
       document.getElementById('previewCanvas'),
       document.getElementById('remoteCanvas')
     ].filter(Boolean);
     if (canvases.length === 0) return;
+
+    // Convert base64 to blob for faster rendering
+    const binary = atob(frameData);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'image/jpeg' });
 
     const img = new Image();
     img.onload = () => {
@@ -244,8 +251,10 @@ const SessionManager = {
         }
         canvas.getContext('2d').drawImage(img, 0, 0);
       });
+      URL.revokeObjectURL(img.src);
     };
-    img.src = 'data:image/jpeg;base64,' + frameData;
+    img.onerror = () => URL.revokeObjectURL(img.src);
+    img.src = URL.createObjectURL(blob);
   },
 
   // Close a session (tab + switching only — full cleanup done by endSession in app.js)
