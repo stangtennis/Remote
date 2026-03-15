@@ -250,11 +250,14 @@ const App = {
   async connectDevice(deviceId, deviceName) {
     try {
       console.log('connectDevice called:', deviceId, deviceName);
+      // Find agent version from device list
+      const device = (this._allDevices || []).find(d => d.device_id === deviceId);
+      const agentVersion = device?.agent_version || '';
       // Switch to viewer tab
       this.switchToTab('viewer');
       // Initialize viewer connection
       if (window.Viewer) {
-        window.Viewer.connect(deviceId, deviceName);
+        window.Viewer.connect(deviceId, deviceName, agentVersion);
       } else {
         showToast('FEJL: Viewer ikke loaded', 'error');
       }
