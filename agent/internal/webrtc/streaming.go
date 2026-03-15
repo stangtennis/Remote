@@ -181,7 +181,7 @@ func (m *Manager) switchMode(newMode StreamMode, fps *int, quality *int, scale *
 		*scale = 1.0
 		log.Printf("🔄 Mode switch: %s -> %s (FPS:%d Q:%d Scale:%.0f%%)", oldMode, newMode, *fps, *quality, *scale*100)
 	case ModeActiveTiles:
-		*fps = 20
+		*fps = 30
 		*quality = 65
 		*scale = 1.0
 		log.Printf("🔄 Mode switch: %s -> %s (FPS:%d Q:%d Scale:%.0f%%)", oldMode, newMode, *fps, *quality, *scale*100)
@@ -249,20 +249,22 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	}
 
 	// Adaptive streaming parameters
-	fps := 20     // Current FPS (12-30)
-	quality := 65 // JPEG quality (50-80)
-	scale := 1.0  // Scale factor (0.5-1.0)
+	fps := 30     // Current FPS — start at 30 for responsiveness on idle
+	quality := 65 // JPEG quality (30-80)
+	scale := 1.0  // Scale factor (0.4-1.0)
 	frameInterval := time.Duration(1000/fps) * time.Millisecond
 
 	// Thresholds for adaptation (use controller caps if set)
-	bufferHigh := uint64(8 * 1024 * 1024) // 8MB - reduce quality
-	bufferLow := uint64(1 * 1024 * 1024)  // 1MB - can increase quality
-	minFPS := 12
+	bufferHigh := uint64(2 * 1024 * 1024)   // 2MB - reduce quality sooner
+	bufferMedium := uint64(1 * 1024 * 1024)  // 1MB - skip every 2nd frame
+	bufferLow := uint64(512 * 1024)          // 512KB - can increase quality
+	minFPS := 15
 	maxFPS := 30
-	minQuality := 50
+	minQuality := 30  // Lower floor for aggressive quality reduction under load
 	maxQuality := 80
-	minScale := 0.5
+	minScale := 0.4   // Lower floor for aggressive scaling under load
 	maxScale := 1.0
+	frameSkipCounter := 0 // Counter for frame skipping under buffer pressure
 
 	// Apply controller caps if set
 	if m.streamMaxFPS > 0 {
@@ -492,20 +494,31 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			if congested {
 				// Network congested - SCALE-FIRST strategy for better text readability
 				// Reduce scale first, then FPS, then quality
+				// Use larger steps when buffer is very high (> 1.5MB)
+				severeCongestion := bufferedAmount > (bufferHigh * 3 / 4)
+				scaleStep := 0.1
+				fpsStep := 4
+				qualityStep := 5
+				if severeCongestion {
+					scaleStep = 0.15
+					fpsStep = 6
+					qualityStep = 10
+				}
+
 				if scale > minScale {
-					scale -= 0.1
+					scale -= scaleStep
 					if scale < minScale {
 						scale = minScale
 					}
 					changed = true
 				} else if fps > minFPS {
-					fps -= 4
+					fps -= fpsStep
 					if fps < minFPS {
 						fps = minFPS
 					}
 					changed = true
 				} else if quality > minQuality {
-					quality -= 5
+					quality -= qualityStep
 					if quality < minQuality {
 						quality = minQuality
 					}
@@ -541,17 +554,33 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			}
 		}
 
-		// EARLY-DROP: Drop frames before encode if buffer/CPU is critically high
-		// This saves CPU compared to encoding and then dropping
-		criticalBuffer := bufferedAmount > bufferHigh*2
+		// EARLY-DROP: Drop frames before encode if buffer is filling up
+		// This keeps the stream responsive instead of building up latency
+		criticalBuffer := bufferedAmount > bufferHigh
 		criticalCPU := m.cpuMonitor != nil && m.cpuMonitor.IsCriticalCPU()
 
 		if criticalBuffer || criticalCPU {
 			droppedFrames++
-			if criticalCPU && droppedFrames%10 == 1 {
-				log.Printf("⚠️ Early-drop: CPU %.1f%% - skipping encode", cpuPct)
+			if droppedFrames%10 == 1 {
+				log.Printf("⚠️ Early-drop #%d: buffer=%dKB cpu=%.1f%%", droppedFrames, bufferedAmount/1024, cpuPct)
 			}
+			// Short sleep to let buffer drain instead of busy-looping
+			time.Sleep(20 * time.Millisecond)
 			continue
+		}
+
+		// FRAME SKIPPING under buffer pressure — prevents stalls on slow connections/CPUs
+		// When buffer > 1MB, only send every 2nd frame. When > 2MB threshold approaching, every 4th.
+		frameSkipCounter++
+		if bufferedAmount > bufferMedium {
+			skipInterval := 2
+			if bufferedAmount > (bufferHigh * 3 / 4) { // > 1.5MB
+				skipInterval = 4
+			}
+			if frameSkipCounter%skipInterval != 0 {
+				skippedFrames++
+				continue
+			}
 		}
 
 		// H.264 mode: encode and send via video track
@@ -621,6 +650,16 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 
 		_ = scaledW
 		_ = scaledH
+
+		// POST-ENCODE buffer check: if buffer grew during encoding, drop the frame
+		postEncodeBuffer := m.dataChannel.BufferedAmount()
+		if postEncodeBuffer > bufferHigh {
+			droppedFrames++
+			if droppedFrames%10 == 1 {
+				log.Printf("⚠️ Post-encode drop #%d: buffer grew to %dKB during encode", droppedFrames, postEncodeBuffer/1024)
+			}
+			continue
+		}
 
 		lastFrame = jpeg
 

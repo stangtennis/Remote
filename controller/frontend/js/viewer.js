@@ -203,9 +203,9 @@ class ViewerSession {
   }
 
   async setupPeerConnection() {
-    // Force relay for reliable NAT traversal (original working config)
-    const config = { ...this.iceConfig, iceTransportPolicy: 'relay' };
-    this.setConnectStatus(`ICE servers: ${config.iceServers?.length || 0}, policy: relay`);
+    // Allow all ICE types — P2P preferred for speed, relay as fallback
+    const config = { ...this.iceConfig };
+    this.setConnectStatus(`ICE servers: ${config.iceServers?.length || 0}, policy: all`);
     this.peerConnection = new RTCPeerConnection(config);
 
     this.peerConnection.onicecandidate = (event) => {
@@ -609,6 +609,7 @@ class ViewerSession {
     this.setupInput();
     this.startStats();
     this.sendSettingsToAgent();
+    this.enableH264Mode();
 
     // Wire file channel to FileTransfer module
     if (this.fileChannel && window.FileTransfer) {
@@ -717,6 +718,7 @@ class ViewerSession {
           }
         });
         set('.detail-type', connType);
+        set('.detail-agent-ver', this.agentVersion || '—');
       }
     } catch (e) {
       // getStats() can fail during teardown — ignore
@@ -1009,6 +1011,25 @@ class ViewerSession {
       const panel = this.wrapper.querySelector('.connection-details');
       if (panel) panel.classList.toggle('visible');
     });
+  }
+
+  enableH264Mode() {
+    // Request H.264 streaming mode for better performance on large screen changes
+    const dc = this.dataChannel;
+    if (!dc) return;
+
+    const send = () => {
+      if (dc.readyState === 'open') {
+        dc.send(JSON.stringify({ type: 'set_mode', mode: 'h264', bitrate: 8000 }));
+        console.log(`[${this.deviceName}] Requested H.264 mode (8 Mbps)`);
+      }
+    };
+
+    if (dc.readyState === 'open') {
+      send();
+    } else {
+      dc.addEventListener('open', send, { once: true });
+    }
   }
 
   forceUpdateAgent() {
@@ -1433,8 +1454,8 @@ const SessionManager = {
     return document.getElementById('sessionTabs');
   },
 
-  connect(deviceId, deviceName) {
-    console.log('SessionManager.connect:', deviceId, deviceName);
+  connect(deviceId, deviceName, agentVersion) {
+    console.log('SessionManager.connect:', deviceId, deviceName, agentVersion);
     showToast(`Forbinder til ${deviceName}...`, 'info');
 
     // Check if already connected to this device
@@ -1456,6 +1477,7 @@ const SessionManager = {
       return;
     }
     const session = new ViewerSession(deviceId, deviceName, container);
+    session.agentVersion = agentVersion || '';
     this.sessions.set(session.id, session);
 
     // Add tab
@@ -1549,8 +1571,8 @@ window.SessionManager = SessionManager;
 
 // Backwards compat — Viewer.connect still works
 window.Viewer = {
-  connect(deviceId, deviceName) {
-    SessionManager.connect(deviceId, deviceName);
+  connect(deviceId, deviceName, agentVersion) {
+    SessionManager.connect(deviceId, deviceName, agentVersion);
   },
   disconnect() {
     SessionManager.disconnectAll();
