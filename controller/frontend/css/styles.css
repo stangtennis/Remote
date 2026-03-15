@@ -338,9 +338,48 @@ html, body {
 .viewer-toolbar.fullscreen-autohide {
   position: absolute; top: 0; left: 0; right: 0; z-index: 10;
   opacity: 0; transition: opacity 0.3s ease;
-  background: rgba(3, 7, 18, 0.9); backdrop-filter: blur(8px);
+  background: rgba(3, 7, 18, 0.95); backdrop-filter: blur(8px);
 }
 .viewer-toolbar.fullscreen-autohide:hover { opacity: 1; }
+
+/* True fullscreen — hide all chrome */
+body.viewer-fullscreen .app-header,
+body.viewer-fullscreen .tab-nav,
+body.viewer-fullscreen .tab-content { padding: 0; }
+body.viewer-fullscreen .tab-content > .tab-pane:not(#viewerTab) { display: none !important; }
+body.viewer-fullscreen .app-header { display: none !important; }
+body.viewer-fullscreen .tab-nav { display: none !important; }
+body.viewer-fullscreen #viewerTab { padding: 0; }
+body.viewer-fullscreen .viewer-container { border-radius: 0; border: none; }
+body.viewer-fullscreen .session-tab-bar { display: none !important; }
+
+/* Fullscreen exit hint */
+.fullscreen-exit-hint {
+  position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+  z-index: 100; padding: 0.3rem 1rem; font-size: 0.75rem;
+  background: rgba(0,0,0,0.8); color: var(--text-muted);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
+}
+body.viewer-fullscreen .fullscreen-exit-hint { opacity: 1; }
+body.viewer-fullscreen .fullscreen-exit-hint.hidden { opacity: 0; }
+
+/* Connection details panel */
+.connection-details {
+  position: absolute; top: 2.5rem; right: 0.5rem; z-index: 20;
+  background: rgba(3, 7, 18, 0.95); backdrop-filter: blur(12px);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 0.75rem; min-width: 220px; font-size: 0.78rem;
+  box-shadow: var(--shadow-lg); display: none;
+}
+.connection-details.visible { display: block; }
+.connection-details h4 { font-size: 0.8rem; margin-bottom: 0.5rem; color: var(--primary); }
+.connection-details .detail-row {
+  display: flex; justify-content: space-between; padding: 0.2rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.connection-details .detail-label { color: var(--text-muted); }
+.connection-details .detail-value { color: var(--text); font-weight: 500; }
 
 /* ===== SESSION TABS ===== */
 .session-tab-bar {
