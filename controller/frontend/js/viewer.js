@@ -55,6 +55,7 @@ class ViewerSession {
             <option value="0">Skærm 1</option>
           </select>
           <button class="btn btn-sm btn-icon session-files-btn" title="Filoverførsel"><i class="fas fa-folder-open"></i></button>
+          <button class="btn btn-sm btn-icon session-update-btn" title="Opdater agent"><i class="fas fa-sync-alt"></i></button>
           <button class="btn btn-sm btn-icon session-fullscreen-btn" title="Fuldskærm"><i class="fas fa-expand"></i></button>
           <button class="btn btn-sm btn-danger session-disconnect-btn">Afbryd</button>
         </div>
@@ -299,6 +300,9 @@ class ViewerSession {
           this.screenHeight = msg.height;
         } else if (msg.type === 'monitor_list') {
           this.updateMonitorList(msg.monitors || [], msg.active || 0);
+        } else if (msg.type === 'update_status') {
+          const type = msg.status === 'error' ? 'error' : msg.status === 'up_to_date' ? 'success' : 'info';
+          showToast(msg.message || msg.status, type);
         }
       } catch (e) { /* not JSON */ }
     }
@@ -836,6 +840,18 @@ class ViewerSession {
     this.wrapper.querySelector('.session-monitor-select').addEventListener('change', (e) => {
       this.switchMonitor(e.target.value);
     });
+    this.wrapper.querySelector('.session-update-btn').addEventListener('click', () => {
+      this.forceUpdateAgent();
+    });
+  }
+
+  forceUpdateAgent() {
+    if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+      showToast('Ikke forbundet', 'error');
+      return;
+    }
+    showToast('Sender opdateringskommando til agent...', 'info');
+    this.dataChannel.send(JSON.stringify({ type: 'force_update' }));
   }
 
   async toggleFullscreen() {
