@@ -55,9 +55,19 @@ class ViewerSession {
             <option value="0">Skærm 1</option>
           </select>
           <button class="btn btn-sm btn-icon session-files-btn" title="Filoverførsel"><i class="fas fa-folder-open"></i></button>
+          <button class="btn btn-sm btn-icon session-details-btn" title="Forbindelsesdetaljer"><i class="fas fa-info-circle"></i></button>
           <button class="btn btn-sm btn-icon session-update-btn" title="Opdater agent"><i class="fas fa-sync-alt"></i></button>
           <button class="btn btn-sm btn-icon session-fullscreen-btn" title="Fuldskærm"><i class="fas fa-expand"></i></button>
           <button class="btn btn-sm btn-danger session-disconnect-btn">Afbryd</button>
+        </div>
+        <div class="connection-details">
+          <h4><i class="fas fa-signal"></i> Forbindelsesdetaljer</h4>
+          <div class="detail-row"><span class="detail-label">Latency</span><span class="detail-value detail-rtt">—</span></div>
+          <div class="detail-row"><span class="detail-label">FPS</span><span class="detail-value detail-fps">—</span></div>
+          <div class="detail-row"><span class="detail-label">Båndbredde</span><span class="detail-value detail-bw">—</span></div>
+          <div class="detail-row"><span class="detail-label">Opløsning</span><span class="detail-value detail-res">—</span></div>
+          <div class="detail-row"><span class="detail-label">Forbindelsestype</span><span class="detail-value detail-type">—</span></div>
+          <div class="detail-row"><span class="detail-label">Agent version</span><span class="detail-value detail-agent-ver">—</span></div>
         </div>
         <div class="viewer-screen">
           <video autoplay playsinline muted></video>
@@ -564,6 +574,33 @@ class ViewerSession {
       if (statsEl) {
         statsEl.textContent = parts.length > 0 ? parts.join(' | ') : '';
       }
+
+      // Update detail panel
+      const panel = this.wrapper.querySelector('.connection-details');
+      if (panel) {
+        const set = (cls, val) => { const el = panel.querySelector(cls); if (el) el.textContent = val; };
+        set('.detail-rtt', rtt != null ? `${rtt} ms` : '—');
+        set('.detail-fps', fps != null ? `${fps}` : '—');
+        set('.detail-bw', bwText || '—');
+        // Resolution from canvas or video
+        const w = this.canvasEl?.width || this.videoEl?.videoWidth || 0;
+        const h = this.canvasEl?.height || this.videoEl?.videoHeight || 0;
+        set('.detail-res', w > 0 ? `${w}x${h}` : '—');
+        // Connection type from candidate pair
+        let connType = '—';
+        stats.forEach(report => {
+          if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.nominated) {
+            stats.forEach(r => {
+              if (r.type === 'local-candidate' && r.id === report.localCandidateId) {
+                if (r.candidateType === 'relay') connType = 'TURN (Relay)';
+                else if (r.candidateType === 'srflx') connType = 'P2P (STUN)';
+                else if (r.candidateType === 'host') connType = 'P2P (Direkte)';
+              }
+            });
+          }
+        });
+        set('.detail-type', connType);
+      }
     } catch (e) {
       // getStats() can fail during teardown — ignore
     }
@@ -798,7 +835,15 @@ class ViewerSession {
     this.cleanupConnection();
 
     this.connected = false;
-    this.isFullscreen = false;
+
+    // Exit fullscreen if active
+    if (this.isFullscreen) {
+      this.isFullscreen = false;
+      document.body.classList.remove('viewer-fullscreen');
+      try { window.go.main.App.ToggleFullscreen(); } catch (e) {}
+      const hint = document.querySelector('.fullscreen-exit-hint');
+      if (hint) hint.classList.add('hidden');
+    }
 
     // Remove DOM
     if (this.wrapper && this.wrapper.parentNode) {
@@ -843,6 +888,10 @@ class ViewerSession {
     this.wrapper.querySelector('.session-update-btn').addEventListener('click', () => {
       this.forceUpdateAgent();
     });
+    this.wrapper.querySelector('.session-details-btn').addEventListener('click', () => {
+      const panel = this.wrapper.querySelector('.connection-details');
+      if (panel) panel.classList.toggle('visible');
+    });
   }
 
   forceUpdateAgent() {
@@ -858,9 +907,29 @@ class ViewerSession {
     try {
       await window.go.main.App.ToggleFullscreen();
       this.isFullscreen = !this.isFullscreen;
+
       const toolbar = this.wrapper.querySelector('.viewer-toolbar');
       if (toolbar) {
         toolbar.classList.toggle('fullscreen-autohide', this.isFullscreen);
+      }
+
+      // Toggle true fullscreen — hide all controller chrome
+      document.body.classList.toggle('viewer-fullscreen', this.isFullscreen);
+
+      // Show/hide exit hint
+      let hint = document.querySelector('.fullscreen-exit-hint');
+      if (this.isFullscreen) {
+        if (!hint) {
+          hint = document.createElement('div');
+          hint.className = 'fullscreen-exit-hint';
+          hint.textContent = 'Tryk ESC eller F11 for at forlade fuldskærm';
+          document.body.appendChild(hint);
+        }
+        hint.classList.remove('hidden');
+        // Auto-hide hint after 3s
+        setTimeout(() => hint.classList.add('hidden'), 3000);
+      } else {
+        if (hint) hint.classList.add('hidden');
       }
     } catch (e) {
       console.error('Fullscreen toggle failed:', e);
@@ -870,11 +939,35 @@ class ViewerSession {
   sendMouseEvent(type, e) {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
 
-    // Use relative coordinates (0.0-1.0) like dashboard — agent resolves to pixels
+    // Calculate coordinates accounting for object-fit: contain (black bars)
     const target = this.canvasEl;
     const rect = target.getBoundingClientRect();
-    const relX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const relY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    const displayW = rect.width;
+    const displayH = rect.height;
+
+    // Get actual image/canvas resolution
+    let actualW = target.width || displayW;
+    let actualH = target.height || displayH;
+    // For H.264 video mode, use video element dimensions
+    if (this.usingH264 && this.videoEl) {
+      actualW = this.videoEl.videoWidth || actualW;
+      actualH = this.videoEl.videoHeight || actualH;
+    }
+    if (actualW === 0) actualW = displayW;
+    if (actualH === 0) actualH = displayH;
+
+    // object-fit: contain — calculate rendered image area
+    const scaleX = displayW / actualW;
+    const scaleY = displayH / actualH;
+    const scale = Math.min(scaleX, scaleY);
+    const renderW = actualW * scale;
+    const renderH = actualH * scale;
+    const offsetX = (displayW - renderW) / 2;
+    const offsetY = (displayH - renderH) / 2;
+
+    // Map mouse position to normalized 0-1 within the actual image
+    const relX = Math.max(0, Math.min(1, (e.clientX - rect.left - offsetX) / renderW));
+    const relY = Math.max(0, Math.min(1, (e.clientY - rect.top - offsetY) / renderH));
     const x = Math.round(relX * 10000) / 10000;
     const y = Math.round(relY * 10000) / 10000;
 
