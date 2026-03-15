@@ -95,6 +95,7 @@ const App = {
       this.loadDevices();
       this.loadPendingDevices();
       this.loadSettings();
+      this.checkForUpdateNow();
 
     } catch (err) {
       statusEl.textContent = err.message || 'Login mislykkedes';
@@ -775,16 +776,18 @@ const App = {
     this._pendingUpdate = null;
   },
 
+  async checkForUpdateNow() {
+    try {
+      const info = await window.go.main.App.CheckForUpdate();
+      if (info && info.available) {
+        this.showUpdateBadge(info.controller_version);
+      }
+    } catch (e) { /* silent */ }
+  },
+
   startUpdateChecker() {
     // Check every 10 minutes
-    setInterval(async () => {
-      try {
-        const info = await window.go.main.App.CheckForUpdate();
-        if (info && info.available) {
-          this.showUpdateBadge(info.controller_version);
-        }
-      } catch (e) { /* silent */ }
-    }, 10 * 60 * 1000);
+    setInterval(() => this.checkForUpdateNow(), 10 * 60 * 1000);
   },
 
   // ==================== THEME ====================
