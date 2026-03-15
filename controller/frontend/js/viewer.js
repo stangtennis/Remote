@@ -32,6 +32,7 @@ class ViewerSession {
     this.reconnectTimer = null;
     this.reconnectStartedAt = null;
     this.manualDisconnect = false;
+    this._connectLog = [];
 
     // Create DOM elements for this session
     this.wrapper = document.createElement('div');
@@ -43,9 +44,10 @@ class ViewerSession {
     this.prevTimestamp = 0;
 
     this.wrapper.innerHTML = `
-      <div class="viewer-connecting" style="display:flex;">
+      <div class="viewer-connecting" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.5rem; overflow-y:auto; padding:1rem;">
         <div class="connecting-spinner"></div>
-        <p>Opretter forbindelse til <span class="connecting-name">${deviceName}</span>...</p>
+        <p style="font-size:0.75rem; text-align:left; line-height:1.5; font-family:monospace; max-height:50vh; overflow-y:auto; width:100%; max-width:500px; padding:0.5rem; background:rgba(0,0,0,0.3); border-radius:8px; user-select:text; -webkit-user-select:text;">Opretter forbindelse til ${deviceName}...</p>
+        <button class="btn btn-sm btn-secondary connecting-copy-btn" style="display:none;" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent);"><i class="fas fa-copy"></i> Kopier log</button>
       </div>
       <div class="viewer-active" style="display:none;">
         <div class="viewer-toolbar">
@@ -84,8 +86,18 @@ class ViewerSession {
   }
 
   setConnectStatus(msg) {
+    if (!this._connectLog) this._connectLog = [];
+    const ts = new Date().toLocaleTimeString();
+    this._connectLog.push(`[${ts}] ${msg}`);
+    console.log(`[CONNECT] ${msg}`);
+    // Log to Go backend so it shows in controller log
+    try { window.go?.main?.App?.LogFromFrontend?.('info', msg); } catch(e) {}
     const p = this.connectingEl?.querySelector('p');
-    if (p) p.innerHTML = msg;
+    if (!p) return;
+    p.innerText = this._connectLog.join('\n');
+    p.scrollTop = p.scrollHeight;
+    const copyBtn = this.connectingEl?.querySelector('.connecting-copy-btn');
+    if (copyBtn) copyBtn.style.display = '';
   }
 
   async connect() {
@@ -163,10 +175,15 @@ class ViewerSession {
       if (response.ok) {
         const data = await response.json();
         this.iceConfig = { iceServers: data.iceServers };
-        console.log(`[${this.deviceName}] TURN credentials fetched`);
+        const hasTurn = JSON.stringify(data.iceServers).includes('turn:');
+        this.setConnectStatus(`TURN: ${hasTurn ? 'OK' : 'KUN STUN'} (${data.iceServers.length} servere)`);
+        console.log(`[${this.deviceName}] TURN credentials:`, JSON.stringify(data.iceServers).substring(0, 200));
+      } else {
+        this.setConnectStatus(`<span style="color:orange;">TURN fejlede (${response.status}) — kun STUN</span>`);
       }
     } catch (e) {
-      console.warn(`[${this.deviceName}] TURN fetch failed, using STUN only:`, e);
+      this.setConnectStatus(`<span style="color:orange;">TURN fetch fejl: ${e.message}</span>`);
+      console.warn(`[${this.deviceName}] TURN fetch failed:`, e);
     }
   }
 
@@ -186,8 +203,9 @@ class ViewerSession {
   }
 
   async setupPeerConnection() {
-    // Only force relay if explicitly requested (matches dashboard behavior)
-    const config = { ...this.iceConfig };
+    // Force relay for reliable NAT traversal (original working config)
+    const config = { ...this.iceConfig, iceTransportPolicy: 'relay' };
+    this.setConnectStatus(`ICE servers: ${config.iceServers?.length || 0}, policy: relay`);
     this.peerConnection = new RTCPeerConnection(config);
 
     this.peerConnection.onicecandidate = (event) => {
@@ -203,11 +221,32 @@ class ViewerSession {
 
     this.peerConnection.onconnectionstatechange = () => {
       const state = this.peerConnection?.connectionState;
-      console.log(`[${this.deviceName}] Connection state:`, state);
+      const iceState = this.peerConnection?.iceConnectionState;
+      console.log(`[${this.deviceName}] Connection: ${state}, ICE: ${iceState}`);
+      this.setConnectStatus(`WebRTC: ${state} | ICE: ${iceState}`);
       if (state === 'connected') {
         this.onConnected();
-      } else if (state === 'disconnected' || state === 'failed') {
+      } else if (state === 'failed') {
+        this.setConnectStatus(`<span style="color:red;">WebRTC FEJLET — ICE: ${iceState}<br>TURN relay virkede ikke</span>`);
         this.onDisconnected();
+      } else if (state === 'disconnected') {
+        this.onDisconnected();
+      }
+    };
+
+    this.peerConnection.onicegatheringstatechange = () => {
+      console.log(`[${this.deviceName}] ICE gathering: ${this.peerConnection?.iceGatheringState}`);
+    };
+
+    this.peerConnection.oniceconnectionstatechange = () => {
+      const iceState = this.peerConnection?.iceConnectionState;
+      console.log(`[${this.deviceName}] ICE connection: ${iceState}`);
+      if (iceState === 'checking') {
+        this.setConnectStatus(`ICE tjekker forbindelse...`);
+      } else if (iceState === 'connected' || iceState === 'completed') {
+        this.setConnectStatus(`ICE forbundet!`);
+      } else if (iceState === 'failed') {
+        this.setConnectStatus(`<span style="color:red;">ICE FEJLET — kan ikke nå agent<br>Firewall eller NAT blokerer</span>`);
       }
     };
 
@@ -408,7 +447,7 @@ class ViewerSession {
   async createOffer() {
     const offer = await this.peerConnection.createOffer({
       offerToReceiveVideo: true,
-      offerToReceiveAudio: true
+      offerToReceiveAudio: false
     });
     await this.peerConnection.setLocalDescription(offer);
 
@@ -422,7 +461,10 @@ class ViewerSession {
   }
 
   async sendSignal(payload) {
-    if (!this.supabase) return;
+    if (!this.supabase) {
+      console.error('sendSignal: supabase is null!');
+      return;
+    }
 
     let signalPayload;
     if (payload.type === 'ice') {
@@ -431,12 +473,17 @@ class ViewerSession {
       signalPayload = { type: payload.type, sdp: payload.sdp };
     }
 
-    await this.supabase.from('session_signaling').insert({
+    const { error } = await this.supabase.from('session_signaling').insert({
       session_id: payload.session_id,
       from_side: payload.from,
       msg_type: payload.type,
       payload: signalPayload
     });
+
+    if (error) {
+      console.error(`sendSignal error (${payload.type}):`, error);
+      this.setConnectStatus(`<span style="color:red;">Signaling fejl: ${error.message}</span>`);
+    }
   }
 
   subscribeToSignaling() {
@@ -451,23 +498,40 @@ class ViewerSession {
       )
       .subscribe();
 
+    let pollCount = 0;
     this.pollingInterval = setInterval(async () => {
       try {
-        const { data } = await this.supabase
+        pollCount++;
+        // Use neq instead of in() for compatibility
+        const { data, error } = await this.supabase
           .from('session_signaling')
           .select('*')
           .eq('session_id', sessionId)
-          .in('from_side', ['agent', 'system'])
+          .neq('from_side', 'dashboard')
           .order('created_at', { ascending: true });
+
+        if (error) {
+          this.setConnectStatus(`Polling fejl: ${error.message}`);
+          return;
+        }
+
+        if (pollCount <= 5) {
+          const cs = this.peerConnection?.connectionState || '?';
+          const is = this.peerConnection?.iceConnectionState || '?';
+          this.setConnectStatus(`Poll #${pollCount}: ${data ? data.length : 0} sig | conn=${cs} ice=${is}`);
+        }
 
         if (data) {
           for (const signal of data) {
             if (!this.processedSignalIds.has(signal.id)) {
+              this.setConnectStatus(`Signal: ${signal.msg_type} fra ${signal.from_side}`);
               await this.handleSignal(signal);
             }
           }
         }
-      } catch (e) { console.error('Poll error:', e); }
+      } catch (e) {
+        this.setConnectStatus(`Poll fejl: ${e.message}`);
+      }
     }, 500);
   }
 
@@ -482,12 +546,18 @@ class ViewerSession {
     try {
       switch (signal.msg_type) {
         case 'answer':
+          this.setConnectStatus(`Modtog svar — opsætter forbindelse...`);
+          console.log(`[${this.deviceName}] Got answer, signalingState=${pc.signalingState}`);
           if (pc.signalingState === 'have-local-offer') {
             await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
+            console.log(`[${this.deviceName}] Remote description set, flushing ${this.pendingIceCandidates.length} ICE candidates`);
             for (const c of this.pendingIceCandidates) {
               await pc.addIceCandidate(new RTCIceCandidate(c));
             }
             this.pendingIceCandidates = [];
+            this.setConnectStatus(`WebRTC forbinder...`);
+          } else {
+            console.warn(`[${this.deviceName}] Unexpected signalingState for answer: ${pc.signalingState}`);
           }
           break;
 
@@ -495,8 +565,14 @@ class ViewerSession {
           if (signal.payload && signal.payload.candidate) {
             if (!pc.remoteDescription) {
               this.pendingIceCandidates.push(signal.payload);
+              this.setConnectStatus(`ICE buffered (venter på answer)`);
             } else {
-              await pc.addIceCandidate(new RTCIceCandidate(signal.payload));
+              try {
+                await pc.addIceCandidate(new RTCIceCandidate(signal.payload));
+                this.setConnectStatus(`ICE tilføjet: ${signal.payload.candidate.substring(0, 50)}...`);
+              } catch (iceErr) {
+                this.setConnectStatus(`ICE fejl: ${iceErr.message}`);
+              }
             }
           }
           break;

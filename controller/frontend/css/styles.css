@@ -56,7 +56,7 @@ html, body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
-  user-select: none;
+  user-select: text;
 }
 
 ::selection { background: var(--primary); color: white; }
@@ -482,6 +482,7 @@ body.viewer-fullscreen .fullscreen-exit-hint.hidden { opacity: 0; }
   white-space: pre-wrap; word-break: break-all;
   max-height: 400px; overflow-y: auto;
   color: var(--text-secondary);
+  user-select: text; -webkit-user-select: text; cursor: text;
 }
 
 /* ===== TOAST ===== */

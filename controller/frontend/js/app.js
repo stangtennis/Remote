@@ -236,6 +236,9 @@ const App = {
           <button class="btn btn-sm btn-secondary" onclick="App.removeDevice('${d.device_id}', '${this.esc(d.device_name)}')">
             <i class="fas fa-user-minus"></i>
           </button>
+          <button class="btn btn-sm btn-secondary" ${d.is_online ? '' : 'disabled'} onclick="App.forceUpdateDevice('${d.device_id}', '${this.esc(d.device_name)}')" title="Opdater agent">
+            <i class="fas fa-sync-alt"></i>
+          </button>
           <button class="btn btn-sm btn-danger" onclick="App.deleteDevice('${d.device_id}', '${this.esc(d.device_name)}')">
             <i class="fas fa-trash"></i>
           </button>
@@ -753,6 +756,34 @@ const App = {
           }
         }
       });
+    }
+  },
+
+  // ==================== FORCE UPDATE DEVICE ====================
+  async forceUpdateDevice(deviceId, deviceName) {
+    showToast(`Sender opdateringskommando til ${deviceName}...`, 'info');
+    // Connect briefly just to send force_update command
+    try {
+      const config = await window.go.main.App.GetConnectionConfig();
+      // Use Supabase to send a pending_command
+      const supabase = window.supabase?.createClient(
+        config.supabase_url || config.SupabaseURL,
+        config.anon_key || config.AnonKey,
+        { auth: { persistSession: false } }
+      );
+      if (supabase) {
+        await supabase.auth.setSession({
+          access_token: config.auth_token || config.AuthToken,
+          refresh_token: config.refresh_token || config.RefreshToken
+        });
+        // Insert update command in device's pending commands
+        await supabase.from('remote_devices').update({
+          pending_command: 'force_update'
+        }).eq('device_id', deviceId);
+        showToast(`Opdateringskommando sendt til ${deviceName}`, 'success');
+      }
+    } catch (err) {
+      showToast(`Fejl: ${err.message}`, 'error');
     }
   },
 

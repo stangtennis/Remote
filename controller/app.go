@@ -510,6 +510,18 @@ func (a *App) JoinSupportSession(pin string) (*JoinSupportInfo, error) {
 	}, nil
 }
 
+// LogFromFrontend receives log messages from the JS frontend
+func (a *App) LogFromFrontend(level, message string) {
+	switch level {
+	case "error":
+		logger.Error("[Frontend] %s", message)
+	case "warn":
+		logger.Info("[Frontend] WARN: %s", message)
+	default:
+		logger.Info("[Frontend] %s", message)
+	}
+}
+
 // GetLogContent returns recent log entries
 func (a *App) GetLogContent(lines int) (string, error) {
 	if lines <= 0 {

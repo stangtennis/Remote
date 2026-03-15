@@ -275,10 +275,13 @@
     <div class="modal-content modal-large glass">
       <div class="modal-header">
         <h2><i class="fas fa-file-alt"></i> Controller Log</h2>
-        <button class="modal-close" onclick="closeModal('logModal')">&times;</button>
+        <div style="display:flex; gap:0.3rem;">
+          <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText(document.getElementById('logContent').textContent);showToast('Log kopieret!','success')"><i class="fas fa-copy"></i> Kopier</button>
+          <button class="modal-close" onclick="closeModal('logModal')">&times;</button>
+        </div>
       </div>
-      <div class="modal-body">
-        <pre id="logContent" class="log-viewer"></pre>
+      <div class="modal-body" style="padding:0;">
+        <pre id="logContent" class="log-viewer" style="max-height:60vh; overflow-y:auto; margin:0;"></pre>
       </div>
     </div>
   </div>
