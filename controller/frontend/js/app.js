@@ -24,6 +24,9 @@ const App = {
     this.setupBackendEvents();
     this.setupDeviceFilter();
 
+    // Start periodic update checker
+    this.startUpdateChecker();
+
     // Try auto-login
     await this.tryAutoLogin();
   },
@@ -619,6 +622,7 @@ const App = {
   },
 
   async showUpdateModal() {
+    this.hideUpdateBadge();
     const modal = document.getElementById('updateModal');
     const body = document.getElementById('updateModalBody');
     modal.style.display = 'flex';
@@ -725,6 +729,7 @@ const App = {
 
       window.runtime.EventsOn('update-available', (tagName) => {
         showToast(`Opdatering tilgængelig: ${tagName}`, 'info');
+        this.showUpdateBadge(tagName);
       });
 
       window.runtime.EventsOn('update-progress', (percent) => {
@@ -748,6 +753,38 @@ const App = {
         }
       });
     }
+  },
+
+  // ==================== UPDATE CHECKER ====================
+  _pendingUpdate: null,
+
+  showUpdateBadge(tagName) {
+    this._pendingUpdate = tagName;
+    const badge = document.getElementById('updateBadge');
+    if (badge) {
+      badge.style.display = '';
+      badge.title = `Opdatering: ${tagName}`;
+    }
+    const btn = document.getElementById('updateBtn');
+    if (btn) btn.title = `Opdatering tilgængelig: ${tagName}`;
+  },
+
+  hideUpdateBadge() {
+    const badge = document.getElementById('updateBadge');
+    if (badge) badge.style.display = 'none';
+    this._pendingUpdate = null;
+  },
+
+  startUpdateChecker() {
+    // Check every 10 minutes
+    setInterval(async () => {
+      try {
+        const info = await window.go.main.App.CheckForUpdate();
+        if (info && info.available) {
+          this.showUpdateBadge(info.controller_version);
+        }
+      } catch (e) { /* silent */ }
+    }, 10 * 60 * 1000);
   },
 
   // ==================== THEME ====================
