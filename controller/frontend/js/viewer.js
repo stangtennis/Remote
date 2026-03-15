@@ -83,8 +83,14 @@ class ViewerSession {
     this.canvasEl = this.wrapper.querySelector('canvas');
   }
 
+  setConnectStatus(msg) {
+    const p = this.connectingEl?.querySelector('p');
+    if (p) p.innerHTML = msg;
+  }
+
   async connect() {
     try {
+      this.setConnectStatus(`Henter forbindelsesconfig...`);
       const config = await window.go.main.App.GetConnectionConfig();
       const cfg = {
         supabase_url: config.supabase_url || config.SupabaseURL,
@@ -94,29 +100,54 @@ class ViewerSession {
         refresh_token: config.refresh_token || config.RefreshToken,
       };
 
+      this.setConnectStatus(`Initialiserer Supabase...`);
       this.supabase = window.supabase
         ? window.supabase.createClient(cfg.supabase_url, cfg.anon_key, {
             auth: { persistSession: false }
           })
         : null;
 
-      if (this.supabase) {
-        await this.supabase.auth.setSession({
-          access_token: cfg.auth_token,
-          refresh_token: cfg.refresh_token
-        });
+      if (!this.supabase) {
+        this.setConnectStatus(`<span style="color:red;">FEJL: Supabase JS ikke loaded</span>`);
+        showToast('Supabase bibliotek ikke loaded — tjek internetforbindelse', 'error');
+        return;
       }
 
+      await this.supabase.auth.setSession({
+        access_token: cfg.auth_token,
+        refresh_token: cfg.refresh_token
+      });
+
       this.config = cfg;
+
+      this.setConnectStatus(`Henter TURN credentials...`);
       await this.fetchTurnCredentials(cfg);
+
+      this.setConnectStatus(`Opretter session...`);
       await this.createSession(cfg);
+
+      this.setConnectStatus(`Opsætter WebRTC...`);
       await this.setupPeerConnection();
+
+      this.setConnectStatus(`Lytter efter agent...`);
       this.subscribeToSignaling();
+
+      this.setConnectStatus(`Sender tilbud til ${this.deviceName}...`);
       await this.createOffer();
+
+      this.setConnectStatus(`Venter på svar fra ${this.deviceName}...`);
+
+      // Timeout — if not connected after 30s, show error
+      setTimeout(() => {
+        if (!this.connected && this.connectingEl?.style.display !== 'none') {
+          this.setConnectStatus(`<span style="color:orange;">Timeout — agent svarede ikke inden 30s<br>Tjek at agent kører på enheden</span>`);
+        }
+      }, 30000);
+
     } catch (err) {
       console.error(`[${this.deviceName}] Connection failed:`, err);
+      this.setConnectStatus(`<span style="color:red;">FEJL: ${err.message}</span>`);
       showToast(`Forbindelse til ${this.deviceName} fejlede: ${err.message}`, 'error');
-      this.disconnect();
     }
   }
 
