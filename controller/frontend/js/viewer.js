@@ -411,6 +411,9 @@ class ViewerSession {
   renderFrame(data) {
     const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
     if (blob.size < 100) return;
+    // Count frames for FPS calculation
+    if (!this._frameCount) this._frameCount = 0;
+    this._frameCount++;
 
     const img = new Image();
     img.onload = () => {
@@ -670,6 +673,13 @@ class ViewerSession {
       }
       this.prevBytesReceived = bytesReceived;
       this.prevTimestamp = timestamp;
+
+      // Calculate FPS from data channel frames (since no video track)
+      if (fps == null && this._frameCount) {
+        if (!this._lastFrameCount) this._lastFrameCount = 0;
+        fps = this._frameCount - this._lastFrameCount;
+        this._lastFrameCount = this._frameCount;
+      }
 
       // Build display string
       const parts = [];
