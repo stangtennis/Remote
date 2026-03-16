@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="css/accessibility.css?v=4">
   <link rel="stylesheet" href="css/empty-states.css?v=4">
   <link rel="stylesheet" href="css/modern.css?v=4">
+  <link rel="stylesheet" href="css/redesign.css?v=1">
   <script>if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');</script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
@@ -25,7 +26,7 @@
   <div class="admin-container">
     <!-- Header -->
     <div class="admin-header">
-      <h1>🔐 Adminpanel</h1>
+      <h1><i class="fas fa-shield-halved"></i> Adminpanel</h1>
       <div class="header-actions">
         <button onclick="window.location.href='dashboard.html'" class="btn btn-secondary btn-sm">← Kontrolpanel</button>
         <button onclick="logout()" class="btn btn-secondary btn-sm">Log ud</button>
@@ -39,21 +40,21 @@
 
     <!-- Tabs -->
     <div class="admin-tabs">
-      <button onclick="showTab('users')" id="tabUsers" class="admin-tab active">👥 Brugergodkendelser</button>
-      <button onclick="showTab('devices')" id="tabDevices" class="admin-tab">📱 Enhedsstyring</button>
-      <button onclick="showTab('remote')" id="tabRemote" class="admin-tab">🖥️ Remote Control</button>
-      <button onclick="showTab('invites')" id="tabInvites" class="admin-tab">✉️ Invitationer</button>
-      <button onclick="showTab('transfers')" id="tabTransfers" class="admin-tab" style="display: none;">🔄 Enhedsoverførsler</button>
+      <button onclick="showTab('users')" id="tabUsers" class="admin-tab active"><i class="fas fa-users"></i> Brugergodkendelser</button>
+      <button onclick="showTab('devices')" id="tabDevices" class="admin-tab"><i class="fas fa-laptop"></i> Enhedsstyring</button>
+      <button onclick="showTab('remote')" id="tabRemote" class="admin-tab"><i class="fas fa-desktop"></i> Remote Control</button>
+      <button onclick="showTab('invites')" id="tabInvites" class="admin-tab"><i class="fas fa-envelope"></i> Invitationer</button>
+      <button onclick="showTab('transfers')" id="tabTransfers" class="admin-tab" style="display: none;"><i class="fas fa-exchange-alt"></i> Enhedsoverførsler</button>
     </div>
 
     <!-- Downloads Section -->
     <div style="background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; border: 1px solid rgba(255, 255, 255, 0.1);">
-      <h3 style="margin: 0 0 1rem 0; font-size: 1.125rem;">📥 Downloads</h3>
+      <h3 style="margin: 0 0 1rem 0; font-size: 1.125rem;"><i class="fas fa-download"></i> Downloads</h3>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
         <a href="https://downloads.hawkeye123.dk/remote-agent.exe" 
            class="btn btn-primary" 
            style="text-decoration: none; text-align: center;">
-          🖥️ Windows Agent
+          <i class="fas fa-desktop"></i> Windows Agent
         </a>
         <a href="agent.html" 
            class="btn btn-primary" 
@@ -149,13 +150,13 @@
         </div>
       </div>
       
-      <h3 style="margin-top: 2rem;">📋 Sendte invitationer</h3>
+      <h3 style="margin-top: 2rem;"><i class="fas fa-list"></i> Sendte invitationer</h3>
       <div id="invitationsList"></div>
     </div>
 
     <!-- Remote Control Tab -->
     <div id="remoteTab" class="tab-content" style="display: none;">
-      <h3>🖥️ Remote Control - Administrer enheder direkte</h3>
+      <h3><i class="fas fa-desktop"></i> Remote Control - Administrer enheder direkte</h3>
       
       <!-- Device Selection -->
       <div class="form-group" style="max-width: 600px; margin-bottom: 2rem;">
@@ -191,7 +192,7 @@
 
     <!-- Device Transfers Tab (Super Admin Only) -->
     <div id="transfersTab" class="tab-content" style="display: none;">
-      <h3>🔄 Overfør enhed til en anden administrator</h3>
+      <h3><i class="fas fa-exchange-alt"></i> Overfør enhed til en anden administrator</h3>
       <div class="transfer-form">
         <div class="form-group">
           <label for="transferDevice">Vælg enhed</label>
