@@ -16,6 +16,11 @@
   --shadow-glow: 0 0 30px rgba(34, 211, 238, 0.25);
   --border-glow: rgba(34, 211, 238, 0.25);
 
+  /* Override warning yellow with cyan */
+  --warning: #22d3ee;
+  --warning-light: rgba(34, 211, 238, 0.12);
+  --gradient-warning: linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%);
+
   /* Tighter, more technical spacing */
   --header-height: 52px;
   --section-gap: 1rem;
@@ -581,8 +586,11 @@ code, .pin-display, .stat-mini-value, .connection-stats,
 }
 
 /* ===== Admin Panel — Replace yellow/orange with cyan ===== */
-.super-admin-badge {
-  background: var(--primary-light) !important;
+div.super-admin-badge,
+.super-admin-badge,
+#superAdminBadge {
+  background: rgba(34, 211, 238, 0.1) !important;
+  background-image: none !important;
   color: var(--primary) !important;
   border: 1px solid rgba(34, 211, 238, 0.25) !important;
   border-radius: 6px !important;
@@ -649,15 +657,27 @@ code, .pin-display, .stat-mini-value, .connection-stats,
 }
 
 /* Make Admin button — cyan instead of yellow */
-.btn-warning, .btn[style*="warning"] {
-  background: var(--primary-light) !important;
+.btn-warning,
+button[style*="warning"],
+button[style*="f59e0b"],
+button[style*="eab308"] {
+  background: rgba(34, 211, 238, 0.12) !important;
+  background-image: none !important;
   color: var(--primary) !important;
   border: 1px solid rgba(34, 211, 238, 0.3) !important;
 }
 
 .btn-warning:hover {
   background: var(--primary) !important;
+  background-image: none !important;
   color: #000 !important;
+}
+
+/* Override ALL warning gradients globally */
+[style*="gradient"][style*="f59e0b"],
+[style*="gradient"][style*="eab308"] {
+  background: rgba(34, 211, 238, 0.12) !important;
+  background-image: none !important;
 }
 
 /* Device cards in admin */
