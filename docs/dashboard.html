@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="css/accessibility.css?v=6">
   <link rel="stylesheet" href="css/empty-states.css?v=6">
   <link rel="stylesheet" href="css/modern.css?v=6">
+  <link rel="stylesheet" href="css/redesign.css?v=1">
   <script>if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');</script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
@@ -24,11 +25,11 @@
   <!-- Header -->
   <header class="dashboard-header">
     <div class="header-content">
-      <h1>🖥️ Fjernskrivebord</h1>
+      <h1><i class="fas fa-satellite-dish"></i> Fjernskrivebord</h1>
       <div class="header-actions">
-        <button id="notificationToggleBtn" class="btn btn-icon" onclick="BrowserNotifications.toggle()" title="Notifikationer">🔔</button>
-        <button id="quickSupportBtn" class="btn btn-secondary" style="margin-right: 10px; display: none;" onclick="showSupportModal()">🆘 Quick Support</button>
-        <a href="admin.html" id="adminLink" class="btn btn-secondary" style="margin-right: 10px; display: none;">🔐 Adminpanel</a>
+        <button id="notificationToggleBtn" class="btn btn-icon" onclick="BrowserNotifications.toggle()" title="Notifikationer"><i class="fas fa-bell"></i></button>
+        <button id="quickSupportBtn" class="btn btn-secondary" style="margin-right: 10px; display: none;" onclick="showSupportModal()"><i class="fas fa-life-ring"></i> Quick Support</button>
+        <a href="admin.html" id="adminLink" class="btn btn-secondary" style="margin-right: 10px; display: none;"><i class="fas fa-shield-halved"></i> Admin</a>
         <span id="userEmail" class="user-info"></span>
         <button id="logoutBtn" class="btn btn-secondary">Log ud</button>
       </div>
@@ -46,8 +47,8 @@
           <div class="section-header">
             <h2>Fjernsessioner</h2>
             <div class="preview-controls">
-              <button id="previewFullscreenBtn" class="btn btn-icon" title="Fuldskærm">⛶</button>
-              <button id="previewSettingsBtn" class="btn btn-icon" title="Indstillinger">⚙️</button>
+              <button id="previewFullscreenBtn" class="btn btn-icon" title="Fuldskærm"><i class="fas fa-expand"></i></button>
+              <button id="previewSettingsBtn" class="btn btn-icon" title="Indstillinger"><i class="fas fa-cog"></i></button>
             </div>
           </div>
           
@@ -66,18 +67,18 @@
               <canvas id="previewCanvas" tabindex="0"></canvas>
               
               <!-- Fullscreen Toggle Button -->
-              <button class="fullscreen-toggle" id="fullscreenToggle" title="Skift fuldskærm (F11)">⛶</button>
+              <button class="fullscreen-toggle" id="fullscreenToggle" title="Skift fuldskærm (F11)"><i class="fas fa-expand"></i></button>
               
               <!-- Idle State -->
               <div class="preview-idle" id="previewIdle">
                 <div class="preview-idle-content">
-                  <div class="preview-icon">🖥️</div>
+                  <div class="preview-icon"><i class="fas fa-display" style="font-size:2.5rem; opacity:0.3;"></i></div>
                   <h3>Ingen aktiv forbindelse</h3>
                   <p>Vælg en enhed nedenfor for at starte en fjernsession</p>
                   <div class="preview-features">
-                    <span class="feature-tag">🔒 Krypteret</span>
-                    <span class="feature-tag">⚡ Lav forsinkelse</span>
-                    <span class="feature-tag">🎯 Fuld kontrol</span>
+                    <span class="feature-tag"><i class="fas fa-lock"></i> Krypteret</span>
+                    <span class="feature-tag"><i class="fas fa-bolt"></i> Lav forsinkelse</span>
+                    <span class="feature-tag"><i class="fas fa-bullseye"></i> Fuld kontrol</span>
                   </div>
                 </div>
               </div>
@@ -113,12 +114,12 @@
                 <span id="connectedDeviceName">Enhedsnavn</span>
               </div>
               <div class="toolbar-center">
-                <button class="toolbar-btn" title="Synkroniser udklipsholder" onclick="sendClipboardToAgent()">📋</button>
-                <button class="toolbar-btn" title="Filøverførsel" onclick="FileTransfer.open()">📁</button>
-                <button class="toolbar-btn" title="Skærmbillede" onclick="saveScreenshot()">📸</button>
-                <button class="toolbar-btn" id="qualityToggleBtn" title="Skift H264/JPEG tilstand">🎚️</button>
+                <button class="toolbar-btn" title="Synkroniser udklipsholder" onclick="sendClipboardToAgent()"><i class="fas fa-clipboard"></i></button>
+                <button class="toolbar-btn" title="Filøverførsel" onclick="FileTransfer.open()"><i class="fas fa-folder-open"></i></button>
+                <button class="toolbar-btn" title="Skærmbillede" onclick="saveScreenshot()"><i class="fas fa-camera"></i></button>
+                <button class="toolbar-btn" id="qualityToggleBtn" title="Skift H264/JPEG tilstand"><i class="fas fa-sliders"></i></button>
                 <span id="monitorSelectContainer" style="display: none; align-items: center; gap: 4px;">
-                  <label for="monitorSelect" style="font-size: 0.8rem; color: #aaa;">🖥️</label>
+                  <label for="monitorSelect" style="font-size: 0.8rem; color: #aaa;"><i class="fas fa-desktop"></i></label>
                   <select id="monitorSelect" style="background: var(--surface, #1a1a2e); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: 4px; padding: 2px 6px; font-size: 0.8rem; cursor: pointer;"></select>
                 </span>
               </div>
@@ -161,18 +162,18 @@
         <!-- Downloads Section -->
         <section class="downloads-section" style="margin-bottom: 2rem;">
           <div class="section-header">
-            <h2>📥 Downloads</h2>
+            <h2><i class="fas fa-download"></i> Downloads</h2>
           </div>
           <div id="downloadsGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
             <a href="#" onclick="signedDownload('remote-agent.exe'); return false;"
                class="btn btn-primary"
                style="text-decoration: none; text-align: center;">
-              🖥️ Client Agent
+              <i class="fas fa-desktop"></i> Client Agent
             </a>
             <a href="agent.html"
                class="btn btn-primary"
-               style="text-decoration: none; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-              🌐 Web Agent
+               style="text-decoration: none; text-align: center;">
+              <i class="fas fa-globe"></i> Web Agent
             </a>
             <!-- Controller link added dynamically for admins -->
           </div>
@@ -186,7 +187,7 @@
           <div class="section-header">
             <h2>Dine enheder</h2>
             <button id="refreshDevicesBtn" class="btn btn-icon" title="Opdater">
-              🔄
+              <i class="fas fa-sync-alt"></i>
             </button>
           </div>
 
@@ -207,13 +208,13 @@
 
           <!-- Empty State -->
           <div id="emptyState" class="empty-state" style="display: none;">
-            <p>📱 Ingen enheder registreret endnu</p>
+            <p><i class="fas fa-plug"></i> Ingen enheder registreret endnu</p>
             <p class="muted">Download og kør agenten på en computer for at komme i gang</p>
             <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
               <a href="#" onclick="signedDownload('remote-agent.exe'); return false;"
-                 class="btn btn-primary" style="text-decoration: none;">🖥️ Hent Client Agent</a>
+                 class="btn btn-primary" style="text-decoration: none;"><i class="fas fa-desktop"></i> Hent Client Agent</a>
               <a href="agent.html"
-                 class="btn btn-primary" style="text-decoration: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">🌐 Web Agent</a>
+                 class="btn btn-primary" style="text-decoration: none;"><i class="fas fa-globe"></i> Web Agent</a>
             </div>
           </div>
 
@@ -279,12 +280,12 @@
         <div id="viewerOverlay" class="viewer-overlay">
           <p>Venter på forbindelse...</p>
         </div>
-        <button id="fullscreenBtn" class="fullscreen-btn" title="Fuldskærm (F11)">⛶</button>
+        <button id="fullscreenBtn" class="fullscreen-btn" title="Fuldskærm (F11)"><i class="fas fa-expand"></i></button>
       </div>
 
       <!-- Connection Stats -->
       <div class="stats-panel" id="statsPanel">
-        <button id="toggleStatsBtn" class="btn btn-icon">📊</button>
+        <button id="toggleStatsBtn" class="btn btn-icon"><i class="fas fa-chart-bar"></i></button>
         <div id="statsContent" style="display: none;">
           <div class="stat-item">
             <span class="stat-label">Forbindelse:</span>
@@ -311,7 +312,7 @@
   <div id="supportModal" class="modal" style="display: none;">
     <div class="modal-content" style="max-width: 600px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <h3 style="margin: 0;">🆘 Quick Support</h3>
+        <h3 style="margin: 0;"><i class="fas fa-life-ring"></i> Quick Support</h3>
         <button class="btn btn-icon" onclick="closeSupportModal()" title="Luk">&times;</button>
       </div>
 
@@ -403,10 +404,10 @@
   <div id="fileTransferModal" class="modal" style="display: none;">
     <div class="modal-content" style="max-width: 700px; max-height: 80vh; display: flex; flex-direction: column;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-        <h3 style="margin: 0;">📁 Filoversigt</h3>
+        <h3 style="margin: 0;"><i class="fas fa-folder-open"></i> Filoversigt</h3>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
-          <button class="btn btn-secondary btn-sm" onclick="fileUploadInput.click()" title="Upload fil">⬆️ Upload</button>
-          <button class="btn btn-secondary btn-sm" onclick="promptNewFolder()" title="Ny mappe">📁+</button>
+          <button class="btn btn-secondary btn-sm" onclick="fileUploadInput.click()" title="Upload fil"><i class="fas fa-upload"></i> Upload</button>
+          <button class="btn btn-secondary btn-sm" onclick="promptNewFolder()" title="Ny mappe"><i class="fas fa-folder-plus"></i> Ny mappe</button>
           <button class="btn btn-icon" onclick="FileTransfer.close()" title="Luk">&times;</button>
         </div>
       </div>
