@@ -580,6 +580,101 @@ code, .pin-display, .stat-mini-value, .connection-stats,
   }
 }
 
+/* ===== Admin Panel — Replace yellow/orange with cyan ===== */
+.super-admin-badge {
+  background: var(--primary-light) !important;
+  color: var(--primary) !important;
+  border: 1px solid rgba(34, 211, 238, 0.25) !important;
+  border-radius: 6px !important;
+  font-size: 0.8rem !important;
+  padding: 0.4rem 1rem !important;
+}
+
+.admin-header {
+  background: rgba(3, 7, 18, 0.85) !important;
+  backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(34, 211, 238, 0.1) !important;
+}
+
+.admin-header h1 {
+  color: var(--primary) !important;
+}
+
+.admin-tab.active {
+  background: var(--primary) !important;
+  color: #000 !important;
+}
+
+.admin-tab.active::after {
+  background: var(--primary) !important;
+}
+
+/* Stats cards — cyan instead of warning/orange */
+.stat-card::before,
+.stat-card.warning::before {
+  background: var(--gradient-primary) !important;
+}
+
+.stat-card .stat-number,
+.stat-card.warning .stat-number {
+  background: var(--gradient-primary) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+
+.stat-card.success::before {
+  background: linear-gradient(135deg, #34d399, #10b981) !important;
+}
+
+.stat-card.success .stat-number {
+  background: linear-gradient(135deg, #34d399, #10b981) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+
+.stat-card.danger::before {
+  background: linear-gradient(135deg, #f87171, #ef4444) !important;
+}
+
+/* User cards — left border cyan instead of warning */
+.user-card {
+  border-left-color: var(--primary) !important;
+}
+
+.user-card .status-badge.approved {
+  background: rgba(52, 211, 153, 0.15) !important;
+  color: #34d399 !important;
+}
+
+/* Make Admin button — cyan instead of yellow */
+.btn-warning, .btn[style*="warning"] {
+  background: var(--primary-light) !important;
+  color: var(--primary) !important;
+  border: 1px solid rgba(34, 211, 238, 0.3) !important;
+}
+
+.btn-warning:hover {
+  background: var(--primary) !important;
+  color: #000 !important;
+}
+
+/* Device cards in admin */
+.device-admin-card {
+  border: 1px solid var(--border) !important;
+}
+
+.device-admin-card:hover {
+  border-color: rgba(34, 211, 238, 0.3) !important;
+}
+
+/* Filter tabs */
+.filter-tab.active {
+  background: var(--primary) !important;
+  color: #000 !important;
+}
+
 /* ===== Focus States (Accessibility) ===== */
 .btn:focus-visible,
 .toolbar-btn:focus-visible,
