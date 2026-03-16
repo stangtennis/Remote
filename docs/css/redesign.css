@@ -695,6 +695,39 @@ button[style*="eab308"] {
   color: #000 !important;
 }
 
+/* Admin buttons — override ALL gradient yellows */
+.admin-btn,
+button.admin-btn {
+  background: rgba(34, 211, 238, 0.12) !important;
+  background-image: none !important;
+  color: var(--primary) !important;
+  border-color: rgba(34, 211, 238, 0.3) !important;
+}
+
+.admin-btn:hover {
+  background: var(--primary) !important;
+  background-image: none !important;
+  color: #000 !important;
+}
+
+/* Approve/reject buttons */
+.approve-btn, button.approve-btn {
+  background: rgba(52, 211, 153, 0.12) !important;
+  background-image: none !important;
+  color: #34d399 !important;
+  border-color: rgba(52, 211, 153, 0.3) !important;
+}
+
+.approve-btn:hover {
+  background: #34d399 !important;
+  color: #000 !important;
+}
+
+/* User card left border */
+.user-card {
+  border-left: 4px solid var(--primary) !important;
+}
+
 /* ===== Focus States (Accessibility) ===== */
 .btn:focus-visible,
 .toolbar-btn:focus-visible,
