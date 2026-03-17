@@ -569,7 +569,7 @@ function initThemeToggle() {
 
 function updateThemeIcon(btn) {
   const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-  btn.textContent = isLight ? '🌙' : '☀️';
+  btn.innerHTML = isLight ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
 }
 
 /**
