@@ -17,6 +17,16 @@ import (
 	"github.com/stangtennis/remote-agent/internal/version"
 )
 
+// Package-level HTTP client with connection reuse
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 5,
+		IdleConnTimeout:     90 * time.Second,
+	},
+}
+
 // systemMetrics holds collected system resource metrics.
 type systemMetrics struct {
 	CPUPercent   float64
@@ -66,8 +76,7 @@ func fetchPublicIPInfo() (ip, isp string) {
 		return cachedIPInfo.IP, cachedIPInfo.ISP
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get("http://ip-api.com/json/?fields=query,isp")
+	resp, err := httpClient.Get("http://ip-api.com/json/?fields=query,isp")
 	if err != nil {
 		log.Printf("⚠️ IP lookup failed: %v", err)
 		return "", ""
@@ -167,8 +176,7 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Prefer", "resolution=merge-duplicates")
 
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to register device: %w", err)
 	}
@@ -195,7 +203,7 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 		updateReq.Header.Set("Authorization", "Bearer "+config.AccessToken)
 		updateReq.Header.Set("Content-Type", "application/json")
 
-		updateResp, err := client.Do(updateReq)
+		updateResp, err := httpClient.Do(updateReq)
 		if err != nil {
 			return fmt.Errorf("failed to update device: %w", err)
 		}
@@ -264,8 +272,7 @@ func UpdateHeartbeat(config RegistrationConfig, deviceID string, isOnline bool) 
 		req.Header.Set("Authorization", "Bearer "+config.AccessToken)
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return result, fmt.Errorf("failed to send request: %w", err)
 	}
@@ -310,8 +317,7 @@ func ClearPendingCommand(config RegistrationConfig, deviceID string) error {
 		req.Header.Set("Authorization", "Bearer "+config.AccessToken)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -344,8 +350,7 @@ func SetOffline(config RegistrationConfig, deviceID string) error {
 		req.Header.Set("Authorization", "Bearer "+config.AccessToken)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
