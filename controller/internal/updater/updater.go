@@ -1,10 +1,15 @@
 package updater
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 )
 
@@ -202,8 +207,13 @@ func (u *Updater) DownloadUpdate() error {
 		return err
 	}
 
-	// Download exe
-	exePath := filepath.Join(versionDir, fmt.Sprintf("%s-%s.exe", u.appType, info.TagName))
+	// Download file (platform-specific naming)
+	var exePath string
+	if runtime.GOOS == "darwin" {
+		exePath = filepath.Join(versionDir, fmt.Sprintf("%s-%s.tar.gz", u.appType, info.TagName))
+	} else {
+		exePath = filepath.Join(versionDir, fmt.Sprintf("%s-%s.exe", u.appType, info.TagName))
+	}
 	log.Printf("📥 Downloading %s to %s", info.ExeURL, exePath)
 
 	if err := u.downloader.DownloadFile(info.ExeURL, exePath, info.ExeSize); err != nil {
@@ -262,11 +272,41 @@ func (u *Updater) InstallUpdate() error {
 		return err
 	}
 
+	launchPath := state.DownloadPath
+
+	// macOS: extract .tar.gz first, then find the binary inside
+	if runtime.GOOS == "darwin" && strings.HasSuffix(state.DownloadPath, ".tar.gz") {
+		extractDir := filepath.Dir(state.DownloadPath)
+		log.Printf("📦 Extracting macOS update: %s", state.DownloadPath)
+		if err := extractTarGz(state.DownloadPath, extractDir); err != nil {
+			u.lastError = fmt.Errorf("failed to extract update: %w", err)
+			u.setStatus(StatusError)
+			return u.lastError
+		}
+		// Find the .app bundle or binary
+		appPath := filepath.Join(extractDir, "Remote Desktop Controller.app", "Contents", "MacOS", "RemoteDesktopController")
+		if _, err := os.Stat(appPath); err == nil {
+			launchPath = appPath
+		} else {
+			// Try finding any executable in extract dir
+			entries, _ := os.ReadDir(extractDir)
+			for _, e := range entries {
+				p := filepath.Join(extractDir, e.Name())
+				info, _ := os.Stat(p)
+				if info != nil && !info.IsDir() && info.Mode()&0111 != 0 && !strings.HasSuffix(p, ".tar.gz") {
+					launchPath = p
+					break
+				}
+			}
+		}
+		log.Printf("📦 Extracted, launching: %s", launchPath)
+	}
+
 	args := fmt.Sprintf("--update-from \"%s\"", currentExe)
-	log.Printf("🚀 Starting new version with update mode: %s %s", state.DownloadPath, args)
+	log.Printf("🚀 Starting new version with update mode: %s %s", launchPath, args)
 
 	// Launch elevated (runas) — needed when installed in Program Files
-	if err := launchElevated(state.DownloadPath, args); err != nil {
+	if err := launchElevated(launchPath, args); err != nil {
 		u.lastError = err
 		u.setStatus(StatusError)
 		return err
@@ -307,4 +347,50 @@ func (u *Updater) ShouldAutoCheck(interval time.Duration) bool {
 // HasPendingUpdate returns true if there's a downloaded update ready
 func (u *Updater) HasPendingUpdate() bool {
 	return u.state.HasPendingUpdate()
+}
+
+// extractTarGz extracts a .tar.gz archive to the given directory
+func extractTarGz(src, dst string) error {
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		target := filepath.Join(dst, hdr.Name)
+		// Prevent path traversal
+		if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(dst)) {
+			continue
+		}
+
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			os.MkdirAll(target, 0755)
+		case tar.TypeReg:
+			os.MkdirAll(filepath.Dir(target), 0755)
+			out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode))
+			if err != nil {
+				return err
+			}
+			io.Copy(out, tr)
+			out.Close()
+		}
+	}
+	return nil
 }
