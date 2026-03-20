@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"log"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -232,22 +233,30 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		log.Println("⚠️  Skipping monitor enumeration in Session 0 (DXGI not available)")
 	}
 
-	// Adaptive streaming parameters
-	fps := 30     // Current FPS — start at 30 for responsiveness on idle
-	quality := 65 // JPEG quality (30-80)
-	scale := 1.0  // Scale factor (0.4-1.0)
+	// Adaptive streaming parameters — lower defaults on macOS (software JPEG is CPU-heavy)
+	fps := 20
+	quality := 60
+	scale := 0.75
+	maxFPS := 20
+	maxQuality := 75
+	maxScale := 1.0
+	if runtime.GOOS == "darwin" {
+		fps = 15
+		quality = 55
+		scale = 0.5
+		maxFPS = 15
+		maxQuality = 70
+		maxScale = 0.75
+	}
 	frameInterval := time.Duration(1000/fps) * time.Millisecond
 
 	// Thresholds for adaptation (use controller caps if set)
 	bufferHigh := uint64(2 * 1024 * 1024)   // 2MB - reduce quality sooner
 	bufferMedium := uint64(1 * 1024 * 1024)  // 1MB - skip every 2nd frame
 	bufferLow := uint64(512 * 1024)          // 512KB - can increase quality
-	minFPS := 15
-	maxFPS := 30
+	minFPS := 10
 	minQuality := 30  // Lower floor for aggressive quality reduction under load
-	maxQuality := 80
 	minScale := 0.4   // Lower floor for aggressive scaling under load
-	maxScale := 1.0
 	frameSkipCounter := 0 // Counter for frame skipping under buffer pressure
 
 	// Apply controller caps if set
@@ -353,15 +362,22 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			continue
 		}
 
+		// Safety: re-check dataChannel and screenCapturer after potential cleanup race
+		dc := m.dataChannel
+		sc := m.screenCapturer
+		if dc == nil || sc == nil {
+			continue
+		}
+
 		// Switch to input desktop before capture (important for Session 0/login screen)
 		if m.isSession0 {
 			desktop.SwitchToInputDesktop()
 		}
 
-		bufferedAmount := m.dataChannel.BufferedAmount()
+		bufferedAmount := dc.BufferedAmount()
 
 		// Capture RGBA for motion detection (also used for JPEG encoding - single capture)
-		rgbaFrame, err := m.screenCapturer.CaptureRGBA()
+		rgbaFrame, err := sc.CaptureRGBA()
 		if err != nil {
 			errorCount++
 
@@ -396,7 +412,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 					log.Printf("🔄 Reinitializing screen capturer (error #%d, next reinit in %d errors)...", errorCount, reinitInterval)
 					time.Sleep(500 * time.Millisecond)
 
-					if reinitErr := m.screenCapturer.Reinitialize(false); reinitErr != nil {
+					if reinitErr := sc.Reinitialize(false); reinitErr != nil {
 						log.Printf("⚠️ Reinit failed: %v", reinitErr)
 					} else {
 						log.Printf("✅ Screen capturer reinitialized!")
@@ -410,7 +426,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		}
 
 		// Detect motion using dirty regions
-		width, height := m.screenCapturer.GetResolution()
+		width, height := sc.GetResolution()
 		if lastRGBA != nil {
 			regions, _ := m.dirtyDetector.DetectDirtyRegions(rgbaFrame, quality)
 			motionPct = m.dirtyDetector.GetChangePercentage(regions, width, height)
@@ -619,7 +635,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		}
 
 		// Tiles mode: encode RGBA to JPEG with scaling (reuse rgbaFrame to avoid double-capture)
-		jpeg, scaledW, scaledH, encErr := m.screenCapturer.EncodeRGBAToJPEG(rgbaFrame, quality, scale)
+		jpeg, scaledW, scaledH, encErr := sc.EncodeRGBAToJPEG(rgbaFrame, quality, scale)
 		if encErr != nil {
 			errorCount++
 			if errorCount%50 == 1 {
@@ -636,7 +652,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		_ = scaledH
 
 		// POST-ENCODE buffer check: if buffer grew during encoding, drop the frame
-		postEncodeBuffer := m.dataChannel.BufferedAmount()
+		postEncodeBuffer := dc.BufferedAmount()
 		if postEncodeBuffer > bufferHigh {
 			droppedFrames++
 			if droppedFrames%10 == 1 {

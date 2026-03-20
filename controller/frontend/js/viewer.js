@@ -182,7 +182,11 @@ class ViewerSession {
       });
       if (response.ok) {
         const data = await response.json();
-        this.iceConfig = { iceServers: data.iceServers };
+        // Always include STUN for P2P candidates + TURN as fallback
+        this.iceConfig = { iceServers: [
+          { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+          ...data.iceServers
+        ]};
         const hasTurn = JSON.stringify(data.iceServers).includes('turn:');
         this.setConnectStatus(`TURN: ${hasTurn ? 'OK' : 'KUN STUN'} (${data.iceServers.length} servere)`);
         console.log(`[${this.deviceName}] TURN credentials:`, JSON.stringify(data.iceServers).substring(0, 200));
