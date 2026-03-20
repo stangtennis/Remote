@@ -115,22 +115,6 @@ func updateMovingAverageDuration(arr *[]time.Duration, val time.Duration, maxLen
 	return sum / time.Duration(len(*arr))
 }
 
-// lightMotionProbe performs a cheap motion detection by sampling pixels
-// Returns estimated motion percentage without full RGBA capture
-func (m *Manager) lightMotionProbe() (float64, error) {
-	// For now, we'll use a downscaled capture (1/4 resolution)
-	// This is much cheaper than full resolution capture
-	width, height := m.screenCapturer.GetResolution()
-	probeWidth := width / 4
-	probeHeight := height / 4
-
-	// TODO: Implement actual downscaled capture in screen.Capturer
-	// For now, return 0 to indicate we need full capture
-	_ = probeWidth
-	_ = probeHeight
-	return 0, nil
-}
-
 // determineMode decides which mode to use based on current conditions
 func (m *Manager) determineMode(motionPct float64, timeSinceInput time.Duration, avgCPU float64, avgRTT time.Duration, lossPct float64) StreamMode {
 	// Can't switch if minimum duration not elapsed
@@ -712,6 +696,12 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 
 			// Send stats to controller
 			m.sendStats(fps, quality, scale, mode, rttMs, cpuPct)
+
+			// Update tray status
+			if m.StatusCallback != nil {
+				trayStatus := fmt.Sprintf("Forbundet | %s | %.1f Mbit/s", mode, sendMbps)
+				m.StatusCallback(trayStatus)
+			}
 		}
 	}
 

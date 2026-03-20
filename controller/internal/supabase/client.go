@@ -49,7 +49,12 @@ type Device struct {
 	AgentVersion string    `json:"agent_version"`
 	LastSeen     time.Time `json:"last_seen"`
 	CreatedAt    time.Time `json:"created_at"`
-	AssignedAt   time.Time `json:"assigned_at"`
+	AssignedAt    time.Time `json:"assigned_at"`
+	CpuPercent    float64   `json:"cpu_percent"`
+	MemoryUsedMB  int       `json:"memory_used_mb"`
+	MemoryTotalMB int       `json:"memory_total_mb"`
+	DiskUsedGB    int       `json:"disk_used_gb"`
+	DiskTotalGB   int       `json:"disk_total_gb"`
 }
 
 // NewClient creates a new Supabase client
@@ -752,6 +757,114 @@ func (c *Client) JoinSupportSession(pin string) (*JoinSupportSessionResult, erro
 
 	logger.Info("[JoinSupportSession] Found session: ID=%s, Status=%s", result.SessionID, result.Status)
 	return &result, nil
+}
+
+// UserApproval represents a user's approval record
+type UserApproval struct {
+	UserID    string `json:"user_id"`
+	Email     string `json:"email"`
+	Role      string `json:"role"`
+	Approved  bool   `json:"approved"`
+	CreatedAt string `json:"created_at"`
+}
+
+// GetAllUsers fetches all user approvals (admin only)
+func (c *Client) GetAllUsers() ([]UserApproval, error) {
+	c.ensureValidToken()
+	url := fmt.Sprintf("%s/rest/v1/user_approvals?select=user_id,email,role,approved,created_at&order=created_at.desc", c.URL)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed: %s", string(body))
+	}
+	var users []UserApproval
+	if err := json.Unmarshal(body, &users); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+// SetUserApproval approves or rejects a user
+func (c *Client) SetUserApproval(userID string, approved bool) error {
+	c.ensureValidToken()
+	url := fmt.Sprintf("%s/rest/v1/user_approvals?user_id=eq.%s", c.URL, userID)
+	payload, _ := json.Marshal(map[string]interface{}{"approved": approved})
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed: %s", string(body))
+	}
+	return nil
+}
+
+// SetUserRole updates a user's role (admin/user/super_admin)
+func (c *Client) SetUserRole(userID, role string) error {
+	c.ensureValidToken()
+	url := fmt.Sprintf("%s/rest/v1/user_approvals?user_id=eq.%s", c.URL, userID)
+	payload, _ := json.Marshal(map[string]interface{}{"role": role})
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed: %s", string(body))
+	}
+	return nil
+}
+
+// IsAdmin checks if user has admin role (exported version)
+func (c *Client) IsAdmin(userID string) bool {
+	return c.isAdmin(userID)
+}
+
+// ForceUpdateAllDevices sends force_update command to all online devices
+func (c *Client) ForceUpdateAllDevices() error {
+	c.ensureValidToken()
+	url := fmt.Sprintf("%s/rest/v1/remote_devices?is_online=eq.true", c.URL)
+	payload, _ := json.Marshal(map[string]interface{}{"pending_command": "force_update"})
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }
 
 // CheckApproval checks if the user is approved

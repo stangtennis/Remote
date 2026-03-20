@@ -3,23 +3,24 @@ package monitor
 
 import (
 	"log"
-	"runtime"
+	"os"
 	"sync"
 	"time"
+
+	"github.com/shirou/gopsutil/v4/process"
 )
 
 // CPUMonitor tracks process CPU usage for adaptive streaming
 type CPUMonitor struct {
-	mu              sync.RWMutex
-	cpuPct          float64   // Current CPU percentage (0-100)
-	samples         []float64 // Recent samples for averaging
-	maxSamples      int
-	highCPUCount    int     // Count of consecutive high CPU readings
-	threshold       float64 // Threshold for "high" CPU (default 85%)
-	criticalCount   int     // Number of high readings before triggering guard
-	running         bool
-	lastMeasureTime time.Time
-	lastCPUTime     time.Duration
+	mu           sync.RWMutex
+	cpuPct       float64   // Current CPU percentage (0-100)
+	samples      []float64 // Recent samples for averaging
+	maxSamples   int
+	highCPUCount int     // Count of consecutive high CPU readings
+	threshold    float64 // Threshold for "high" CPU (default 85%)
+	criticalCount int    // Number of high readings before triggering guard
+	running      bool
+	proc         *process.Process
 }
 
 // NewCPUMonitor creates a new CPU monitor
@@ -39,12 +40,19 @@ func (m *CPUMonitor) Start() {
 		m.mu.Unlock()
 		return
 	}
+
+	proc, err := process.NewProcess(int32(os.Getpid()))
+	if err != nil {
+		m.mu.Unlock()
+		log.Printf("CPU monitor: failed to get process: %v", err)
+		return
+	}
+	m.proc = proc
 	m.running = true
-	m.lastMeasureTime = time.Now()
 	m.mu.Unlock()
 
 	go m.monitorLoop()
-	log.Println("📊 CPU monitor started")
+	log.Println("CPU monitor started")
 }
 
 // Stop stops CPU monitoring
@@ -52,7 +60,7 @@ func (m *CPUMonitor) Stop() {
 	m.mu.Lock()
 	m.running = false
 	m.mu.Unlock()
-	log.Println("📊 CPU monitor stopped")
+	log.Println("CPU monitor stopped")
 }
 
 // GetCPUPercent returns current CPU usage percentage
@@ -87,9 +95,6 @@ func (m *CPUMonitor) monitorLoop() {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
-	var lastNumGC uint32
-	var lastPauseTotal time.Duration
-
 	for {
 		m.mu.RLock()
 		running := m.running
@@ -101,61 +106,23 @@ func (m *CPUMonitor) monitorLoop() {
 
 		<-ticker.C
 
-		// Use runtime stats as proxy for CPU usage
-		// This is an approximation based on GC activity and goroutine count
-		var memStats runtime.MemStats
-		runtime.ReadMemStats(&memStats)
-
-		// Calculate CPU estimate based on:
-		// 1. GC pause time (more GC = more CPU)
-		// 2. Number of goroutines (more = potentially more CPU)
-		// 3. Allocations (more allocs = more CPU)
-
-		gcPauseIncrease := time.Duration(memStats.PauseTotalNs) - lastPauseTotal
-		gcCountIncrease := memStats.NumGC - lastNumGC
-
-		lastPauseTotal = time.Duration(memStats.PauseTotalNs)
-		lastNumGC = memStats.NumGC
-
-		// Estimate CPU based on GC activity (rough heuristic)
-		// High GC activity often correlates with high CPU
-		cpuEstimate := float64(0)
-
-		if gcCountIncrease > 0 {
-			// GC pause as percentage of interval
-			intervalMs := float64(500)
-			pauseMs := float64(gcPauseIncrease.Milliseconds())
-			gcCPU := (pauseMs / intervalMs) * 100
-
-			// Scale up since GC is just part of CPU usage
-			cpuEstimate = gcCPU * 5 // Rough multiplier
-		}
-
-		// Add goroutine overhead estimate
-		numGoroutines := runtime.NumGoroutine()
-		if numGoroutines > 50 {
-			cpuEstimate += float64(numGoroutines-50) * 0.5
-		}
-
-		// Clamp to 0-100
-		if cpuEstimate < 0 {
-			cpuEstimate = 0
-		}
-		if cpuEstimate > 100 {
-			cpuEstimate = 100
+		// Get actual process CPU percentage via gopsutil
+		pct, err := m.proc.Percent(0)
+		if err != nil {
+			continue
 		}
 
 		m.mu.Lock()
-		m.cpuPct = cpuEstimate
+		m.cpuPct = pct
 
 		// Track samples for averaging
-		m.samples = append(m.samples, cpuEstimate)
+		m.samples = append(m.samples, pct)
 		if len(m.samples) > m.maxSamples {
 			m.samples = m.samples[1:]
 		}
 
 		// Check if high CPU
-		if cpuEstimate > m.threshold {
+		if pct > m.threshold {
 			m.highCPUCount++
 		} else {
 			m.highCPUCount = 0

@@ -34,6 +34,9 @@ type Settings struct {
 	// Advanced
 	HardwareAcceleration bool `json:"hardware_acceleration"`
 	LowLatencyMode       bool `json:"low_latency_mode"`
+
+	// User preferences
+	Favorites []string `json:"favorites"` // List of favorite device_ids
 }
 
 const settingsFile = "settings.json"

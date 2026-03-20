@@ -18,6 +18,7 @@ import (
 	"github.com/pion/rtcp"
 	pionwebrtc "github.com/pion/webrtc/v3"
 	"github.com/stangtennis/remote-agent/internal/auth"
+	"github.com/stangtennis/remote-agent/internal/terminal"
 	"github.com/stangtennis/remote-agent/internal/clipboard"
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/desktop"
@@ -41,6 +42,8 @@ type Manager struct {
 	controlChannel      *pionwebrtc.DataChannel // Separate channel for input (low latency)
 	videoChannel        *pionwebrtc.DataChannel // Unreliable channel for video (less latency)
 	fileChannel         *pionwebrtc.DataChannel // Reliable channel for file transfer
+	terminalChannel     *pionwebrtc.DataChannel // Data channel for remote terminal
+	terminal            *terminal.Terminal
 	screenCapturer      *screen.Capturer
 	dirtyDetector       *screen.DirtyRegionDetector // For bandwidth optimization
 	mouseController     *input.MouseController
@@ -99,6 +102,9 @@ type Manager struct {
 	// CPU/RTT moving averages for mode switching
 	cpuAvg []float64
 	rttAvg []time.Duration
+
+	// Status callback for tray updates
+	StatusCallback func(string)
 
 	// Polling health tracking (for heartbeat awareness)
 	pollingHealthy  atomic.Bool  // true = polling is working
@@ -339,6 +345,7 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 	m.controlChannel = nil
 	m.videoChannel = nil
 	m.fileChannel = nil
+	m.terminalChannel = nil
 	m.mu.Unlock()
 	m.peerConnection = pc
 
@@ -401,6 +408,9 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 		switch state {
 		case pionwebrtc.PeerConnectionStateConnected:
 			log.Println("✅ WebRTC CONNECTED! Starting screen streaming...")
+			if m.StatusCallback != nil {
+				m.StatusCallback("Forbundet")
+			}
 			// Cancel any previous streaming/grace period goroutines
 			if m.connCancel != nil {
 				m.connCancel()
@@ -422,6 +432,9 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 			}()
 		case pionwebrtc.PeerConnectionStateDisconnected:
 			log.Println("⚠️  WebRTC DISCONNECTED - waiting for ICE recovery...")
+			if m.StatusCallback != nil {
+				m.StatusCallback("Afbrudt — venter på genforbindelse...")
+			}
 			m.isStreaming.Store(false) // Stop sending frames during recovery
 			// Cancel previous streaming, start grace period with new context
 			if m.connCancel != nil {
@@ -439,6 +452,9 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 			}()
 		case pionwebrtc.PeerConnectionStateFailed:
 			log.Println("❌ WebRTC CONNECTION FAILED")
+			if m.StatusCallback != nil {
+				m.StatusCallback("Status: Online (ingen forbindelse)")
+			}
 			// Restore local cursor
 			if m.mouseController != nil {
 				m.mouseController.ShowCursor()
@@ -449,6 +465,9 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 			m.cleanupConnection("Failed")
 		case pionwebrtc.PeerConnectionStateClosed:
 			log.Println("🔒 WebRTC CONNECTION CLOSED")
+			if m.StatusCallback != nil {
+				m.StatusCallback("Status: Online (ingen forbindelse)")
+			}
 			// Restore local cursor
 			if m.mouseController != nil {
 				m.mouseController.ShowCursor()
@@ -500,6 +519,10 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 			log.Println("📁 File channel ready (reliable, ordered)")
 			m.fileChannel = dc
 			m.setupFileChannelHandlers(dc)
+		case "terminal":
+			log.Println("🖥️ Terminal data channel opened")
+			m.terminalChannel = dc
+			m.setupTerminalChannelHandlers(dc)
 		default:
 			m.dataChannel = dc
 			m.setupDataChannelHandlers(dc)
@@ -572,6 +595,63 @@ func (m *Manager) setupFileChannelHandlers(dc *pionwebrtc.DataChannel) {
 		if m.fileTransferHandler != nil {
 			if err := m.fileTransferHandler.HandleIncomingData(msg.Data); err != nil {
 				log.Printf("❌ File transfer error: %v", err)
+			}
+		}
+	})
+}
+
+// setupTerminalChannelHandlers sets up the terminal data channel for remote shell access
+func (m *Manager) setupTerminalChannelHandlers(dc *pionwebrtc.DataChannel) {
+	dc.OnOpen(func() {
+		log.Println("🖥️ TERMINAL CHANNEL READY")
+	})
+
+	dc.OnClose(func() {
+		log.Println("🖥️ Terminal channel closed")
+		if m.terminal != nil {
+			m.terminal.Close()
+			m.terminal = nil
+		}
+	})
+
+	dc.OnMessage(func(msg pionwebrtc.DataChannelMessage) {
+		var termMsg struct {
+			Type string `json:"type"`
+			Data string `json:"data"`
+		}
+		if err := json.Unmarshal(msg.Data, &termMsg); err != nil {
+			return
+		}
+		switch termMsg.Type {
+		case "input":
+			if m.terminal != nil {
+				m.terminal.Write([]byte(termMsg.Data))
+			}
+		case "start":
+			// Start new terminal session
+			if m.terminal != nil {
+				m.terminal.Close()
+			}
+			term, err := terminal.New()
+			if err != nil {
+				errMsg, _ := json.Marshal(map[string]string{"type": "error", "data": err.Error()})
+				dc.Send(errMsg)
+				return
+			}
+			m.terminal = term
+			// Forward output to data channel
+			go term.ReadOutput(func(data []byte) {
+				outMsg, _ := json.Marshal(map[string]string{"type": "output", "data": string(data)})
+				dc.Send(outMsg)
+			})
+			go term.ReadStderr(func(data []byte) {
+				outMsg, _ := json.Marshal(map[string]string{"type": "output", "data": string(data)})
+				dc.Send(outMsg)
+			})
+		case "close":
+			if m.terminal != nil {
+				m.terminal.Close()
+				m.terminal = nil
 			}
 		}
 	})
@@ -710,10 +790,20 @@ func (m *Manager) cleanupConnection(reason string) {
 		m.fileChannel.Close()
 		m.fileChannel = nil
 	}
+	if m.terminalChannel != nil {
+		m.terminalChannel.Close()
+		m.terminalChannel = nil
+	}
 
 	pc := m.peerConnection
 	m.peerConnection = nil
 	m.mu.Unlock()
+
+	// Close terminal session if active
+	if m.terminal != nil {
+		m.terminal.Close()
+		m.terminal = nil
+	}
 
 	// Close peer connection outside mutex to avoid deadlock with pion callbacks
 	if pc != nil {
@@ -737,11 +827,40 @@ func (m *Manager) Close() {
 	if m.dataChannel != nil {
 		m.dataChannel.Close()
 	}
+	if m.controlChannel != nil {
+		m.controlChannel.Close()
+	}
+	if m.videoChannel != nil {
+		m.videoChannel.Close()
+	}
+	if m.fileChannel != nil {
+		m.fileChannel.Close()
+	}
+	if m.terminalChannel != nil {
+		m.terminalChannel.Close()
+	}
 	pc := m.peerConnection
+	m.peerConnection = nil
 	m.mu.Unlock()
 
+	// Close terminal session if active
+	if m.terminal != nil {
+		m.terminal.Close()
+		m.terminal = nil
+	}
+
 	if pc != nil {
-		pc.Close()
+		done := make(chan struct{})
+		go func() {
+			pc.Close()
+			close(done)
+		}()
+		select {
+		case <-done:
+			log.Println("WebRTC peer connection closed gracefully")
+		case <-time.After(5 * time.Second):
+			log.Println("WebRTC peer connection close timed out (5s)")
+		}
 	}
 }
 

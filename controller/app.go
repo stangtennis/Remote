@@ -84,6 +84,7 @@ type AuthResult struct {
 	Email    string `json:"email"`
 	UserID   string `json:"user_id"`
 	Approved bool   `json:"approved"`
+	Role     string `json:"role"`
 }
 
 // Login authenticates with email and password
@@ -111,10 +112,16 @@ func (a *App) Login(email, password string) (*AuthResult, error) {
 		a.startDeviceRefresh()
 	}
 
+	role := "user"
+	if a.supabase.IsAdmin(a.currentUser.ID) {
+		role = "admin"
+	}
+
 	return &AuthResult{
 		Email:    a.currentUser.Email,
 		UserID:   a.currentUser.ID,
 		Approved: approved,
+		Role:     role,
 	}, nil
 }
 
@@ -161,25 +168,35 @@ func (a *App) SaveCredentials(email, password string, remember bool) error {
 
 // DeviceInfo is a frontend-friendly device representation
 type DeviceInfo struct {
-	DeviceID     string `json:"device_id"`
-	DeviceName   string `json:"device_name"`
-	Platform     string `json:"platform"`
-	OwnerID      string `json:"owner_id"`
-	Status       string `json:"status"`
-	AgentVersion string `json:"agent_version"`
-	LastSeen     string `json:"last_seen"`
-	TimeSince    string `json:"time_since"`
-	IsOnline     bool   `json:"is_online"`
-	IsAway       bool   `json:"is_away"`
+	DeviceID      string  `json:"device_id"`
+	DeviceName    string  `json:"device_name"`
+	Platform      string  `json:"platform"`
+	OwnerID       string  `json:"owner_id"`
+	Status        string  `json:"status"`
+	AgentVersion  string  `json:"agent_version"`
+	LastSeen      string  `json:"last_seen"`
+	TimeSince     string  `json:"time_since"`
+	IsOnline      bool    `json:"is_online"`
+	IsAway        bool    `json:"is_away"`
+	CpuPercent    float64 `json:"cpu_percent"`
+	MemoryUsedMB  int     `json:"memory_used_mb"`
+	MemoryTotalMB int     `json:"memory_total_mb"`
+	DiskUsedGB    int     `json:"disk_used_gb"`
+	DiskTotalGB   int     `json:"disk_total_gb"`
 }
 
 func deviceToInfo(d supabase.Device) DeviceInfo {
 	info := DeviceInfo{
-		DeviceID:     d.DeviceID,
-		DeviceName:   d.DeviceName,
-		Platform:     d.Platform,
-		OwnerID:      d.OwnerID,
-		AgentVersion: d.AgentVersion,
+		DeviceID:      d.DeviceID,
+		DeviceName:    d.DeviceName,
+		Platform:      d.Platform,
+		OwnerID:       d.OwnerID,
+		AgentVersion:  d.AgentVersion,
+		CpuPercent:    d.CpuPercent,
+		MemoryUsedMB:  d.MemoryUsedMB,
+		MemoryTotalMB: d.MemoryTotalMB,
+		DiskUsedGB:    d.DiskUsedGB,
+		DiskTotalGB:   d.DiskTotalGB,
 	}
 
 	if d.LastSeen.IsZero() {
@@ -528,6 +545,86 @@ func (a *App) GetLogContent(lines int) (string, error) {
 		lines = 200
 	}
 	return logger.ReadLog(lines)
+}
+
+// ==================== ADMIN ====================
+
+// AdminUserInfo represents a user for the admin panel
+type AdminUserInfo struct {
+	UserID    string `json:"user_id"`
+	Email     string `json:"email"`
+	Role      string `json:"role"`
+	Approved  bool   `json:"approved"`
+	CreatedAt string `json:"created_at"`
+}
+
+// GetCurrentUserRole returns the current user's role
+func (a *App) GetCurrentUserRole() string {
+	if a.currentUser == nil || a.supabase == nil {
+		return "user"
+	}
+	if a.supabase.IsAdmin(a.currentUser.ID) {
+		return "admin"
+	}
+	return "user"
+}
+
+// GetAllUsers returns all users (admin only)
+func (a *App) GetAllUsers() ([]AdminUserInfo, error) {
+	if a.currentUser == nil || a.supabase == nil {
+		return nil, fmt.Errorf("not logged in")
+	}
+	if !a.supabase.IsAdmin(a.currentUser.ID) {
+		return nil, fmt.Errorf("ikke admin")
+	}
+	users, err := a.supabase.GetAllUsers()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]AdminUserInfo, len(users))
+	for i, u := range users {
+		result[i] = AdminUserInfo{
+			UserID:    u.UserID,
+			Email:     u.Email,
+			Role:      u.Role,
+			Approved:  u.Approved,
+			CreatedAt: u.CreatedAt,
+		}
+	}
+	return result, nil
+}
+
+// ApproveUser approves or rejects a user (admin only)
+func (a *App) ApproveUser(userID string, approved bool) error {
+	if a.currentUser == nil || a.supabase == nil {
+		return fmt.Errorf("not logged in")
+	}
+	if !a.supabase.IsAdmin(a.currentUser.ID) {
+		return fmt.Errorf("ikke admin")
+	}
+	return a.supabase.SetUserApproval(userID, approved)
+}
+
+// SetUserRole changes a user's role (admin only)
+func (a *App) SetUserRole(userID, role string) error {
+	if a.currentUser == nil || a.supabase == nil {
+		return fmt.Errorf("not logged in")
+	}
+	if !a.supabase.IsAdmin(a.currentUser.ID) {
+		return fmt.Errorf("ikke admin")
+	}
+	return a.supabase.SetUserRole(userID, role)
+}
+
+// ForceUpdateAllDevices sends update command to all online devices (admin only)
+func (a *App) ForceUpdateAllDevices() error {
+	if a.currentUser == nil || a.supabase == nil {
+		return fmt.Errorf("not logged in")
+	}
+	if !a.supabase.IsAdmin(a.currentUser.ID) {
+		return fmt.Errorf("ikke admin")
+	}
+	return a.supabase.ForceUpdateAllDevices()
 }
 
 // ==================== DEVICE REFRESH ====================

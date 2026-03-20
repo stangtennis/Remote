@@ -97,6 +97,19 @@ const App = {
       this.loadSettings();
       this.checkForUpdateNow();
 
+      // Load favorites
+      try {
+        const s = await window.go.main.App.GetSettings();
+        this._favorites = s.favorites || [];
+      } catch(e) { this._favorites = []; }
+
+      // Show admin tab if user is admin
+      if (result.role === 'admin' || result.role === 'super_admin') {
+        const adminBtn = document.getElementById('adminTabBtn');
+        if (adminBtn) adminBtn.style.display = '';
+        this.loadAdminUsers();
+      }
+
     } catch (err) {
       statusEl.textContent = err.message || 'Login mislykkedes';
       statusEl.className = 'status-text error';
@@ -158,6 +171,7 @@ const App = {
 
   // ==================== DEVICES ====================
   _allDevices: [],  // cached for search/filter
+  _favorites: [],   // favorite device_ids
 
   async loadDevices() {
     const container = document.getElementById('deviceList');
@@ -165,6 +179,7 @@ const App = {
       const devices = await window.go.main.App.GetDevices();
       this._allDevices = devices || [];
       this.renderDevices(devices, container);
+      this.updateQuickConnect();
     } catch (err) {
       container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>${err.message}</p></div>`;
     }
@@ -210,6 +225,16 @@ const App = {
       filtered = filtered.filter(d => !d.is_online);
     }
 
+    // Sort: favorites first, then online, then alphabetically
+    const favs = this._favorites || [];
+    filtered.sort((a, b) => {
+      const aFav = favs.includes(a.device_id);
+      const bFav = favs.includes(b.device_id);
+      if (aFav !== bFav) return aFav ? -1 : 1;
+      if (a.is_online !== b.is_online) return a.is_online ? -1 : 1;
+      return (a.device_name || '').localeCompare(b.device_name || '');
+    });
+
     if (filtered.length === 0) {
       container.innerHTML = '<div class="empty-state"><i class="fas fa-search"></i><p>Ingen enheder matcher filteret.</p></div>';
       return;
@@ -218,6 +243,9 @@ const App = {
     container.innerHTML = filtered.map(d => `
       <div class="device-card" data-id="${d.device_id}">
         <div class="device-card-header">
+          <button class="fav-btn ${favs.includes(d.device_id) ? 'active' : ''}" onclick="event.stopPropagation();App.toggleFavorite('${d.device_id}')" title="Favorit">
+            <i class="fa${favs.includes(d.device_id) ? 's' : 'r'} fa-star"></i>
+          </button>
           <div class="status-dot ${d.status}"></div>
           <span class="device-name">${this.esc(d.device_name)}</span>
         </div>
@@ -226,6 +254,23 @@ const App = {
           ${d.agent_version ? `<span><i class="fas fa-code-branch"></i> ${this.esc(d.agent_version)}</span>` : ''}
           <span><i class="fas fa-clock"></i> ${this.esc(d.time_since)}</span>
         </div>
+        ${d.is_online ? `<div class="device-metrics">
+          <div class="metric">
+            <span class="metric-label">CPU</span>
+            <div class="metric-bar"><div class="metric-bar-fill" style="width:${d.cpu_percent || 0}%"></div></div>
+            <span class="metric-value">${Math.round(d.cpu_percent || 0)}%</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">RAM</span>
+            <div class="metric-bar"><div class="metric-bar-fill" style="width:${d.memory_total_mb ? Math.round(d.memory_used_mb/d.memory_total_mb*100) : 0}%"></div></div>
+            <span class="metric-value">${d.memory_used_mb ? Math.round(d.memory_used_mb/1024*10)/10 : 0}/${d.memory_total_mb ? Math.round(d.memory_total_mb/1024*10)/10 : 0} GB</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Disk</span>
+            <div class="metric-bar"><div class="metric-bar-fill" style="width:${d.disk_total_gb ? Math.round(d.disk_used_gb/d.disk_total_gb*100) : 0}%"></div></div>
+            <span class="metric-value">${d.disk_used_gb || 0}/${d.disk_total_gb || 0} GB</span>
+          </div>
+        </div>` : ''}
         <div class="device-actions">
           <button class="btn btn-sm btn-primary" ${d.is_online ? '' : 'disabled'} onclick="App.connectDevice('${d.device_id}', '${this.esc(d.device_name)}')">
             <i class="fas fa-plug"></i> ${d.is_online ? 'Connect' : 'Offline'}
@@ -236,9 +281,17 @@ const App = {
           <button class="btn btn-sm btn-secondary" onclick="App.removeDevice('${d.device_id}', '${this.esc(d.device_name)}')">
             <i class="fas fa-user-minus"></i>
           </button>
-          <button class="btn btn-sm btn-secondary" ${d.is_online ? '' : 'disabled'} onclick="App.forceUpdateDevice('${d.device_id}', '${this.esc(d.device_name)}')" title="Opdater agent">
-            <i class="fas fa-sync-alt"></i>
-          </button>
+          <div class="dropdown" style="position:relative;display:inline-block;">
+            <button class="btn btn-sm btn-secondary" ${d.is_online ? '' : 'disabled'} onclick="this.nextElementSibling.classList.toggle('show')" title="Handlinger">
+              <i class="fas fa-ellipsis-v"></i>
+            </button>
+            <div class="dropdown-menu">
+              <button onclick="App.sendDeviceCommand('${d.device_id}', '${this.esc(d.device_name)}', 'force_update')"><i class="fas fa-sync-alt"></i> Opdater agent</button>
+              <button onclick="App.sendDeviceCommand('${d.device_id}', '${this.esc(d.device_name)}', 'lock')"><i class="fas fa-lock"></i> Lås skærm</button>
+              <button onclick="App.sendDeviceCommand('${d.device_id}', '${this.esc(d.device_name)}', 'restart')"><i class="fas fa-redo"></i> Genstart</button>
+              <button onclick="App.sendDeviceCommand('${d.device_id}', '${this.esc(d.device_name)}', 'shutdown')"><i class="fas fa-power-off"></i> Luk ned</button>
+            </div>
+          </div>
           <button class="btn btn-sm btn-danger" onclick="App.deleteDevice('${d.device_id}', '${this.esc(d.device_name)}')">
             <i class="fas fa-trash"></i>
           </button>
@@ -250,6 +303,19 @@ const App = {
   async connectDevice(deviceId, deviceName) {
     try {
       console.log('connectDevice called:', deviceId, deviceName);
+
+      // Find and update the connect button to show connecting state
+      const btn = document.querySelector(`.device-card[data-id="${deviceId}"] .btn-primary`);
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Forbinder...';
+        // Reset after 10s (connection timeout safety)
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+        }, 10000);
+      }
+
       // Find agent version from device list
       const device = (this._allDevices || []).find(d => d.device_id === deviceId);
       const agentVersion = device?.agent_version || '';
@@ -371,7 +437,7 @@ const App = {
     };
 
     ['settResolution', 'settFPS', 'settCodec', 'settQuality', 'settBitrate',
-     'settAdaptive', 'settFileTransfer', 'settClipboard', 'settLowLatency'
+     'settAdaptive', 'settFileTransfer', 'settClipboard', 'settLowLatency', 'settAudio'
     ].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', autoSave);
@@ -399,6 +465,7 @@ const App = {
       document.getElementById('settFileTransfer').checked = s.enable_file_transfer;
       document.getElementById('settClipboard').checked = s.enable_clipboard_sync;
       document.getElementById('settLowLatency').checked = s.low_latency_mode;
+      document.getElementById('settAudio').checked = s.enable_audio;
 
       // Update install button
       const installed = await window.go.main.App.IsInstalled();
@@ -426,13 +493,13 @@ const App = {
         enable_file_transfer: document.getElementById('settFileTransfer').checked,
         enable_clipboard_sync: document.getElementById('settClipboard').checked,
         low_latency_mode: document.getElementById('settLowLatency').checked,
+        enable_audio: document.getElementById('settAudio').checked,
         // Keep defaults for fields not shown
         high_quality_mode: true,
         theme: 'dark',
         window_width: 1100,
         window_height: 750,
         hardware_acceleration: true,
-        enable_audio: false,
       };
       await window.go.main.App.SaveSettings(s);
       document.getElementById('settingsInfo').textContent =
@@ -502,6 +569,13 @@ const App = {
 
   // ==================== MODALS ====================
   setupModals() {
+    // Close dropdown menus on click outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.dropdown')) {
+        document.querySelectorAll('.dropdown-menu.show').forEach(m => m.classList.remove('show'));
+      }
+    });
+
     // Close modal on backdrop click
     document.querySelectorAll('.modal').forEach(modal => {
       modal.addEventListener('click', (e) => {
@@ -727,11 +801,26 @@ const App = {
     // Listen for device updates from Go backend
     if (window.runtime) {
       window.runtime.EventsOn('devices-updated', (devices) => {
-        this._allDevices = devices || [];
+        // Detect online/offline state changes
+        const prev = this._allDevices || [];
+        const curr = devices || [];
+        for (const device of curr) {
+          const old = prev.find(d => d.device_id === device.device_id);
+          if (old && old.is_online !== device.is_online) {
+            if (device.is_online) {
+              showToast(`${device.device_name} er nu online`, 'success', 5000);
+            } else {
+              showToast(`${device.device_name} gik offline`, 'warning', 5000);
+            }
+          }
+        }
+
+        this._allDevices = curr;
         const container = document.getElementById('deviceList');
         if (container && document.getElementById('devicesTab').classList.contains('active')) {
           this.renderDevices(devices, container);
         }
+        this.updateQuickConnect();
       });
 
       window.runtime.EventsOn('update-available', (tagName) => {
@@ -762,13 +851,21 @@ const App = {
     }
   },
 
-  // ==================== FORCE UPDATE DEVICE ====================
-  async forceUpdateDevice(deviceId, deviceName) {
-    showToast(`Sender opdateringskommando til ${deviceName}...`, 'info');
-    // Connect briefly just to send force_update command
+  // ==================== DEVICE COMMANDS ====================
+  async sendDeviceCommand(deviceId, deviceName, command) {
+    // Close any open dropdowns
+    document.querySelectorAll('.dropdown-menu.show').forEach(m => m.classList.remove('show'));
+
+    const labels = { force_update: 'Opdater', lock: 'Lås', restart: 'Genstart', shutdown: 'Luk ned' };
+    const label = labels[command] || command;
+
+    if (command === 'restart' || command === 'shutdown') {
+      if (!confirm(`${label} '${deviceName}'?\n\nDette kan ikke fortrydes!`)) return;
+    }
+
+    showToast(`Sender ${label}-kommando til ${deviceName}...`, 'info');
     try {
       const config = await window.go.main.App.GetConnectionConfig();
-      // Use Supabase to send a pending_command
       const supabase = window.supabase?.createClient(
         config.supabase_url || config.SupabaseURL,
         config.anon_key || config.AnonKey,
@@ -779,15 +876,18 @@ const App = {
           access_token: config.auth_token || config.AuthToken,
           refresh_token: config.refresh_token || config.RefreshToken
         });
-        // Insert update command in device's pending commands
         await supabase.from('remote_devices').update({
-          pending_command: 'force_update'
+          pending_command: command
         }).eq('device_id', deviceId);
-        showToast(`Opdateringskommando sendt til ${deviceName}`, 'success');
+        showToast(`${label}-kommando sendt til ${deviceName}`, 'success');
       }
     } catch (err) {
       showToast(`Fejl: ${err.message}`, 'error');
     }
+  },
+
+  async forceUpdateDevice(deviceId, deviceName) {
+    this.sendDeviceCommand(deviceId, deviceName, 'force_update');
   },
 
   // ==================== UPDATE CHECKER ====================
@@ -849,6 +949,86 @@ const App = {
       icon.className = 'fas fa-sun';
     } else {
       icon.className = 'fas fa-moon';
+    }
+  },
+
+  // ==================== QUICK CONNECT ====================
+  updateQuickConnect() {
+    const grid = document.getElementById('quickConnectGrid');
+    if (!grid) return;
+    const online = (this._allDevices || []).filter(d => d.is_online).slice(0, 4);
+    if (online.length === 0) {
+      grid.innerHTML = '<p style="color:var(--text-muted); font-size:0.8rem;">Ingen online enheder</p>';
+      return;
+    }
+    grid.innerHTML = online.map(d => `
+      <button class="quick-connect-card glass" onclick="App.connectDevice('${d.device_id}', '${App.esc(d.device_name)}')">
+        <i class="fas fa-${d.platform === 'darwin' ? 'apple' : 'desktop'}"></i>
+        <span>${App.esc(d.device_name)}</span>
+      </button>
+    `).join('');
+  },
+
+  // ==================== ADMIN ====================
+  async loadAdminUsers() {
+    const container = document.getElementById('adminUserList');
+    if (!container) return;
+    try {
+      const users = await window.go.main.App.GetAllUsers();
+      if (!users || users.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>Ingen brugere fundet.</p></div>';
+        return;
+      }
+      container.innerHTML = users.map(u => `
+        <div class="admin-user-card glass">
+          <div class="admin-user-info">
+            <span class="admin-user-email"><i class="fas fa-user"></i> ${this.esc(u.email)}</span>
+            <span class="admin-user-role ${u.role}">${u.role}</span>
+            <span class="admin-user-status ${u.approved ? 'approved' : 'pending'}">${u.approved ? 'Godkendt' : 'Afventer'}</span>
+          </div>
+          <div class="admin-user-actions">
+            ${!u.approved ? `<button class="btn btn-sm btn-success" onclick="App.approveUser('${u.user_id}', true)"><i class="fas fa-check"></i> Godkend</button>` : ''}
+            ${u.approved ? `<button class="btn btn-sm btn-warning" onclick="App.approveUser('${u.user_id}', false)"><i class="fas fa-ban"></i> Afvis</button>` : ''}
+            <select onchange="App.setUserRole('${u.user_id}', this.value)" class="role-select">
+              <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
+              <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+              <option value="super_admin" ${u.role === 'super_admin' ? 'selected' : ''}>Super Admin</option>
+            </select>
+          </div>
+        </div>
+      `).join('');
+    } catch (err) {
+      container.innerHTML = `<div class="empty-state"><p>Fejl: ${err.message}</p></div>`;
+    }
+  },
+
+  async approveUser(userId, approved) {
+    try {
+      await window.go.main.App.ApproveUser(userId, approved);
+      showToast(approved ? 'Bruger godkendt' : 'Bruger afvist', 'success');
+      this.loadAdminUsers();
+    } catch (err) {
+      showToast('Fejl: ' + err.message, 'error');
+    }
+  },
+
+  async setUserRole(userId, role) {
+    try {
+      await window.go.main.App.SetUserRole(userId, role);
+      showToast(`Rolle ændret til ${role}`, 'success');
+      this.loadAdminUsers();
+    } catch (err) {
+      showToast('Fejl: ' + err.message, 'error');
+    }
+  },
+
+  async forceUpdateAllDevices() {
+    if (!confirm('Send opdateringskommando til ALLE online enheder?')) return;
+    try {
+      await window.go.main.App.ForceUpdateAllDevices();
+      showToast('Opdateringskommando sendt til alle enheder', 'success');
+    } catch (err) {
+      showToast('Fejl: ' + err.message, 'error');
     }
   },
 
