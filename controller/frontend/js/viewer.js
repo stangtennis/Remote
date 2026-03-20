@@ -183,10 +183,16 @@ class ViewerSession {
       });
       if (response.ok) {
         const data = await response.json();
-        // Always include STUN for P2P candidates + TURN as fallback
+        // STUN for P2P + Cloudflare TURN + local coturn as backup
+        // Generate coturn temp credentials (HMAC-based, valid 24h)
+        const coturnUser = Math.floor(Date.now()/1000 + 86400) + ':remotedesktop';
+        const coturnKey = 'HawkeyeTurnSecret2026x';
+        const coturnCred = await this.hmacSHA1(coturnKey, coturnUser);
         this.iceConfig = { iceServers: [
           { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-          ...data.iceServers
+          ...data.iceServers,
+          { urls: 'turn:turn.hawkeye123.dk:3478?transport=udp', username: coturnUser, credential: coturnCred },
+          { urls: 'turn:turn.hawkeye123.dk:3478?transport=tcp', username: coturnUser, credential: coturnCred }
         ]};
         const hasTurn = JSON.stringify(data.iceServers).includes('turn:');
         this.setConnectStatus(`TURN: ${hasTurn ? 'OK' : 'KUN STUN'} (${data.iceServers.length} servere)`);
@@ -997,6 +1003,13 @@ class ViewerSession {
       };
       check();
     });
+  }
+
+  async hmacSHA1(key, message) {
+    const enc = new TextEncoder();
+    const cryptoKey = await crypto.subtle.importKey('raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+    const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
+    return btoa(String.fromCharCode(...new Uint8Array(sig)));
   }
 
   cleanupConnection() {
