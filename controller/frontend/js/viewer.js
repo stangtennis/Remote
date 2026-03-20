@@ -53,8 +53,8 @@ class ViewerSession {
       <div class="viewer-active" style="display:none;">
         <div class="viewer-toolbar">
           <span class="viewer-device-label">${deviceName}</span>
+          <span class="viewer-stats" style="font-size:0.7rem; color:var(--text-muted); margin-left:auto; min-width:12rem; text-align:right;"></span>
           <span class="conn-type-badge" title="Forbindelsestype: ukendt"><i class="fas fa-circle-question"></i></span>
-          <span class="viewer-stats" style="font-size:0.7rem; color:var(--text-muted); margin-left:auto;"></span>
           <span class="session-timer" style="font-size:0.7rem; color:var(--text-muted); margin-left:0.5rem;" title="Session varighed">00:00</span>
           <div class="viewer-sparkline" title="Bitrate/Latency historie"></div>
           <select class="session-monitor-select" title="Vælg skærm" style="font-size:0.75rem; padding:0.2rem 0.4rem; background:var(--background-secondary); border:1px solid var(--border); border-radius:4px; color:var(--text); display:none;">
