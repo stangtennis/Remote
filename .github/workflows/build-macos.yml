@@ -59,6 +59,37 @@ jobs:
             echo "version=$(git describe --tags --always 2>/dev/null || echo 'dev')" >> $GITHUB_OUTPUT
           fi
 
+      - name: Generate .icns icon
+        run: |
+          ICON_SRC="icons/controller.png"
+          ICONSET_DIR="builds/Controller.iconset"
+          mkdir -p "$ICONSET_DIR"
+
+          # Generate all required icon sizes from 256px source
+          sips -z 16 16     "$ICON_SRC" --out "$ICONSET_DIR/icon_16x16.png"
+          sips -z 32 32     "$ICON_SRC" --out "$ICONSET_DIR/icon_16x16@2x.png"
+          sips -z 32 32     "$ICON_SRC" --out "$ICONSET_DIR/icon_32x32.png"
+          sips -z 64 64     "$ICON_SRC" --out "$ICONSET_DIR/icon_32x32@2x.png"
+          sips -z 128 128   "$ICON_SRC" --out "$ICONSET_DIR/icon_128x128.png"
+          sips -z 256 256   "$ICON_SRC" --out "$ICONSET_DIR/icon_128x128@2x.png"
+          sips -z 256 256   "$ICON_SRC" --out "$ICONSET_DIR/icon_256x256.png"
+
+          # Convert to .icns
+          iconutil -c icns "$ICONSET_DIR" -o builds/controller.icns
+          echo "Generated controller.icns"
+          file builds/controller.icns
+
+      - name: Select Xcode
+        run: |
+          # Use full Xcode instead of CommandLineTools to get proper ObjC/CoreText headers
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer 2>/dev/null || \
+          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer 2>/dev/null || \
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer 2>/dev/null || \
+          sudo xcode-select -s /Applications/Xcode_15.2.app/Contents/Developer 2>/dev/null || \
+          echo "Using default Xcode"
+          xcode-select -p
+          xcrun --show-sdk-path
+
       - name: Build Agent (macOS arm64)
         working-directory: ./agent
         env:
@@ -84,6 +115,91 @@ jobs:
           go build -ldflags "${LDFLAGS}" -o ../builds/controller-macos-arm64-${VERSION} .
           echo "Built controller-macos-arm64-${VERSION}"
           file ../builds/controller-macos-arm64-${VERSION}
+
+      - name: Create Controller .app bundle
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          APP_NAME="Remote Desktop Controller"
+          APP_DIR="builds/${APP_NAME}.app"
+          BUNDLE_ID="dk.hawkeye.remote-controller"
+
+          # Create .app structure
+          mkdir -p "${APP_DIR}/Contents/MacOS"
+          mkdir -p "${APP_DIR}/Contents/Resources"
+
+          # Copy binary
+          cp "builds/controller-macos-arm64-${VERSION}" "${APP_DIR}/Contents/MacOS/RemoteDesktopController"
+          chmod +x "${APP_DIR}/Contents/MacOS/RemoteDesktopController"
+
+          # Copy icon
+          cp builds/controller.icns "${APP_DIR}/Contents/Resources/controller.icns"
+
+          # Create Info.plist
+          cat > "${APP_DIR}/Contents/Info.plist" << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleName</key>
+              <string>${APP_NAME}</string>
+              <key>CFBundleDisplayName</key>
+              <string>${APP_NAME}</string>
+              <key>CFBundleIdentifier</key>
+              <string>${BUNDLE_ID}</string>
+              <key>CFBundleVersion</key>
+              <string>${VERSION}</string>
+              <key>CFBundleShortVersionString</key>
+              <string>${VERSION}</string>
+              <key>CFBundleExecutable</key>
+              <string>RemoteDesktopController</string>
+              <key>CFBundleIconFile</key>
+              <string>controller</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>LSMinimumSystemVersion</key>
+              <string>12.0</string>
+              <key>NSSupportsAutomaticGraphicsSwitching</key>
+              <true/>
+          </dict>
+          </plist>
+          PLIST
+
+          echo "Created ${APP_DIR}"
+          ls -la "${APP_DIR}/Contents/MacOS/"
+          ls -la "${APP_DIR}/Contents/Resources/"
+
+      - name: Create .tar.gz of .app bundle (for auto-update)
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cd builds
+          tar -czf "RemoteDesktopController-macOS-${VERSION}.tar.gz" "Remote Desktop Controller.app"
+          echo "Created tar.gz:"
+          ls -la "RemoteDesktopController-macOS-${VERSION}.tar.gz"
+
+      - name: Create DMG installer
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Install create-dmg
+          brew install create-dmg || true
+
+          # Create DMG with drag-to-Applications
+          create-dmg \
+            --volname "Remote Desktop Controller ${VERSION}" \
+            --volicon "builds/controller.icns" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "Remote Desktop Controller.app" 150 190 \
+            --app-drop-link 450 190 \
+            --no-internet-enable \
+            "builds/RemoteDesktopController-${VERSION}.dmg" \
+            "builds/Remote Desktop Controller.app"
+
+          echo "Created DMG:"
+          ls -la "builds/RemoteDesktopController-${VERSION}.dmg"
 
       - name: Test build runs
         working-directory: ./builds
@@ -122,9 +238,38 @@ jobs:
           path: builds/remote-agent-*
           retention-days: 30
 
-      - name: Upload Controller artifact
+      - name: Upload Controller .app artifact
         uses: actions/upload-artifact@v4
         with:
-          name: controller-macos-arm64
-          path: builds/controller-*
+          name: controller-macos-app
+          path: builds/Remote Desktop Controller.app
           retention-days: 30
+
+      - name: Upload Controller DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: controller-macos-dmg
+          path: builds/RemoteDesktopController-*.dmg
+          retention-days: 30
+
+      - name: Upload Controller tar.gz artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: controller-macos-targz
+          path: builds/RemoteDesktopController-macOS-*.tar.gz
+          retention-days: 30
+
+      - name: Upload to GitHub Release
+        if: startsWith(github.event.inputs.version, 'v') && github.event.inputs.version != 'dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${VERSION}"
+
+          # Upload macOS assets to release
+          gh release upload "${TAG}" \
+            "builds/remote-agent-macos-arm64-${VERSION}" \
+            "builds/RemoteDesktopController-${VERSION}.dmg" \
+            "builds/RemoteDesktopController-macOS-${VERSION}.tar.gz" \
+            --clobber || echo "Release ${TAG} not found — assets not uploaded"
