@@ -741,3 +741,11 @@ body.viewer-fullscreen .fullscreen-exit-hint.hidden { opacity: 0; }
 
 /* ===== WAILS DRAG REGION ===== */
 .wails-drag { --wails-draggable: drag; }
+
+/* Connection type badge */
+.conn-type-badge {
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+  cursor: help;
+  transition: color 0.3s;
+}

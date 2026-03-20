@@ -53,6 +53,7 @@ class ViewerSession {
       <div class="viewer-active" style="display:none;">
         <div class="viewer-toolbar">
           <span class="viewer-device-label">${deviceName}</span>
+          <span class="conn-type-badge" title="Forbindelsestype: ukendt"><i class="fas fa-circle-question"></i></span>
           <span class="viewer-stats" style="font-size:0.7rem; color:var(--text-muted); margin-left:auto;"></span>
           <span class="session-timer" style="font-size:0.7rem; color:var(--text-muted); margin-left:0.5rem;" title="Session varighed">00:00</span>
           <div class="viewer-sparkline" title="Bitrate/Latency historie"></div>
@@ -741,6 +742,23 @@ class ViewerSession {
         });
         set('.detail-type', connType);
         set('.detail-agent-ver', this.agentVersion || '—');
+        // Update connection type badge in toolbar
+        const badge = this.wrapper.querySelector('.conn-type-badge');
+        if (badge && connType !== '—') {
+          if (connType.includes('Direkte')) {
+            badge.innerHTML = '<i class="fas fa-bolt"></i>';
+            badge.style.color = '#22c55e';
+            badge.title = 'P2P Direkte — lavest mulig latency';
+          } else if (connType.includes('STUN')) {
+            badge.innerHTML = '<i class="fas fa-arrow-right-arrow-left"></i>';
+            badge.style.color = '#3b82f6';
+            badge.title = 'P2P via STUN — lav latency';
+          } else if (connType.includes('Relay')) {
+            badge.innerHTML = '<i class="fas fa-cloud"></i>';
+            badge.style.color = '#f59e0b';
+            badge.title = 'TURN Relay — højere latency (trafik via server)';
+          }
+        }
       }
 
       // Track history for sparkline (max 60 entries)
