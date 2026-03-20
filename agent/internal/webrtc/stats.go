@@ -37,6 +37,8 @@ func (m *Manager) collectStats(ctx context.Context) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
+	var prevPacketsSent, prevPacketsReceived uint32
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -54,30 +56,50 @@ func (m *Manager) collectStats(ctx context.Context) {
 
 		stats := pc.GetStats()
 		for _, stat := range stats {
-			// Look for data channel stats
-			if dcStats, ok := stat.(pionwebrtc.DataChannelStats); ok {
-				sent := dcStats.MessagesSent
-				// Calculate loss from retransmits (approximation)
-				if sent > m.lastPacketsSent && m.lastPacketsSent > 0 {
-					delta := sent - m.lastPacketsSent
-					if delta > 0 {
-						// Use buffered amount as proxy for congestion/loss
-						buffered := float64(0)
-						if m.dataChannel != nil {
-							buffered = float64(m.dataChannel.BufferedAmount())
+			// Use ICE candidate pair stats for loss and RTT
+			if pairStats, ok := stat.(pionwebrtc.ICECandidatePairStats); ok {
+				// Only use the nominated (active) pair
+				if !pairStats.Nominated {
+					continue
+				}
+
+				// RTT from ICE (more accurate than app-level ping)
+				if pairStats.CurrentRoundTripTime > 0 {
+					m.lastRTT = time.Duration(pairStats.CurrentRoundTripTime * float64(time.Second))
+				}
+
+				// Calculate loss from sent vs received delta
+				sent := pairStats.PacketsSent
+				received := pairStats.PacketsReceived
+				if prevPacketsSent > 0 && sent > prevPacketsSent {
+					deltaSent := sent - prevPacketsSent
+					deltaReceived := received - prevPacketsReceived
+					if deltaSent > 0 {
+						lost := float64(0)
+						if deltaSent > deltaReceived {
+							lost = float64(deltaSent - deltaReceived)
 						}
-						// High buffer = potential loss/congestion
-						if buffered > 4*1024*1024 { // 4MB
-							m.lossPct = (buffered / (16 * 1024 * 1024)) * 10 // 0-10% based on buffer
-							if m.lossPct > 10 {
-								m.lossPct = 10
-							}
-						} else {
-							m.lossPct = 0
+						m.lossPct = (lost / float64(deltaSent)) * 100
+						if m.lossPct > 100 {
+							m.lossPct = 100
 						}
 					}
 				}
-				m.lastPacketsSent = sent
+				prevPacketsSent = sent
+				prevPacketsReceived = received
+				break // Only process one nominated pair
+			}
+		}
+
+		// Fallback: also check buffer as secondary congestion signal
+		if m.dataChannel != nil {
+			buffered := float64(m.dataChannel.BufferedAmount())
+			if buffered > 4*1024*1024 && m.lossPct < 1 {
+				// Buffer is very high but ICE says no loss — report minor congestion
+				m.lossPct = (buffered / (16 * 1024 * 1024)) * 5
+				if m.lossPct > 5 {
+					m.lossPct = 5
+				}
 			}
 		}
 	}

@@ -12,6 +12,7 @@ require (
 	github.com/pion/rtcp v1.2.12
 	github.com/pion/webrtc/v3 v3.2.40
 	github.com/rs/zerolog v1.34.0
+	github.com/shirou/gopsutil/v4 v4.25.4
 	github.com/y9o/go-openh264 v0.2.0
 	golang.design/x/clipboard v0.7.1
 	golang.org/x/sys v0.36.0
@@ -76,7 +77,6 @@ require (
 	github.com/robotn/xgb v0.10.0 // indirect
 	github.com/robotn/xgbutil v0.10.0 // indirect
 	github.com/rymdport/portal v0.4.2 // indirect
-	github.com/shirou/gopsutil/v4 v4.25.4 // indirect
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.11.1 // indirect

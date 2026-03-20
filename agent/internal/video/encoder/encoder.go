@@ -56,13 +56,25 @@ func (m *Manager) Init(cfg Config) error {
 
 	m.config = cfg
 
-	// Try OpenH264 first (real H.264 encoding)
+	// Try NVENC first (hardware H.264 encoding via FFmpeg)
+	if IsNVENCAvailable() {
+		nvencEnc := NewNVENCEncoder()
+		if err := nvencEnc.Init(cfg); err == nil {
+			m.encoder = nvencEnc
+			log.Printf("✅ Using NVENC hardware encoder")
+			return nil
+		} else {
+			log.Printf("⚠️ NVENC init failed (%v) - trying OpenH264", err)
+		}
+	}
+
+	// Try OpenH264 (software H.264 encoding)
 	openh264Enc := NewOpenH264Encoder()
 	if err := openh264Enc.Init(cfg); err == nil {
 		m.encoder = openh264Enc
 		return nil
 	} else {
-		log.Printf("⚠️ OpenH264 init fejlede (%v) - fallback til %s", err, NewSoftwareEncoder().Name())
+		log.Printf("⚠️ OpenH264 init failed (%v) - fallback to %s", err, NewSoftwareEncoder().Name())
 	}
 
 	// Fallback to software encoder (JPEG placeholder)

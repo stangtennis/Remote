@@ -44,8 +44,9 @@ func init() {
 }
 
 type TrayApp struct {
-	device *device.Device
-	onExit func()
+	device  *device.Device
+	onExit  func()
+	mStatus *systray.MenuItem
 }
 
 func New(dev *device.Device, onExit func()) *TrayApp {
@@ -69,8 +70,8 @@ func (t *TrayApp) onReady() {
 	mDeviceName := systray.AddMenuItem(fmt.Sprintf("Enhed: %s", t.device.Name), "")
 	mDeviceName.Disable()
 
-	mStatus := systray.AddMenuItem("Status: Online", "Aktuel forbindelsesstatus")
-	mStatus.Disable()
+	t.mStatus = systray.AddMenuItem("Status: Online", "Aktuel forbindelsesstatus")
+	t.mStatus.Disable()
 
 	systray.AddSeparator()
 
@@ -197,6 +198,14 @@ func clearCredentialsAndRestart() {
 
 	// Exit current instance
 	systray.Quit()
+}
+
+// UpdateStatus updates the tray tooltip and status menu item with connection info
+func (t *TrayApp) UpdateStatus(status string) {
+	if t.mStatus != nil {
+		t.mStatus.SetTitle(status)
+	}
+	systray.SetTooltip(fmt.Sprintf("Remote Desktop Agent %s\nEnhed: %s\n%s", Version, t.device.Name, status))
 }
 
 // getIcon returns the embedded ICO file for the system tray

@@ -42,6 +42,7 @@ class ViewerSession {
     this.statsInterval = null;
     this.prevBytesReceived = 0;
     this.prevTimestamp = 0;
+    this.statsHistory = { rtt: [], bw: [], fps: [] }; // last 60 data points (1 per sec)
 
     this.wrapper.innerHTML = `
       <div class="viewer-connecting" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.5rem; overflow-y:auto; padding:1rem;">
@@ -53,12 +54,16 @@ class ViewerSession {
         <div class="viewer-toolbar">
           <span class="viewer-device-label">${deviceName}</span>
           <span class="viewer-stats" style="font-size:0.7rem; color:var(--text-muted); margin-left:auto;"></span>
+          <span class="session-timer" style="font-size:0.7rem; color:var(--text-muted); margin-left:0.5rem;" title="Session varighed">00:00</span>
+          <div class="viewer-sparkline" title="Bitrate/Latency historie"></div>
           <select class="session-monitor-select" title="Vælg skærm" style="font-size:0.75rem; padding:0.2rem 0.4rem; background:var(--background-secondary); border:1px solid var(--border); border-radius:4px; color:var(--text); display:none;">
             <option value="0">Skærm 1</option>
           </select>
           <button class="btn btn-sm btn-icon session-files-btn" title="Filoverførsel"><i class="fas fa-folder-open"></i></button>
           <button class="btn btn-sm btn-icon session-details-btn" title="Forbindelsesdetaljer"><i class="fas fa-info-circle"></i></button>
           <button class="btn btn-sm btn-icon session-update-btn" title="Opdater agent"><i class="fas fa-sync-alt"></i></button>
+          <button class="btn btn-sm btn-icon session-screenshot-btn" title="Tag screenshot"><i class="fas fa-camera"></i></button>
+          <button class="btn btn-sm btn-icon session-terminal-btn" title="Terminal"><i class="fas fa-terminal"></i></button>
           <button class="btn btn-sm btn-icon session-fullscreen-btn" title="Fuldskærm"><i class="fas fa-expand"></i></button>
           <button class="btn btn-sm btn-danger session-disconnect-btn">Afbryd</button>
         </div>
@@ -74,6 +79,9 @@ class ViewerSession {
         <div class="viewer-screen">
           <video autoplay playsinline muted></video>
           <canvas tabindex="0"></canvas>
+        </div>
+        <div class="terminal-container" style="display:none;">
+          <div class="terminal-el" style="flex:1;"></div>
         </div>
       </div>
     `;
@@ -606,6 +614,16 @@ class ViewerSession {
       showToast(`Forbundet til ${this.deviceName}`, 'success');
     }
 
+    this.sessionStartTime = Date.now();
+    this.sessionTimerInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - this.sessionStartTime) / 1000);
+      const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
+      const s = (elapsed % 60).toString().padStart(2, '0');
+      const h = Math.floor(elapsed / 3600);
+      const timerEl = this.wrapper.querySelector('.session-timer');
+      if (timerEl) timerEl.textContent = h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
+    }, 1000);
+
     this.setupInput();
     this.startStats();
     this.sendSettingsToAgent();
@@ -720,9 +738,50 @@ class ViewerSession {
         set('.detail-type', connType);
         set('.detail-agent-ver', this.agentVersion || '—');
       }
+
+      // Track history for sparkline (max 60 entries)
+      const mbpsVal = (this.prevTimestamp > 0 && bwText)
+        ? parseFloat(bwText) || 0
+        : 0;
+      this.statsHistory.bw.push(mbpsVal);
+      if (this.statsHistory.bw.length > 60) this.statsHistory.bw.shift();
+      if (rtt != null) this.statsHistory.rtt.push(rtt);
+      else this.statsHistory.rtt.push(this.statsHistory.rtt.length > 0 ? this.statsHistory.rtt[this.statsHistory.rtt.length - 1] : 0);
+      if (this.statsHistory.rtt.length > 60) this.statsHistory.rtt.shift();
+      if (fps != null) this.statsHistory.fps.push(fps);
+      else this.statsHistory.fps.push(this.statsHistory.fps.length > 0 ? this.statsHistory.fps[this.statsHistory.fps.length - 1] : 0);
+      if (this.statsHistory.fps.length > 60) this.statsHistory.fps.shift();
+
+      this.renderSparkline();
     } catch (e) {
       // getStats() can fail during teardown — ignore
     }
+  }
+
+  // Render sparkline SVG for bitrate history
+  renderSparkline() {
+    const container = this.wrapper.querySelector('.viewer-sparkline');
+    if (!container) return;
+    const data = this.statsHistory.bw;
+    if (data.length < 2) { container.innerHTML = ''; return; }
+
+    const w = 120, h = 24, pad = 1;
+    const max = Math.max(...data, 0.1); // avoid division by zero
+    const min = 0;
+    const xStep = (w - pad * 2) / (data.length - 1);
+
+    const points = data.map((v, i) => {
+      const x = pad + i * xStep;
+      const y = pad + (h - pad * 2) * (1 - (v - min) / (max - min));
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+
+    const fillPoints = `${pad},${h - pad} ${points.join(' ')} ${(pad + (data.length - 1) * xStep).toFixed(1)},${h - pad}`;
+
+    container.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+      <polygon class="sparkline-fill" points="${fillPoints}" />
+      <polyline points="${points.join(' ')}" />
+    </svg>`;
   }
 
   // Send current settings to agent via data channel
@@ -919,6 +978,7 @@ class ViewerSession {
   }
 
   cleanupConnection() {
+    if (this.sessionTimerInterval) { clearInterval(this.sessionTimerInterval); this.sessionTimerInterval = null; }
     if (this.statsInterval) { clearInterval(this.statsInterval); this.statsInterval = null; }
     if (this.pollingInterval) { clearInterval(this.pollingInterval); this.pollingInterval = null; }
     if (this.signalingChannel && this.supabase) { this.supabase.removeChannel(this.signalingChannel); this.signalingChannel = null; }
@@ -930,6 +990,7 @@ class ViewerSession {
     this.usingH264 = false;
     this.processedSignalIds.clear();
     this.pendingIceCandidates = [];
+    this.stopTerminal();
   }
 
   cancelReconnect() {
@@ -941,6 +1002,93 @@ class ViewerSession {
     this.reconnectAttempt = 0;
     this.reconnectStartedAt = null;
     console.log(`[${this.deviceName}] Reconnect cancelled`);
+  }
+
+  toggleTerminal() {
+    const termContainer = this.wrapper.querySelector('.terminal-container');
+    if (!termContainer) return;
+
+    if (termContainer.style.display === 'none' || !termContainer.style.display) {
+      termContainer.style.display = 'flex';
+      this.startTerminal();
+    } else {
+      termContainer.style.display = 'none';
+      this.stopTerminal();
+    }
+  }
+
+  startTerminal() {
+    if (this.xterm) return; // Already running
+
+    const termEl = this.wrapper.querySelector('.terminal-el');
+    if (!termEl) return;
+
+    // Create xterm instance
+    this.xterm = new window.Terminal({
+      cursorBlink: true,
+      fontSize: 14,
+      fontFamily: 'Consolas, "Courier New", monospace',
+      theme: {
+        background: '#0d1117',
+        foreground: '#c9d1d9',
+        cursor: '#58a6ff',
+      }
+    });
+
+    const fitAddon = new window.FitAddon.FitAddon();
+    this.xterm.loadAddon(fitAddon);
+    this.xterm.open(termEl);
+    fitAddon.fit();
+
+    // Create terminal data channel
+    this.terminalChannel = this.peerConnection.createDataChannel('terminal', { ordered: true });
+    this.terminalChannel.onopen = () => {
+      // Send start command
+      this.terminalChannel.send(JSON.stringify({ type: 'start' }));
+      this.xterm.writeln('\x1b[32mTerminal forbundet.\x1b[0m\r\n');
+    };
+    this.terminalChannel.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'output') {
+          this.xterm.write(msg.data);
+        } else if (msg.type === 'error') {
+          this.xterm.writeln('\x1b[31mFejl: ' + msg.data + '\x1b[0m');
+        }
+      } catch (err) {
+        // Raw data fallback
+        this.xterm.write(e.data);
+      }
+    };
+
+    // Send input to terminal channel
+    this.xterm.onData((data) => {
+      if (this.terminalChannel && this.terminalChannel.readyState === 'open') {
+        this.terminalChannel.send(JSON.stringify({ type: 'input', data: data }));
+      }
+    });
+
+    // Resize handler
+    this._termResizeObserver = new ResizeObserver(() => fitAddon.fit());
+    this._termResizeObserver.observe(termEl);
+  }
+
+  stopTerminal() {
+    if (this.terminalChannel) {
+      try {
+        this.terminalChannel.send(JSON.stringify({ type: 'close' }));
+        this.terminalChannel.close();
+      } catch (e) {}
+      this.terminalChannel = null;
+    }
+    if (this.xterm) {
+      this.xterm.dispose();
+      this.xterm = null;
+    }
+    if (this._termResizeObserver) {
+      this._termResizeObserver.disconnect();
+      this._termResizeObserver = null;
+    }
   }
 
   disconnect() {
@@ -995,6 +1143,7 @@ class ViewerSession {
 
     this.wrapper.querySelector('.session-disconnect-btn').addEventListener('click', () => { this.manualDisconnect = true; this.disconnect(); });
     this.wrapper.querySelector('.session-fullscreen-btn').addEventListener('click', () => this.toggleFullscreen());
+    this.wrapper.querySelector('.session-terminal-btn').addEventListener('click', () => this.toggleTerminal());
     this.wrapper.querySelector('.session-files-btn').addEventListener('click', () => {
       if (window.FileTransfer) {
         if (this.fileChannel) window.FileTransfer.setChannel(this.fileChannel);
@@ -1011,6 +1160,28 @@ class ViewerSession {
       const panel = this.wrapper.querySelector('.connection-details');
       if (panel) panel.classList.toggle('visible');
     });
+    this.wrapper.querySelector('.session-screenshot-btn').addEventListener('click', () => this.takeScreenshot());
+  }
+
+  takeScreenshot() {
+    const canvas = this.canvasEl;
+    const video = this.videoEl;
+    let dataUrl;
+    if (this.usingH264 && video && video.videoWidth > 0) {
+      const c = document.createElement('canvas');
+      c.width = video.videoWidth;
+      c.height = video.videoHeight;
+      c.getContext('2d').drawImage(video, 0, 0);
+      dataUrl = c.toDataURL('image/png');
+    } else if (canvas && canvas.width > 0) {
+      dataUrl = canvas.toDataURL('image/png');
+    }
+    if (!dataUrl) { showToast('Ingen video at screenshotte', 'warning'); return; }
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `screenshot-${this.deviceName}-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.png`;
+    a.click();
+    showToast('Screenshot gemt!', 'success');
   }
 
   enableH264Mode() {

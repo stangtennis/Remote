@@ -11,8 +11,48 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/disk"
+	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/stangtennis/remote-agent/internal/version"
 )
+
+// systemMetrics holds collected system resource metrics.
+type systemMetrics struct {
+	CPUPercent   float64
+	MemUsedMB    int
+	MemTotalMB   int
+	DiskUsedGB   int
+	DiskTotalGB  int
+}
+
+// collectSystemMetrics gathers CPU, RAM and disk usage from the OS.
+func collectSystemMetrics() systemMetrics {
+	m := systemMetrics{}
+
+	// CPU — instant sample (0 = no blocking interval, false = aggregate all cores)
+	if percents, err := cpu.Percent(0, false); err == nil && len(percents) > 0 {
+		m.CPUPercent = percents[0]
+	}
+
+	// RAM
+	if v, err := mem.VirtualMemory(); err == nil {
+		m.MemUsedMB = int(v.Used / 1024 / 1024)
+		m.MemTotalMB = int(v.Total / 1024 / 1024)
+	}
+
+	// Disk — "C:" on Windows, "/" elsewhere
+	diskPath := "/"
+	if runtime.GOOS == "windows" {
+		diskPath = "C:"
+	}
+	if d, err := disk.Usage(diskPath); err == nil {
+		m.DiskUsedGB = int(d.Used / 1024 / 1024 / 1024)
+		m.DiskTotalGB = int(d.Total / 1024 / 1024 / 1024)
+	}
+
+	return m
+}
 
 // ipInfo caches the public IP and ISP
 var cachedIPInfo struct {
@@ -193,12 +233,18 @@ func UpdateHeartbeat(config RegistrationConfig, deviceID string, isOnline bool) 
 
 	now := time.Now().Format(time.RFC3339)
 	publicIP, isp := fetchPublicIPInfo()
+	metrics := collectSystemMetrics()
 	payload := map[string]interface{}{
-		"is_online":     isOnline,
-		"last_seen":     now,
-		"agent_version": version.Version,
-		"public_ip":     publicIP,
-		"isp":           isp,
+		"is_online":       isOnline,
+		"last_seen":       now,
+		"agent_version":   version.Version,
+		"public_ip":       publicIP,
+		"isp":             isp,
+		"cpu_percent":     metrics.CPUPercent,
+		"memory_used_mb":  metrics.MemUsedMB,
+		"memory_total_mb": metrics.MemTotalMB,
+		"disk_used_gb":    metrics.DiskUsedGB,
+		"disk_total_gb":   metrics.DiskTotalGB,
 	}
 
 	jsonData, err := json.Marshal(payload)

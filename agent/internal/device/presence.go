@@ -3,6 +3,8 @@ package device
 import (
 	"fmt"
 	"log"
+	"os/exec"
+	"runtime"
 	"time"
 
 	"github.com/stangtennis/remote-agent/internal/updater"
@@ -85,6 +87,12 @@ func (d *Device) handlePendingCommand(config RegistrationConfig, result *Heartbe
 	switch result.PendingCommand {
 	case "force_update":
 		go d.executeForceUpdate()
+	case "restart":
+		go d.executeRestart()
+	case "lock":
+		go d.executeLock()
+	case "shutdown":
+		go d.executeShutdown()
 	default:
 		log.Printf("⚠️  Unknown pending command: %s", result.PendingCommand)
 	}
@@ -125,4 +133,52 @@ func (d *Device) executeForceUpdate() {
 	}
 
 	log.Printf("✅ Force update: installed %s, agent will restart", info.TagName)
+}
+
+// executeRestart triggers an OS restart.
+func (d *Device) executeRestart() {
+	log.Println("🔄 Restart triggered via dashboard command")
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("shutdown", "/r", "/t", "5", "/c", "Remote Desktop: Genstart anmodet")
+	} else if runtime.GOOS == "darwin" {
+		cmd = exec.Command("sudo", "shutdown", "-r", "+1")
+	} else {
+		cmd = exec.Command("sudo", "shutdown", "-r", "+1")
+	}
+	if err := cmd.Run(); err != nil {
+		log.Printf("❌ Restart failed: %v", err)
+	}
+}
+
+// executeLock locks the workstation screen.
+func (d *Device) executeLock() {
+	log.Println("🔒 Lock triggered via dashboard command")
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("rundll32.exe", "user32.dll,LockWorkStation")
+	} else if runtime.GOOS == "darwin" {
+		cmd = exec.Command("pmset", "displaysleepnow")
+	} else {
+		cmd = exec.Command("loginctl", "lock-session")
+	}
+	if err := cmd.Run(); err != nil {
+		log.Printf("❌ Lock failed: %v", err)
+	}
+}
+
+// executeShutdown triggers an OS shutdown.
+func (d *Device) executeShutdown() {
+	log.Println("⏻ Shutdown triggered via dashboard command")
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("shutdown", "/s", "/t", "10", "/c", "Remote Desktop: Nedlukning anmodet")
+	} else if runtime.GOOS == "darwin" {
+		cmd = exec.Command("sudo", "shutdown", "-h", "+1")
+	} else {
+		cmd = exec.Command("sudo", "shutdown", "-h", "+1")
+	}
+	if err := cmd.Run(); err != nil {
+		log.Printf("❌ Shutdown failed: %v", err)
+	}
 }
