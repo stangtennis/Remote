@@ -1231,6 +1231,11 @@ func runInteractive() {
 		log.Println("👋 Farvel!")
 	})
 
+	// Wire WebRTC connection status to system tray
+	if rtc != nil {
+		rtc.StatusCallback = trayApp.UpdateStatus
+	}
+
 	trayApp.Run()
 }
 
