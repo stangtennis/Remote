@@ -48,10 +48,13 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 		return
 	}
 
-	// Switch to input desktop before handling input
-	if m.isSession0 {
+	// Switch to input desktop before handling input (only for direct input, not pipe-forwarded)
+	if m.isSession0 && !(m.screenCapturer != nil && m.screenCapturer.HasInputForwarder()) {
 		if err := desktop.SwitchToInputDesktop(); err != nil {
-			log.Printf("⚠️  Failed to switch to input desktop: %v", err)
+			// Rate-limit this warning (noisy on Hyper-V VMs)
+			if eventType == "mouse_click" || eventType == "key" {
+				log.Printf("⚠️  Failed to switch to input desktop: %v", err)
+			}
 		}
 	}
 
