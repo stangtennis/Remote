@@ -9,7 +9,7 @@ import (
 
 const (
 	maxLogSize    = 10 * 1024 * 1024 // 10 MB
-	maxLogBackups = 3
+	maxLogBackups = 10
 )
 
 var (

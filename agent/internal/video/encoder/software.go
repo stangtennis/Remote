@@ -1,11 +1,11 @@
 package encoder
 
 import (
-	"bytes"
 	"fmt"
 	"image"
-	"image/jpeg"
 	"sync"
+
+	"github.com/stangtennis/remote-agent/internal/screen"
 )
 
 // SoftwareEncoder implements H.264 encoding using software
@@ -55,12 +55,11 @@ func (e *SoftwareEncoder) Encode(frame *image.RGBA, forceKeyframe bool) ([]byte,
 	}
 
 	// For now, encode as JPEG (placeholder for H.264)
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, frame, &jpeg.Options{Quality: quality}); err != nil {
+	data, err := screen.EncodeJPEG(frame.Pix, frame.Bounds().Dx(), frame.Bounds().Dy(), frame.Stride, quality, false)
+	if err != nil {
 		return nil, fmt.Errorf("jpeg encode failed: %w", err)
 	}
-
-	return buf.Bytes(), nil
+	return data, nil
 }
 
 // SetBitrate adjusts the encoding bitrate

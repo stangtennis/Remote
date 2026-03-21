@@ -213,7 +213,35 @@ const FileTransfer = {
       });
     }
 
+    this._setupDragDrop();
     this.listDrives();
+  },
+
+  _setupDragDrop() {
+    const zone = document.getElementById('fileDropZone');
+    if (!zone || zone._dragSetup) return;
+    zone._dragSetup = true;
+
+    zone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      zone.classList.add('drag-over');
+    });
+    zone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+    });
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        const sep = this._currentPath.includes('/') ? '/' : '\\';
+        for (const file of files) {
+          this.uploadFile(file, this._currentPath + sep + file.name);
+        }
+      }
+    });
   },
 
   close() {
@@ -347,13 +375,17 @@ const FileTransfer = {
     return (bytes / 1073741824).toFixed(2) + ' GB';
   },
 
-  _updateProgress(fid, pct, text) {
-    const bar = document.getElementById('fileProgressBar');
-    const label = document.getElementById('fileProgressLabel');
+  _updateProgress(fid, percent, label) {
     const container = document.getElementById('fileProgressContainer');
-    if (container) container.style.display = 'block';
-    if (bar) bar.style.width = pct + '%';
-    if (label) label.textContent = text;
+    const bar = document.getElementById('fileProgressBar');
+    const labelEl = document.getElementById('fileProgressLabel');
+    if (!container) return;
+    container.style.display = '';
+    if (bar) bar.style.width = Math.round(percent) + '%';
+    if (labelEl) labelEl.textContent = label || '';
+    if (percent >= 100) {
+      setTimeout(() => { container.style.display = 'none'; }, 2000);
+    }
   },
 
   _hideProgress() {
