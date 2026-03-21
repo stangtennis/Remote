@@ -6,6 +6,8 @@ services:
     container_name: coturn
     restart: unless-stopped
     network_mode: host
+    env_file:
+      - .env
     volumes:
       - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
-    command: ["-c", "/etc/coturn/turnserver.conf"]
+    command: ["-c", "/etc/coturn/turnserver.conf", "--static-auth-secret=$TURN_SECRET"]

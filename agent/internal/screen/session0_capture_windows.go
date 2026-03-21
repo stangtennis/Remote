@@ -4,11 +4,9 @@
 package screen
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"image"
-	"image/jpeg"
 	"io"
 	"log"
 	"math/rand"
@@ -532,11 +530,7 @@ func (c *Session0PipeCapturer) CaptureJPEG(quality int) ([]byte, error) {
 		return nil, err
 	}
 
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
-		return nil, fmt.Errorf("JPEG encode: %w", err)
-	}
-	return buf.Bytes(), nil
+	return EncodeJPEG(img.Pix, img.Bounds().Dx(), img.Bounds().Dy(), img.Stride, quality, false)
 }
 
 func (c *Session0PipeCapturer) GetBounds() image.Rectangle {

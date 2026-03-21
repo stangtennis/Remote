@@ -36,10 +36,8 @@ void CloseDXGI(DXGICapture* cap);
 */
 import "C"
 import (
-	"bytes"
 	"fmt"
 	"image"
-	"image/jpeg"
 	"unsafe"
 )
 
@@ -116,19 +114,19 @@ func EnumerateDisplays() []MonitorInfo {
 func (c *DXGICapturer) CaptureJPEG(quality int) ([]byte, error) {
 	// Calculate buffer size for BGRA (4 bytes per pixel)
 	bufferSize := c.width * c.height * 4
-	buffer := make([]byte, bufferSize)
+	buffer := getPixelBuffer(bufferSize)
+	defer putPixelBuffer(buffer)
 
 	// Capture frame from DXGI
 	result := C.CaptureDXGI(c.handle, (*C.uchar)(unsafe.Pointer(&buffer[0])), C.int(bufferSize))
 	if result != 0 {
 		// Timeout (code 1) means no new frame - use cached frame if available
 		if result == 1 && c.lastFrame != nil {
-			var buf bytes.Buffer
-			opts := &jpeg.Options{Quality: quality}
-			if err := jpeg.Encode(&buf, c.lastFrame, opts); err != nil {
+			data, err := EncodeJPEG(c.lastFrame.Pix, c.lastFrame.Bounds().Dx(), c.lastFrame.Bounds().Dy(), c.lastFrame.Stride, quality, false)
+			if err != nil {
 				return nil, fmt.Errorf("failed to encode cached JPEG: %w", err)
 			}
-			return buf.Bytes(), nil
+			return data, nil
 		}
 
 		// Detailed error codes for real errors
@@ -152,27 +150,24 @@ func (c *DXGICapturer) CaptureJPEG(quality int) ([]byte, error) {
 		return nil, fmt.Errorf("DXGI capture failed: %s", errMsg)
 	}
 
-	// Convert BGRA to RGBA and create image
-	img := image.NewRGBA(image.Rect(0, 0, c.width, c.height))
-	for i := 0; i < len(buffer); i += 4 {
-		// BGRA -> RGBA
-		img.Pix[i] = buffer[i+2]   // R
-		img.Pix[i+1] = buffer[i+1] // G
-		img.Pix[i+2] = buffer[i]   // B
-		img.Pix[i+3] = buffer[i+3] // A
-	}
-
-	// Cache frame for timeout cases
-	c.lastFrame = img
-
-	// Encode as JPEG
-	var buf bytes.Buffer
-	opts := &jpeg.Options{Quality: quality}
-	if err := jpeg.Encode(&buf, img, opts); err != nil {
+	// Encode BGRA directly to JPEG — no pixel swap needed!
+	data, err := EncodeJPEG(buffer, c.width, c.height, c.width*4, quality, true)
+	if err != nil {
 		return nil, fmt.Errorf("failed to encode JPEG: %w", err)
 	}
 
-	return buf.Bytes(), nil
+	// Update cached RGBA frame for timeout cases (BGRA→RGBA conversion only for cache)
+	if c.lastFrame == nil || c.lastFrame.Bounds().Dx() != c.width || c.lastFrame.Bounds().Dy() != c.height {
+		c.lastFrame = image.NewRGBA(image.Rect(0, 0, c.width, c.height))
+	}
+	for i := 0; i < bufferSize; i += 4 {
+		c.lastFrame.Pix[i] = buffer[i+2]   // R
+		c.lastFrame.Pix[i+1] = buffer[i+1] // G
+		c.lastFrame.Pix[i+2] = buffer[i]   // B
+		c.lastFrame.Pix[i+3] = buffer[i+3] // A
+	}
+
+	return data, nil
 }
 
 // CaptureRGBA captures the screen as RGBA image (for dirty region detection)

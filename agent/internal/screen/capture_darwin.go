@@ -9,7 +9,7 @@ package screen
 #include <ImageIO/ImageIO.h>
 #include <stdlib.h>
 
-// Capture the main display as BGRA pixel data
+// Capture the main display as RGBA pixel data
 // Returns pixel data that caller must free, sets width/height/bytesPerRow
 static unsigned char* captureDisplay(int displayIndex, int* outWidth, int* outHeight, int* outBytesPerRow) {
     // Get display ID
@@ -63,6 +63,61 @@ static unsigned char* captureDisplay(int displayIndex, int* outWidth, int* outHe
     return pixels;
 }
 
+// Capture display scaled to target dimensions using CoreGraphics hardware scaling.
+// Much faster than Go-side resize for streaming.
+static unsigned char* captureDisplayScaled(int displayIndex, int targetW, int targetH,
+    int* outWidth, int* outHeight, int* outBytesPerRow) {
+    CGDirectDisplayID displays[16];
+    uint32_t displayCount;
+    CGGetActiveDisplayList(16, displays, &displayCount);
+
+    if (displayIndex >= (int)displayCount) {
+        return NULL;
+    }
+
+    CGDirectDisplayID displayID = displays[displayIndex];
+    CGImageRef image = CGDisplayCreateImage(displayID);
+    if (!image) {
+        return NULL;
+    }
+
+    size_t width = (size_t)targetW;
+    size_t height = (size_t)targetH;
+    size_t bytesPerRow = width * 4;
+
+    unsigned char* pixels = (unsigned char*)malloc(bytesPerRow * height);
+    if (!pixels) {
+        CGImageRelease(image);
+        return NULL;
+    }
+
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef ctx = CGBitmapContextCreate(
+        pixels, width, height, 8, bytesPerRow,
+        colorSpace,
+        kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big // RGBA
+    );
+    CGColorSpaceRelease(colorSpace);
+
+    if (!ctx) {
+        free(pixels);
+        CGImageRelease(image);
+        return NULL;
+    }
+
+    // CoreGraphics hardware-accelerated scaling
+    CGContextSetInterpolationQuality(ctx, kCGInterpolationMedium);
+    CGContextDrawImage(ctx, CGRectMake(0, 0, width, height), image);
+    CGContextRelease(ctx);
+    CGImageRelease(image);
+
+    *outWidth = (int)width;
+    *outHeight = (int)height;
+    *outBytesPerRow = (int)bytesPerRow;
+
+    return pixels;
+}
+
 // Get display count
 static int getDisplayCount() {
     uint32_t count;
@@ -92,7 +147,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"image"
-	"image/jpeg"
 	"log"
 	"sync"
 	"unsafe"
@@ -187,13 +241,11 @@ func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
 		finalImg = resize.Resize(maxWidth, 0, img, resize.Lanczos3)
 	}
 
-	var buf bytes.Buffer
-	opts := &jpeg.Options{Quality: quality}
-	if err := jpeg.Encode(&buf, finalImg, opts); err != nil {
+	data, err := EncodeImageJPEG(finalImg, quality)
+	if err != nil {
 		return nil, fmt.Errorf("failed to encode JPEG: %w", err)
 	}
-
-	return buf.Bytes(), nil
+	return data, nil
 }
 
 func (c *Capturer) CaptureJPEGIfChanged(quality int) ([]byte, error) {
@@ -227,13 +279,11 @@ func (c *Capturer) CaptureJPEGIfChanged(quality int) ([]byte, error) {
 		finalImg = resize.Resize(maxWidth, 0, img, resize.Lanczos3)
 	}
 
-	var buf bytes.Buffer
-	opts := &jpeg.Options{Quality: quality}
-	if err := jpeg.Encode(&buf, finalImg, opts); err != nil {
+	data, err := EncodeImageJPEG(finalImg, quality)
+	if err != nil {
 		return nil, fmt.Errorf("failed to encode JPEG: %w", err)
 	}
-
-	return buf.Bytes(), nil
+	return data, nil
 }
 
 func (c *Capturer) GetBounds() image.Rectangle {
@@ -302,28 +352,47 @@ func (c *Capturer) CaptureJPEGScaled(quality int, scale float64) ([]byte, int, i
 		scale = 1.0
 	}
 
+	// Get native display resolution for target calculation
+	var origW, origH C.int
+	var dummyBPR C.int
+	probe := C.captureDisplay(C.int(c.displayIndex), &origW, &origH, &dummyBPR)
+	if probe == nil {
+		return nil, 0, 0, fmt.Errorf("failed to probe display %d", c.displayIndex)
+	}
+	C.free(unsafe.Pointer(probe))
+
+	targetWidth := int(float64(int(origW)) * scale)
+	targetHeight := int(float64(int(origH)) * scale)
+
+	if scale < 1.0 {
+		// Use C-side hardware-accelerated scaling (CoreGraphics)
+		var w, h, bpr C.int
+		pixels := C.captureDisplayScaled(C.int(c.displayIndex), C.int(targetWidth), C.int(targetHeight), &w, &h, &bpr)
+		if pixels == nil {
+			return nil, 0, 0, fmt.Errorf("captureDisplayScaled failed for display %d", c.displayIndex)
+		}
+		defer C.free(unsafe.Pointer(pixels))
+
+		pix := unsafe.Slice((*byte)(unsafe.Pointer(pixels)), int(bpr)*int(h))
+		data, err := EncodeJPEG(pix, int(w), int(h), int(bpr), quality, false)
+		if err != nil {
+			return nil, 0, 0, fmt.Errorf("failed to encode JPEG: %w", err)
+		}
+		c.bounds = image.Rect(0, 0, int(origW), int(origH))
+		return data, int(w), int(h), nil
+	}
+
+	// scale == 1.0: capture at full size
 	img, err := c.captureRGBAInternal()
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("failed to capture screen: %w", err)
 	}
 
-	origWidth := img.Bounds().Dx()
-	origHeight := img.Bounds().Dy()
-	targetWidth := uint(float64(origWidth) * scale)
-	targetHeight := uint(float64(origHeight) * scale)
-
-	var finalImg image.Image = img
-	if scale < 1.0 {
-		finalImg = resize.Resize(targetWidth, targetHeight, img, resize.Bilinear)
-	}
-
-	var buf bytes.Buffer
-	opts := &jpeg.Options{Quality: quality}
-	if err := jpeg.Encode(&buf, finalImg, opts); err != nil {
+	data, err := EncodeJPEG(img.Pix, img.Bounds().Dx(), img.Bounds().Dy(), img.Stride, quality, false)
+	if err != nil {
 		return nil, 0, 0, fmt.Errorf("failed to encode JPEG: %w", err)
 	}
-
-	return buf.Bytes(), int(targetWidth), int(targetHeight), nil
+	return data, img.Bounds().Dx(), img.Bounds().Dy(), nil
 }
 
 func (c *Capturer) EncodeRGBAToJPEG(img *image.RGBA, quality int, scale float64) ([]byte, int, int, error) {
@@ -336,21 +405,25 @@ func (c *Capturer) EncodeRGBAToJPEG(img *image.RGBA, quality int, scale float64)
 
 	origWidth := img.Bounds().Dx()
 	origHeight := img.Bounds().Dy()
-	targetWidth := uint(float64(origWidth) * scale)
-	targetHeight := uint(float64(origHeight) * scale)
+	targetWidth := int(float64(origWidth) * scale)
+	targetHeight := int(float64(origHeight) * scale)
 
-	var finalImg image.Image = img
 	if scale < 1.0 {
-		finalImg = resize.Resize(targetWidth, targetHeight, img, resize.Bilinear)
+		// Resize in Go, then turbo-encode the smaller image
+		resized := resize.Resize(uint(targetWidth), uint(targetHeight), img, resize.Bilinear)
+		data, err := EncodeImageJPEG(resized, quality)
+		if err != nil {
+			return nil, 0, 0, fmt.Errorf("failed to encode JPEG: %w", err)
+		}
+		return data, targetWidth, targetHeight, nil
 	}
 
-	var buf bytes.Buffer
-	opts := &jpeg.Options{Quality: quality}
-	if err := jpeg.Encode(&buf, finalImg, opts); err != nil {
+	// No resize needed — encode directly from pixel buffer
+	data, err := EncodeJPEG(img.Pix, origWidth, origHeight, img.Stride, quality, false)
+	if err != nil {
 		return nil, 0, 0, fmt.Errorf("failed to encode JPEG: %w", err)
 	}
-
-	return buf.Bytes(), int(targetWidth), int(targetHeight), nil
+	return data, origWidth, origHeight, nil
 }
 
 // --- Input forwarding stubs (Session 0 is Windows-only) ---
@@ -381,11 +454,9 @@ func (c *Capturer) captureRGBAInternal() (*image.RGBA, error) {
 	h := int(height)
 	bpr := int(bytesPerRow)
 
-	// Copy C pixel data to Go image
+	// Zero-copy: create Go slice backed by C memory, copy directly into image
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-
-	// CGBitmapContext with kCGImageAlphaPremultipliedLast gives RGBA order
-	src := C.GoBytes(unsafe.Pointer(pixels), C.int(bpr*h))
+	src := unsafe.Slice((*byte)(unsafe.Pointer(pixels)), bpr*h)
 
 	if bpr == img.Stride {
 		copy(img.Pix, src)

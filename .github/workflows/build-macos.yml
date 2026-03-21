@@ -90,6 +90,11 @@ jobs:
           xcode-select -p
           xcrun --show-sdk-path
 
+      - name: Install libjpeg-turbo
+        run: |
+          brew install libjpeg-turbo
+          echo "libjpeg-turbo installed at: $(brew --prefix libjpeg-turbo)"
+
       - name: Build Agent (macOS arm64)
         working-directory: ./agent
         env:
@@ -99,8 +104,8 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           BUILD_DATE=$(date +%Y-%m-%d)
           LDFLAGS="-s -w -X 'github.com/stangtennis/remote-agent/internal/tray.Version=${VERSION}' -X 'github.com/stangtennis/remote-agent/internal/tray.BuildDate=${BUILD_DATE}'"
-          go build -ldflags "${LDFLAGS}" -o ../builds/remote-agent-macos-arm64-${VERSION} ./cmd/remote-agent
-          echo "Built remote-agent-macos-arm64-${VERSION}"
+          go build -tags turbo -ldflags "${LDFLAGS}" -o ../builds/remote-agent-macos-arm64-${VERSION} ./cmd/remote-agent
+          echo "Built remote-agent-macos-arm64-${VERSION} (turbo JPEG)"
           file ../builds/remote-agent-macos-arm64-${VERSION}
 
       - name: Build Controller (macOS arm64)

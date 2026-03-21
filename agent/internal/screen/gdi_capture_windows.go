@@ -172,10 +172,8 @@ void CloseGDI(GDICapture* cap) {
 */
 import "C"
 import (
-	"bytes"
 	"fmt"
 	"image"
-	"image/jpeg"
 	"unsafe"
 )
 
@@ -249,24 +247,13 @@ func (c *GDICapturer) CaptureJPEG(quality int) ([]byte, error) {
 		return nil, fmt.Errorf("GDI capture failed: %s (try running as Administrator/SYSTEM)", errMsg)
 	}
 
-	// Convert BGRA to RGBA
-	img := image.NewRGBA(image.Rect(0, 0, c.width, c.height))
+	// Encode BGRA directly to JPEG — no pixel swap needed!
 	pixelBytes := c.width * c.height * 4
-	for i := 0; i < pixelBytes; i += 4 {
-		img.Pix[i] = buffer[i+2]   // R
-		img.Pix[i+1] = buffer[i+1] // G
-		img.Pix[i+2] = buffer[i]   // B
-		img.Pix[i+3] = 255         // A (opaque)
-	}
-
-	// Encode as JPEG
-	var buf bytes.Buffer
-	opts := &jpeg.Options{Quality: quality}
-	if err := jpeg.Encode(&buf, img, opts); err != nil {
+	data, err := EncodeJPEG(buffer[:pixelBytes], c.width, c.height, c.width*4, quality, true)
+	if err != nil {
 		return nil, fmt.Errorf("failed to encode JPEG: %w", err)
 	}
-
-	return buf.Bytes(), nil
+	return data, nil
 }
 
 // CaptureRGBA captures the screen as RGBA image (for dirty region detection)

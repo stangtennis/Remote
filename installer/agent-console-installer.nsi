@@ -11,8 +11,8 @@ InstallDirRegKey HKLM "Software\RemoteDesktopAgentConsole" "InstallDir"
 RequestExecutionLevel admin
 
 ; Version info - will be replaced by build script
-!define VERSION "2.62.6"
-VIProductVersion "2.62.6.0"
+!define VERSION "2.99.25"
+VIProductVersion "2.99.25.0"
 VIAddVersionKey "ProductName" "Remote Desktop Agent Console"
 VIAddVersionKey "CompanyName" "StangTennis"
 VIAddVersionKey "FileDescription" "Remote Desktop Agent Console med H.264 support og logs"
@@ -74,6 +74,9 @@ Section "Install"
     
     ; OpenH264 DLL for H.264 encoding
     File "openh264-2.1.1-win64.dll"
+
+    ; TurboJPEG DLL for SIMD-accelerated JPEG encoding
+    File /nonfatal "libturbojpeg.dll"
     
     ; Create shortcuts
     CreateDirectory "$SMPROGRAMS\Remote Desktop Agent Console"
@@ -110,6 +113,7 @@ Section "Uninstall"
     ; Remove files
     Delete "$INSTDIR\remote-agent-console.exe"
     Delete "$INSTDIR\openh264-2.1.1-win64.dll"
+    Delete "$INSTDIR\libturbojpeg.dll"
     Delete "$INSTDIR\uninstall.exe"
     Delete "$INSTDIR\*.log"
     

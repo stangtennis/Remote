@@ -3,12 +3,15 @@
 package main
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/stangtennis/Remote/controller/internal/logger"
@@ -18,6 +21,7 @@ import (
 
 const (
 	controllerInstallDir = "/Applications"
+	controllerAppName    = "Remote Desktop Controller.app"
 	controllerExeName    = "RemoteDesktopController"
 )
 
@@ -38,19 +42,20 @@ func runAsAdmin() {
 
 // isInstalledAsProgram checks if the controller is installed in /Applications
 func isInstalledAsProgram() bool {
-	targetExe := filepath.Join(controllerInstallDir, controllerExeName)
-	_, err := os.Stat(targetExe)
+	targetApp := filepath.Join(controllerInstallDir, controllerAppName)
+	_, err := os.Stat(targetApp)
 	if err == nil {
 		return true
 	}
-	targetApp := filepath.Join(controllerInstallDir, controllerExeName+".app")
-	_, err = os.Stat(targetApp)
+	// Also check raw binary (legacy)
+	targetExe := filepath.Join(controllerInstallDir, controllerExeName)
+	_, err = os.Stat(targetExe)
 	return err == nil
 }
 
-// getInstalledExePath returns the full path to the installed exe
+// getInstalledExePath returns the full path to the installed exe inside the .app bundle
 func getInstalledExePath() string {
-	return filepath.Join(controllerInstallDir, controllerExeName)
+	return filepath.Join(controllerInstallDir, controllerAppName, "Contents", "MacOS", controllerExeName)
 }
 
 // stopRunningController kills any running controller processes (except this one)
@@ -67,7 +72,7 @@ func stopRunningController() {
 	log.Printf("Controller-processer stoppet")
 }
 
-// installControllerAsProgram copies the executable to /Applications and sets up autostart
+// installControllerAsProgram copies the .app bundle or binary to /Applications
 func installControllerAsProgram() error {
 	if !isAdmin() {
 		return fmt.Errorf("administrator rettigheder kraeves")
@@ -80,28 +85,80 @@ func installControllerAsProgram() error {
 		return fmt.Errorf("kunne ikke finde exe: %w", err)
 	}
 
-	targetExe := filepath.Join(controllerInstallDir, controllerExeName)
+	// Check if we're running from inside an .app bundle
+	appBundlePath := findAppBundle(currentExe)
+	if appBundlePath != "" {
+		// Install .app bundle
+		targetApp := filepath.Join(controllerInstallDir, controllerAppName)
+		log.Printf("Installerer .app bundle: %s -> %s", appBundlePath, targetApp)
 
-	if err := copyFileSimple(currentExe, targetExe); err != nil {
-		return fmt.Errorf("kunne ikke kopiere: %w", err)
+		// Remove existing
+		os.RemoveAll(targetApp)
+
+		// Copy entire .app bundle
+		if err := copyDir(appBundlePath, targetApp); err != nil {
+			return fmt.Errorf("kunne ikke kopiere .app bundle: %w", err)
+		}
+
+		exePath := filepath.Join(targetApp, "Contents", "MacOS", controllerExeName)
+		if err := os.Chmod(exePath, 0755); err != nil {
+			return fmt.Errorf("kunne ikke saette eksekverbar: %w", err)
+		}
+
+		if err := setControllerAutostart(exePath); err != nil {
+			return fmt.Errorf("kunne ikke saette autostart: %w", err)
+		}
+
+		log.Printf("Starter controller fra: %s", exePath)
+		startCmd := exec.Command("open", targetApp)
+		if err := startCmd.Start(); err != nil {
+			log.Printf("Kunne ikke starte controller: %v", err)
+		}
+
+		log.Printf("Controller .app installeret: %s", targetApp)
+	} else {
+		// Fallback: install raw binary
+		targetExe := filepath.Join(controllerInstallDir, controllerExeName)
+
+		if err := copyFileSimple(currentExe, targetExe); err != nil {
+			return fmt.Errorf("kunne ikke kopiere: %w", err)
+		}
+
+		if err := os.Chmod(targetExe, 0755); err != nil {
+			return fmt.Errorf("kunne ikke saette eksekverbar: %w", err)
+		}
+
+		if err := setControllerAutostart(targetExe); err != nil {
+			return fmt.Errorf("kunne ikke saette autostart: %w", err)
+		}
+
+		log.Printf("Starter controller fra: %s", targetExe)
+		startCmd := exec.Command(targetExe)
+		if err := startCmd.Start(); err != nil {
+			log.Printf("Kunne ikke starte controller: %v", err)
+		}
+
+		log.Printf("Controller installeret: %s", targetExe)
 	}
 
-	if err := os.Chmod(targetExe, 0755); err != nil {
-		return fmt.Errorf("kunne ikke saette eksekverbar: %w", err)
-	}
-
-	if err := setControllerAutostart(targetExe); err != nil {
-		return fmt.Errorf("kunne ikke saette autostart: %w", err)
-	}
-
-	log.Printf("Starter controller fra: %s", targetExe)
-	startCmd := exec.Command(targetExe)
-	if err := startCmd.Start(); err != nil {
-		log.Printf("Kunne ikke starte controller: %v", err)
-	}
-
-	log.Printf("Controller installeret: %s", targetExe)
 	return nil
+}
+
+// findAppBundle returns the .app bundle path if the executable is inside one, or "" if not
+func findAppBundle(exePath string) string {
+	// Walk up from exe to find .app
+	// e.g. /path/to/Foo.app/Contents/MacOS/Foo -> /path/to/Foo.app
+	dir := exePath
+	for i := 0; i < 5; i++ {
+		dir = filepath.Dir(dir)
+		if strings.HasSuffix(dir, ".app") {
+			return dir
+		}
+		if dir == "/" || dir == "." {
+			break
+		}
+	}
+	return ""
 }
 
 // uninstallControllerProgram removes the controller installation and autostart
@@ -114,12 +171,15 @@ func uninstallControllerProgram() error {
 	removeControllerAutostart()
 	removeShortcuts()
 
+	// Remove .app bundle
+	targetApp := filepath.Join(controllerInstallDir, controllerAppName)
+	os.RemoveAll(targetApp)
+
+	// Remove legacy raw binary
 	targetExe := filepath.Join(controllerInstallDir, controllerExeName)
 	if err := os.Remove(targetExe); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("kunne ikke fjerne executable: %w", err)
 	}
-	targetApp := filepath.Join(controllerInstallDir, controllerExeName+".app")
-	os.RemoveAll(targetApp)
 
 	log.Println("Controller afinstalleret")
 	return nil
@@ -193,6 +253,27 @@ func copyFileSimple(src, dst string) error {
 	return err
 }
 
+// copyDir recursively copies a directory
+func copyDir(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		targetPath := filepath.Join(dst, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(targetPath, info.Mode())
+		}
+
+		return copyFileSimple(path, targetPath)
+	})
+}
+
 // createStartMenuShortcut is a no-op on macOS
 func createStartMenuShortcut(targetExe string) error {
 	return nil
@@ -236,13 +317,22 @@ func restartApplication() {
 		return
 	}
 
-	cmd := exec.Command(executable)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		logger.Error("Failed to start new instance: %v", err)
-		return
+	// If inside .app bundle, use 'open' to launch properly
+	appBundle := findAppBundle(executable)
+	if appBundle != "" {
+		cmd := exec.Command("open", appBundle)
+		if err := cmd.Start(); err != nil {
+			logger.Error("Failed to start new instance: %v", err)
+			return
+		}
+	} else {
+		cmd := exec.Command(executable)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Start(); err != nil {
+			logger.Error("Failed to start new instance: %v", err)
+			return
+		}
 	}
 
 	logger.Info("New instance started, exiting current")
@@ -250,6 +340,7 @@ func restartApplication() {
 }
 
 // runUpdateMode runs when started with --update-from flag
+// On macOS, the downloaded file is a .tar.gz containing the .app bundle
 func runUpdateMode(oldExePath string) {
 	logFile := oldExePath + ".update.log"
 	f, _ := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
@@ -264,8 +355,8 @@ func runUpdateMode(oldExePath string) {
 		}
 	}
 
-	logMsg("Update mode started")
-	logMsg(fmt.Sprintf("Old exe: %s", oldExePath))
+	logMsg("Update mode started (macOS)")
+	logMsg(fmt.Sprintf("Old exe/path: %s", oldExePath))
 
 	currentExe, err := os.Executable()
 	if err != nil {
@@ -273,6 +364,85 @@ func runUpdateMode(oldExePath string) {
 		return
 	}
 	logMsg(fmt.Sprintf("New exe: %s", currentExe))
+
+	// Determine if we're updating an .app bundle or a raw binary
+	oldAppBundle := findAppBundle(oldExePath)
+
+	if oldAppBundle != "" {
+		// .app bundle update: the downloaded file should be a .tar.gz
+		// Check if current exe's parent has a .tar.gz nearby (downloaded update)
+		updateDir := filepath.Dir(currentExe)
+		tarFiles, _ := filepath.Glob(filepath.Join(updateDir, "*.tar.gz"))
+
+		if len(tarFiles) > 0 {
+			tarPath := tarFiles[0]
+			logMsg(fmt.Sprintf("Extracting .tar.gz: %s", tarPath))
+
+			// Extract to temp dir
+			tempDir, err := os.MkdirTemp("", "controller-update-*")
+			if err != nil {
+				logMsg(fmt.Sprintf("ERROR: Failed to create temp dir: %v", err))
+				return
+			}
+			defer os.RemoveAll(tempDir)
+
+			if err := extractTarGz(tarPath, tempDir); err != nil {
+				logMsg(fmt.Sprintf("ERROR: Failed to extract tar.gz: %v", err))
+				return
+			}
+
+			// Find the .app inside extracted
+			extractedApp := ""
+			filepath.Walk(tempDir, func(path string, info os.FileInfo, err error) error {
+				if err == nil && info.IsDir() && strings.HasSuffix(path, ".app") {
+					extractedApp = path
+					return filepath.SkipAll
+				}
+				return nil
+			})
+
+			if extractedApp == "" {
+				logMsg("ERROR: No .app found in tar.gz")
+				return
+			}
+
+			logMsg(fmt.Sprintf("Found .app: %s", extractedApp))
+
+			// Wait for old app to close
+			logMsg("Waiting for old app to exit...")
+			time.Sleep(2 * time.Second)
+
+			// Replace the old .app
+			logMsg(fmt.Sprintf("Removing old .app: %s", oldAppBundle))
+			if err := os.RemoveAll(oldAppBundle); err != nil {
+				logMsg(fmt.Sprintf("WARNING: Failed to remove old .app: %v", err))
+			}
+
+			logMsg(fmt.Sprintf("Installing new .app to: %s", oldAppBundle))
+			if err := copyDirForUpdate(extractedApp, oldAppBundle); err != nil {
+				logMsg(fmt.Sprintf("ERROR: Failed to copy .app: %v", err))
+				return
+			}
+
+			// Make binary executable
+			newExe := filepath.Join(oldAppBundle, "Contents", "MacOS", controllerExeName)
+			os.Chmod(newExe, 0755)
+
+			// Launch the new app
+			logMsg(fmt.Sprintf("Launching updated app: %s", oldAppBundle))
+			cmd := exec.Command("open", oldAppBundle)
+			if err := cmd.Start(); err != nil {
+				logMsg(fmt.Sprintf("ERROR: Failed to launch: %v", err))
+				return
+			}
+
+			logMsg("Update complete!")
+			return
+		}
+	}
+
+	// Fallback: raw binary update (legacy)
+	logMsg("Fallback: raw binary update mode")
 
 	// Wait for old exe to exit
 	logMsg("Waiting for old exe to exit...")
@@ -332,4 +502,97 @@ func runUpdateMode(oldExePath string) {
 	}
 
 	logMsg("Update complete!")
+}
+
+// extractTarGz extracts a .tar.gz archive to the destination directory
+func extractTarGz(tarGzPath, destDir string) error {
+	file, err := os.Open(tarGzPath)
+	if err != nil {
+		return fmt.Errorf("failed to open tar.gz: %w", err)
+	}
+	defer file.Close()
+
+	gzReader, err := gzip.NewReader(file)
+	if err != nil {
+		return fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer gzReader.Close()
+
+	tarReader := tar.NewReader(gzReader)
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("tar read error: %w", err)
+		}
+
+		// Security: prevent path traversal
+		targetPath := filepath.Join(destDir, header.Name)
+		if !strings.HasPrefix(targetPath, filepath.Clean(destDir)+string(os.PathSeparator)) && targetPath != filepath.Clean(destDir) {
+			return fmt.Errorf("invalid tar path: %s", header.Name)
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				return err
+			}
+			outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(outFile, tarReader); err != nil {
+				outFile.Close()
+				return err
+			}
+			outFile.Close()
+		case tar.TypeSymlink:
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				return err
+			}
+			os.Remove(targetPath)
+			if err := os.Symlink(header.Linkname, targetPath); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// copyDirForUpdate recursively copies a directory (used during update)
+func copyDirForUpdate(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		targetPath := filepath.Join(dst, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(targetPath, info.Mode())
+		}
+
+		// Handle symlinks
+		if info.Mode()&os.ModeSymlink != 0 {
+			linkTarget, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			return os.Symlink(linkTarget, targetPath)
+		}
+
+		return copyFileSimple(path, targetPath)
+	})
 }

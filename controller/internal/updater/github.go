@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -142,9 +143,10 @@ type VersionInfo struct {
 	AgentVersion      string `json:"agent_version,omitempty"`
 	ControllerVersion string `json:"controller_version,omitempty"`
 	// Download URLs
-	DownloadURL   string `json:"download_url"`
-	AgentURL      string `json:"agent_url,omitempty"`
-	ControllerURL string `json:"controller_url"`
+	DownloadURL      string `json:"download_url"`
+	AgentURL         string `json:"agent_url,omitempty"`
+	ControllerURL    string `json:"controller_url"`
+	ControllerURLMacOS string `json:"controller_url_macos,omitempty"`
 }
 
 // GetControllerVersion returns the controller version from the VersionInfo
@@ -198,7 +200,11 @@ func (c *GitHubClient) CheckForUpdate(currentVersion string, appType string, cha
 	var remoteVersionStr, downloadURL string
 	if appType == "controller" {
 		remoteVersionStr = versionInfo.GetControllerVersion()
-		downloadURL = versionInfo.ControllerURL
+		if runtime.GOOS == "darwin" && versionInfo.ControllerURLMacOS != "" {
+			downloadURL = versionInfo.ControllerURLMacOS
+		} else {
+			downloadURL = versionInfo.ControllerURL
+		}
 	} else {
 		remoteVersionStr = versionInfo.GetAgentVersion()
 		if versionInfo.AgentURL != "" {

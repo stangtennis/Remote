@@ -30,10 +30,11 @@ type Client struct {
 	mu                   sync.Mutex
 	connected            bool
 
-	// Frame reassembly with timeout tracking
+	// Frame reassembly with timeout tracking and backlog limit
 	frameChunks    map[int][][]byte  // frameID -> chunk data
 	frameFirstSeen map[int]time.Time // frameID -> first chunk arrival time
 	frameChunksMu  sync.Mutex
+	maxPendingFrames int // max incomplete frames before dropping oldest
 
 	// RTT measurement
 	lastPingTime time.Time
@@ -49,9 +50,10 @@ type Client struct {
 // NewClient creates a new WebRTC client
 func NewClient() (*Client, error) {
 	return &Client{
-		connected:      false,
-		frameChunks:    make(map[int][][]byte),
-		frameFirstSeen: make(map[int]time.Time),
+		connected:        false,
+		frameChunks:      make(map[int][][]byte),
+		frameFirstSeen:   make(map[int]time.Time),
+		maxPendingFrames: 100,
 	}, nil
 }
 
@@ -430,7 +432,17 @@ func (c *Client) IsConnected() bool {
 // Close closes the WebRTC connection
 func (c *Client) Close() error {
 	if c.peerConnection != nil {
-		return c.peerConnection.Close()
+		done := make(chan error, 1)
+		go func() {
+			done <- c.peerConnection.Close()
+		}()
+		select {
+		case err := <-done:
+			return err
+		case <-time.After(5 * time.Second):
+			log.Println("WebRTC peer connection close timed out (5s)")
+			return fmt.Errorf("peer close timed out")
+		}
 	}
 	return nil
 }
@@ -467,6 +479,22 @@ func (c *Client) handleDataChannelMessage(data []byte) {
 		if c.frameChunks[frameID] == nil {
 			c.frameChunks[frameID] = make([][]byte, totalChunks)
 			c.frameFirstSeen[frameID] = time.Now()
+
+			// Enforce backlog limit: drop oldest incomplete frames if over cap
+			if len(c.frameChunks) > c.maxPendingFrames {
+				oldestID := -1
+				var oldestTime time.Time
+				for id, t := range c.frameFirstSeen {
+					if oldestID == -1 || t.Before(oldestTime) {
+						oldestID = id
+						oldestTime = t
+					}
+				}
+				if oldestID != -1 {
+					delete(c.frameChunks, oldestID)
+					delete(c.frameFirstSeen, oldestID)
+				}
+			}
 		}
 
 		// Store this chunk

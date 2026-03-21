@@ -26,20 +26,20 @@ cd controller
 timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -tags desktop,production -ldflags \"$CONTROLLER_LDFLAGS\" -o ../builds/controller-$VERSION.exe ." && echo "✅ Controller built" || echo "❌ Controller build failed"
 cd ..
 
-# Build Agent (Windows) - requires Windows or proper cross-compile setup
+# Build Agent (Windows) with libjpeg-turbo SIMD encoding
 echo ""
-echo "📦 Building Agent (Windows)..."
+echo "📦 Building Agent (Windows) with turbo JPEG..."
 echo "   Note: Agent requires Windows SDK headers for DXGI"
 echo "   If this fails, build on Windows instead"
 cd agent
-timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -ldflags \"$AGENT_LDFLAGS\" -o ../builds/remote-agent-$VERSION.exe ./cmd/remote-agent" 2>&1 && echo "✅ Agent built" || echo "⚠️  Agent build failed (try on Windows)"
+timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -tags turbo -ldflags \"$AGENT_LDFLAGS\" -o ../builds/remote-agent-$VERSION.exe ./cmd/remote-agent" 2>&1 && echo "✅ Agent built (turbo JPEG)" || echo "⚠️  Agent build failed (try on Windows)"
 cd ..
 
 # Build Agent Console version
 echo ""
-echo "📦 Building Agent Console (Windows)..."
+echo "📦 Building Agent Console (Windows) with turbo JPEG..."
 cd agent
-timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -ldflags \"$AGENT_CONSOLE_LDFLAGS\" -o ../builds/remote-agent-console-$VERSION.exe ./cmd/remote-agent" 2>&1 && echo "✅ Agent Console built" || echo "⚠️  Agent Console build failed (try on Windows)"
+timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -tags turbo -ldflags \"$AGENT_CONSOLE_LDFLAGS\" -o ../builds/remote-agent-console-$VERSION.exe ./cmd/remote-agent" 2>&1 && echo "✅ Agent Console built (turbo JPEG)" || echo "⚠️  Agent Console build failed (try on Windows)"
 cd ..
 
 # =============================================================================
@@ -51,12 +51,12 @@ echo "   Note: Requires osxcross or native macOS with Xcode CLI tools"
 MACOS_AGENT_LDFLAGS="-s -w -X 'github.com/stangtennis/remote-agent/internal/tray.Version=$VERSION' -X 'github.com/stangtennis/remote-agent/internal/tray.BuildDate=$BUILD_DATE'"
 cd agent
 if command -v o64-clang &> /dev/null; then
-    # Cross-compile via osxcross
+    # Cross-compile via osxcross (no turbo — libjpeg-turbo not in osxcross SDK, use GitHub Actions CI for turbo)
     timeout $TIMEOUT bash -c "GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=oa64-clang CXX=oa64-clang++ go build -ldflags \"$MACOS_AGENT_LDFLAGS\" -o ../builds/remote-agent-macos-arm64-$VERSION ./cmd/remote-agent" 2>&1 && echo "✅ macOS Agent (arm64) built" || echo "⚠️  macOS arm64 build failed (osxcross)"
     timeout $TIMEOUT bash -c "GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC=o64-clang CXX=o64-clang++ go build -ldflags \"$MACOS_AGENT_LDFLAGS\" -o ../builds/remote-agent-macos-amd64-$VERSION ./cmd/remote-agent" 2>&1 && echo "✅ macOS Agent (amd64) built" || echo "⚠️  macOS amd64 build failed (osxcross)"
 elif [[ "$(uname -s)" == "Darwin" ]]; then
-    # Native macOS build
-    timeout $TIMEOUT bash -c "CGO_ENABLED=1 go build -ldflags \"$MACOS_AGENT_LDFLAGS\" -o ../builds/remote-agent-macos-$VERSION ./cmd/remote-agent" 2>&1 && echo "✅ macOS Agent built (native)" || echo "⚠️  macOS Agent build failed"
+    # Native macOS build with turbo JPEG (brew install libjpeg-turbo)
+    timeout $TIMEOUT bash -c "CGO_ENABLED=1 go build -tags turbo -ldflags \"$MACOS_AGENT_LDFLAGS\" -o ../builds/remote-agent-macos-$VERSION ./cmd/remote-agent" 2>&1 && echo "✅ macOS Agent built (native+turbo)" || echo "⚠️  macOS Agent build failed"
 else
     echo "⏭️  Skipping macOS build (no osxcross and not on macOS)"
     echo "   macOS builds will be done via GitHub Actions CI"
@@ -127,12 +127,13 @@ build_installer() {
         "installer/$NSI_FILE" > "$STAGING/$NSI_FILE"
 }
 
-# --- Agent installer (GUI + Console + OpenH264) ---
+# --- Agent installer (GUI + Console + OpenH264 + TurboJPEG) ---
 build_installer "Agent" "agent-installer.nsi" "RemoteDesktopAgent"
 STAGING="installer/staging-agent"
 cp "builds/remote-agent-${VERSION}.exe" "$STAGING/remote-agent.exe"
 cp "builds/remote-agent-console-${VERSION}.exe" "$STAGING/remote-agent-console.exe"
 cp "installer/openh264-2.1.1-win64.dll" "$STAGING/"
+cp "deps/libjpeg-turbo-win64/bin/libturbojpeg.dll" "$STAGING/"
 if makensis -V2 "$STAGING/agent-installer.nsi" >/dev/null 2>&1; then
     mv "$STAGING/RemoteDesktopAgent-${VERSION}-Setup.exe" "builds/"
     echo "  ✅ RemoteDesktopAgent-${VERSION}-Setup.exe"
@@ -142,11 +143,12 @@ else
 fi
 rm -rf "$STAGING"
 
-# --- Agent Console installer (Console + OpenH264) ---
+# --- Agent Console installer (Console + OpenH264 + TurboJPEG) ---
 build_installer "AgentConsole" "agent-console-installer.nsi" "RemoteDesktopAgentConsole"
 STAGING="installer/staging-agentconsole"
 cp "builds/remote-agent-console-${VERSION}.exe" "$STAGING/remote-agent-console.exe"
 cp "installer/openh264-2.1.1-win64.dll" "$STAGING/"
+cp "deps/libjpeg-turbo-win64/bin/libturbojpeg.dll" "$STAGING/"
 if makensis -V2 "$STAGING/agent-console-installer.nsi" >/dev/null 2>&1; then
     mv "$STAGING/RemoteDesktopAgentConsole-${VERSION}-Setup.exe" "builds/"
     echo "  ✅ RemoteDesktopAgentConsole-${VERSION}-Setup.exe"

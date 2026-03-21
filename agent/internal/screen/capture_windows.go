@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"image"
-	"image/jpeg"
 	"log"
 	"sync"
 
@@ -151,19 +150,14 @@ func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
 	var finalImg image.Image = img
 	maxWidth := uint(3840)
 	if img.Bounds().Dx() > int(maxWidth) {
-		// Use Lanczos3 for highest quality scaling
 		finalImg = resize.Resize(maxWidth, 0, img, resize.Lanczos3)
 	}
 
-	// Encode as JPEG
-	var buf bytes.Buffer
-	opts := &jpeg.Options{Quality: quality}
-	
-	if err := jpeg.Encode(&buf, finalImg, opts); err != nil {
+	data, err := EncodeImageJPEG(finalImg, quality)
+	if err != nil {
 		return nil, fmt.Errorf("failed to encode JPEG: %w", err)
 	}
-
-	return buf.Bytes(), nil
+	return data, nil
 }
 
 // CaptureJPEGIfChanged only returns a frame if the screen has changed
@@ -206,13 +200,11 @@ func (c *Capturer) CaptureJPEGIfChanged(quality int) ([]byte, error) {
 		finalImg = resize.Resize(maxWidth, 0, img, resize.Lanczos3)
 	}
 
-	var buf bytes.Buffer
-	opts := &jpeg.Options{Quality: quality}
-	if err := jpeg.Encode(&buf, finalImg, opts); err != nil {
+	data, err := EncodeImageJPEG(finalImg, quality)
+	if err != nil {
 		return nil, fmt.Errorf("failed to encode JPEG: %w", err)
 	}
-
-	return buf.Bytes(), nil
+	return data, nil
 }
 
 func (c *Capturer) GetBounds() image.Rectangle {
@@ -400,19 +392,14 @@ func (c *Capturer) CaptureJPEGScaled(quality int, scale float64) ([]byte, int, i
 	// Scale if needed
 	var finalImg image.Image = img
 	if scale < 1.0 {
-		// Use Bilinear for speed (Lanczos3 is too slow for real-time)
 		finalImg = resize.Resize(targetWidth, targetHeight, img, resize.Bilinear)
 	}
 
-	// Encode as JPEG
-	var buf bytes.Buffer
-	opts := &jpeg.Options{Quality: quality}
-	if err := jpeg.Encode(&buf, finalImg, opts); err != nil {
+	data, err := EncodeImageJPEG(finalImg, quality)
+	if err != nil {
 		return nil, 0, 0, fmt.Errorf("failed to encode JPEG: %w", err)
 	}
-
-	// Return the SCALED dimensions (what the client will see)
-	return buf.Bytes(), int(targetWidth), int(targetHeight), nil
+	return data, int(targetWidth), int(targetHeight), nil
 }
 
 // EncodeRGBAToJPEG encodes an existing RGBA frame to JPEG with scaling
@@ -438,14 +425,11 @@ func (c *Capturer) EncodeRGBAToJPEG(img *image.RGBA, quality int, scale float64)
 		finalImg = resize.Resize(targetWidth, targetHeight, img, resize.Bilinear)
 	}
 
-	// Encode as JPEG
-	var buf bytes.Buffer
-	opts := &jpeg.Options{Quality: quality}
-	if err := jpeg.Encode(&buf, finalImg, opts); err != nil {
+	data, err := EncodeImageJPEG(finalImg, quality)
+	if err != nil {
 		return nil, 0, 0, fmt.Errorf("failed to encode JPEG: %w", err)
 	}
-
-	return buf.Bytes(), int(targetWidth), int(targetHeight), nil
+	return data, int(targetWidth), int(targetHeight), nil
 }
 
 // --- Input forwarding wrappers (delegate to Session0PipeCapturer) ---
