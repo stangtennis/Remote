@@ -60,6 +60,11 @@ class ViewerSession {
           <select class="session-monitor-select" title="Vælg skærm" style="font-size:0.75rem; padding:0.2rem 0.4rem; background:var(--background-secondary); border:1px solid var(--border); border-radius:4px; color:var(--text); display:none;">
             <option value="0">Skærm 1</option>
           </select>
+          <div class="quality-presets" style="display:flex; gap:2px; margin-right:0.25rem;">
+            <button class="btn btn-sm quality-preset-btn" data-preset="low" title="Lav kvalitet (15 FPS, 40%)">Lav</button>
+            <button class="btn btn-sm quality-preset-btn active" data-preset="medium" title="Mellem kvalitet (25 FPS, 65%)">Mellem</button>
+            <button class="btn btn-sm quality-preset-btn" data-preset="high" title="Høj kvalitet (30 FPS, 85%)">Høj</button>
+          </div>
           <button class="btn btn-sm btn-icon session-files-btn" title="Filoverførsel"><i class="fas fa-folder-open"></i></button>
           <button class="btn btn-sm btn-icon session-details-btn" title="Forbindelsesdetaljer"><i class="fas fa-info-circle"></i></button>
           <button class="btn btn-sm btn-icon session-update-btn" title="Opdater agent"><i class="fas fa-sync-alt"></i></button>
@@ -1196,6 +1201,35 @@ class ViewerSession {
       if (panel) panel.classList.toggle('visible');
     });
     this.wrapper.querySelector('.session-screenshot-btn').addEventListener('click', () => this.takeScreenshot());
+    this.wrapper.querySelectorAll('.quality-preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => this.applyQualityPreset(btn.dataset.preset));
+    });
+  }
+
+  applyQualityPreset(preset) {
+    const presets = {
+      low:    { max_fps: 15, max_quality: 40, max_scale: 0.5 },
+      medium: { max_fps: 25, max_quality: 65, max_scale: 0.75 },
+      high:   { max_fps: 30, max_quality: 85, max_scale: 1.0 }
+    };
+    const params = presets[preset];
+    if (!params) return;
+
+    const dc = this.dataChannel;
+    if (!dc || dc.readyState !== 'open') {
+      showToast('Ikke forbundet', 'error');
+      return;
+    }
+
+    dc.send(JSON.stringify({ type: 'set_stream_params', ...params }));
+
+    // Update active button
+    this.wrapper.querySelectorAll('.quality-preset-btn').forEach(b => b.classList.remove('active'));
+    this.wrapper.querySelector(`.quality-preset-btn[data-preset="${preset}"]`).classList.add('active');
+
+    const labels = { low: 'Lav', medium: 'Mellem', high: 'Høj' };
+    showToast(`Kvalitet: ${labels[preset]} (${params.max_fps} FPS, ${params.max_quality}%)`, 'success');
+    console.log(`[${this.deviceName}] Quality preset: ${preset}`, params);
   }
 
   takeScreenshot() {

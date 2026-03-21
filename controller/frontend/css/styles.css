@@ -337,6 +337,17 @@ html, body {
 }
 .viewer-device-label { font-weight: 600; font-size: 0.85rem; flex: 1; }
 .viewer-stats { font-size: 0.7rem; color: var(--text-muted); }
+.quality-presets { display: flex; gap: 2px; }
+.quality-preset-btn {
+  font-size: 0.65rem; padding: 0.15rem 0.45rem;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  color: var(--text-muted); border-radius: 4px; cursor: pointer; transition: all 0.15s;
+}
+.quality-preset-btn:hover { background: rgba(255,255,255,0.15); color: var(--text); }
+.quality-preset-btn.active {
+  background: var(--primary); border-color: var(--primary);
+  color: #fff; font-weight: 600;
+}
 .viewer-screen { flex: 1; position: relative; background: #000; }
 .viewer-screen video, .viewer-screen canvas {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
