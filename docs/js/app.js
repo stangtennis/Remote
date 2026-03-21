@@ -228,10 +228,11 @@ async function startSession(device) {
       if (connectingDeviceName) connectingDeviceName.textContent = device.device_name;
     }
 
-    // Also update old session UI if present
+    // Update legacy session UI (kept hidden — preview panel handles display)
     const sessionSection = document.getElementById('sessionSection');
     if (sessionSection) {
-      sessionSection.style.display = 'block';
+      // Don't show sessionSection — it overlaps the dashboard grid layout.
+      // The preview system in dashboard-left handles viewer display.
       const sessionDeviceName = document.getElementById('sessionDeviceName');
       const sessionPin = document.getElementById('sessionPin');
       const sessionStatus = document.getElementById('sessionStatus');
