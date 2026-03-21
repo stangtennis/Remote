@@ -582,6 +582,58 @@ body.viewer-fullscreen .fullscreen-exit-hint.hidden { opacity: 0; }
 /* Drag and drop */
 #fileDropZone.drag-over { background: var(--primary-light); border: 2px dashed var(--primary); }
 
+/* ===== Total Commander File Manager ===== */
+.tc-btn { background:none; border:1px solid #30363d; color:#c9d1d9; padding:2px 8px; border-radius:3px; font-size:0.75rem; cursor:pointer; }
+.tc-btn:hover { background:#30363d; }
+.tc-panel { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
+.tc-panel.active { background:#0d1117; }
+.tc-path {
+  padding:3px 8px; font-size:0.75rem; font-family:monospace; color:#58a6ff; background:#0d1117;
+  border-bottom:1px solid #2a3040; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer;
+  display:flex; align-items:center; gap:4px;
+}
+.tc-path .drive-btn { padding:1px 6px; background:#21262d; border:1px solid #30363d; border-radius:2px; color:#c9d1d9; cursor:pointer; font-size:0.7rem; }
+.tc-path .drive-btn:hover, .tc-path .drive-btn.active { background:#58a6ff; color:#0d1117; }
+.tc-header {
+  display:flex; padding:1px 8px; background:#21262d; border-bottom:1px solid #2a3040;
+  font-size:0.7rem; color:#8b949e; font-weight:600; user-select:none;
+}
+.tc-header span { cursor:pointer; padding:2px 0; }
+.tc-header span:hover { color:#c9d1d9; }
+.tc-col-name { flex:1; min-width:0; }
+.tc-col-ext { width:50px; text-align:center; }
+.tc-col-size { width:75px; text-align:right; padding-right:8px !important; }
+.tc-col-date { width:100px; text-align:right; }
+.tc-filelist { flex:1; overflow-y:auto; overflow-x:hidden; font-family:monospace; font-size:0.78rem; outline:none; }
+.tc-filelist:focus { box-shadow:inset 0 0 0 1px #58a6ff; }
+.tc-row {
+  display:flex; padding:1px 8px; cursor:pointer; border-bottom:1px solid rgba(48,54,61,0.3);
+  color:#c9d1d9; align-items:center;
+}
+.tc-row:hover { background:rgba(88,166,255,0.08); }
+.tc-row.selected { background:#1f3a5f; color:#fff; }
+.tc-row.focused { outline:1px dotted #58a6ff; outline-offset:-1px; }
+.tc-row .tc-col-name { display:flex; align-items:center; gap:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tc-row .tc-icon { width:14px; text-align:center; flex-shrink:0; font-size:0.7rem; }
+.tc-row .tc-fname { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tc-row.dir .tc-fname { color:#58a6ff; }
+.tc-row.dir .tc-icon { color:#e3b341; }
+.tc-row.upnav .tc-icon { color:#8b949e; }
+.tc-status {
+  padding:2px 8px; font-size:0.7rem; color:#8b949e; background:#0d1117;
+  border-top:1px solid #2a3040; white-space:nowrap; overflow:hidden;
+}
+.tc-fbar {
+  display:flex; background:#0d1117; border-top:1px solid #2a3040;
+}
+.tc-fkey {
+  flex:1; padding:4px 2px; background:none; border:none; border-right:1px solid #2a3040;
+  color:#c9d1d9; font-size:0.72rem; cursor:pointer; text-align:center;
+}
+.tc-fkey:hover { background:#21262d; }
+.tc-fkey:last-child { border-right:none; }
+.tc-fkey span { color:#58a6ff; font-weight:700; margin-right:2px; }
+
 /* ===== IDLE ILLUSTRATION ===== */
 .idle-illustration { margin-bottom: 1.5rem; }
 .idle-monitor { display: flex; flex-direction: column; align-items: center; }
