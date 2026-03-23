@@ -52,7 +52,14 @@ async function loadDevices() {
     const tagsPromise = supabase.from('device_tags').select('device_id, tag');
     const favoritesPromise = supabase.from('user_device_favorites').select('device_id').eq('user_id', session.user.id);
 
-    const [devicesResult, tagsResult, favoritesResult] = await Promise.all([devicesPromise, tagsPromise, favoritesPromise]);
+    const [devicesSettled, tagsSettled, favoritesSettled] = await Promise.allSettled([devicesPromise, tagsPromise, favoritesPromise]);
+
+    const devicesResult = devicesSettled.status === 'fulfilled' ? devicesSettled.value : { error: devicesSettled.reason };
+    const tagsResult = tagsSettled.status === 'fulfilled' ? tagsSettled.value : { data: null };
+    const favoritesResult = favoritesSettled.status === 'fulfilled' ? favoritesSettled.value : { data: null };
+
+    if (tagsSettled.status === 'rejected') console.warn('Tags query failed:', tagsSettled.reason);
+    if (favoritesSettled.status === 'rejected') console.warn('Favorites query failed:', favoritesSettled.reason);
 
     if (devicesResult.error) throw devicesResult.error;
 
@@ -148,8 +155,29 @@ function applyDeviceFilters() {
   }
 
   emptyState.style.display = 'none';
-  for (const device of filtered) {
-    devicesList.appendChild(createDeviceCard(device));
+
+  // Group by online status and add section headers
+  const onlineDevices = filtered.filter(d => d.is_online);
+  const offlineDevices = filtered.filter(d => !d.is_online);
+
+  if (onlineDevices.length > 0) {
+    const header = document.createElement('div');
+    header.style.cssText = 'padding: 0.4rem 0.75rem; font-size: 0.7rem; font-weight: 600; color: #22c55e; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.4rem;';
+    header.innerHTML = `<span style="width:6px; height:6px; border-radius:50%; background:#22c55e; box-shadow:0 0 6px rgba(34,197,94,0.5);"></span> Online (${onlineDevices.length})`;
+    devicesList.appendChild(header);
+    for (const device of onlineDevices) {
+      devicesList.appendChild(createDeviceCard(device));
+    }
+  }
+
+  if (offlineDevices.length > 0) {
+    const header = document.createElement('div');
+    header.style.cssText = 'padding: 0.4rem 0.75rem; font-size: 0.7rem; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.4rem;' + (onlineDevices.length > 0 ? ' margin-top: 0.5rem; border-top: 1px solid var(--border, #333); padding-top: 0.6rem;' : '');
+    header.innerHTML = `<span style="width:6px; height:6px; border-radius:50%; background:#666;"></span> Offline (${offlineDevices.length})`;
+    devicesList.appendChild(header);
+    for (const device of offlineDevices) {
+      devicesList.appendChild(createDeviceCard(device));
+    }
   }
 }
 
