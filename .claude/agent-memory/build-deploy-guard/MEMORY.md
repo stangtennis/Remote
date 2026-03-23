@@ -1,9 +1,9 @@
 # Build & Deploy Guard - Memory
 
 ## Current State
-- **Version:** v2.91.0 (deployed 2026-03-05)
-- **Changes:** Fix sort skaerm paa macOS (WiFi): reliable channel til chunked frames + JPEG/0xFF kollisions-fix
-- **Agent SHA256:** bf74f868e4e630e764434b46e74a248aa1bf633fbb45ffbf6457cc3ed977acb7
+- **Version:** v2.99.30 (deployed 2026-03-23)
+- **Changes:** In-session chat, dashboard forbedringer (badge farver, inline stats, online/offline gruppering), H.264 auto-enable
+- **Agent SHA256:** 32a154066002b5adec83cd873367472a504ee4941225ae6136da9e908b5bc605
 
 ## Key Facts
 - Version injection via `-ldflags -X` in `build-local.sh` (NOT in source code)
