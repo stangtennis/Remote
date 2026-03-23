@@ -523,6 +523,22 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 			log.Println("🖥️ Terminal data channel opened")
 			m.terminalChannel = dc
 			m.setupTerminalChannelHandlers(dc)
+		case "chat":
+			log.Println("💬 Chat channel ready")
+			dc.OnOpen(func() {
+				log.Println("💬 Chat channel open")
+			})
+			dc.OnMessage(func(msg pionwebrtc.DataChannelMessage) {
+				// Parse incoming chat message
+				var chatMsg map[string]interface{}
+				if err := json.Unmarshal(msg.Data, &chatMsg); err != nil {
+					log.Printf("Failed to parse chat message: %v", err)
+					return
+				}
+				log.Printf("💬 Chat from controller: %s", chatMsg["text"])
+				// Echo back as acknowledgment (agent doesn't have UI to respond)
+				// In future, could show system tray notification
+			})
 		default:
 			m.dataChannel = dc
 			m.setupDataChannelHandlers(dc)

@@ -290,6 +290,11 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	motionPct := 0.0
 	forceFullFrame := false
 
+	// H.264 auto-enable state
+	streamStart := time.Now()
+	h264AutoEnabled := false
+	lastH264Check := time.Now()
+
 	ticker := time.NewTicker(frameInterval)
 	defer ticker.Stop()
 
@@ -558,6 +563,28 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 				frameInterval = time.Duration(1000/fps) * time.Millisecond
 				ticker.Reset(frameInterval)
 			}
+		}
+
+		// H.264 auto-enable: after 10s of streaming, check if conditions are good
+		if !m.useH264 && !h264AutoEnabled && time.Since(streamStart) > 10*time.Second && time.Since(lastH264Check) > 5*time.Second {
+			lastH264Check = time.Now()
+			// Check prerequisites
+			if m.videoTrack != nil && m.videoEncoder != nil && m.videoEncoder.GetEncoderName() == "openh264" {
+				// Check network conditions
+				if m.lastRTT < 100*time.Millisecond && m.lossPct < 1.0 && avgCPU < 60 {
+					log.Printf("🎬 Auto-enabling H.264 (good network conditions: RTT=%dms, loss=%.1f%%, CPU=%.0f%%)",
+						m.lastRTT.Milliseconds(), m.lossPct, avgCPU)
+					m.SetH264Mode(true)
+					h264AutoEnabled = true
+				}
+			}
+		}
+
+		// H.264 auto-disable: fall back if CPU goes high
+		if m.useH264 && h264AutoEnabled && avgCPU > 60 {
+			log.Printf("⚠️ H.264 auto-disable: CPU too high (%.0f%%) — falling back to JPEG tiles", avgCPU)
+			m.SetH264Mode(false)
+			h264AutoEnabled = false
 		}
 
 		// EARLY-DROP: Drop frames before encode if buffer is filling up

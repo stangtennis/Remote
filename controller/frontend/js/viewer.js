@@ -70,6 +70,7 @@ class ViewerSession {
           <button class="btn btn-sm btn-icon session-update-btn" title="Opdater agent"><i class="fas fa-sync-alt"></i></button>
           <button class="btn btn-sm btn-icon session-screenshot-btn" title="Tag screenshot"><i class="fas fa-camera"></i></button>
           <button class="btn btn-sm btn-icon session-terminal-btn" title="Terminal"><i class="fas fa-terminal"></i></button>
+          <button class="btn btn-sm btn-icon session-chat-btn" title="Chat"><i class="fas fa-comment"></i></button>
           <button class="btn btn-sm btn-icon session-fullscreen-btn" title="Fuldskærm"><i class="fas fa-expand"></i></button>
           <button class="btn btn-sm btn-danger session-disconnect-btn">Afbryd</button>
         </div>
@@ -81,6 +82,17 @@ class ViewerSession {
           <div class="detail-row"><span class="detail-label">Opløsning</span><span class="detail-value detail-res">—</span></div>
           <div class="detail-row"><span class="detail-label">Forbindelsestype</span><span class="detail-value detail-type">—</span></div>
           <div class="detail-row"><span class="detail-label">Agent version</span><span class="detail-value detail-agent-ver">—</span></div>
+        </div>
+        <div class="chat-panel" style="display:none; position:absolute; right:0; top:2.5rem; bottom:0; width:280px; z-index:10; background:var(--background-secondary); border-left:1px solid var(--border); flex-direction:column;">
+          <div class="chat-header" style="padding:0.5rem 0.75rem; border-bottom:1px solid var(--border); font-size:0.8rem; font-weight:600; display:flex; justify-content:space-between; align-items:center;">
+            <span>Chat</span>
+            <button class="btn btn-sm btn-icon chat-close-btn" style="font-size:0.7rem;">&times;</button>
+          </div>
+          <div class="chat-messages" style="flex:1; overflow-y:auto; padding:0.5rem; font-size:0.75rem;"></div>
+          <div class="chat-input-row" style="padding:0.5rem; border-top:1px solid var(--border); display:flex; gap:0.25rem;">
+            <input type="text" class="chat-input" placeholder="Skriv besked..." style="flex:1; padding:0.3rem 0.5rem; background:var(--surface); border:1px solid var(--border); border-radius:4px; color:var(--text); font-size:0.75rem;">
+            <button class="btn btn-sm btn-primary chat-send-btn" style="padding:0.3rem 0.5rem; font-size:0.75rem;">Send</button>
+          </div>
         </div>
         <div class="viewer-screen">
           <video autoplay playsinline muted></video>
@@ -97,6 +109,7 @@ class ViewerSession {
     this.activeEl = this.wrapper.querySelector('.viewer-active');
     this.videoEl = this.wrapper.querySelector('video');
     this.canvasEl = this.wrapper.querySelector('canvas');
+    this.setupChat();
   }
 
   setConnectStatus(msg) {
@@ -112,6 +125,67 @@ class ViewerSession {
     p.scrollTop = p.scrollHeight;
     const copyBtn = this.connectingEl?.querySelector('.connecting-copy-btn');
     if (copyBtn) copyBtn.style.display = '';
+  }
+
+  setupChat() {
+    this.chatChannel = null;
+    const chatBtn = this.wrapper.querySelector('.session-chat-btn');
+    const chatPanel = this.wrapper.querySelector('.chat-panel');
+    const chatClose = this.wrapper.querySelector('.chat-close-btn');
+    const chatInput = this.wrapper.querySelector('.chat-input');
+    const chatSend = this.wrapper.querySelector('.chat-send-btn');
+    const chatMessages = this.wrapper.querySelector('.chat-messages');
+
+    if (chatBtn) {
+      chatBtn.addEventListener('click', () => {
+        const panel = this.wrapper.querySelector('.chat-panel');
+        if (panel) {
+          const isVisible = panel.style.display === 'flex';
+          panel.style.display = isVisible ? 'none' : 'flex';
+        }
+      });
+    }
+    if (chatClose) {
+      chatClose.addEventListener('click', () => {
+        const panel = this.wrapper.querySelector('.chat-panel');
+        if (panel) panel.style.display = 'none';
+      });
+    }
+
+    const sendMessage = () => {
+      const text = chatInput?.value?.trim();
+      if (!text) return;
+      this.sendChatMessage(text);
+      this.addChatMessage('Du', text);
+      if (chatInput) chatInput.value = '';
+    };
+
+    if (chatSend) chatSend.addEventListener('click', sendMessage);
+    if (chatInput) chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+  }
+
+  sendChatMessage(text) {
+    if (!this.chatChannel || this.chatChannel.readyState !== 'open') {
+      // Fallback: send via control data channel
+      if (this.dataChannel && this.dataChannel.readyState === 'open') {
+        this.dataChannel.send(JSON.stringify({ type: 'chat', text, sender: 'controller' }));
+      }
+      return;
+    }
+    this.chatChannel.send(JSON.stringify({ type: 'chat', text, sender: 'controller' }));
+  }
+
+  addChatMessage(sender, text) {
+    const chatMessages = this.wrapper.querySelector('.chat-messages');
+    if (!chatMessages) return;
+    const msg = document.createElement('div');
+    msg.style.cssText = 'margin-bottom:0.3rem; padding:0.2rem 0.4rem; border-radius:4px; background:rgba(255,255,255,0.05);';
+    const time = new Date().toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' });
+    msg.innerHTML = `<span style="color:var(--primary); font-weight:500;">${sender}</span> <span style="color:var(--text-dim); font-size:0.65rem;">${time}</span><br>${text}`;
+    chatMessages.appendChild(msg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
   async connect() {
@@ -304,6 +378,14 @@ class ViewerSession {
         dc.onmessage = (e) => this.handleDataMessage(e);
       } else if (dc.label === 'file-transfer' || dc.label === 'file') {
         this.fileChannel = dc;
+      } else if (dc.label === 'chat') {
+        this.chatChannel = dc;
+        dc.onmessage = (e) => {
+          try {
+            const msg = JSON.parse(typeof e.data === 'string' ? e.data : new TextDecoder().decode(e.data));
+            if (msg.type === 'chat') this.addChatMessage('Agent', msg.text || '');
+          } catch(err) {}
+        };
       }
     };
 
@@ -329,6 +411,13 @@ class ViewerSession {
     fileDC.onopen = () => {
       console.log(`[${this.deviceName}] File data channel open`);
       this.fileChannel = fileDC;
+    };
+
+    // Chat channel
+    const chatDC = this.peerConnection.createDataChannel('chat', { ordered: true });
+    chatDC.onopen = () => {
+      console.log(`[${this.deviceName}] Chat data channel open`);
+      this.chatChannel = chatDC;
     };
   }
 
@@ -407,6 +496,8 @@ class ViewerSession {
         } else if (msg.type === 'update_status') {
           const type = msg.status === 'error' ? 'error' : msg.status === 'up_to_date' ? 'success' : 'info';
           showToast(msg.message || msg.status, type);
+        } else if (msg.type === 'chat') {
+          this.addChatMessage('Agent', msg.text || msg.message || '');
         }
       } catch (e) { /* not JSON */ }
     }

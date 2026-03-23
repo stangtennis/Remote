@@ -626,6 +626,12 @@ function updateBandwidthDisplay(mbps, fps) {
       bwSpan.textContent = `${mbps.toFixed(1)} Mbit/s`;
     }
   }
+
+  // Also update the stats mini panel
+  const statFPS = document.getElementById('statFPS');
+  if (statFPS) statFPS.textContent = fps.toFixed(0) + ' FPS';
+  const statBW = document.getElementById('statBandwidth');
+  if (statBW) statBW.textContent = mbps.toFixed(1) + ' Mbit/s';
 }
 
 // Get current bandwidth (for external use)
@@ -926,6 +932,16 @@ async function updateConnectionStats(ctx) {
     document.getElementById('statRtt').textContent = rtt + ' ms';
     document.getElementById('statPacketLoss').textContent = packetLoss + ' packets';
 
+    // Update toolbar inline stats
+    const latencyEl = document.getElementById('previewLatency');
+    if (latencyEl) latencyEl.textContent = rtt + ' ms';
+    const statLatency = document.getElementById('statLatency');
+    if (statLatency) statLatency.textContent = rtt + ' ms';
+
+    // Show connection stats section when we have data
+    const connectionStatsSection = document.getElementById('connectionStatsSection');
+    if (connectionStatsSection) connectionStatsSection.style.display = 'block';
+
   } catch (error) {
     console.error('Failed to get stats:', error);
   }
@@ -974,6 +990,41 @@ async function updateConnectionType(ctx) {
     }
 
     document.getElementById('statConnectionType').textContent = connectionType;
+
+    // Color-code the connection indicator in toolbar
+    const indicator = document.getElementById('previewToolbar')?.querySelector('.connection-indicator');
+    if (indicator) {
+        if (connectionType.includes('Direct')) {
+            indicator.style.background = '#22c55e';
+            indicator.style.boxShadow = '0 0 6px rgba(34,197,94,0.5)';
+            indicator.title = 'P2P Direkte';
+        } else if (connectionType.includes('STUN')) {
+            indicator.style.background = '#3b82f6';
+            indicator.style.boxShadow = '0 0 6px rgba(59,130,246,0.5)';
+            indicator.title = 'P2P via STUN';
+        } else if (connectionType.includes('Relay') || connectionType.includes('TURN')) {
+            indicator.style.background = '#f59e0b';
+            indicator.style.boxShadow = '0 0 6px rgba(245,158,11,0.5)';
+            indicator.title = 'TURN Relay';
+        }
+    }
+
+    // Update connection type badge text next to device name
+    const connBadge = document.getElementById('connTypeBadge');
+    if (connBadge) {
+        let shortType = 'P2P';
+        let badgeColor = '#22c55e';
+        if (connectionType.includes('Relay') || connectionType.includes('TURN')) {
+            shortType = 'Relay';
+            badgeColor = '#f59e0b';
+        } else if (connectionType.includes('STUN')) {
+            shortType = 'STUN';
+            badgeColor = '#3b82f6';
+        }
+        connBadge.textContent = shortType;
+        connBadge.style.color = badgeColor;
+        connBadge.style.display = '';
+    }
 
   } catch (error) {
     console.error('Failed to get connection type:', error);
@@ -1165,6 +1216,10 @@ function handleAgentMessage(msg) {
       }
       break;
 
+    case 'chat':
+      addChatMessage('Agent', msg.text || msg.message || '');
+      break;
+
     case 'clipboard_text':
       if (msg.content) {
         navigator.clipboard.writeText(msg.content).then(() => {
@@ -1333,6 +1388,44 @@ function setupFileChannelHandlers(ctx) {
     }
   };
 }
+
+// ========== CHAT ==========
+function toggleChat() {
+    const panel = document.getElementById('chatPanel');
+    if (!panel) return;
+    const isVisible = panel.style.display === 'flex';
+    panel.style.display = isVisible ? 'none' : 'flex';
+}
+
+function sendChat() {
+    const input = document.getElementById('chatInput');
+    const text = input?.value?.trim();
+    if (!text) return;
+
+    const ctx = window.SessionManager?.getActiveSession();
+    const dc = ctx?.dataChannel || window.dataChannel;
+    if (dc && dc.readyState === 'open') {
+        dc.send(JSON.stringify({ type: 'chat', text, sender: 'controller' }));
+    }
+
+    addChatMessage('Du', text);
+    input.value = '';
+}
+
+function addChatMessage(sender, text) {
+    const container = document.getElementById('chatMessages');
+    if (!container) return;
+    const msg = document.createElement('div');
+    msg.style.cssText = 'margin-bottom:0.3rem; padding:0.2rem 0.4rem; border-radius:4px; background:rgba(255,255,255,0.05);';
+    const time = new Date().toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' });
+    msg.innerHTML = `<span style="color:var(--primary, #6366f1); font-weight:500;">${sender}</span> <span style="color:var(--text-dim, #64748b); font-size:0.65rem;">${time}</span><br>${text}`;
+    container.appendChild(msg);
+    container.scrollTop = container.scrollHeight;
+}
+
+window.toggleChat = toggleChat;
+window.sendChat = sendChat;
+window.addChatMessage = addChatMessage;
 
 // Export
 window.initWebRTC = initWebRTC;
