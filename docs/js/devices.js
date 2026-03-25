@@ -43,11 +43,15 @@ async function loadDevices() {
       .single();
 
     const isAdmin = approval && (approval.role === 'admin' || approval.role === 'super_admin');
+    const isSuperAdmin = approval && approval.role === 'super_admin';
 
     // Load devices, tags, and favorites in parallel
-    const devicesPromise = isAdmin
+    // Only super_admin sees ALL devices; admin sees own devices (owner_id match)
+    const devicesPromise = isSuperAdmin
       ? supabase.from('remote_devices').select('*').order('last_seen', { ascending: false })
-      : supabase.rpc('get_user_devices', { p_user_id: session.user.id });
+      : isAdmin
+        ? supabase.from('remote_devices').select('*').eq('owner_id', session.user.id).order('last_seen', { ascending: false })
+        : supabase.rpc('get_user_devices', { p_user_id: session.user.id });
 
     const tagsPromise = supabase.from('device_tags').select('device_id, tag');
     const favoritesPromise = supabase.from('user_device_favorites').select('device_id').eq('user_id', session.user.id);
