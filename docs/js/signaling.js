@@ -176,12 +176,6 @@ async function handleSignal(signal, ctx) {
     return;
   }
 
-  // Skip already processed signals (prevents duplicates from realtime + polling)
-  if (ctx.processedSignalIds.has(signal.id)) {
-    return;
-  }
-  ctx.processedSignalIds.add(signal.id);
-
   debug('🔵 Processing signal:', signal.msg_type, 'from', signal.from_side, 'for device:', ctx.id);
 
   const peerConnection = ctx.peerConnection;
