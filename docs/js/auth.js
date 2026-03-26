@@ -196,16 +196,19 @@ if (document.getElementById('logoutBtn')) {
         quickSupportBtn.style.display = 'inline-flex';
       }
       
-      // Add controller download for admins
+      // Add controller download for admins (platform-aware)
       const downloadsGrid = document.getElementById('downloadsGrid');
       const downloadsDescription = document.getElementById('downloadsDescription');
       if (downloadsGrid && isAdmin) {
+        const isMac = window._isMacPlatform || /Mac/i.test(navigator.platform);
+        const controllerFile = isMac ? 'controller-macos' : 'controller.exe';
+        const controllerLabel = isMac ? '🎮 Controller (macOS)' : '🎮 Admin Controller';
         const controllerLink = document.createElement('a');
         controllerLink.href = '#';
-        controllerLink.onclick = function() { signedDownload('controller.exe'); return false; };
+        controllerLink.onclick = function() { signedDownload(controllerFile); return false; };
         controllerLink.className = 'btn btn-secondary';
         controllerLink.style.cssText = 'text-decoration: none; text-align: center;';
-        controllerLink.innerHTML = '🎮 Admin Controller';
+        controllerLink.innerHTML = controllerLabel;
         downloadsGrid.appendChild(controllerLink);
 
         if (downloadsDescription) {

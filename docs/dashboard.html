@@ -179,9 +179,7 @@
             <h2><i class="fas fa-download"></i> Downloads</h2>
           </div>
           <div id="downloadsGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-            <a href="#" onclick="signedDownload('remote-agent.exe'); return false;"
-               class="btn btn-primary"
-               style="text-decoration: none; text-align: center;">
+            <a href="#" id="agentDownloadBtn" class="btn btn-primary" style="text-decoration: none; text-align: center;">
               <i class="fas fa-desktop"></i> Client Agent
             </a>
             <a href="agent.html"
@@ -194,6 +192,17 @@
           <p id="downloadsDescription" style="margin-top: 0.5rem; font-size: 0.875rem; color: #888; text-align: center;">
             Client Agent: installér på den PC der skal fjernstyres • Web Agent: browser-baseret alternativ
           </p>
+          <script>
+            (function() {
+              var isMac = /Mac/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent);
+              var agentBtn = document.getElementById('agentDownloadBtn');
+              if (agentBtn) {
+                agentBtn.onclick = function() { signedDownload(isMac ? 'remote-agent-macos' : 'remote-agent.exe'); return false; };
+                if (isMac) agentBtn.innerHTML = '<i class="fas fa-apple-alt"></i> Client Agent (macOS)';
+              }
+              window._isMacPlatform = isMac;
+            })();
+          </script>
         </section>
 
         <!-- Devices Section -->
@@ -522,7 +531,7 @@
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js?v=6"></script>
-  <script src="js/auth.js?v=6"></script>
+  <script src="js/auth.js?v=7"></script>
   <script src="js/app.js?v=9"></script>
   <script src="js/devices.js?v=12"></script>
   <script src="js/sessions.js?v=8"></script>
