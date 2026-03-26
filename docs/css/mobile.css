@@ -46,12 +46,14 @@
   #quickSupportBtn i { font-size: 0.75rem !important; }
   #adminLink { font-size: 0 !important; padding: 0.3rem !important; }
   #adminLink i { font-size: 0.75rem !important; }
-  #logoutBtn { font-size: 0.65rem !important; padding: 0.25rem 0.4rem; }
+  #logoutBtn { font-size: 0 !important; padding: 0.3rem !important; width: 28px; height: 28px; }
+  #logoutBtn::before { content: '\f2f5'; font-family: 'Font Awesome 6 Free'; font-weight: 900; font-size: 0.75rem; }
 
-  /* ===== Dashboard grid — stack ===== */
+  /* ===== Dashboard grid — stack, devices first ===== */
   .dashboard-grid { grid-template-columns: 1fr !important; gap: 0.75rem; padding: 0.5rem; }
   .dashboard-main { padding: 0 !important; }
   .dashboard-left, .dashboard-right { width: 100%; }
+  .dashboard-right { order: -1; } /* Devices/downloads first on mobile */
 
   /* ===== Remote preview — fill width, proper aspect ===== */
   .remote-preview-section { min-height: auto; border-radius: 8px; }
