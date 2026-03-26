@@ -41,8 +41,12 @@
   .header-actions .btn { width: auto; padding: 0.3rem 0.5rem; font-size: 0.7rem !important; }
   .header-actions .btn-icon { width: 28px; height: 28px; font-size: 0.75rem !important; }
   .user-info { font-size: 0.65rem !important; padding: 0.2rem 0.4rem; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* Hide less critical header buttons on very small screens */
-  #quickSupportBtn { display: none !important; }
+  /* Compact header buttons */
+  #quickSupportBtn { font-size: 0 !important; padding: 0.3rem !important; }
+  #quickSupportBtn i { font-size: 0.75rem !important; }
+  #adminLink { font-size: 0 !important; padding: 0.3rem !important; }
+  #adminLink i { font-size: 0.75rem !important; }
+  #logoutBtn { font-size: 0.65rem !important; padding: 0.25rem 0.4rem; }
 
   /* ===== Dashboard grid — stack ===== */
   .dashboard-grid { grid-template-columns: 1fr !important; gap: 0.75rem; padding: 0.5rem; }
@@ -109,10 +113,11 @@
   .stat-mini-label { font-size: 0.55rem; }
 
   /* ===== Downloads section ===== */
-  .downloads-section { margin-bottom: 1rem !important; }
-  #downloadsGrid { grid-template-columns: 1fr 1fr !important; gap: 0.5rem; }
-  #downloadsGrid .btn { font-size: 0.7rem !important; padding: 0.5rem 0.3rem; }
-  #downloadsDescription { font-size: 0.7rem !important; }
+  .downloads-section { margin-bottom: 0.75rem !important; }
+  .downloads-section .section-header h2 { font-size: 0.7rem !important; }
+  #downloadsGrid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) !important; gap: 0.4rem; }
+  #downloadsGrid .btn { font-size: 0.65rem !important; padding: 0.4rem 0.25rem; min-height: 36px; }
+  #downloadsDescription { font-size: 0.65rem !important; margin-top: 0.3rem !important; }
 
   /* ===== Device list — compact cards ===== */
   .devices-section .section-header { padding: 0 0 0.4rem 0; }
