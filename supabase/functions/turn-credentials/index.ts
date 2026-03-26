@@ -90,26 +90,9 @@ serve(async (req) => {
       }
     }
 
-    // 2) Coturn fallback (always include if configured, as backup relay)
-    if (TURN_SERVER && TURN_SECRET) {
-      const timestamp = Math.floor(Date.now() / 1000) + TURN_TTL
-      const username = `${timestamp}:${user.id}`
-
-      const encoder = new TextEncoder()
-      const key = encoder.encode(TURN_SECRET)
-      const message = encoder.encode(username)
-      const signature = await crypto.subtle.importKey(
-        'raw', key, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']
-      )
-      const sig = await crypto.subtle.sign('HMAC', signature, message)
-      const credential = btoa(String.fromCharCode(...new Uint8Array(sig)))
-
-      allIceServers.push(
-        { urls: [TURN_SERVER, `${TURN_SERVER}?transport=tcp`], username, credential }
-      )
-      if (provider === 'stun-only') provider = 'coturn'
-      else provider += '+coturn'
-    }
+    // 2) Coturn fallback — disabled for now (relay ports 49200-49300 not forwarded on router)
+    // Re-enable when router port forwarding is set up
+    // if (TURN_SERVER && TURN_SECRET) { ... }
 
     return new Response(
       JSON.stringify({
