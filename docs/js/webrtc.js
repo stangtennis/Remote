@@ -129,7 +129,6 @@ async function initWebRTC(sessionData, ctx) {
     // Use dynamically fetched ICE configuration
     const configuration = {
       ...iceConfig,
-      bundlePolicy: 'max-bundle',
       // Force relay mode if ?relay=true in URL (for testing)
       ...(forceRelay && { iceTransportPolicy: 'relay' })
     };
