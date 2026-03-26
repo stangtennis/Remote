@@ -51,6 +51,13 @@ serve(async (req) => {
     const CF_TURN_KEY_ID = Deno.env.get('CF_TURN_KEY_ID') || ''
     const CF_TURN_API_TOKEN = Deno.env.get('CF_TURN_API_TOKEN') || ''
 
+    // Collect all ICE servers (Cloudflare + coturn)
+    let allIceServers: any[] = [
+      { urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] },
+    ]
+    let provider = 'stun-only'
+
+    // 1) Cloudflare managed TURN
     if (CF_TURN_KEY_ID && CF_TURN_API_TOKEN) {
       try {
         const cfResp = await fetch(
@@ -66,81 +73,50 @@ serve(async (req) => {
         )
         if (cfResp.ok) {
           const cfData = await cfResp.json()
-          return new Response(
-            JSON.stringify({
-              iceServers: cfData.iceServers,
-              ttl: 86400,
-              expires: Math.floor(Date.now() / 1000) + 86400,
-              provider: 'cloudflare',
-            }),
-            {
-              status: 200,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          // Add Cloudflare ICE servers (skip their STUN, we already have it)
+          for (const srv of cfData.iceServers || []) {
+            const urls = Array.isArray(srv.urls) ? srv.urls : [srv.urls]
+            const turnUrls = urls.filter((u: string) => u.startsWith('turn'))
+            if (turnUrls.length > 0 && srv.username) {
+              allIceServers.push({ urls: turnUrls, username: srv.username, credential: srv.credential })
             }
-          )
+          }
+          provider = 'cloudflare'
+        } else {
+          console.error('Cloudflare TURN failed:', cfResp.status)
         }
-        console.error('Cloudflare TURN failed:', cfResp.status, await cfResp.text())
       } catch (e) {
         console.error('Cloudflare TURN error:', e)
       }
     }
 
-    // Fallback: coturn with HMAC-SHA1 credentials
-    if (!TURN_SERVER || !TURN_SECRET) {
-      return new Response(
-        JSON.stringify({
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-          ],
-          ttl: TURN_TTL,
-          expires: Math.floor(Date.now() / 1000) + TURN_TTL,
-          provider: 'stun-only',
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
+    // 2) Coturn fallback (always include if configured, as backup relay)
+    if (TURN_SERVER && TURN_SECRET) {
+      const timestamp = Math.floor(Date.now() / 1000) + TURN_TTL
+      const username = `${timestamp}:${user.id}`
+
+      const encoder = new TextEncoder()
+      const key = encoder.encode(TURN_SECRET)
+      const message = encoder.encode(username)
+      const signature = await crypto.subtle.importKey(
+        'raw', key, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']
       )
+      const sig = await crypto.subtle.sign('HMAC', signature, message)
+      const credential = btoa(String.fromCharCode(...new Uint8Array(sig)))
+
+      allIceServers.push(
+        { urls: [TURN_SERVER, `${TURN_SERVER}?transport=tcp`], username, credential }
+      )
+      if (provider === 'stun-only') provider = 'coturn'
+      else provider += '+coturn'
     }
-
-    // Generate time-limited credentials using TURN REST API format
-    // Username format: timestamp:username (coturn style)
-    const timestamp = Math.floor(Date.now() / 1000) + TURN_TTL
-    const username = `${timestamp}:${user.id}`
-
-    // Generate HMAC-SHA1 credential (coturn compatible)
-    const encoder = new TextEncoder()
-    const key = encoder.encode(TURN_SECRET)
-    const message = encoder.encode(username)
-    const signature = await crypto.subtle.importKey(
-      'raw', key, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']
-    )
-    const sig = await crypto.subtle.sign('HMAC', signature, message)
-    const credential = btoa(String.fromCharCode(...new Uint8Array(sig)))
-
-    // Return ICE servers configuration
-    const iceServers = [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      {
-        urls: TURN_SERVER,
-        username: username,
-        credential: credential
-      },
-      {
-        urls: `${TURN_SERVER}?transport=tcp`,
-        username: username,
-        credential: credential
-      }
-    ]
 
     return new Response(
       JSON.stringify({
-        iceServers,
+        iceServers: allIceServers,
         ttl: TURN_TTL,
-        expires: timestamp,
-        provider: 'coturn',
+        expires: Math.floor(Date.now() / 1000) + TURN_TTL,
+        provider,
       }),
       {
         status: 200,
