@@ -62,20 +62,84 @@ if (document.getElementById('loginForm')) {
   const backToLoginBtn = document.getElementById('backToLoginBtn');
   const authMessage = document.getElementById('authMessage');
 
+  const resetForm = document.getElementById('resetForm');
+  const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+  const backToLoginFromReset = document.getElementById('backToLoginFromReset');
+  const loginDivider = document.getElementById('loginDivider');
+
+  function showLoginView() {
+    loginForm.style.display = 'block';
+    signupForm.style.display = 'none';
+    if (resetForm) resetForm.style.display = 'none';
+    showSignupBtn.style.display = 'block';
+    if (forgotPasswordLink) forgotPasswordLink.parentElement.style.display = '';
+    if (loginDivider) loginDivider.style.display = '';
+    authMessage.style.display = 'none';
+  }
+
   // Toggle between login and signup
   showSignupBtn.addEventListener('click', () => {
     loginForm.style.display = 'none';
     showSignupBtn.style.display = 'none';
+    if (forgotPasswordLink) forgotPasswordLink.parentElement.style.display = 'none';
+    if (loginDivider) loginDivider.style.display = 'none';
     signupForm.style.display = 'block';
     authMessage.style.display = 'none';
   });
 
-  backToLoginBtn.addEventListener('click', () => {
-    signupForm.style.display = 'none';
-    loginForm.style.display = 'block';
-    showSignupBtn.style.display = 'block';
-    authMessage.style.display = 'none';
-  });
+  backToLoginBtn.addEventListener('click', showLoginView);
+
+  // Forgot password
+  if (forgotPasswordLink) {
+    forgotPasswordLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      loginForm.style.display = 'none';
+      showSignupBtn.style.display = 'none';
+      if (forgotPasswordLink) forgotPasswordLink.parentElement.style.display = 'none';
+      if (loginDivider) loginDivider.style.display = 'none';
+      if (resetForm) resetForm.style.display = 'block';
+      authMessage.style.display = 'none';
+      // Pre-fill email if already entered
+      const emailVal = document.getElementById('email')?.value;
+      if (emailVal) document.getElementById('resetEmail').value = emailVal;
+    });
+  }
+
+  if (backToLoginFromReset) {
+    backToLoginFromReset.addEventListener('click', showLoginView);
+  }
+
+  // Handle password reset
+  if (resetForm) {
+    resetForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('resetEmail').value;
+      const resetBtn = document.getElementById('resetBtn');
+
+      resetBtn.disabled = true;
+      resetBtn.innerHTML = '<span>Sender...</span>';
+      authMessage.style.display = 'none';
+
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin + '/Remote/reset-password.html'
+        });
+
+        if (error) throw error;
+
+        authMessage.className = 'message success';
+        authMessage.textContent = 'Nulstillingslink sendt! Tjek din indbakke (og spam-mappe).';
+        authMessage.style.display = 'block';
+      } catch (error) {
+        authMessage.className = 'message error';
+        authMessage.textContent = translateAuthError(error.message);
+        authMessage.style.display = 'block';
+      } finally {
+        resetBtn.disabled = false;
+        resetBtn.innerHTML = '<span>Send nulstillingslink</span>';
+      }
+    });
+  }
 
   // Handle login
   loginForm.addEventListener('submit', async (e) => {
