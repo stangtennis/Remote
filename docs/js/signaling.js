@@ -192,8 +192,16 @@ async function handleSignal(signal, ctx) {
           debug('⏭️ Skipping answer - already in state:', peerConnection.signalingState);
           return;
         }
-        const answer = new RTCSessionDescription(signal.payload);
-        await peerConnection.setRemoteDescription(answer);
+        try {
+          const answer = new RTCSessionDescription(signal.payload);
+          await peerConnection.setRemoteDescription(answer);
+        } catch (e) {
+          if (e.name === 'InvalidStateError') {
+            debug('⏭️ Answer race condition (already set):', e.message);
+            return;
+          }
+          throw e;
+        }
         debug('✅ Remote description set (answer)');
 
         // Flush any buffered ICE candidates now that remote description is set
