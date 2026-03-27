@@ -180,27 +180,35 @@
           </div>
           <div id="downloadsGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
             <a href="#" id="agentDownloadBtn" class="btn btn-primary" style="text-decoration: none; text-align: center;">
-              <i class="fas fa-desktop"></i> Client Agent
+              <i class="fas fa-desktop"></i> Agent Installer
             </a>
-            <a href="agent.html"
-               class="btn btn-primary"
-               style="text-decoration: none; text-align: center;">
+            <a href="#" id="agentRunOnceBtn" class="btn btn-secondary" style="text-decoration: none; text-align: center;">
+              <i class="fas fa-play"></i> Quick Connect
+            </a>
+            <a href="agent.html" class="btn btn-secondary" style="text-decoration: none; text-align: center;">
               <i class="fas fa-globe"></i> Web Agent
             </a>
             <!-- Controller link added dynamically for admins -->
           </div>
           <p id="downloadsDescription" style="margin-top: 0.5rem; font-size: 0.875rem; color: #888; text-align: center;">
-            Client Agent: installér på den PC der skal fjernstyres • Web Agent: browser-baseret alternativ
+            Agent Installer: permanent installation med service + tray • Quick Connect: kør én gang uden installation
           </p>
           <script>
             (function() {
               var isMac = /Mac/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent);
+              window._isMacPlatform = isMac;
+              // Agent installer
               var agentBtn = document.getElementById('agentDownloadBtn');
               if (agentBtn) {
-                agentBtn.onclick = function() { signedDownload(isMac ? 'remote-agent-macos' : 'remote-agent.exe'); return false; };
-                if (isMac) agentBtn.innerHTML = '<i class="fas fa-apple-alt"></i> Client Agent (macOS)';
+                agentBtn.onclick = function() { signedDownload(isMac ? 'remote-agent-macos' : 'RemoteDesktopAgent-Setup.exe'); return false; };
+                if (isMac) agentBtn.innerHTML = '<i class="fas fa-apple-alt"></i> Agent (macOS)';
               }
-              window._isMacPlatform = isMac;
+              // Quick Connect (run once)
+              var runOnceBtn = document.getElementById('agentRunOnceBtn');
+              if (runOnceBtn) {
+                runOnceBtn.onclick = function() { signedDownload(isMac ? 'remote-agent-macos' : 'RemoteDesktopAgent-RunOnce-Setup.exe'); return false; };
+                if (isMac) runOnceBtn.innerHTML = '<i class="fas fa-play"></i> Quick Connect (macOS)';
+              }
             })();
           </script>
         </section>
@@ -531,7 +539,7 @@
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js?v=6"></script>
-  <script src="js/auth.js?v=7"></script>
+  <script src="js/auth.js?v=8"></script>
   <script src="js/app.js?v=10"></script>
   <script src="js/devices.js?v=13"></script>
   <script src="js/sessions.js?v=8"></script>

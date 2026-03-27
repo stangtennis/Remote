@@ -262,11 +262,10 @@ if (document.getElementById('logoutBtn')) {
       
       // Add controller download for admins (platform-aware)
       const downloadsGrid = document.getElementById('downloadsGrid');
-      const downloadsDescription = document.getElementById('downloadsDescription');
       if (downloadsGrid && isAdmin) {
         const isMac = window._isMacPlatform || /Mac/i.test(navigator.platform);
-        const controllerFile = isMac ? 'controller-macos' : 'controller.exe';
-        const controllerLabel = isMac ? '🎮 Controller (macOS)' : '🎮 Admin Controller';
+        const controllerFile = isMac ? 'controller-macos' : 'RemoteDesktopController-Setup.exe';
+        const controllerLabel = isMac ? '<i class="fas fa-gamepad"></i> Controller (macOS)' : '<i class="fas fa-gamepad"></i> Controller';
         const controllerLink = document.createElement('a');
         controllerLink.href = '#';
         controllerLink.onclick = function() { signedDownload(controllerFile); return false; };
@@ -274,10 +273,6 @@ if (document.getElementById('logoutBtn')) {
         controllerLink.style.cssText = 'text-decoration: none; text-align: center;';
         controllerLink.innerHTML = controllerLabel;
         downloadsGrid.appendChild(controllerLink);
-
-        if (downloadsDescription) {
-          downloadsDescription.textContent = 'Client Agent: installér på den PC der skal fjernstyres • Web Agent: browser-baseret alternativ • Admin Controller: styr enheder fra din PC';
-        }
       }
     }
   });
