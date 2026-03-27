@@ -59,25 +59,28 @@
   .dashboard-main { padding: 0 !important; }
   .dashboard-right { order: -1; }
 
-  /* === DOWNLOADS: single row, tiny === */
+  /* === DOWNLOADS: horizontal row === */
   .downloads-section {
     margin-bottom: 0.3rem !important;
     padding: 0 !important;
   }
   .downloads-section .section-header { display: none !important; }
   #downloadsGrid {
-    display: flex !important;
-    flex-wrap: wrap;
-    gap: 0.2rem;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) !important;
+    gap: 0.2rem !important;
   }
-  #downloadsGrid > * {
-    flex: 1 1 auto;
-    font-size: 0.55rem !important;
-    padding: 0.25rem 0.3rem !important;
-    min-height: 26px !important;
+  #downloadsGrid .btn,
+  #downloadsGrid a {
+    font-size: 0.5rem !important;
+    padding: 0.2rem 0.15rem !important;
+    min-height: 24px !important;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  #downloadsGrid > * i { margin-right: 0.15rem; font-size: 0.55rem !important; }
+  #downloadsGrid .btn i,
+  #downloadsGrid a i { margin-right: 0.1rem; font-size: 0.5rem !important; }
   #downloadsDescription { display: none !important; }
 
   /* === DEVICES: compact list === */
