@@ -193,7 +193,26 @@ async function handleSignal(signal, ctx) {
           return;
         }
         try {
-          const answer = new RTCSessionDescription(signal.payload);
+          // Fix: Pion agent omits a=rtcp-mux on rejected (port 0) m-lines.
+          // Chrome requires it on ALL m-lines. Fix the SDP before setting it.
+          const fixedPayload = { ...signal.payload };
+          if (fixedPayload.sdp) {
+            const sep = fixedPayload.sdp.includes('\r\n') ? '\r\n' : '\n';
+            const lines = fixedPayload.sdp.split(sep);
+            const out = [];
+            let inM = false, hasMux = false;
+            for (const line of lines) {
+              if (line.startsWith('m=')) {
+                if (inM && !hasMux) out.push('a=rtcp-mux');
+                inM = true; hasMux = false;
+              }
+              if (line === 'a=rtcp-mux') hasMux = true;
+              out.push(line);
+            }
+            if (inM && !hasMux) out.push('a=rtcp-mux');
+            fixedPayload.sdp = out.join(sep);
+          }
+          const answer = new RTCSessionDescription(fixedPayload);
           await peerConnection.setRemoteDescription(answer);
         } catch (e) {
           if (e.name === 'InvalidStateError') {
