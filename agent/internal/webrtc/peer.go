@@ -400,7 +400,7 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 		m.mu.Lock()
 		isCurrentPC := m.peerConnection == thisPC
 		m.mu.Unlock()
-		if !isCurrentPC && (state == pionwebrtc.PeerConnectionStateClosed || state == pionwebrtc.PeerConnectionStateFailed) {
+		if !isCurrentPC {
 			log.Printf("🔄 Ignoring stale %s callback from old peer connection", state.String())
 			return
 		}
@@ -495,6 +495,14 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 
 	// Set up data channel handler
 	pc.OnDataChannel(func(dc *pionwebrtc.DataChannel) {
+		// Ignore data channels from old peer connections
+		m.mu.Lock()
+		isCurrentPC := m.peerConnection == thisPC
+		m.mu.Unlock()
+		if !isCurrentPC {
+			log.Printf("🔄 Ignoring stale data channel %s from old peer connection", dc.Label())
+			return
+		}
 		log.Printf("📡 Data channel opened: %s", dc.Label())
 
 		// Route to appropriate handler based on channel label
