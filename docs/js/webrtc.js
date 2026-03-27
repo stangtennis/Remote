@@ -1085,15 +1085,6 @@ function displayVideoFrame(data, ctx) {
   if (previewIdle) previewIdle.style.display = 'none';
   if (previewConnecting) previewConnecting.style.display = 'none';
 
-  // Auto-fullscreen on mobile when first frame arrives
-  if (window.innerWidth <= 768 && !window._mobileFullscreenDone) {
-    window._mobileFullscreenDone = true;
-    const container = document.getElementById('remotePreviewContainer');
-    if (container && !container.classList.contains('fullscreen')) {
-      container.classList.add('fullscreen');
-      document.body.style.overflow = 'hidden';
-    }
-  }
 
   const img = new Image();
   img.onload = () => {
