@@ -823,16 +823,53 @@ function setupInputCapture() {
   target.addEventListener('touchmove', touchMoveHandler, { passive: false });
   inputEventHandlers.touchMove = touchMoveHandler;
 
+  // Hidden input for mobile keyboard
+  let mobileInput = document.getElementById('mobileKeyboardInput');
+  if (!mobileInput) {
+    mobileInput = document.createElement('input');
+    mobileInput.id = 'mobileKeyboardInput';
+    mobileInput.type = 'text';
+    mobileInput.autocomplete = 'off';
+    mobileInput.autocapitalize = 'off';
+    mobileInput.autocorrect = 'off';
+    mobileInput.spellcheck = false;
+    mobileInput.style.cssText = 'position:fixed; left:-9999px; top:50%; width:1px; height:1px; opacity:0; font-size:16px;';
+    document.body.appendChild(mobileInput);
+
+    // Capture input and send as keystrokes
+    mobileInput.addEventListener('input', (e) => {
+      const dc = getActiveDataChannel();
+      if (!dc || dc.readyState !== 'open') return;
+      const text = e.data || '';
+      for (const char of text) {
+        sendControlEvent({ t: 'key', key: char, down: true });
+        sendControlEvent({ t: 'key', key: char, down: false });
+      }
+      mobileInput.value = '';
+    });
+    mobileInput.addEventListener('keydown', (e) => {
+      const dc = getActiveDataChannel();
+      if (!dc || dc.readyState !== 'open') return;
+      if (e.key === 'Backspace' || e.key === 'Enter' || e.key === 'Tab' || e.key === 'Escape') {
+        sendControlEvent({ t: 'key', key: e.key, down: true });
+        sendControlEvent({ t: 'key', key: e.key, down: false });
+        e.preventDefault();
+      }
+    });
+  }
+
   const touchEndHandler = (e) => {
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
     e.preventDefault();
     const duration = Date.now() - touchStartTime;
     if (!touchMoved && duration < 500) {
-      // Tap = click
+      // Tap = click + show keyboard
       sendControlEvent({ t: 'mouse_click', button: 'left', down: true, x: lastCoords.x, y: lastCoords.y, rel: true });
       setTimeout(() => {
         sendControlEvent({ t: 'mouse_click', button: 'left', down: false, x: lastCoords.x, y: lastCoords.y, rel: true });
+        // Focus hidden input to show mobile keyboard
+        if (mobileInput) { mobileInput.value = ''; mobileInput.focus(); }
       }, 50);
     } else if (!touchMoved && duration >= 500) {
       // Long press = right click
