@@ -158,6 +158,21 @@ else
 fi
 rm -rf "$STAGING"
 
+# --- Agent Run Once installer (Portable, no service) ---
+build_installer "AgentRunOnce" "agent-runonce-installer.nsi" "RemoteDesktopAgent-RunOnce"
+STAGING="installer/staging-agentrunonce"
+cp "builds/remote-agent-console-${VERSION}.exe" "$STAGING/remote-agent-console.exe"
+cp "installer/openh264-2.1.1-win64.dll" "$STAGING/"
+cp "deps/libjpeg-turbo-win64/bin/libturbojpeg.dll" "$STAGING/"
+if makensis -V2 "$STAGING/agent-runonce-installer.nsi" >/dev/null 2>&1; then
+    mv "$STAGING/RemoteDesktopAgent-RunOnce-${VERSION}-Setup.exe" "builds/"
+    echo "  ✅ RemoteDesktopAgent-RunOnce-${VERSION}-Setup.exe"
+else
+    echo "  ❌ Agent Run Once installer build failed"
+    makensis -V2 "$STAGING/agent-runonce-installer.nsi" 2>&1 | tail -5
+fi
+rm -rf "$STAGING"
+
 # --- Controller installer (Controller + FFmpeg) ---
 build_installer "Controller" "controller-installer.nsi" "RemoteDesktopController"
 STAGING="installer/staging-controller"
