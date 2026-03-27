@@ -176,12 +176,6 @@ async function handleSignal(signal, ctx) {
     return;
   }
 
-  // Skip already processed signals (prevents duplicates from realtime + polling)
-  if (ctx.processedSignalIds.has(signal.id)) {
-    return;
-  }
-  ctx.processedSignalIds.add(signal.id);
-
   debug('🔵 Processing signal:', signal.msg_type, 'from', signal.from_side, 'for device:', ctx.id);
 
   const peerConnection = ctx.peerConnection;
@@ -198,8 +192,34 @@ async function handleSignal(signal, ctx) {
           debug('⏭️ Skipping answer - already in state:', peerConnection.signalingState);
           return;
         }
-        const answer = new RTCSessionDescription(signal.payload);
-        await peerConnection.setRemoteDescription(answer);
+        try {
+          // Fix: Pion omits a=rtcp-mux on rejected m-lines. Chrome requires it.
+          const fixedPayload = { ...signal.payload };
+          if (fixedPayload.sdp) {
+            const sep = fixedPayload.sdp.includes('\r\n') ? '\r\n' : '\n';
+            const lines = fixedPayload.sdp.split(sep);
+            const out = [];
+            let inM = false, hasMux = false;
+            for (const line of lines) {
+              if (line.startsWith('m=')) {
+                if (inM && !hasMux) out.push('a=rtcp-mux');
+                inM = true; hasMux = false;
+              }
+              if (line === 'a=rtcp-mux') hasMux = true;
+              out.push(line);
+            }
+            if (inM && !hasMux) out.push('a=rtcp-mux');
+            fixedPayload.sdp = out.join(sep);
+          }
+          const answer = new RTCSessionDescription(fixedPayload);
+          await peerConnection.setRemoteDescription(answer);
+        } catch (e) {
+          if (e.name === 'InvalidStateError' || e.name === 'OperationError') {
+            debug('⏭️ Answer already applied:', e.message);
+            return;
+          }
+          throw e;
+        }
         debug('✅ Remote description set (answer)');
 
         // Flush any buffered ICE candidates now that remote description is set
