@@ -252,10 +252,12 @@ async function handleSignal(signal, ctx) {
           // the rejected audio m-line. Chrome ignores candidates for rejected
           // m-lines. Fix by setting sdpMid to null and letting Chrome match
           // candidates to the correct m-line via the candidate's component.
+          // Use sdpMLineIndex=1 (video m-line) since index 0 is rejected audio.
+          // With BUNDLE, all media shares the same ICE transport.
           const fixedCandidate = {
             candidate: iceCandidate.candidate,
-            sdpMid: null,
-            sdpMLineIndex: 0
+            sdpMid: '1',
+            sdpMLineIndex: 1
           };
 
           // Check if remote description is set
