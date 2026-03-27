@@ -173,7 +173,7 @@ async function initWebRTC(sessionData, ctx) {
     debug('📝 Creating offer...');
     const offer = await ctx.peerConnection.createOffer({
       offerToReceiveVideo: true,
-      offerToReceiveAudio: false
+      offerToReceiveAudio: true
     });
     debug('✅ Offer created');
 
