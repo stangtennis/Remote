@@ -135,30 +135,13 @@ async function startSession(device) {
       throw new Error('Session udløbet. Log venligst ind igen.');
     }
 
-    // Generate a unique controller ID for this dashboard instance
-    const controllerId = `dashboard-${session.user.id}-${Date.now()}`;
-
-    // Use claim_device_connection to atomically take over any existing sessions
-    debug('🔒 Claiming device connection (will kick any existing controllers)...');
-    const { data: claimResult, error: claimError } = await supabase.rpc('claim_device_connection', {
-      p_device_id: device.device_id,
-      p_controller_id: controllerId,
-      p_controller_type: 'dashboard'
-    });
-
-    if (claimError) {
-      console.warn('⚠️ claim_device_connection not available, falling back to old method:', claimError);
-      await supabase
-        .from('remote_sessions')
-        .update({ status: 'expired' })
-        .eq('device_id', device.device_id)
-        .in('status', ['pending', 'active']);
-    } else {
-      debug('✅ Device claimed:', claimResult);
-      if (claimResult.kicked_sessions > 0) {
-        debug(`🔴 Kicked ${claimResult.kicked_sessions} existing session(s)`);
-      }
-    }
+    // End any existing dashboard sessions for this device (avoid conflicts)
+    debug('🔒 Ending existing dashboard sessions...');
+    await supabase
+      .from('remote_sessions')
+      .update({ status: 'ended' })
+      .eq('device_id', device.device_id)
+      .in('status', ['pending', 'active']);
 
     // Call session-token Edge Function
     const { data, error } = await supabase.functions.invoke('session-token', {
