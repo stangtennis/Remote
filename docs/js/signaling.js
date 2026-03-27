@@ -227,13 +227,7 @@ async function handleSignal(signal, ctx) {
         if (ctx.pendingIceCandidates.length > 0) {
           debug(`📥 Flushing ${ctx.pendingIceCandidates.length} buffered ICE candidates`);
           for (const buffered of ctx.pendingIceCandidates) {
-            await peerConnection.addIceCandidate(
-              new RTCIceCandidate({
-                candidate: buffered.candidate,
-                sdpMid: buffered.sdpMid,
-                sdpMLineIndex: buffered.sdpMLineIndex
-              })
-            );
+            await peerConnection.addIceCandidate(new RTCIceCandidate(buffered));
           }
           ctx.pendingIceCandidates = [];
         }
@@ -254,18 +248,22 @@ async function handleSignal(signal, ctx) {
             : JSON.stringify(iceCandidate.candidate).substring(0, 50);
           debug('📥 Received ICE candidate from agent:', candidateStr);
 
+          // Fix: Pion agent sends all candidates with sdpMid="0" which maps to
+          // the rejected audio m-line. Chrome ignores candidates for rejected
+          // m-lines. Fix by setting sdpMid to null and letting Chrome match
+          // candidates to the correct m-line via the candidate's component.
+          const fixedCandidate = {
+            candidate: iceCandidate.candidate,
+            sdpMid: null,
+            sdpMLineIndex: 0
+          };
+
           // Check if remote description is set
           if (!peerConnection.remoteDescription) {
             debug('⏸️ Buffering ICE candidate (remote description not set yet)');
-            ctx.pendingIceCandidates.push(iceCandidate);
+            ctx.pendingIceCandidates.push(fixedCandidate);
           } else {
-            await peerConnection.addIceCandidate(
-              new RTCIceCandidate({
-                candidate: iceCandidate.candidate,
-                sdpMid: iceCandidate.sdpMid,
-                sdpMLineIndex: iceCandidate.sdpMLineIndex
-              })
-            );
+            await peerConnection.addIceCandidate(new RTCIceCandidate(fixedCandidate));
             debug('✅ ICE candidate added successfully');
           }
         }
