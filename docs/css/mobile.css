@@ -1,248 +1,238 @@
-/* Mobile Responsiveness — Clean rewrite */
+/* Mobile — Complete rewrite for usability */
 
-/* ===== MOBILE (<768px) ===== */
+/* ===== MOBILE ===== */
 @media (max-width: 768px) {
-  /* Prevent iOS zoom on input focus */
   input, select, textarea { font-size: 16px !important; }
 
-  /* ===== HEADER: single compact row ===== */
-  .dashboard-header { height: auto !important; padding: 0.4rem 0.6rem !important; }
+  /* === HEADER: tight single line === */
+  .dashboard-header {
+    height: auto !important;
+    padding: 0.35rem 0.5rem !important;
+    position: sticky; top: 0; z-index: 50;
+  }
   .header-content {
     flex-direction: row !important;
     align-items: center;
-    gap: 0.3rem;
+    gap: 0.2rem;
     flex-wrap: nowrap;
+    max-width: 100%;
   }
-  .dashboard-header h1 { font-size: 0.85rem !important; white-space: nowrap; margin-right: auto; }
+  .dashboard-header h1 {
+    font-size: 0.75rem !important;
+    white-space: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .dashboard-header h1 i { display: none; }
   .header-actions {
     display: flex !important;
     flex-direction: row !important;
-    gap: 0.25rem;
+    gap: 0.15rem;
     flex-wrap: nowrap;
-    align-items: center;
+    margin-left: auto;
+    flex-shrink: 0;
   }
-  /* All header buttons: icon-only */
   .header-actions .btn,
   .header-actions .btn-secondary,
   .header-actions .btn-icon {
-    width: 32px !important; height: 32px !important;
+    width: 30px !important; height: 30px !important;
     padding: 0 !important; font-size: 0 !important;
     display: inline-flex !important; align-items: center; justify-content: center;
-    border-radius: 6px; min-height: 32px !important;
+    border-radius: 5px; min-height: 30px !important; flex-shrink: 0;
   }
   .header-actions .btn i,
-  .header-actions .btn-secondary i,
-  .header-actions .btn-icon i { font-size: 0.8rem !important; }
-  /* Log ud: show icon via CSS */
-  #logoutBtn { position: relative; color: var(--danger, #ef4444) !important; border-color: var(--danger, #ef4444) !important; }
-  #logoutBtn::after { content: '\f2f5'; font-family: 'Font Awesome 6 Free'; font-weight: 900; font-size: 0.8rem; }
-  /* User email: hide on mobile */
+  .header-actions .btn-icon i { font-size: 0.7rem !important; }
+  /* Log ud icon */
+  #logoutBtn { color: var(--danger, #ef4444) !important; border-color: rgba(239,68,68,0.3) !important; }
+  #logoutBtn::after { content: '\f2f5'; font-family: 'Font Awesome 6 Free'; font-weight: 900; font-size: 0.7rem; }
   .user-info { display: none !important; }
+  /* Hide notification bell on mobile */
+  #notificationToggleBtn { display: none !important; }
 
-  /* ===== LAYOUT: devices first, then preview ===== */
+  /* === LAYOUT === */
   .dashboard-grid {
     grid-template-columns: 1fr !important;
-    gap: 0.5rem;
-    padding: 0.4rem;
+    gap: 0.4rem;
+    padding: 0.3rem;
   }
   .dashboard-main { padding: 0 !important; }
   .dashboard-right { order: -1; }
 
-  /* ===== DOWNLOADS: collapsed, small ===== */
-  .downloads-section { margin-bottom: 0.5rem !important; padding: 0 !important; }
+  /* === DOWNLOADS: single row, tiny === */
+  .downloads-section {
+    margin-bottom: 0.3rem !important;
+    padding: 0 !important;
+  }
   .downloads-section .section-header { display: none !important; }
   #downloadsGrid {
-    grid-template-columns: repeat(3, 1fr) !important;
-    gap: 0.3rem;
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 0.2rem;
   }
-  #downloadsGrid .btn {
-    font-size: 0.6rem !important;
-    padding: 0.35rem 0.2rem;
-    min-height: 32px;
+  #downloadsGrid > * {
+    flex: 1 1 auto;
+    font-size: 0.55rem !important;
+    padding: 0.25rem 0.3rem !important;
+    min-height: 26px !important;
+    white-space: nowrap;
   }
+  #downloadsGrid > * i { margin-right: 0.15rem; font-size: 0.55rem !important; }
   #downloadsDescription { display: none !important; }
 
-  /* ===== DEVICES: the main content on mobile ===== */
-  .devices-section { padding: 0; }
-  .devices-section .section-header {
-    padding: 0 0 0.3rem 0;
-  }
-  .devices-section .section-header h2 { font-size: 0.8rem !important; }
-  .device-filters {
-    gap: 0.25rem !important;
-    margin-bottom: 0.4rem !important;
-  }
-  .device-filters input {
-    padding: 0.35rem 0.5rem;
-    min-width: 0;
-  }
-  .device-filters select {
-    padding: 0.35rem 0.4rem;
-    min-width: 60px;
-  }
+  /* === DEVICES: compact list === */
+  .devices-section .section-header { padding: 0 0 0.25rem 0; }
+  .devices-section .section-header h2 { font-size: 0.75rem !important; }
+  .device-filters { gap: 0.2rem !important; margin-bottom: 0.3rem !important; }
+  .device-filters input { padding: 0.3rem 0.4rem; min-width: 0; }
+  .device-filters select { padding: 0.3rem; min-width: 55px; }
 
-  /* Device cards: clean list style */
-  .devices-list { gap: 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--border, #333); }
+  .devices-list {
+    gap: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border, #333);
+  }
   .device-card {
-    padding: 0.5rem 0.65rem !important;
+    padding: 0.4rem 0.5rem !important;
     border-radius: 0 !important;
     border: none !important;
-    border-bottom: 1px solid var(--border, rgba(255,255,255,0.08)) !important;
-    min-height: 44px !important;
-    background: var(--surface, rgba(15,23,42,0.6)) !important;
+    border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+    min-height: 40px !important;
   }
   .device-card:last-child { border-bottom: none !important; }
-  .device-card .btn-sm {
-    font-size: 0.7rem !important;
-    padding: 0.25rem 0.5rem;
-    min-height: 28px;
-  }
-  .device-card .btn-icon {
-    width: 26px; min-width: 26px; height: 26px;
-    font-size: 0.75rem; padding: 0;
-  }
+  .device-card .btn-sm { font-size: 0.65rem !important; padding: 0.2rem 0.4rem; }
+  .device-card .btn-icon { width: 24px; min-width: 24px; height: 24px; font-size: 0.7rem; padding: 0; }
+  .devices-list > div:not(.device-card) { padding: 0.25rem 0.5rem !important; font-size: 0.6rem !important; }
 
-  /* Online/offline section headers */
-  .devices-list > div:not(.device-card) {
-    padding: 0.3rem 0.65rem !important;
-    font-size: 0.65rem !important;
-  }
-
-  /* ===== PREVIEW: compact when idle, expand when connected ===== */
+  /* === PREVIEW: small when idle, FULLSCREEN when connected === */
   .remote-preview-section {
     min-height: auto;
     border-radius: 8px;
     overflow: hidden;
   }
-  .remote-preview-section .section-header {
-    padding: 0.35rem 0.65rem;
-  }
-  .remote-preview-section .section-header h2 { font-size: 0.7rem !important; }
+  .remote-preview-section .section-header { padding: 0.3rem 0.5rem; }
+  .remote-preview-section .section-header h2 { font-size: 0.65rem !important; }
 
-  /* Idle preview: very compact */
-  .preview-screen { height: 35vw; min-height: 120px; max-height: 200px; }
-  .preview-idle-content h3 { font-size: 0.8rem; }
-  .preview-idle-content p { font-size: 0.65rem; }
-  .preview-idle-content .preview-icon { margin-bottom: 0.3rem; }
+  /* Idle: tiny placeholder */
+  .preview-screen {
+    height: 25vw;
+    min-height: 80px;
+    max-height: 120px;
+  }
+  .preview-idle-content h3 { font-size: 0.75rem; margin: 0; }
+  .preview-idle-content p { font-size: 0.6rem; margin: 0.2rem 0 0; }
+  .preview-idle-content .preview-icon { display: none; }
   .preview-features { display: none; }
 
-  /* Connected preview: expand to fill */
-  .remote-preview-container.fullscreen .preview-screen,
-  .preview-screen:has(canvas[width]:not([width="300"])) {
-    height: 56vw;
-    min-height: 200px;
-    max-height: 60vh;
+  /* CONNECTED: preview takes over the screen */
+  .remote-preview-container.fullscreen {
+    border-radius: 0;
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 100 !important;
   }
 
   /* Session tabs */
   .session-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .tabs-container { min-width: min-content; }
-  .session-tab { font-size: 0.65rem; padding: 0.25rem 0.5rem; white-space: nowrap; }
+  .session-tab { font-size: 0.6rem; padding: 0.2rem 0.4rem; }
 
-  /* Preview toolbar */
+  /* Toolbar */
   .preview-toolbar {
     flex-direction: row !important;
     flex-wrap: nowrap;
-    gap: 0.2rem;
-    padding: 0.3rem 0.5rem !important;
+    gap: 0.15rem;
+    padding: 0.25rem 0.4rem !important;
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
   }
-  .toolbar-left { min-width: 0; flex-shrink: 1; gap: 0.2rem; }
-  .toolbar-left .connection-indicator { width: 6px; height: 6px; }
-  #connectedDeviceName { font-size: 0.65rem; max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #connTypeBadge { font-size: 0.55rem !important; padding: 0.05rem 0.25rem !important; }
-  .toolbar-center { gap: 0.1rem; }
-  .toolbar-center .toolbar-btn { width: 26px; height: 26px; font-size: 0.65rem; }
-  .toolbar-right { min-width: 0; flex-shrink: 1; gap: 0.2rem; }
-  .toolbar-right .connection-stats { font-size: 0.55rem; gap: 0.2rem; }
-  .toolbar-right .btn-danger { font-size: 0.6rem !important; padding: 0.15rem 0.35rem; min-height: 24px !important; }
-  /* Hide monitor select on mobile */
+  .toolbar-left { min-width: 0; flex-shrink: 1; gap: 0.15rem; }
+  .toolbar-left .connection-indicator { width: 5px; height: 5px; }
+  #connectedDeviceName { font-size: 0.6rem; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #connTypeBadge { font-size: 0.5rem !important; padding: 0.02rem 0.2rem !important; }
+  .toolbar-center { gap: 0.05rem; }
+  .toolbar-center .toolbar-btn { width: 24px; height: 24px; font-size: 0.6rem; }
+  .toolbar-right { min-width: 0; flex-shrink: 1; gap: 0.15rem; }
+  .toolbar-right .connection-stats { font-size: 0.5rem; gap: 0.15rem; }
+  .toolbar-right .btn-danger { font-size: 0.55rem !important; padding: 0.1rem 0.3rem; min-height: 22px !important; }
   #monitorSelectContainer { display: none !important; }
 
-  /* Chat panel: full overlay */
+  /* Chat: full overlay */
   #chatPanel { width: 100% !important; left: 0 !important; border-left: none !important; }
 
-  /* Connection stats mini */
-  .stats-grid-mini { grid-template-columns: repeat(4, 1fr); gap: 0.2rem; }
-  .stat-mini { padding: 0.2rem; }
-  .stat-mini-value { font-size: 0.7rem; }
-  .stat-mini-label { font-size: 0.5rem; }
-  .connection-stats-section { margin-top: 0 !important; padding: 0.3rem !important; }
+  /* Stats mini */
+  .connection-stats-section { padding: 0.2rem !important; margin-top: 0 !important; }
+  .stats-grid-mini { grid-template-columns: repeat(4, 1fr); gap: 0.15rem; }
+  .stat-mini { padding: 0.15rem; }
+  .stat-mini-value { font-size: 0.65rem; }
+  .stat-mini-label { font-size: 0.45rem; }
 
-  /* ===== ACTIVITY LOG: collapsed by default ===== */
-  .activity-log-section { margin-top: 0.5rem !important; }
-  .activity-log-section .section-header h2 { font-size: 0.7rem !important; }
+  /* Activity log */
+  .activity-log-section { margin-top: 0.3rem !important; }
+  .activity-log-section .section-header h2 { font-size: 0.65rem !important; }
 
-  /* ===== MODALS: bottom sheet ===== */
+  /* Modals */
   .modal { align-items: flex-end !important; }
   .modal-content {
     width: 100% !important; max-width: 100% !important;
-    margin: 0 !important; padding: 1rem;
+    margin: 0 !important; padding: 0.75rem;
     border-radius: 12px 12px 0 0 !important;
     max-height: 85vh; overflow-y: auto;
     position: fixed; bottom: 0; left: 0; right: 0;
   }
-  .modal-actions { flex-direction: column; gap: 0.4rem; }
+  .modal-actions { flex-direction: column; gap: 0.3rem; }
   .modal-actions .btn { width: 100%; }
 
   /* Empty state */
-  .empty-state { padding: 1rem; }
-  .empty-state p { font-size: 0.8rem; }
+  .empty-state { padding: 0.75rem; }
+  .empty-state p { font-size: 0.75rem; }
 
-  /* Fullscreen: clean */
-  .remote-preview-container.fullscreen { border-radius: 0; }
-
-  /* Touch targets */
-  .btn { min-height: 32px; }
+  /* Touch */
+  .btn { min-height: 30px; }
 }
 
-/* ===== TABLET (768-1024) ===== */
+/* === TABLET === */
 @media (min-width: 768px) and (max-width: 1024px) {
   .dashboard-grid { grid-template-columns: 1fr; gap: 1rem; }
-  #downloadsGrid { grid-template-columns: repeat(3, 1fr); }
 }
 
-/* ===== LANDSCAPE MOBILE ===== */
+/* === LANDSCAPE MOBILE === */
 @media (max-width: 768px) and (orientation: landscape) {
   .preview-screen { height: 50vw; max-height: 70vh; }
   .dashboard-grid { grid-template-columns: 1fr 1fr !important; }
-  .dashboard-right { order: 0; } /* Side by side in landscape */
+  .dashboard-right { order: 0; }
 }
 
-/* ===== SMALL MOBILE (SE etc) ===== */
+/* === SMALL MOBILE === */
 @media (max-width: 375px) {
-  .dashboard-header h1 { font-size: 0.75rem !important; }
-  .header-actions .btn, .header-actions .btn-icon { width: 28px !important; height: 28px !important; }
-  #downloadsGrid { grid-template-columns: 1fr 1fr !important; }
-  .device-card { padding: 0.4rem 0.5rem !important; }
+  .dashboard-header h1 { font-size: 0.65rem !important; }
+  .header-actions .btn { width: 26px !important; height: 26px !important; }
+  #downloadsGrid > * { font-size: 0.5rem !important; }
 }
 
-/* ===== PREVENT HORIZONTAL SCROLL ===== */
+/* === NO HORIZONTAL SCROLL === */
 @media (max-width: 768px) {
   html, body { overflow-x: hidden; max-width: 100vw; }
 }
 
-/* ===== SAFE AREA (notched devices) ===== */
+/* === SAFE AREA === */
 @supports (padding: env(safe-area-inset-top)) {
   @media (max-width: 768px) {
-    .dashboard-header { padding-top: calc(0.4rem + env(safe-area-inset-top)) !important; }
-    .modal-content { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+    .dashboard-header { padding-top: calc(0.35rem + env(safe-area-inset-top)) !important; }
+    .modal-content { padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)); }
   }
 }
 
-/* ===== TOUCH: no hover, active feedback ===== */
+/* === TOUCH === */
 @media (hover: none) {
   .btn:hover, .device-card:hover { transform: none; }
-  .btn:active { transform: scale(0.97); opacity: 0.9; }
-  .device-card:active { background: rgba(34, 211, 238, 0.05) !important; }
+  .btn:active { transform: scale(0.97); }
 }
 
-/* ===== LOGIN PAGE MOBILE ===== */
+/* === LOGIN MOBILE === */
 @media (max-width: 768px) {
   .login-container { padding: 0.5rem; }
-  .login-card { padding: 1.5rem 1rem; max-width: 100%; }
-  .login-logo { width: 50px; height: 50px; }
-  .security-badges { flex-wrap: wrap; gap: 0.3rem; justify-content: center; }
-  .security-badges .badge { font-size: 0.65rem; }
+  .login-card { padding: 1.25rem 1rem; }
+  .login-logo { width: 48px; height: 48px; }
+  .security-badges { flex-wrap: wrap; gap: 0.2rem; }
+  .security-badges .badge { font-size: 0.6rem; }
 }
