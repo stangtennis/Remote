@@ -215,8 +215,8 @@ async function handleSignal(signal, ctx) {
           const answer = new RTCSessionDescription(fixedPayload);
           await peerConnection.setRemoteDescription(answer);
         } catch (e) {
-          if (e.name === 'InvalidStateError') {
-            debug('⏭️ Answer race condition (already set):', e.message);
+          if (e.name === 'InvalidStateError' || e.name === 'OperationError') {
+            debug('⏭️ Answer already applied or parse error:', e.message);
             return;
           }
           throw e;
