@@ -195,8 +195,9 @@ async function handleSignal(signal, ctx) {
         try {
           // Fix: Pion omits a=rtcp-mux on rejected m-lines. Chrome requires it.
           let answerSdp = signal.payload.sdp || '';
-          if (answerSdp && !answerSdp.match(/m=audio[^\n]*\n[^\n]*a=rtcp-mux/)) {
-            answerSdp = answerSdp.replace(/(m=audio [^\n]+\n)/, '$1a=rtcp-mux\n');
+          const sdpSep = answerSdp.includes('\r\n') ? '\r\n' : '\n';
+          if (answerSdp && answerSdp.includes('m=audio') && !answerSdp.match(/m=audio[^\r\n]*[\r\n]+a=rtcp-mux/)) {
+            answerSdp = answerSdp.replace(/(m=audio [^\r\n]+)/, '$1' + sdpSep + 'a=rtcp-mux');
           }
           const answer = new RTCSessionDescription({ type: signal.payload.type || 'answer', sdp: answerSdp });
           debug('📝 Setting remote description (answer SDP length: ' + answerSdp.length + ')');
