@@ -19,6 +19,39 @@ func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
 
+// ensureRtcpMux adds a=rtcp-mux to any m= section that lacks it.
+// Chrome requires a=rtcp-mux on ALL m-lines, even rejected ones (port 0).
+// Pion doesn't add it to rejected m-lines, causing "Failed to setup RTCP mux".
+func ensureRtcpMux(sdp string) string {
+	lines := strings.Split(sdp, "\r\n")
+	var result []string
+	inMSection := false
+	hasRtcpMux := false
+
+	for i, line := range lines {
+		result = append(result, line)
+
+		if strings.HasPrefix(line, "m=") {
+			// Starting a new m-section; check if previous needed rtcp-mux
+			if inMSection && !hasRtcpMux {
+				// Insert a=rtcp-mux before this m= line
+				result = append(result[:len(result)-1], "a=rtcp-mux", line)
+			}
+			inMSection = true
+			hasRtcpMux = false
+		} else if line == "a=rtcp-mux" {
+			hasRtcpMux = true
+		}
+
+		// Last line: if we're in an m-section without rtcp-mux, add it
+		if i == len(lines)-1 && inMSection && !hasRtcpMux {
+			result = append(result, "a=rtcp-mux")
+		}
+	}
+
+	return strings.Join(result, "\r\n")
+}
+
 // fetchTurnCredentials fetches TURN credentials from the Supabase Edge Function
 func fetchTurnCredentials(supabaseURL, anonKey, authToken string, client *http.Client) []webrtc.ICEServer {
 	if supabaseURL == "" || authToken == "" {
@@ -492,6 +525,10 @@ func (m *Manager) handleWebSession(session Session) {
 		log.Println("❌ Answer SDP is MISSING m=application!")
 	}
 
+	// Fix: Chrome requires a=rtcp-mux on ALL m-lines, even rejected (port 0) ones.
+	// Pion doesn't add it to rejected m-lines, so we munge the SDP.
+	answer.SDP = ensureRtcpMux(answer.SDP)
+
 	if err := m.peerConnection.SetLocalDescription(answer); err != nil {
 		log.Printf("Failed to set local description: %v", err)
 		return
@@ -745,6 +782,9 @@ func (m *Manager) handleOffer(sessionID string, sig SignalMessage) {
 		return
 	}
 
+	// Fix: ensure a=rtcp-mux on all m-lines (Chrome requirement)
+	answer.SDP = ensureRtcpMux(answer.SDP)
+
 	if err := m.peerConnection.SetLocalDescription(answer); err != nil {
 		log.Printf("Failed to set local description: %v", err)
 		return
@@ -943,6 +983,9 @@ func (m *Manager) handleOfferDirect(sessionID, offerSDP string) {
 		log.Printf("Failed to create answer: %v", err)
 		return
 	}
+
+	// Fix: ensure a=rtcp-mux on all m-lines (Chrome requirement)
+	answer.SDP = ensureRtcpMux(answer.SDP)
 
 	if err := m.peerConnection.SetLocalDescription(answer); err != nil {
 		log.Printf("Failed to set local description: %v", err)
