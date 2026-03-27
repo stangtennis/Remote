@@ -194,25 +194,14 @@ async function handleSignal(signal, ctx) {
         }
         try {
           // Fix: Pion omits a=rtcp-mux on rejected m-lines. Chrome requires it.
-          const fixedPayload = { ...signal.payload };
-          if (fixedPayload.sdp) {
-            const sep = fixedPayload.sdp.includes('\r\n') ? '\r\n' : '\n';
-            const lines = fixedPayload.sdp.split(sep);
-            const out = [];
-            let inM = false, hasMux = false;
-            for (const line of lines) {
-              if (line.startsWith('m=')) {
-                if (inM && !hasMux) out.push('a=rtcp-mux');
-                inM = true; hasMux = false;
-              }
-              if (line === 'a=rtcp-mux') hasMux = true;
-              out.push(line);
-            }
-            if (inM && !hasMux) out.push('a=rtcp-mux');
-            fixedPayload.sdp = out.join(sep);
+          let answerSdp = signal.payload.sdp || '';
+          if (answerSdp && !answerSdp.match(/m=audio[^\n]*\n[^\n]*a=rtcp-mux/)) {
+            answerSdp = answerSdp.replace(/(m=audio [^\n]+\n)/, '$1a=rtcp-mux\n');
           }
-          const answer = new RTCSessionDescription(fixedPayload);
+          const answer = new RTCSessionDescription({ type: signal.payload.type || 'answer', sdp: answerSdp });
+          debug('📝 Setting remote description (answer SDP length: ' + answerSdp.length + ')');
           await peerConnection.setRemoteDescription(answer);
+          debug('✅ setRemoteDescription succeeded');
         } catch (e) {
           console.error('❌ setRemoteDescription FAILED:', e.name, e.message);
           if (e.name === 'InvalidStateError') {
