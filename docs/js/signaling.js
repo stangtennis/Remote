@@ -214,10 +214,12 @@ async function handleSignal(signal, ctx) {
           const answer = new RTCSessionDescription(fixedPayload);
           await peerConnection.setRemoteDescription(answer);
         } catch (e) {
-          if (e.name === 'InvalidStateError' || e.name === 'OperationError') {
-            debug('⏭️ Answer already applied:', e.message);
+          console.error('❌ setRemoteDescription FAILED:', e.name, e.message);
+          if (e.name === 'InvalidStateError') {
+            debug('⏭️ Answer already applied');
             return;
           }
+          // Don't silently swallow — log the full error
           throw e;
         }
         debug('✅ Remote description set (answer)');
