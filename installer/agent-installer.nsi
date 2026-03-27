@@ -104,8 +104,12 @@ Section "Install"
     ; Desktop shortcut
     CreateShortcut "$DESKTOP\Remote Desktop Agent.lnk" "$INSTDIR\remote-agent.exe"
 
-    ; Remove old startup shortcut (replaced by Windows Service)
+    ; Remove old startup shortcut
     Delete "$SMSTARTUP\Remote Desktop Agent.lnk"
+
+    ; Auto-start tray icon at user login (service handles the actual work,
+    ; tray shows status icon when user is logged in)
+    WriteRegStr HKCU "SOFTWARE\Microsoft\Windows\CurrentVersion\Run" "RemoteDesktopAgent" '"$INSTDIR\remote-agent.exe"'
 
     ; Stop and remove existing service (if upgrading)
     nsExec::ExecToLog 'sc stop RemoteDesktopAgent'
@@ -113,8 +117,9 @@ Section "Install"
     nsExec::ExecToLog 'sc delete RemoteDesktopAgent'
     Sleep 1000
 
-    ; Register as Windows Service (LocalSystem = has SeTcbPrivilege for Session 0 capture)
-    nsExec::ExecToLog 'sc create RemoteDesktopAgent binPath= "$INSTDIR\remote-agent.exe" start= auto obj= LocalSystem DisplayName= "Remote Desktop Agent"'
+    ; Register as Windows Service using console version (no GUI window)
+    ; LocalSystem = has SeTcbPrivilege for Session 0 capture
+    nsExec::ExecToLog 'sc create RemoteDesktopAgent binPath= "$INSTDIR\remote-agent-console.exe" start= auto obj= LocalSystem DisplayName= "Remote Desktop Agent"'
     nsExec::ExecToLog 'sc description RemoteDesktopAgent "Remote Desktop Agent - WebRTC remote desktop"'
     nsExec::ExecToLog 'sc failure RemoteDesktopAgent reset= 86400 actions= restart/5000/restart/10000/restart/30000'
     
@@ -170,6 +175,9 @@ Section "Uninstall"
     ; Remove install directory
     RMDir "$INSTDIR"
     
+    ; Remove auto-start registry key
+    DeleteRegValue HKCU "SOFTWARE\Microsoft\Windows\CurrentVersion\Run" "RemoteDesktopAgent"
+
     ; Remove registry keys
     DeleteRegKey HKLM "Software\RemoteDesktopAgent"
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RemoteDesktopAgent"
