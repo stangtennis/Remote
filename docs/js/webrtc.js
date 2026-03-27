@@ -783,6 +783,68 @@ function setupInputCapture() {
   target.addEventListener('mouseup', mouseUpHandler);
   inputEventHandlers.mouseUp = mouseUpHandler;
 
+  // === Touch support (mobile) ===
+  let touchStartTime = 0;
+  let touchStartPos = null;
+  let touchMoved = false;
+
+  const touchStartHandler = (e) => {
+    const dc = getActiveDataChannel();
+    if (!dc || dc.readyState !== 'open') return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const coords = getImageCoordinates(target, touch.clientX, touch.clientY);
+    touchStartPos = { x: touch.clientX, y: touch.clientY };
+    touchStartTime = Date.now();
+    touchMoved = false;
+    lastCoords = {
+      x: Math.round(coords.x * 10000) / 10000,
+      y: Math.round(coords.y * 10000) / 10000
+    };
+    // Move cursor to touch position
+    sendControlEvent({ t: 'mouse_move', x: lastCoords.x, y: lastCoords.y, rel: true });
+  };
+  target.addEventListener('touchstart', touchStartHandler, { passive: false });
+  inputEventHandlers.touchStart = touchStartHandler;
+
+  const touchMoveHandler = (e) => {
+    const dc = getActiveDataChannel();
+    if (!dc || dc.readyState !== 'open') return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    touchMoved = true;
+    const coords = getImageCoordinates(target, touch.clientX, touch.clientY);
+    lastCoords = {
+      x: Math.round(coords.x * 10000) / 10000,
+      y: Math.round(coords.y * 10000) / 10000
+    };
+    sendControlEvent({ t: 'mouse_move', x: lastCoords.x, y: lastCoords.y, rel: true });
+  };
+  target.addEventListener('touchmove', touchMoveHandler, { passive: false });
+  inputEventHandlers.touchMove = touchMoveHandler;
+
+  const touchEndHandler = (e) => {
+    const dc = getActiveDataChannel();
+    if (!dc || dc.readyState !== 'open') return;
+    e.preventDefault();
+    const duration = Date.now() - touchStartTime;
+    if (!touchMoved && duration < 500) {
+      // Tap = click
+      sendControlEvent({ t: 'mouse_click', button: 'left', down: true, x: lastCoords.x, y: lastCoords.y, rel: true });
+      setTimeout(() => {
+        sendControlEvent({ t: 'mouse_click', button: 'left', down: false, x: lastCoords.x, y: lastCoords.y, rel: true });
+      }, 50);
+    } else if (!touchMoved && duration >= 500) {
+      // Long press = right click
+      sendControlEvent({ t: 'mouse_click', button: 'right', down: true, x: lastCoords.x, y: lastCoords.y, rel: true });
+      setTimeout(() => {
+        sendControlEvent({ t: 'mouse_click', button: 'right', down: false, x: lastCoords.x, y: lastCoords.y, rel: true });
+      }, 50);
+    }
+  };
+  target.addEventListener('touchend', touchEndHandler, { passive: false });
+  inputEventHandlers.touchEnd = touchEndHandler;
+
   const wheelHandler = (e) => {
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
