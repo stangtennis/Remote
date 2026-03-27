@@ -176,6 +176,12 @@ async function handleSignal(signal, ctx) {
     return;
   }
 
+  // Skip already processed signals (prevents duplicates from realtime + polling)
+  if (ctx.processedSignalIds.has(signal.id)) {
+    return;
+  }
+  ctx.processedSignalIds.add(signal.id);
+
   debug('🔵 Processing signal:', signal.msg_type, 'from', signal.from_side, 'for device:', ctx.id);
 
   const peerConnection = ctx.peerConnection;
@@ -192,42 +198,21 @@ async function handleSignal(signal, ctx) {
           debug('⏭️ Skipping answer - already in state:', peerConnection.signalingState);
           return;
         }
-        try {
-          // Fix: Pion agent omits a=rtcp-mux on rejected (port 0) m-lines.
-          // Chrome requires it on ALL m-lines. Fix the SDP before setting it.
-          const fixedPayload = { ...signal.payload };
-          if (fixedPayload.sdp) {
-            const sep = fixedPayload.sdp.includes('\r\n') ? '\r\n' : '\n';
-            const lines = fixedPayload.sdp.split(sep);
-            const out = [];
-            let inM = false, hasMux = false;
-            for (const line of lines) {
-              if (line.startsWith('m=')) {
-                if (inM && !hasMux) out.push('a=rtcp-mux');
-                inM = true; hasMux = false;
-              }
-              if (line === 'a=rtcp-mux') hasMux = true;
-              out.push(line);
-            }
-            if (inM && !hasMux) out.push('a=rtcp-mux');
-            fixedPayload.sdp = out.join(sep);
-          }
-          const answer = new RTCSessionDescription(fixedPayload);
-          await peerConnection.setRemoteDescription(answer);
-        } catch (e) {
-          if (e.name === 'InvalidStateError' || e.name === 'OperationError') {
-            debug('⏭️ Answer already applied or parse error:', e.message);
-            return;
-          }
-          throw e;
-        }
+        const answer = new RTCSessionDescription(signal.payload);
+        await peerConnection.setRemoteDescription(answer);
         debug('✅ Remote description set (answer)');
 
         // Flush any buffered ICE candidates now that remote description is set
         if (ctx.pendingIceCandidates.length > 0) {
           debug(`📥 Flushing ${ctx.pendingIceCandidates.length} buffered ICE candidates`);
           for (const buffered of ctx.pendingIceCandidates) {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(buffered));
+            await peerConnection.addIceCandidate(
+              new RTCIceCandidate({
+                candidate: buffered.candidate,
+                sdpMid: buffered.sdpMid,
+                sdpMLineIndex: buffered.sdpMLineIndex
+              })
+            );
           }
           ctx.pendingIceCandidates = [];
         }
@@ -248,24 +233,18 @@ async function handleSignal(signal, ctx) {
             : JSON.stringify(iceCandidate.candidate).substring(0, 50);
           debug('📥 Received ICE candidate from agent:', candidateStr);
 
-          // Fix: Pion agent sends all candidates with sdpMid="0" which maps to
-          // the rejected audio m-line. Chrome ignores candidates for rejected
-          // m-lines. Fix by setting sdpMid to null and letting Chrome match
-          // candidates to the correct m-line via the candidate's component.
-          // Use sdpMLineIndex=1 (video m-line) since index 0 is rejected audio.
-          // With BUNDLE, all media shares the same ICE transport.
-          const fixedCandidate = {
-            candidate: iceCandidate.candidate,
-            sdpMid: '1',
-            sdpMLineIndex: 1
-          };
-
           // Check if remote description is set
           if (!peerConnection.remoteDescription) {
             debug('⏸️ Buffering ICE candidate (remote description not set yet)');
-            ctx.pendingIceCandidates.push(fixedCandidate);
+            ctx.pendingIceCandidates.push(iceCandidate);
           } else {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(fixedCandidate));
+            await peerConnection.addIceCandidate(
+              new RTCIceCandidate({
+                candidate: iceCandidate.candidate,
+                sdpMid: iceCandidate.sdpMid,
+                sdpMLineIndex: iceCandidate.sdpMLineIndex
+              })
+            );
             debug('✅ ICE candidate added successfully');
           }
         }
