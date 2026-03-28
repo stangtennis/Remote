@@ -367,10 +367,10 @@ function setupDataChannelHandlers(ctx) {
     debug('Data channel opened for', ctx.id);
     // Enable mouse/keyboard input (only once, shared across sessions)
     setupInputCapture();
-    // Set high quality defaults (agent starts at Q60/scale 0.75 which causes color artifacts)
+    // Set reasonable defaults (agent starts at Q60/scale 0.75)
     try {
-      dc.send(JSON.stringify({ t: 'set_stream_params', max_quality: 85, max_fps: 30, max_scale: 1.0 }));
-      debug('📊 Sent quality preset: Q85 FPS30 Scale100%');
+      dc.send(JSON.stringify({ t: 'set_stream_params', max_quality: 75, max_fps: 25, max_scale: 1.0 }));
+      debug('📊 Sent quality preset: Q75 FPS25 Scale100%');
     } catch (e) {}
   };
 
