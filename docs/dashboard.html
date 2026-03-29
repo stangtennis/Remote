@@ -595,13 +595,8 @@
         }
       });
       
-      // Double-click to toggle fullscreen
-      container.addEventListener('dblclick', function(e) {
-        if (e.target.closest('.preview-toolbar') || e.target.closest('button')) {
-          return; // Don't toggle if clicking toolbar or buttons
-        }
-        toggleFullscreen();
-      });
+      // Double-click fullscreen disabled — conflicts with remote desktop double-click
+      // Use the fullscreen button (⛶) or F11 instead
 
       // Monitor selector change event
       const monitorSelect = document.getElementById('monitorSelect');
