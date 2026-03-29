@@ -535,21 +535,21 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 					changed = true
 				}
 			} else if bufferedAmount < bufferLow && droppedFrames == 0 && m.lossPct < 1 && m.lastRTT < 120*time.Millisecond {
-				// Network clear - can increase quality (reverse order: quality, scale, fps)
+				// Network clear - recover quality FAST (bigger steps)
 				if quality < maxQuality {
-					quality += 2
+					quality += 10 // Fast recovery (was +2)
 					if quality > maxQuality {
 						quality = maxQuality
 					}
 					changed = true
 				} else if scale < maxScale {
-					scale += 0.05
+					scale += 0.15 // Fast recovery (was +0.05)
 					if scale > maxScale {
 						scale = maxScale
 					}
 					changed = true
 				} else if fps < maxFPS {
-					fps += 2
+					fps += 5 // Fast recovery (was +2)
 					if fps > maxFPS {
 						fps = maxFPS
 					}
