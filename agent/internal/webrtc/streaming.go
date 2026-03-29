@@ -290,10 +290,9 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	motionPct := 0.0
 	forceFullFrame := false
 
-	// H.264 auto-enable state
-	streamStart := time.Now()
+	// H.264 state (auto-enable disabled — manual toggle only)
 	h264AutoEnabled := false
-	lastH264Check := time.Now()
+	_ = h264AutoEnabled
 
 	ticker := time.NewTicker(frameInterval)
 	defer ticker.Stop()
@@ -565,20 +564,10 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			}
 		}
 
-		// H.264 auto-enable: after 10s of streaming, check if conditions are good
-		if !m.useH264 && !h264AutoEnabled && time.Since(streamStart) > 10*time.Second && time.Since(lastH264Check) > 5*time.Second {
-			lastH264Check = time.Now()
-			// Check prerequisites
-			if m.videoTrack != nil && m.videoEncoder != nil && m.videoEncoder.GetEncoderName() == "openh264" {
-				// Check network conditions
-				if m.lastRTT < 100*time.Millisecond && m.lossPct < 1.0 && avgCPU < 60 {
-					log.Printf("🎬 Auto-enabling H.264 (good network conditions: RTT=%dms, loss=%.1f%%, CPU=%.0f%%)",
-						m.lastRTT.Milliseconds(), m.lossPct, avgCPU)
-					m.SetH264Mode(true)
-					h264AutoEnabled = true
-				}
-			}
-		}
+		// H.264 auto-enable DISABLED — chroma subsampling (4:2:0) causes color
+		// artifacts on screen content (text on white background). JPEG tiles at
+		// Q75+ look better for static desktop. H.264 can be enabled manually
+		// via controller quality toggle when smooth video is preferred.
 
 		// H.264 auto-disable: fall back if CPU goes high
 		if m.useH264 && h264AutoEnabled && avgCPU > 60 {
