@@ -239,16 +239,16 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		log.Println("⚠️  Skipping monitor enumeration in Session 0 (DXGI not available)")
 	}
 
-	// Adaptive streaming parameters — lower defaults on macOS (software JPEG is CPU-heavy)
-	fps := 20
-	quality := 60
-	scale := 0.75
-	maxFPS := 20
-	maxQuality := 75
+	// Adaptive streaming parameters
+	fps := 25
+	quality := 75
+	scale := 1.0
+	maxFPS := 30
+	maxQuality := 90
 	maxScale := 1.0
 	if runtime.GOOS == "darwin" {
-		fps = 25
-		quality = 65
+		fps = 20
+		quality = 70
 		scale = 0.75
 		maxFPS = 30
 		maxQuality = 80
