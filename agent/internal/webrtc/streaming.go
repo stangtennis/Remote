@@ -501,59 +501,74 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 				}
 			}
 
-			if congested {
-				// Network congested - SCALE-FIRST strategy for better text readability
-				// Reduce scale first, then FPS, then quality
-				// Use larger steps when buffer is very high (> 1.5MB)
-				severeCongestion := bufferedAmount > (bufferHigh * 3 / 4)
-				scaleStep := 0.1
-				fpsStep := 4
-				qualityStep := 5
-				if severeCongestion {
-					scaleStep = 0.15
-					fpsStep = 6
-					qualityStep = 10
-				}
+			isLAN := m.lastRTT < 20*time.Millisecond
 
-				if scale > minScale {
-					scale -= scaleStep
-					if scale < minScale {
-						scale = minScale
+			if congested {
+				if isLAN {
+					// LAN: NEVER reduce quality or scale — only drop FPS
+					// LAN has plenty of bandwidth, congestion is temporary
+					if fps > minFPS {
+						fps -= 5
+						if fps < minFPS {
+							fps = minFPS
+						}
+						changed = true
 					}
-					changed = true
-				} else if fps > minFPS {
-					fps -= fpsStep
-					if fps < minFPS {
-						fps = minFPS
+				} else {
+					// WAN: reduce FPS first, then scale, then quality
+					severeCongestion := bufferedAmount > (bufferHigh * 3 / 4)
+					fpsStep := 5
+					scaleStep := 0.1
+					qualityStep := 5
+					if severeCongestion {
+						fpsStep = 8
+						scaleStep = 0.15
+						qualityStep = 10
 					}
-					changed = true
-				} else if quality > minQuality {
-					quality -= qualityStep
-					if quality < minQuality {
-						quality = minQuality
+
+					if fps > minFPS {
+						fps -= fpsStep
+						if fps < minFPS {
+							fps = minFPS
+						}
+						changed = true
+					} else if scale > minScale {
+						scale -= scaleStep
+						if scale < minScale {
+							scale = minScale
+						}
+						changed = true
+					} else if quality > minQuality {
+						quality -= qualityStep
+						if quality < minQuality {
+							quality = minQuality
+						}
+						changed = true
 					}
-					changed = true
 				}
-			} else if bufferedAmount < bufferLow && droppedFrames == 0 && m.lossPct < 1 && m.lastRTT < 120*time.Millisecond {
-				// Network clear - recover quality FAST (bigger steps)
-				if quality < maxQuality {
-					quality += 10 // Fast recovery (was +2)
-					if quality > maxQuality {
-						quality = maxQuality
-					}
+			} else if bufferedAmount < bufferLow && droppedFrames == 0 {
+				// Network clear — snap back to max immediately on LAN, fast on WAN
+				if isLAN {
+					// LAN: instant recovery
+					quality = maxQuality
+					scale = maxScale
+					fps = maxFPS
 					changed = true
-				} else if scale < maxScale {
-					scale += 0.15 // Fast recovery (was +0.05)
-					if scale > maxScale {
-						scale = maxScale
+				} else if m.lossPct < 1 && m.lastRTT < 120*time.Millisecond {
+					// WAN: fast recovery
+					if quality < maxQuality {
+						quality += 15
+						if quality > maxQuality { quality = maxQuality }
+						changed = true
+					} else if scale < maxScale {
+						scale += 0.2
+						if scale > maxScale { scale = maxScale }
+						changed = true
+					} else if fps < maxFPS {
+						fps += 5
+						if fps > maxFPS { fps = maxFPS }
+						changed = true
 					}
-					changed = true
-				} else if fps < maxFPS {
-					fps += 5 // Fast recovery (was +2)
-					if fps > maxFPS {
-						fps = maxFPS
-					}
-					changed = true
 				}
 			}
 
