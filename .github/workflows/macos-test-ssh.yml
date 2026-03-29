@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   macos-e2e:
-    runs-on: macos-15  # Apple Silicon M1, Sequoia
+    runs-on: macos-14  # Apple Silicon M1, Sonoma (macos-15 kræver ScreenCaptureKit)
     timeout-minutes: 360
     steps:
       - name: Checkout kode
