@@ -694,8 +694,10 @@ let inputEventHandlers = {};
 
 function setupInputCapture() {
   const remoteVideo = document.getElementById('remoteVideo');
-  const remoteCanvas = document.getElementById('remoteCanvas') || document.getElementById('previewCanvas');
-  const target = remoteCanvas || remoteVideo;
+  // Prefer previewCanvas (dashboard main view) over remoteCanvas (legacy session view)
+  const previewCanvas = document.getElementById('previewCanvas');
+  const remoteCanvas = document.getElementById('remoteCanvas');
+  const target = previewCanvas || remoteCanvas || remoteVideo;
 
   if (!target) return;
 
