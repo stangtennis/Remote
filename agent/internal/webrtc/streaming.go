@@ -166,15 +166,9 @@ func (m *Manager) switchMode(newMode StreamMode, fps *int, quality *int, scale *
 		*scale = 1.0
 		log.Printf("🔄 Mode switch: %s -> %s (FPS:%d Q:%d Scale:%.0f%%)", oldMode, newMode, *fps, *quality, *scale*100)
 	case ModeActiveTiles:
-		if runtime.GOOS == "darwin" {
-			*fps = 25
-			*quality = 65
-			*scale = 0.75
-		} else {
-			*fps = 20
-			*quality = 65
-			*scale = 0.75
-		}
+		*fps = 25
+		*quality = 85
+		*scale = 1.0
 		log.Printf("🔄 Mode switch: %s -> %s (FPS:%d Q:%d Scale:%.0f%%)", oldMode, newMode, *fps, *quality, *scale*100)
 	case ModeActiveH264:
 		*fps = 25
@@ -247,11 +241,12 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	maxQuality := 95
 	maxScale := 1.0
 	if runtime.GOOS == "darwin" {
-		fps = 20
-		quality = 75
-		scale = 0.75
+		// Same quality as Windows — macOS Quartz capture is fast enough
+		fps = 25
+		quality = 85
+		scale = 1.0
 		maxFPS = 30
-		maxQuality = 85
+		maxQuality = 95
 		maxScale = 1.0
 	}
 	frameInterval := time.Duration(1000/fps) * time.Millisecond
