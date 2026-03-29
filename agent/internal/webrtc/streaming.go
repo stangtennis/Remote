@@ -241,28 +241,28 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 
 	// Adaptive streaming parameters
 	fps := 25
-	quality := 75
+	quality := 85
 	scale := 1.0
 	maxFPS := 30
-	maxQuality := 90
+	maxQuality := 95
 	maxScale := 1.0
 	if runtime.GOOS == "darwin" {
 		fps = 20
-		quality = 70
+		quality = 75
 		scale = 0.75
 		maxFPS = 30
-		maxQuality = 80
+		maxQuality = 85
 		maxScale = 1.0
 	}
 	frameInterval := time.Duration(1000/fps) * time.Millisecond
 
 	// Thresholds for adaptation (use controller caps if set)
-	bufferHigh := uint64(1 * 1024 * 1024)    // 1MB - reduce quality sooner (was 2MB)
-	bufferMedium := uint64(512 * 1024)        // 512KB - skip every 2nd frame (was 1MB)
-	bufferLow := uint64(256 * 1024)           // 256KB - can increase quality (was 512KB)
+	bufferHigh := uint64(2 * 1024 * 1024)    // 2MB - reduce quality
+	bufferMedium := uint64(1 * 1024 * 1024)   // 1MB - skip every 2nd frame
+	bufferLow := uint64(512 * 1024)           // 512KB - can increase quality
 	minFPS := 10
-	minQuality := 30  // Lower floor for aggressive quality reduction under load
-	minScale := 0.4   // Lower floor for aggressive scaling under load
+	minQuality := 50  // Never go below 50% (was 30)
+	minScale := 0.65  // Never go below 65% scale (was 0.4)
 	frameSkipCounter := 0 // Counter for frame skipping under buffer pressure
 
 	// Apply controller caps if set
