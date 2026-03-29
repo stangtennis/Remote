@@ -194,7 +194,7 @@ func New(cfg *config.Config, dev *device.Device, tokenProvider *auth.TokenProvid
 	if err := videoEncoder.Init(encoder.Config{
 		Width:            width,
 		Height:           height,
-		Bitrate:          8000, // 8 Mbps - good quality for 1080p screen content
+		Bitrate:          16000, // 16 Mbps - high quality for screen content (text clarity)
 		Framerate:        30,
 		KeyframeInterval: 90, // Keyframe every 3 seconds at 30fps
 	}); err != nil {
