@@ -1008,6 +1008,24 @@ function sendControlEvent(event) {
   }
 }
 
+// Quality toggle (cycles: Medium → High → Low → Medium)
+let currentQualityPreset = 'medium';
+function toggleQuality() {
+  const presets = {
+    low:    { max_fps: 15, max_quality: 45, max_scale: 0.5,  label: 'Lav' },
+    medium: { max_fps: 25, max_quality: 75, max_scale: 1.0,  label: 'Mellem' },
+    high:   { max_fps: 30, max_quality: 90, max_scale: 1.0,  label: 'Høj' }
+  };
+  const cycle = { medium: 'high', high: 'low', low: 'medium' };
+  currentQualityPreset = cycle[currentQualityPreset] || 'medium';
+  const p = presets[currentQualityPreset];
+  sendControlEvent({ t: 'set_stream_params', ...p });
+  const btn = document.getElementById('qualityToggleBtn');
+  if (btn) btn.title = 'Kvalitet: ' + p.label;
+  if (typeof showToast === 'function') showToast('Kvalitet: ' + p.label + ' (' + p.max_fps + ' FPS, ' + p.max_quality + '%)', 'info');
+}
+document.getElementById('qualityToggleBtn')?.addEventListener('click', toggleQuality);
+
 // Export for use in other modules
 window.sendControlEvent = sendControlEvent;
 
