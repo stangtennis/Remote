@@ -369,7 +369,7 @@ function setupDataChannelHandlers(ctx) {
     setupInputCapture();
     // Set reasonable defaults (agent starts at Q60/scale 0.75)
     try {
-      dc.send(JSON.stringify({ t: 'set_stream_params', max_quality: 75, max_fps: 25, max_scale: 1.0 }));
+      dc.send(JSON.stringify({ type: 'set_stream_params', max_quality: 75, max_fps: 25, max_scale: 1.0 }));
       debug('📊 Sent quality preset: Q75 FPS25 Scale100%');
     } catch (e) {}
   };
@@ -1019,7 +1019,7 @@ function toggleQuality() {
   const cycle = { medium: 'high', high: 'low', low: 'medium' };
   currentQualityPreset = cycle[currentQualityPreset] || 'medium';
   const p = presets[currentQualityPreset];
-  sendControlEvent({ t: 'set_stream_params', ...p });
+  sendControlEvent({ type: 'set_stream_params', ...p });
   const btn = document.getElementById('qualityToggleBtn');
   if (btn) btn.title = 'Kvalitet: ' + p.label;
   if (typeof showToast === 'function') showToast('Kvalitet: ' + p.label + ' (' + p.max_fps + ' FPS, ' + p.max_quality + '%)', 'info');
