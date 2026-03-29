@@ -812,6 +812,7 @@ class ViewerSession {
       if (rtt != null) parts.push(`${rtt}ms`);
       if (fps != null) parts.push(`${fps}fps`);
       if (bwText) parts.push(bwText);
+      parts.push(this.usingH264 ? 'H.264' : 'JPEG');
 
       const statsEl = this.wrapper.querySelector('.viewer-stats');
       if (statsEl) {
