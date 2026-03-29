@@ -351,7 +351,9 @@ class ViewerSession {
     this.peerConnection.ontrack = (event) => {
       console.log(`[${this.deviceName}] Track received:`, event.track.kind);
       if (event.track.kind === 'video') {
-        this.usingH264 = true;
+        // Don't set usingH264 yet — agent always adds video track but only
+        // sends frames when H.264 mode is active. Detect actual H.264 usage
+        // by checking if video element receives frames (videoWidth > 0).
         this.videoEl.srcObject = event.streams[0];
         this.videoEl.style.display = '';
         this.canvasEl.style.pointerEvents = 'auto';
@@ -812,6 +814,8 @@ class ViewerSession {
       if (rtt != null) parts.push(`${rtt}ms`);
       if (fps != null) parts.push(`${fps}fps`);
       if (bwText) parts.push(bwText);
+      // Detect actual codec: H.264 if video element has frames, JPEG if canvas gets data channel frames
+      this.usingH264 = !!(this.videoEl && this.videoEl.videoWidth > 0 && this.videoEl.videoHeight > 0);
       parts.push(this.usingH264 ? 'H.264' : 'JPEG');
 
       const statsEl = this.wrapper.querySelector('.viewer-stats');
