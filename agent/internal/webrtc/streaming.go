@@ -257,9 +257,9 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	frameInterval := time.Duration(1000/fps) * time.Millisecond
 
 	// Thresholds for adaptation (use controller caps if set)
-	bufferHigh := uint64(2 * 1024 * 1024)   // 2MB - reduce quality sooner
-	bufferMedium := uint64(1 * 1024 * 1024)  // 1MB - skip every 2nd frame
-	bufferLow := uint64(512 * 1024)          // 512KB - can increase quality
+	bufferHigh := uint64(1 * 1024 * 1024)    // 1MB - reduce quality sooner (was 2MB)
+	bufferMedium := uint64(512 * 1024)        // 512KB - skip every 2nd frame (was 1MB)
+	bufferLow := uint64(256 * 1024)           // 256KB - can increase quality (was 512KB)
 	minFPS := 10
 	minQuality := 30  // Lower floor for aggressive quality reduction under load
 	minScale := 0.4   // Lower floor for aggressive scaling under load
