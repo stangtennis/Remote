@@ -166,8 +166,8 @@ func (m *Manager) switchMode(newMode StreamMode, fps *int, quality *int, scale *
 		log.Printf("🔄 Mode switch: %s -> %s (FPS:%d Q:%d Scale:%.0f%%)", oldMode, newMode, *fps, *quality, *scale*100)
 	case ModeActiveTiles:
 		*fps = 25
-		*quality = 85
-		*scale = 1.0
+		*quality = 80
+		*scale = 0.85
 		log.Printf("🔄 Mode switch: %s -> %s (FPS:%d Q:%d Scale:%.0f%%)", oldMode, newMode, *fps, *quality, *scale*100)
 	case ModeActiveH264:
 		*fps = 25
