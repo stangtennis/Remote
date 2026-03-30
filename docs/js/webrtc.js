@@ -998,7 +998,7 @@ function cleanupInputCapture() {
   if (mobileInput) mobileInput.remove();
 
   // Reset cached frame elements (reconnect will re-init)
-  _frameCanvas = null;
+  _frameCanvas = _frameCanvasCtx = _frameRemoteCanvas = _frameRemoteCtx = _frameIdle = _frameConnecting = null;
 
   inputListenersAttached = false;
   inputEventHandlers = {};
