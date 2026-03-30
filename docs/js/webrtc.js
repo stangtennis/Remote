@@ -795,11 +795,18 @@ function setupInputCapture() {
   let touchStartTime = 0;
   let touchStartPos = null;
   let touchMoved = false;
+  let twoFingerLastY = null;
 
   const touchStartHandler = (e) => {
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
     e.preventDefault();
+    if (e.touches.length === 2) {
+      // Two-finger: track for scroll
+      twoFingerLastY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      return;
+    }
+    twoFingerLastY = null;
     const touch = e.touches[0];
     const coords = getImageCoordinates(target, touch.clientX, touch.clientY);
     touchStartPos = { x: touch.clientX, y: touch.clientY };
@@ -809,7 +816,6 @@ function setupInputCapture() {
       x: Math.round(coords.x * 10000) / 10000,
       y: Math.round(coords.y * 10000) / 10000
     };
-    // Move cursor to touch position
     sendControlEvent({ t: 'mouse_move', x: lastCoords.x, y: lastCoords.y, rel: true });
   };
   target.addEventListener('touchstart', touchStartHandler, { passive: false });
@@ -819,6 +825,16 @@ function setupInputCapture() {
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
     e.preventDefault();
+    // Two-finger scroll
+    if (e.touches.length === 2 && twoFingerLastY !== null) {
+      const currentY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const delta = twoFingerLastY - currentY;
+      if (Math.abs(delta) > 5) {
+        sendControlEvent({ t: 'mouse_scroll', delta: delta > 0 ? -1 : 1 });
+        twoFingerLastY = currentY;
+      }
+      return;
+    }
     const touch = e.touches[0];
     touchMoved = true;
     const coords = getImageCoordinates(target, touch.clientX, touch.clientY);
