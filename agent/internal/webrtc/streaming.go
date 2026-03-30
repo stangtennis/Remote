@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"image"
 	"log"
-	"runtime"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -234,21 +233,13 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	}
 
 	// Adaptive streaming parameters
+	// Same defaults for all platforms (macOS Quartz capture is fast enough)
 	fps := 25
 	quality := 85
 	scale := 1.0
 	maxFPS := 30
 	maxQuality := 95
 	maxScale := 1.0
-	if runtime.GOOS == "darwin" {
-		// Same quality as Windows — macOS Quartz capture is fast enough
-		fps = 25
-		quality = 85
-		scale = 1.0
-		maxFPS = 30
-		maxQuality = 95
-		maxScale = 1.0
-	}
 	frameInterval := time.Duration(1000/fps) * time.Millisecond
 
 	// Thresholds for adaptation (use controller caps if set)
@@ -256,8 +247,8 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	bufferMedium := uint64(1 * 1024 * 1024)   // 1MB - skip every 2nd frame
 	bufferLow := uint64(512 * 1024)           // 512KB - can increase quality
 	minFPS := 10
-	minQuality := 50  // Never go below 50% (was 30)
-	minScale := 0.65  // Never go below 65% scale (was 0.4)
+	minQuality := 50  // Below 50% introduces visible JPEG artifacts on text
+	minScale := 0.65  // Below 65% makes small text unreadable
 	frameSkipCounter := 0 // Counter for frame skipping under buffer pressure
 
 	// Apply controller caps if set
@@ -284,10 +275,6 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	isIdle := false             // Tracked from modeState for logging
 	motionPct := 0.0
 	forceFullFrame := false
-
-	// H.264 state (auto-enable disabled — manual toggle only)
-	h264AutoEnabled := false
-	_ = h264AutoEnabled
 
 	ticker := time.NewTicker(frameInterval)
 	defer ticker.Stop()
@@ -496,7 +483,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 				}
 			}
 
-			isLAN := m.lastRTT < 20*time.Millisecond
+			isLAN := m.lastRTT > 0 && m.lastRTT < 20*time.Millisecond
 
 			if congested {
 				if isLAN {
@@ -574,17 +561,8 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			}
 		}
 
-		// H.264 auto-enable DISABLED — chroma subsampling (4:2:0) causes color
-		// artifacts on screen content (text on white background). JPEG tiles at
-		// Q75+ look better for static desktop. H.264 can be enabled manually
-		// via controller quality toggle when smooth video is preferred.
-
-		// H.264 auto-disable: fall back if CPU goes high
-		if m.useH264 && h264AutoEnabled && avgCPU > 60 {
-			log.Printf("⚠️ H.264 auto-disable: CPU too high (%.0f%%) — falling back to JPEG tiles", avgCPU)
-			m.SetH264Mode(false)
-			h264AutoEnabled = false
-		}
+		// H.264 auto-enable disabled — 4:2:0 chroma causes color artifacts on text.
+		// H.264 can be toggled manually via controller.
 
 		// EARLY-DROP: Drop frames before encode if buffer is filling up
 		// This keeps the stream responsive instead of building up latency
@@ -667,7 +645,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		}
 
 		// Tiles mode: encode RGBA to JPEG with scaling (reuse rgbaFrame to avoid double-capture)
-		jpeg, scaledW, scaledH, encErr := sc.EncodeRGBAToJPEG(rgbaFrame, quality, scale)
+		jpeg, _, _, encErr := sc.EncodeRGBAToJPEG(rgbaFrame, quality, scale)
 		if encErr != nil {
 			errorCount++
 			if errorCount%50 == 1 {
@@ -680,8 +658,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			continue
 		}
 
-		_ = scaledW
-		_ = scaledH
+
 
 		// POST-ENCODE buffer check: if buffer grew during encoding, drop the frame
 		postEncodeBuffer := dc.BufferedAmount()
