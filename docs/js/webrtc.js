@@ -993,6 +993,13 @@ function cleanupInputCapture() {
     });
   }
 
+  // Remove mobile keyboard input element
+  const mobileInput = document.getElementById('mobileKeyboardInput');
+  if (mobileInput) mobileInput.remove();
+
+  // Reset cached frame elements (reconnect will re-init)
+  _frameCanvas = null;
+
   inputListenersAttached = false;
   inputEventHandlers = {};
   debug('🧹 Input capture cleaned up');
@@ -1027,7 +1034,11 @@ function toggleQuality() {
   if (btn) btn.title = 'Kvalitet: ' + p.label;
   if (typeof showToast === 'function') showToast('Kvalitet: ' + p.label + ' (' + p.max_fps + ' FPS, ' + p.max_quality + '%)', 'info');
 }
-document.getElementById('qualityToggleBtn')?.addEventListener('click', toggleQuality);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => document.getElementById('qualityToggleBtn')?.addEventListener('click', toggleQuality));
+} else {
+  document.getElementById('qualityToggleBtn')?.addEventListener('click', toggleQuality);
+}
 
 // Export for use in other modules
 window.sendControlEvent = sendControlEvent;
@@ -1156,19 +1167,26 @@ async function updateConnectionType(ctx) {
   }
 }
 
+// Cached DOM elements for frame rendering (avoid getElementById per frame)
+let _frameCanvas, _frameCanvasCtx, _frameRemoteCanvas, _frameRemoteCtx, _frameIdle, _frameConnecting;
+function initFrameElements() {
+  _frameCanvas = document.getElementById('previewCanvas') || document.getElementById('remoteCanvas');
+  _frameCanvasCtx = _frameCanvas?.getContext('2d') || null;
+  _frameRemoteCanvas = document.getElementById('remoteCanvas');
+  _frameRemoteCtx = _frameRemoteCanvas?.getContext('2d') || null;
+  _frameIdle = document.getElementById('previewIdle');
+  _frameConnecting = document.getElementById('previewConnecting');
+}
+
 // Display video frame on canvas
 function displayVideoFrame(data, ctx) {
-  // Render to both canvases - previewCanvas (tab preview) and remoteCanvas (viewer)
-  const previewCanvas = document.getElementById('previewCanvas');
-  const remoteCanvas = document.getElementById('remoteCanvas');
-  const canvas = previewCanvas || remoteCanvas;
-  if (!canvas) {
-    console.error('Canvas not found!');
-    return;
-  }
+  if (!_frameCanvas) initFrameElements();
+  const canvas = _frameCanvas;
+  if (!canvas) return;
 
-  const canvasCtx = canvas.getContext('2d');
-  const remoteCtx = remoteCanvas ? remoteCanvas.getContext('2d') : null;
+  const canvasCtx = _frameCanvasCtx;
+  const remoteCanvas = _frameRemoteCanvas;
+  const remoteCtx = _frameRemoteCtx;
 
   let dataSize = 0;
   if (data instanceof Blob) {
@@ -1204,11 +1222,9 @@ function displayVideoFrame(data, ctx) {
 
   const blob = jpegData instanceof Blob ? jpegData : new Blob([jpegData], { type: 'image/jpeg' });
 
-  // Hide overlays
-  const previewIdle = document.getElementById('previewIdle');
-  const previewConnecting = document.getElementById('previewConnecting');
-  if (previewIdle) previewIdle.style.display = 'none';
-  if (previewConnecting) previewConnecting.style.display = 'none';
+  // Hide overlays (cached)
+  if (_frameIdle) _frameIdle.style.display = 'none';
+  if (_frameConnecting) _frameConnecting.style.display = 'none';
 
 
   const img = new Image();

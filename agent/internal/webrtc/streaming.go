@@ -483,7 +483,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 				}
 			}
 
-			isLAN := m.lastRTT > 0 && m.lastRTT < 20*time.Millisecond
+			isLAN := avgRTT > 0 && avgRTT < 20*time.Millisecond
 
 			if congested {
 				if isLAN {
@@ -529,13 +529,24 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 					}
 				}
 			} else if bufferedAmount < bufferLow && droppedFrames == 0 {
-				// Network clear — snap back to max immediately on LAN, fast on WAN
+				// Network clear — ramp back up fast
 				if isLAN {
-					// LAN: instant recovery
-					quality = maxQuality
-					scale = maxScale
-					fps = maxFPS
-					changed = true
+					// LAN: fast ramp (2-3 ticks to max, avoids buffer spikes)
+					if quality < maxQuality {
+						quality += 20
+						if quality > maxQuality { quality = maxQuality }
+						changed = true
+					}
+					if scale < maxScale {
+						scale += 0.2
+						if scale > maxScale { scale = maxScale }
+						changed = true
+					}
+					if fps < maxFPS {
+						fps += 10
+						if fps > maxFPS { fps = maxFPS }
+						changed = true
+					}
 				} else if m.lossPct < 1 && m.lastRTT < 120*time.Millisecond {
 					// WAN: fast recovery
 					if quality < maxQuality {
