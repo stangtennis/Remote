@@ -3,6 +3,7 @@ package device
 import (
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"runtime"
 	"time"
@@ -133,6 +134,14 @@ func (d *Device) executeForceUpdate() {
 	}
 
 	log.Printf("✅ Force update: installed %s, agent will restart", info.TagName)
+
+	// Exit the current process so the new version can replace the binary
+	// Windows: SCM will restart the service; macOS: LaunchAgent KeepAlive restarts
+	go func() {
+		time.Sleep(1 * time.Second)
+		log.Println("🔄 Exiting for update...")
+		os.Exit(0)
+	}()
 }
 
 // executeRestart triggers an OS restart.

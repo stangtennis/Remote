@@ -111,7 +111,7 @@ const App = {
       }
 
     } catch (err) {
-      statusEl.textContent = err.message || 'Login mislykkedes';
+      statusEl.textContent = err?.message || err || 'Login mislykkedes';
       statusEl.className = 'status-text error';
     }
 
@@ -181,7 +181,7 @@ const App = {
       this.renderDevices(devices, container);
       this.updateQuickConnect();
     } catch (err) {
-      container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>${err.message}</p></div>`;
+      container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>${err?.message || err}</p></div>`;
     }
   },
 
@@ -329,7 +329,7 @@ const App = {
       }
     } catch (err) {
       console.error('connectDevice error:', err);
-      showToast('Connect fejl: ' + err.message, 'error');
+      showToast('Connect fejl: ' + err?.message || err, 'error');
     }
   },
 
@@ -341,7 +341,7 @@ const App = {
       showToast('Enhed omdøbt!', 'success');
       this.loadDevices();
     } catch (err) {
-      showToast('Fejl: ' + err.message, 'error');
+      showToast('Fejl: ' + err?.message || err, 'error');
     }
   },
 
@@ -352,7 +352,7 @@ const App = {
       showToast('Enhed fjernet', 'success');
       this.loadDevices();
     } catch (err) {
-      showToast('Fejl: ' + err.message, 'error');
+      showToast('Fejl: ' + err?.message || err, 'error');
     }
   },
 
@@ -364,7 +364,7 @@ const App = {
       this.loadDevices();
       this.loadPendingDevices();
     } catch (err) {
-      showToast('Fejl: ' + err.message, 'error');
+      showToast('Fejl: ' + err?.message || err, 'error');
     }
   },
 
@@ -375,7 +375,7 @@ const App = {
       const devices = await window.go.main.App.GetPendingDevices();
       this.renderPendingDevices(devices, container);
     } catch (err) {
-      container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>${err.message}</p></div>`;
+      container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>${err?.message || err}</p></div>`;
     }
   },
 
@@ -415,7 +415,7 @@ const App = {
       this.loadDevices();
       this.loadPendingDevices();
     } catch (err) {
-      showToast('Fejl: ' + err.message, 'error');
+      showToast('Fejl: ' + err?.message || err, 'error');
     }
   },
 
@@ -515,7 +515,7 @@ const App = {
       await this.loadSettings();
       showToast(`${preset.charAt(0).toUpperCase() + preset.slice(1)} preset anvendt`, 'success');
     } catch (err) {
-      showToast('Fejl: ' + err.message, 'error');
+      showToast('Fejl: ' + err?.message || err, 'error');
     }
   },
 
@@ -547,7 +547,7 @@ const App = {
       }
       this.loadSettings(); // Refresh install button state
     } catch (err) {
-      showToast('Fejl: ' + err.message, 'error');
+      showToast('Fejl: ' + err?.message || err, 'error');
     }
   },
 
@@ -563,7 +563,7 @@ const App = {
       await this.loadSettings();
       showToast('Indstillinger nulstillet', 'success');
     } catch (err) {
-      showToast('Fejl: ' + err.message, 'error');
+      showToast('Fejl: ' + err?.message || err, 'error');
     }
   },
 
@@ -634,7 +634,7 @@ const App = {
         <p style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-muted)">Udløber: ${info.expires_at}</p>
       `;
     } catch (err) {
-      body.innerHTML = `<p style="color:var(--danger)">Fejl: ${err.message}</p>`;
+      body.innerHTML = `<p style="color:var(--danger)">Fejl: ${err?.message || err}</p>`;
     }
   },
 
@@ -696,7 +696,7 @@ const App = {
       }
     } catch (err) {
       console.error('joinSupportSession error:', err);
-      if (statusEl) { statusEl.textContent = 'Fejl: ' + (err.message || err); statusEl.className = 'status-text error'; }
+      if (statusEl) { statusEl.textContent = 'Fejl: ' + (err?.message || err || err); statusEl.className = 'status-text error'; }
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-plug"></i> Forbind'; }
     }
@@ -733,7 +733,7 @@ const App = {
         ` : ''}
       `;
     } catch (err) {
-      body.innerHTML = `<p style="color:var(--danger)">Fejl: ${err.message}</p>`;
+      body.innerHTML = `<p style="color:var(--danger)">Fejl: ${err?.message || err}</p>`;
     }
   },
 
@@ -748,7 +748,7 @@ const App = {
     try {
       await window.go.main.App.DownloadAndInstallUpdate();
     } catch (err) {
-      if (status) status.textContent = 'Fejl: ' + err.message;
+      if (status) status.textContent = 'Fejl: ' + err?.message || err;
       if (btn) btn.disabled = false;
     }
   },
@@ -764,7 +764,7 @@ const App = {
       content.textContent = log;
       content.scrollTop = content.scrollHeight;
     } catch (err) {
-      content.textContent = 'Fejl: ' + err.message;
+      content.textContent = 'Fejl: ' + err?.message || err;
     }
   },
 
@@ -790,7 +790,7 @@ const App = {
             showToast(`Ctrl+${e.key}: Ingen online enhed #${index + 1}`, 'warning');
           }
         } catch (err) {
-          showToast('Fejl: ' + err.message, 'error');
+          showToast('Fejl: ' + err?.message || err, 'error');
         }
       }
     });
@@ -882,7 +882,7 @@ const App = {
         showToast(`${label}-kommando sendt til ${deviceName}`, 'success');
       }
     } catch (err) {
-      showToast(`Fejl: ${err.message}`, 'error');
+      showToast(`Fejl: ${err?.message || err}`, 'error');
     }
   },
 
@@ -998,7 +998,7 @@ const App = {
         </div>
       `).join('');
     } catch (err) {
-      container.innerHTML = `<div class="empty-state"><p>Fejl: ${err.message}</p></div>`;
+      container.innerHTML = `<div class="empty-state"><p>Fejl: ${err?.message || err}</p></div>`;
     }
   },
 
@@ -1008,7 +1008,7 @@ const App = {
       showToast(approved ? 'Bruger godkendt' : 'Bruger afvist', 'success');
       this.loadAdminUsers();
     } catch (err) {
-      showToast('Fejl: ' + err.message, 'error');
+      showToast('Fejl: ' + err?.message || err, 'error');
     }
   },
 
@@ -1018,7 +1018,7 @@ const App = {
       showToast(`Rolle ændret til ${role}`, 'success');
       this.loadAdminUsers();
     } catch (err) {
-      showToast('Fejl: ' + err.message, 'error');
+      showToast('Fejl: ' + err?.message || err, 'error');
     }
   },
 
@@ -1028,7 +1028,7 @@ const App = {
       await window.go.main.App.ForceUpdateAllDevices();
       showToast('Opdateringskommando sendt til alle enheder', 'success');
     } catch (err) {
-      showToast('Fejl: ' + err.message, 'error');
+      showToast('Fejl: ' + err?.message || err, 'error');
     }
   },
 
