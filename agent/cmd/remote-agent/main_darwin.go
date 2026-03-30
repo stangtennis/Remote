@@ -17,6 +17,7 @@ import (
 	"github.com/stangtennis/remote-agent/internal/input"
 	"github.com/stangtennis/remote-agent/internal/screen"
 	"github.com/stangtennis/remote-agent/internal/tray"
+	"github.com/stangtennis/remote-agent/internal/updater"
 	"github.com/stangtennis/remote-agent/internal/webrtc"
 	"github.com/stangtennis/remote-agent/pkg/logging"
 )
@@ -134,6 +135,16 @@ func runConsoleMode() {
 	log.Println("Agent running! Waiting for connections...")
 	log.Println("Press Ctrl+C to stop")
 	log.Println("========================================")
+
+	// Auto-update: check 2 min after start, then every 30 min
+	go func() {
+		time.Sleep(2 * time.Minute)
+		for {
+			log.Println("🔄 Auto-update check...")
+			consoleCheckAndApplyUpdate()
+			time.Sleep(30 * time.Minute)
+		}
+	}()
 
 	// Wait for signal
 	sigCh := make(chan os.Signal, 1)
@@ -336,4 +347,33 @@ func watchAccessibilityPermission() {
 		}
 		log.Println("  ⏳ Accessibility permission still not granted — waiting...")
 	}
+}
+
+// consoleCheckAndApplyUpdate checks for updates and applies them (macOS console mode)
+func consoleCheckAndApplyUpdate() {
+	u, err := updater.NewUpdater(tray.Version)
+	if err != nil {
+		log.Printf("❌ Updater init failed: %v", err)
+		return
+	}
+	if err := u.CheckForUpdate(); err != nil {
+		log.Printf("🔄 Update check: %v", err)
+		return
+	}
+	info := u.GetAvailableUpdate()
+	if info == nil {
+		log.Println("✅ Already up to date")
+		return
+	}
+	log.Printf("🔄 Update available: %s → %s", tray.Version, info.Version)
+	if err := u.DownloadUpdate(); err != nil {
+		log.Printf("❌ Download failed: %v", err)
+		return
+	}
+	log.Println("📦 Installing update...")
+	if err := u.InstallUpdate(); err != nil {
+		log.Printf("❌ Install failed: %v", err)
+		return
+	}
+	log.Println("✅ Update installed — restarting")
 }
