@@ -1296,8 +1296,8 @@ func (s *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, chan
 	// Sikr SCM recovery er korrekt konfigureret (auto-fix eksisterende installationer)
 	ensureRecoveryConfig()
 
-	// Auto-update timers
-	updateTicker := time.NewTicker(30 * time.Minute)
+	// Auto-update timers (6h interval — force update from dashboard for urgent patches)
+	updateTicker := time.NewTicker(6 * time.Hour)
 	defer updateTicker.Stop()
 	startupUpdateTimer := time.NewTimer(2 * time.Minute)
 	defer startupUpdateTimer.Stop()
@@ -1796,6 +1796,12 @@ func ensureRecoveryConfig() {
 // forceCheck=true skips the interval check (used at startup to always check).
 // Returns true if an update was applied and the service should restart via SCM.
 func serviceCheckAndApplyUpdate(forceCheck bool) bool {
+	// Skip update if active remote session (don't interrupt user)
+	if !forceCheck && rtc != nil && rtc.IsStreaming() {
+		log.Println("⏭️  Service update: skipping — active remote session")
+		return false
+	}
+
 	// Opryd .old filer fra forrige update
 	cleanupOldBinaries()
 
@@ -1805,7 +1811,7 @@ func serviceCheckAndApplyUpdate(forceCheck bool) bool {
 		return false
 	}
 
-	if !forceCheck && !u.ShouldAutoCheck(30 * time.Minute) {
+	if !forceCheck && !u.ShouldAutoCheck(6 * time.Hour) {
 		log.Println("⏭️  Service update: for tidligt at checke igen")
 		return false
 	}
