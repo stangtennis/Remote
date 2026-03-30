@@ -136,13 +136,18 @@ func runConsoleMode() {
 	log.Println("Press Ctrl+C to stop")
 	log.Println("========================================")
 
-	// Auto-update: check 2 min after start, then every 30 min
+	// Auto-update: check 2 min after start, then every 6 hours
 	go func() {
 		time.Sleep(2 * time.Minute)
 		for {
-			log.Println("🔄 Auto-update check...")
-			consoleCheckAndApplyUpdate()
-			time.Sleep(30 * time.Minute)
+			// Skip if active remote session
+			if rtc != nil && rtc.IsStreaming() {
+				log.Println("⏭️  Auto-update: skipping — active remote session")
+			} else {
+				log.Println("🔄 Auto-update check...")
+				consoleCheckAndApplyUpdate()
+			}
+			time.Sleep(6 * time.Hour)
 		}
 	}()
 

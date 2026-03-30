@@ -832,6 +832,11 @@ func (m *Manager) cleanupConnection(reason string) {
 	log.Println("✅ Connection cleaned up - ready for new connections")
 }
 
+// IsStreaming returns true if the agent is actively streaming to a client
+func (m *Manager) IsStreaming() bool {
+	return m.isStreaming.Load()
+}
+
 func (m *Manager) Close() {
 	m.isStreaming.Store(false)
 
