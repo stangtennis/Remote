@@ -1356,7 +1356,7 @@ class ViewerSession {
 
     const send = () => {
       if (dc.readyState === 'open') {
-        dc.send(JSON.stringify({ type: 'set_mode', mode: 'h264', bitrate: 8000 }));
+        dc.send(JSON.stringify({ type: 'set_mode', mode: 'h264', bitrate: 16000 }));
         console.log(`[${this.deviceName}] Requested H.264 mode (8 Mbps)`);
       }
     };

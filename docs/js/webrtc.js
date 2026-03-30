@@ -367,10 +367,11 @@ function setupDataChannelHandlers(ctx) {
     debug('Data channel opened for', ctx.id);
     // Enable mouse/keyboard input (only once, shared across sessions)
     setupInputCapture();
-    // Set reasonable defaults (agent starts at Q60/scale 0.75)
+    // Send medium preset (matches controller's medium)
     try {
-      dc.send(JSON.stringify({ type: 'set_stream_params', max_quality: 75, max_fps: 25, max_scale: 1.0 }));
-      debug('📊 Sent quality preset: Q75 FPS25 Scale100%');
+      currentQualityPreset = 'medium';
+      dc.send(JSON.stringify({ type: 'set_stream_params', max_quality: 70, max_fps: 25, max_scale: 0.75 }));
+      debug('📊 Sent quality preset: medium (Q70 FPS25 Scale75%)');
     } catch (e) {}
   };
 
@@ -1015,8 +1016,8 @@ let currentQualityPreset = 'medium';
 function toggleQuality() {
   const presets = {
     low:    { max_fps: 15, max_quality: 45, max_scale: 0.5,  label: 'Lav' },
-    medium: { max_fps: 25, max_quality: 75, max_scale: 1.0,  label: 'Mellem' },
-    high:   { max_fps: 30, max_quality: 90, max_scale: 1.0,  label: 'Høj' }
+    medium: { max_fps: 25, max_quality: 70, max_scale: 0.75, label: 'Mellem' },
+    high:   { max_fps: 30, max_quality: 95, max_scale: 1.0,  label: 'Høj' }
   };
   const cycle = { medium: 'high', high: 'low', low: 'medium' };
   currentQualityPreset = cycle[currentQualityPreset] || 'medium';
