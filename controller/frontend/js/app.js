@@ -329,7 +329,7 @@ const App = {
       }
     } catch (err) {
       console.error('connectDevice error:', err);
-      showToast('Connect fejl: ' + err?.message || err, 'error');
+      showToast('Connect fejl: ' + (err?.message || err), 'error');
     }
   },
 
@@ -341,7 +341,7 @@ const App = {
       showToast('Enhed omdøbt!', 'success');
       this.loadDevices();
     } catch (err) {
-      showToast('Fejl: ' + err?.message || err, 'error');
+      showToast('Fejl: ' + (err?.message || err), 'error');
     }
   },
 
@@ -352,7 +352,7 @@ const App = {
       showToast('Enhed fjernet', 'success');
       this.loadDevices();
     } catch (err) {
-      showToast('Fejl: ' + err?.message || err, 'error');
+      showToast('Fejl: ' + (err?.message || err), 'error');
     }
   },
 
@@ -364,7 +364,7 @@ const App = {
       this.loadDevices();
       this.loadPendingDevices();
     } catch (err) {
-      showToast('Fejl: ' + err?.message || err, 'error');
+      showToast('Fejl: ' + (err?.message || err), 'error');
     }
   },
 
@@ -415,7 +415,7 @@ const App = {
       this.loadDevices();
       this.loadPendingDevices();
     } catch (err) {
-      showToast('Fejl: ' + err?.message || err, 'error');
+      showToast('Fejl: ' + (err?.message || err), 'error');
     }
   },
 
@@ -515,7 +515,7 @@ const App = {
       await this.loadSettings();
       showToast(`${preset.charAt(0).toUpperCase() + preset.slice(1)} preset anvendt`, 'success');
     } catch (err) {
-      showToast('Fejl: ' + err?.message || err, 'error');
+      showToast('Fejl: ' + (err?.message || err), 'error');
     }
   },
 
@@ -547,7 +547,7 @@ const App = {
       }
       this.loadSettings(); // Refresh install button state
     } catch (err) {
-      showToast('Fejl: ' + err?.message || err, 'error');
+      showToast('Fejl: ' + (err?.message || err), 'error');
     }
   },
 
@@ -563,7 +563,7 @@ const App = {
       await this.loadSettings();
       showToast('Indstillinger nulstillet', 'success');
     } catch (err) {
-      showToast('Fejl: ' + err?.message || err, 'error');
+      showToast('Fejl: ' + (err?.message || err), 'error');
     }
   },
 
@@ -790,7 +790,7 @@ const App = {
             showToast(`Ctrl+${e.key}: Ingen online enhed #${index + 1}`, 'warning');
           }
         } catch (err) {
-          showToast('Fejl: ' + err?.message || err, 'error');
+          showToast('Fejl: ' + (err?.message || err), 'error');
         }
       }
     });
@@ -1008,7 +1008,7 @@ const App = {
       showToast(approved ? 'Bruger godkendt' : 'Bruger afvist', 'success');
       this.loadAdminUsers();
     } catch (err) {
-      showToast('Fejl: ' + err?.message || err, 'error');
+      showToast('Fejl: ' + (err?.message || err), 'error');
     }
   },
 
@@ -1018,7 +1018,7 @@ const App = {
       showToast(`Rolle ændret til ${role}`, 'success');
       this.loadAdminUsers();
     } catch (err) {
-      showToast('Fejl: ' + err?.message || err, 'error');
+      showToast('Fejl: ' + (err?.message || err), 'error');
     }
   },
 
@@ -1028,7 +1028,7 @@ const App = {
       await window.go.main.App.ForceUpdateAllDevices();
       showToast('Opdateringskommando sendt til alle enheder', 'success');
     } catch (err) {
-      showToast('Fejl: ' + err?.message || err, 'error');
+      showToast('Fejl: ' + (err?.message || err), 'error');
     }
   },
 

@@ -987,9 +987,11 @@ function setupInputCapture() {
 function cleanupInputCapture() {
   if (!inputListenersAttached) return;
 
-  const remoteVideo = document.getElementById('remoteVideo');
+  // Must match setupInputCapture target selection (previewCanvas first)
+  const previewCanvas = document.getElementById('previewCanvas');
   const remoteCanvas = document.getElementById('remoteCanvas');
-  const target = remoteCanvas || remoteVideo;
+  const remoteVideo = document.getElementById('remoteVideo');
+  const target = previewCanvas || remoteCanvas || remoteVideo;
 
   if (target && inputEventHandlers) {
     Object.entries(inputEventHandlers).forEach(([name, handler]) => {
