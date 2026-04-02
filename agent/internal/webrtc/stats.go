@@ -15,13 +15,16 @@ func (m *Manager) sendStats(fps, quality int, scale float64, mode string, rttMs 
 	}
 
 	stats := map[string]interface{}{
-		"type":    "stats",
-		"fps":     fps,
-		"quality": quality,
-		"scale":   scale,
-		"mode":    mode,
-		"rtt":     rttMs,
-		"cpu":     cpuPct,
+		"type":      "stats",
+		"fps":       fps,
+		"quality":   quality,
+		"scale":     scale,
+		"mode":      mode,
+		"rtt":       rttMs,
+		"cpu":       cpuPct,
+		"conn_type": m.connectionType,
+		"bytes_tx":  m.totalBytesSent,
+		"bytes_rx":  m.totalBytesReceived,
 	}
 
 	data, err := json.Marshal(stats)
@@ -55,6 +58,14 @@ func (m *Manager) collectStats(ctx context.Context) {
 		}
 
 		stats := pc.GetStats()
+		// Collect candidate type lookup table
+		localCandidates := map[string]string{} // id → candidateType
+		for _, stat := range stats {
+			if cs, ok := stat.(pionwebrtc.ICECandidateStats); ok {
+				localCandidates[cs.ID] = cs.CandidateType.String()
+			}
+		}
+
 		for _, stat := range stats {
 			// Use ICE candidate pair stats for loss and RTT
 			if pairStats, ok := stat.(pionwebrtc.ICECandidatePairStats); ok {
@@ -67,6 +78,15 @@ func (m *Manager) collectStats(ctx context.Context) {
 				if pairStats.CurrentRoundTripTime > 0 {
 					m.lastRTT = time.Duration(pairStats.CurrentRoundTripTime * float64(time.Second))
 				}
+
+				// Track connection type from local candidate
+				if ct, ok := localCandidates[pairStats.LocalCandidateID]; ok {
+					m.connectionType = ct
+				}
+
+				// Track cumulative bytes for TURN usage monitoring
+				m.totalBytesSent = uint64(pairStats.BytesSent)
+				m.totalBytesReceived = uint64(pairStats.BytesReceived)
 
 				// Calculate loss from sent vs received delta
 				sent := pairStats.PacketsSent

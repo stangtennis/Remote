@@ -76,6 +76,11 @@ type Manager struct {
 	lastBytesSent   int64   // For sendBps calculation
 	lastSendTime    time.Time
 
+	// Connection monitoring
+	connectionType     string // "host" (P2P), "srflx" (STUN), "relay" (TURN)
+	totalBytesSent     uint64 // Cumulative bytes sent via ICE
+	totalBytesReceived uint64 // Cumulative bytes received via ICE
+
 	// Video encoding (H.264)
 	videoTrack   *video.Track
 	videoEncoder *encoder.Manager
@@ -835,6 +840,11 @@ func (m *Manager) cleanupConnection(reason string) {
 // IsStreaming returns true if the agent is actively streaming to a client
 func (m *Manager) IsStreaming() bool {
 	return m.isStreaming.Load()
+}
+
+// GetConnectionInfo returns connection type and bytes transferred for monitoring
+func (m *Manager) GetConnectionInfo() (connType string, bytesSent, bytesReceived uint64) {
+	return m.connectionType, m.totalBytesSent, m.totalBytesReceived
 }
 
 func (m *Manager) Close() {

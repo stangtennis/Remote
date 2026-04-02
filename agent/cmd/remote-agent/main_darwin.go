@@ -293,6 +293,7 @@ func startAgent() error {
 	dev.SetHealthCheck(func() bool {
 		return rtc.IsPollingHealthy()
 	})
+	dev.SetConnInfoProvider(rtc.GetConnectionInfo)
 
 	// Start presence heartbeat (now health-aware)
 	go dev.StartPresence()
