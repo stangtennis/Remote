@@ -231,10 +231,17 @@ type HeartbeatResult struct {
 	PendingCommand string // Non-empty if dashboard sent a command (e.g. "force_update")
 }
 
+// ConnectionInfo holds optional WebRTC connection metrics for heartbeat
+type ConnectionInfo struct {
+	Type          string // "host", "srflx", "relay"
+	BytesSent     uint64
+	BytesReceived uint64
+}
+
 // UpdateHeartbeat updates the device heartbeat using authenticated token.
 // isOnline indicates whether the agent is healthy and reachable.
 // Returns a HeartbeatResult with any pending commands from the dashboard.
-func UpdateHeartbeat(config RegistrationConfig, deviceID string, isOnline bool) (*HeartbeatResult, error) {
+func UpdateHeartbeat(config RegistrationConfig, deviceID string, isOnline bool, connInfo ...ConnectionInfo) (*HeartbeatResult, error) {
 	result := &HeartbeatResult{}
 
 	url := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, deviceID)
@@ -253,6 +260,13 @@ func UpdateHeartbeat(config RegistrationConfig, deviceID string, isOnline bool) 
 		"memory_total_mb": metrics.MemTotalMB,
 		"disk_used_gb":    metrics.DiskUsedGB,
 		"disk_total_gb":   metrics.DiskTotalGB,
+	}
+
+	// Add connection info if provided
+	if len(connInfo) > 0 && connInfo[0].Type != "" {
+		payload["connection_type"] = connInfo[0].Type
+		payload["session_bytes_sent"] = connInfo[0].BytesSent
+		payload["session_bytes_received"] = connInfo[0].BytesReceived
 	}
 
 	jsonData, err := json.Marshal(payload)

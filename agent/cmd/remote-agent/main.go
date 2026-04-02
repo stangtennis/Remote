@@ -1423,6 +1423,9 @@ func startAgent() error {
 		return rtc.IsPollingHealthy()
 	})
 
+	// Wire connection info: heartbeat reports TURN usage
+	dev.SetConnInfoProvider(rtc.GetConnectionInfo)
+
 	// Start presence heartbeat (now health-aware)
 	go dev.StartPresence()
 

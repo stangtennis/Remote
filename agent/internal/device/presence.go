@@ -64,7 +64,16 @@ func (d *Device) StartPresence() {
 			fmt.Println("⚠️  Heartbeat: polling is unhealthy — reporting offline")
 		}
 
-		if result, err := UpdateHeartbeat(config, d.ID, isHealthy); err != nil {
+		// Collect connection info if available
+		var ci []ConnectionInfo
+		if d.connInfoFunc != nil {
+			ct, bs, br := d.connInfoFunc()
+			if ct != "" {
+				ci = append(ci, ConnectionInfo{Type: ct, BytesSent: bs, BytesReceived: br})
+			}
+		}
+
+		if result, err := UpdateHeartbeat(config, d.ID, isHealthy, ci...); err != nil {
 			fmt.Printf("⚠️  Heartbeat failed: %v\n", err)
 		} else {
 			d.handlePendingCommand(config, result)

@@ -222,6 +222,10 @@ function createDeviceCard(device) {
   if (device.agent_version) parts.push(device.agent_version);
   if (device.public_ip) parts.push(device.public_ip);
   if (device.isp) parts.push(device.isp);
+  if (device.connection_type) {
+    const ctLabel = { host: 'P2P', srflx: 'STUN', relay: 'Relay' }[device.connection_type] || device.connection_type;
+    parts.push(ctLabel);
+  }
   subtitle.textContent = parts.join(' · ');
   nameCol.append(nameEl, subtitle);
 

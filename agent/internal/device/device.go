@@ -12,6 +12,9 @@ import (
 // HealthChecker is a callback that returns true if the agent's polling is healthy.
 type HealthChecker func() bool
 
+// ConnInfoProvider returns current WebRTC connection info for heartbeat
+type ConnInfoProvider func() (connType string, bytesSent, bytesReceived uint64)
+
 type Device struct {
 	ID            string
 	Name          string
@@ -24,6 +27,12 @@ type Device struct {
 	tokenProvider *auth.TokenProvider
 	userID        string
 	healthCheck   HealthChecker
+	connInfoFunc  ConnInfoProvider
+}
+
+// SetConnInfoProvider sets a callback to get WebRTC connection info for heartbeat
+func (d *Device) SetConnInfoProvider(fn ConnInfoProvider) {
+	d.connInfoFunc = fn
 }
 
 // SetHealthCheck sets a callback used by heartbeat to determine if polling is healthy.
