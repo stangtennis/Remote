@@ -68,6 +68,7 @@ function subscribeToSessionSignaling(sessionId, ctx) {
       },
       async (payload) => {
         debug('✅ Realtime signal received:', payload.new.msg_type);
+        ctx.processedSignalIds.add(payload.new.id);
         await handleSignal(payload.new, ctx);
       }
     )

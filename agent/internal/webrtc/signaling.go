@@ -440,10 +440,10 @@ func (m *Manager) handleWebSession(session Session) {
 	m.sessionID = session.ID
 
 	// Stop previous ICE polling goroutine and create new stop channel
-	if m.iceStopCh != nil {
-		close(m.iceStopCh)
-	}
+	m.closeIceStopCh()
+	m.mu.Lock()
 	m.iceStopCh = make(chan struct{})
+	m.mu.Unlock()
 
 	// Reset ICE candidate buffer for new session
 	m.pendingCandidates = nil

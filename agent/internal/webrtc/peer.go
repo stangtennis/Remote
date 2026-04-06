@@ -776,6 +776,16 @@ func (m *Manager) handleDisconnectGracePeriod(ctx context.Context) {
 	m.cleanupConnection("Disconnected (grace period expired)")
 }
 
+// closeIceStopCh safely closes the ICE stop channel (prevents double-close panic)
+func (m *Manager) closeIceStopCh() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.iceStopCh != nil {
+		close(m.iceStopCh)
+		m.iceStopCh = nil
+	}
+}
+
 func (m *Manager) cleanupConnection(reason string) {
 	log.Printf("🧹 Cleaning up connection (reason: %s)", reason)
 
@@ -788,10 +798,7 @@ func (m *Manager) cleanupConnection(reason string) {
 	}
 
 	// Stop ICE polling goroutine from previous session
-	if m.iceStopCh != nil {
-		close(m.iceStopCh)
-		m.iceStopCh = nil
-	}
+	m.closeIceStopCh()
 
 	// Close data channels and peer connection under mutex
 	m.mu.Lock()

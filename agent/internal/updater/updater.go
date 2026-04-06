@@ -272,7 +272,11 @@ func (u *Updater) DownloadUpdate() error {
 			return err
 		}
 	} else {
-		log.Printf("⚠️ Ingen SHA256 hash tilgængelig — springer verifikation over")
+		err := fmt.Errorf("no SHA256 hash available — refusing to install unverified binary")
+		u.lastError = err
+		u.setStatus(StatusError)
+		os.Remove(exePath)
+		return err
 	}
 
 	u.state.DownloadedVersion = info.TagName

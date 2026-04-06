@@ -1003,7 +1003,10 @@ function cleanupInputCapture() {
         wheel: 'wheel',
         click: 'click',
         keyDown: 'keydown',
-        keyUp: 'keyup'
+        keyUp: 'keyup',
+        touchStart: 'touchstart',
+        touchMove: 'touchmove',
+        touchEnd: 'touchend'
       }[name];
       if (eventName) {
         target.removeEventListener(eventName, handler);
@@ -1578,7 +1581,15 @@ function addChatMessage(sender, text) {
     const msg = document.createElement('div');
     msg.style.cssText = 'margin-bottom:0.3rem; padding:0.2rem 0.4rem; border-radius:4px; background:rgba(255,255,255,0.05);';
     const time = new Date().toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' });
-    msg.innerHTML = `<span style="color:var(--primary, #6366f1); font-weight:500;">${sender}</span> <span style="color:var(--text-dim, #64748b); font-size:0.65rem;">${time}</span><br>${text}`;
+    const senderEl = document.createElement('span');
+    senderEl.style.cssText = 'color:var(--primary, #6366f1); font-weight:500;';
+    senderEl.textContent = sender;
+    const timeEl = document.createElement('span');
+    timeEl.style.cssText = 'color:var(--text-dim, #64748b); font-size:0.65rem;';
+    timeEl.textContent = ' ' + time;
+    const textEl = document.createElement('div');
+    textEl.textContent = text;
+    msg.append(senderEl, timeEl, textEl);
     container.appendChild(msg);
     container.scrollTop = container.scrollHeight;
 }
