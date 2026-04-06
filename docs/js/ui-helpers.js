@@ -466,14 +466,15 @@ function showConfirm(message, options = {}) {
     
     const confirmBtnClass = type === 'danger' ? 'btn-danger' : 'btn-primary';
     
+    const esc = (s) => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
     overlay.innerHTML = `
       <div class="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
-        <div class="confirm-icon">${displayIcon}</div>
-        <h3 id="confirm-title" class="confirm-title">${title}</h3>
-        <p id="confirm-message" class="confirm-message">${message}</p>
+        <div class="confirm-icon">${esc(displayIcon)}</div>
+        <h3 id="confirm-title" class="confirm-title">${esc(title)}</h3>
+        <p id="confirm-message" class="confirm-message">${esc(message)}</p>
         <div class="confirm-actions">
-          <button class="btn btn-ghost confirm-cancel">${cancelText}</button>
-          <button class="btn ${confirmBtnClass} confirm-ok">${confirmText}</button>
+          <button class="btn btn-ghost confirm-cancel">${esc(cancelText)}</button>
+          <button class="btn ${confirmBtnClass} confirm-ok">${esc(confirmText)}</button>
         </div>
       </div>
     `;

@@ -70,13 +70,13 @@ var cachedIPInfo struct {
 	ISP string
 }
 
-// fetchPublicIPInfo gets public IP and ISP from ip-api.com (free, no key needed)
+// fetchPublicIPInfo gets public IP and ISP via HTTPS (no API key needed)
 func fetchPublicIPInfo() (ip, isp string) {
 	if cachedIPInfo.IP != "" {
 		return cachedIPInfo.IP, cachedIPInfo.ISP
 	}
 
-	resp, err := httpClient.Get("http://ip-api.com/json/?fields=query,isp")
+	resp, err := httpClient.Get("https://ipinfo.io/json")
 	if err != nil {
 		log.Printf("⚠️ IP lookup failed: %v", err)
 		return "", ""
@@ -84,16 +84,16 @@ func fetchPublicIPInfo() (ip, isp string) {
 	defer resp.Body.Close()
 
 	var result struct {
-		Query string `json:"query"`
-		ISP   string `json:"isp"`
+		IP  string `json:"ip"`
+		Org string `json:"org"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		log.Printf("⚠️ IP lookup parse failed: %v", err)
 		return "", ""
 	}
 
-	cachedIPInfo.IP = strings.TrimSpace(result.Query)
-	cachedIPInfo.ISP = strings.TrimSpace(result.ISP)
+	cachedIPInfo.IP = strings.TrimSpace(result.IP)
+	cachedIPInfo.ISP = strings.TrimSpace(result.Org)
 	log.Printf("🌐 Public IP: %s (%s)", cachedIPInfo.IP, cachedIPInfo.ISP)
 	return cachedIPInfo.IP, cachedIPInfo.ISP
 }
