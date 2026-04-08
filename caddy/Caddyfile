@@ -7,14 +7,23 @@ supabase.hawkeye123.dk {
     # Kong håndterer selv CORS - ingen ekstra headers nødvendige
 }
 
-# Remote Desktop Dashboard - redirect til GitHub Pages (EKSTERN)
-remote.hawkeye123.dk {
-    redir https://stangtennis.github.io/Remote{uri} permanent
+# Remote Desktop Dashboard - self-hosted bag Cloudflare Access
+# Served on port 8098 (HTTP) — Cloudflare Tunnel handles TLS
+:8098 {
+    root * /dashboard
+    file_server
+    try_files {path} /index.html
+
+    header {
+        Access-Control-Allow-Origin *
+        Access-Control-Allow-Methods "GET, POST, OPTIONS"
+        Access-Control-Allow-Headers "Authorization, Content-Type, apikey, x-client-info"
+    }
 }
 
-# Remote Desktop Login - redirect til GitHub Pages login (EKSTERN)
-login.hawkeye123.dk {
-    redir https://stangtennis.github.io/Remote/login.html permanent
+# Legacy redirect til ny dashboard URL
+remote.hawkeye123.dk {
+    redir https://dashboard.hawkeye123.dk{uri} permanent
 }
 
 # Remote Desktop Downloads - JWT-authenticated via download-proxy (EKSTERN)
