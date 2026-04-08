@@ -2,7 +2,7 @@
 
 A **professional remote desktop solution** built with **Supabase**, **WebRTC**, and **Go** — like TeamViewer, but self-hosted and open-source.
 
-**Current version: v2.99.29** | [Download](https://github.com/stangtennis/Remote/releases/latest) | [Dashboard](https://stangtennis.github.io/Remote/)
+**Current version: v2.99.57** | [Download](https://github.com/stangtennis/Remote/releases/latest) | [Dashboard](https://dashboard.hawkeye123.dk)
 
 ## Features
 
@@ -33,7 +33,7 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 |----------|-------|------------|
 | **Windows** | Native EXE + Windows Service + NSIS installer | Native EXE + NSIS installer |
 | **macOS** | Universal binary (Intel + Apple Silicon) | Universal binary |
-| **Web** | Browser-based screen sharing | Dashboard at GitHub Pages |
+| **Web** | Browser-based screen sharing | Dashboard (self-hosted) |
 
 ### Connectivity
 - **WebRTC P2P** — direct connection for lowest latency (DTLS-SRTP encrypted)
@@ -45,9 +45,12 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 
 ### Infrastructure
 - **Cloudflare Tunnel** — all HTTP traffic via tunnel (no port forwarding needed)
-- **Cloudflare Zero Trust** — Grafana, Portainer, Supabase Studio behind email OTP
-- **Caddy reverse proxy** — serves downloads at `updates.hawkeye123.dk`
-- **Auto-update** — agent + controller check `version.json` on startup
+- **Cloudflare Zero Trust** — Dashboard, Dockge, Beszel, Supabase behind email OTP
+- **Caddy reverse proxy** — serves dashboard + downloads at `updates.hawkeye123.dk`
+- **Dockge** — Docker Compose stack manager (replaces Portainer)
+- **Beszel** — system monitoring (CPU, RAM, disk, Docker stats)
+- **Glance** — home dashboard with service monitors, releases, device status
+- **Auto-update** — agent + controller check `version.json` on startup (SHA256 verified)
 - **Self-hosted Supabase** — runs in Docker, not cloud
 - **GitHub Actions CI** — automated macOS builds, releases with auto-generated notes
 
@@ -123,7 +126,7 @@ cd agent && CGO_ENABLED=1 go build -tags turbo -o remote-agent ./cmd/remote-agen
 
 ```bash
 # Full build (all platforms + installers)
-./build-local.sh v2.99.29
+./build-local.sh v2.99.57
 
 # Manual Windows agent (with turbo JPEG)
 cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
@@ -156,7 +159,7 @@ Version is injected via `-ldflags -X` — no source code changes needed.
 | Supabase (self-hosted) | $0/mo | Docker on local server |
 | Cloudflare Tunnel + TURN | $0/mo | Free tier |
 | Coturn (backup) | $0/mo | Docker on same server |
-| GitHub Pages | $0/mo | Dashboard hosting |
+| Dockge + Beszel + Glance | $0/mo | Docker monitoring stack |
 | **Total** | **$0/mo** | Fully self-hosted |
 
 ## License
