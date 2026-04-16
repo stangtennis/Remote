@@ -118,6 +118,7 @@
                 <button class="toolbar-btn" title="Synkroniser udklipsholder" onclick="sendClipboardToAgent()"><i class="fas fa-clipboard"></i></button>
                 <button class="toolbar-btn" title="Filøverførsel" onclick="FileTransfer.open()"><i class="fas fa-folder-open"></i></button>
                 <button class="toolbar-btn" title="Skærmbillede" onclick="saveScreenshot()"><i class="fas fa-camera"></i></button>
+                <button class="toolbar-btn" title="Processer" onclick="toggleProcessManager()"><i class="fas fa-microchip"></i></button>
                 <button class="toolbar-btn" id="qualityToggleBtn" title="Skift H264/JPEG tilstand"><i class="fas fa-sliders"></i></button>
                 <span id="monitorSelectContainer" style="display: none; align-items: center; gap: 4px;">
                   <label for="monitorSelect" style="font-size: 0.8rem; color: #aaa;"><i class="fas fa-desktop"></i></label>
@@ -430,6 +431,38 @@
   <style>
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
+
+  <!-- Process Manager Modal -->
+  <div id="processModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 800px; max-height: 80vh; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+        <h3 style="margin: 0;"><i class="fas fa-microchip"></i> Processer</h3>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="text" id="processSearch" placeholder="Søg..." oninput="filterProcesses()" style="padding: 4px 8px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 0.85rem;">
+          <button onclick="requestProcessList()" class="btn btn-primary" style="padding: 4px 12px; font-size: 0.85rem;"><i class="fas fa-sync"></i> Opdater</button>
+          <button onclick="toggleProcessManager()" class="btn" style="padding: 4px 8px;"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
+      <div id="processTableContainer" style="flex: 1; overflow-y: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+          <thead>
+            <tr style="position: sticky; top: 0; background: var(--bg-primary); border-bottom: 1px solid var(--border);">
+              <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="sortProcesses('pid')">PID</th>
+              <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="sortProcesses('name')">Navn</th>
+              <th style="text-align: right; padding: 6px 8px; cursor: pointer;" onclick="sortProcesses('memory_mb')">RAM</th>
+              <th style="text-align: right; padding: 6px 8px; cursor: pointer;" onclick="sortProcesses('cpu')">CPU</th>
+              <th style="text-align: left; padding: 6px 8px;">Bruger</th>
+              <th style="text-align: center; padding: 6px 8px; width: 60px;"></th>
+            </tr>
+          </thead>
+          <tbody id="processTableBody">
+            <tr><td colspan="6" style="text-align: center; padding: 20px; opacity: 0.5;">Klik "Opdater" for at hente processer</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="processStatus" style="margin-top: 8px; font-size: 0.8rem; opacity: 0.6;"></div>
+    </div>
+  </div>
 
   <!-- File Transfer Modal -->
   <div id="fileTransferModal" class="modal" style="display: none;">

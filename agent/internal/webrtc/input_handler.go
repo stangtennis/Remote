@@ -18,7 +18,7 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 	}
 
 	// Track last input time for idle detection
-	m.lastInputTime = time.Now()
+	m.setLastInputTime(time.Now())
 
 	// Trigger immediate frame capture for click events (visual feedback)
 	if eventType == "mouse_click" || eventType == "key" {
@@ -285,7 +285,7 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 	}
 
 	// Track last input time for idle detection
-	m.lastInputTime = time.Now()
+	m.setLastInputTime(time.Now())
 
 	// Switch to input desktop before handling input (required for Session 0 / login screen)
 	if m.isSession0 {
