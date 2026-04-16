@@ -32,7 +32,8 @@ type activeTransfer struct {
 }
 
 // sanitizePath validates and cleans a file path received from network input.
-// It rejects paths containing ".." traversal sequences.
+// It rejects paths containing ".." traversal sequences and resolves symlinks
+// to prevent symlink-based path traversal attacks.
 func sanitizePath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("empty path")
@@ -41,7 +42,23 @@ func sanitizePath(path string) (string, error) {
 	if strings.Contains(cleaned, "..") {
 		return "", fmt.Errorf("path traversal not allowed: %s", path)
 	}
-	return cleaned, nil
+	// Resolve symlinks to detect symlink-based traversal
+	resolved, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		// Path doesn't exist yet (e.g. mkdir/upload target) — use cleaned path
+		// but verify parent directory resolves safely
+		parent := filepath.Dir(cleaned)
+		if parentResolved, pErr := filepath.EvalSymlinks(parent); pErr == nil {
+			if strings.Contains(parentResolved, "..") {
+				return "", fmt.Errorf("path traversal detected via symlink: %s", path)
+			}
+		}
+		return cleaned, nil
+	}
+	if strings.Contains(resolved, "..") {
+		return "", fmt.Errorf("path traversal detected via symlink: %s", path)
+	}
+	return resolved, nil
 }
 
 // isProtectedPath checks if a path is a critical system directory that should not be deleted or overwritten.

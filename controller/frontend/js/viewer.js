@@ -415,6 +415,19 @@ class ViewerSession {
       this.fileChannel = fileDC;
     };
 
+    // Process manager channel
+    const processDC = this.peerConnection.createDataChannel('process', { ordered: true });
+    processDC.onopen = () => {
+      console.log(`[${this.deviceName}] Process data channel open`);
+      this.processChannel = processDC;
+    };
+    processDC.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        window.dispatchEvent(new CustomEvent('process-message', { detail: msg }));
+      } catch (e) { /* ignore */ }
+    };
+
     // Chat channel
     const chatDC = this.peerConnection.createDataChannel('chat', { ordered: true });
     chatDC.onopen = () => {

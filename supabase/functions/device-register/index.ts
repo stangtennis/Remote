@@ -4,9 +4,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-key',
+const allowedOrigins = ['https://dashboard.hawkeye123.dk', 'https://supabase.hawkeye123.dk']
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || ''
+  return {
+    'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-key',
+  }
 }
 
 interface DeviceRegisterRequest {
@@ -19,12 +24,23 @@ interface DeviceRegisterRequest {
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req)
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // Require authorization header (agent sends JWT token)
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization required' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      )
+    }
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -43,6 +59,14 @@ serve(async (req) => {
     if (!device_id || !platform || !arch) {
       throw new Error('device_id, platform, and arch are required')
     }
+
+    // Validate device_id format (must be device_ prefix + hex hash)
+    if (!/^device_[a-f0-9]{32}$/.test(device_id)) {
+      throw new Error('Invalid device_id format')
+    }
+
+    // Sanitize device_name (max 100 chars, alphanumeric + spaces/dashes)
+    const safeName = (device_name || '').slice(0, 100).replace(/[^\w\s\-\.]/g, '')
 
     // Check if device already exists
     const { data: existingDevice } = await supabaseClient
@@ -104,7 +128,7 @@ serve(async (req) => {
       .from('remote_devices')
       .insert({
         device_id,
-        device_name: device_name || `${platform}-${arch}`,
+        device_name: safeName || `${platform}-${arch}`,
         platform,
         arch,
         cpu_count,

@@ -17,6 +17,7 @@ import (
 	"github.com/pion/interceptor"
 	"github.com/pion/rtcp"
 	pionwebrtc "github.com/pion/webrtc/v3"
+	"github.com/stangtennis/remote-agent/internal/audio"
 	"github.com/stangtennis/remote-agent/internal/auth"
 	"github.com/stangtennis/remote-agent/internal/terminal"
 	"github.com/stangtennis/remote-agent/internal/clipboard"
@@ -58,6 +59,7 @@ type Manager struct {
 
 	// Concurrency control
 	mu         sync.Mutex             // Protects peerConnection, dataChannel, controlChannel
+	statsMu    sync.RWMutex           // Protects stats fields (lastRTT, lossPct, modeState, etc.)
 	connCtx    context.Context        // Lifecycle context for current connection (streaming + grace period)
 	connCancel context.CancelFunc     // Cancel function for connCtx
 	currentDesktop      desktop.DesktopType
@@ -65,18 +67,18 @@ type Manager struct {
 	answerSent          bool                       // Flag to track if answer has been sent
 	iceStopCh           chan struct{}               // Closed to stop ICE polling goroutine
 
-	// RTT measurement
+	// RTT measurement (protected by statsMu)
 	lastRTT       time.Duration // Last measured round-trip time
 	lastInputTime time.Time     // Last input event time (for idle detection)
 
-	// Stats tracking
+	// Stats tracking (protected by statsMu)
 	lastPacketsSent uint32  // For loss calculation
 	lossPct         float64 // Current packet loss percentage
 	sendBps         float64 // Current send bitrate (bits per second)
 	lastBytesSent   int64   // For sendBps calculation
 	lastSendTime    time.Time
 
-	// Connection monitoring
+	// Connection monitoring (protected by statsMu)
 	connectionType     string // "host" (P2P), "srflx" (STUN), "relay" (TURN)
 	totalBytesSent     uint64 // Cumulative bytes sent via ICE
 	totalBytesReceived uint64 // Cumulative bytes received via ICE
@@ -84,7 +86,11 @@ type Manager struct {
 	// Video encoding (H.264)
 	videoTrack   *video.Track
 	videoEncoder *encoder.Manager
-	useH264      bool // Whether to use H.264 video track
+	useH264      atomic.Bool // Whether to use H.264 video track
+
+	// Audio streaming
+	audioTrack    *audio.Track
+	audioCapturer *audio.Capturer
 
 	// System monitoring
 	cpuMonitor *monitor.CPUMonitor
@@ -93,7 +99,7 @@ type Manager struct {
 	inputFrameTrigger chan struct{}
 
 	// Frame ID for chunking (robustness against out-of-order delivery)
-	frameID uint16
+	frameID atomic.Uint32
 
 	// Stream params from controller (caps)
 	streamMaxFPS     int
@@ -222,7 +228,7 @@ func New(cfg *config.Config, dev *device.Device, tokenProvider *auth.TokenProvid
 		startedInSession0:   isSession0,
 		currentDesktop:      currentDesktopType,
 		videoEncoder:        videoEncoder,
-		useH264:             false, // Start with JPEG tiles; enable H.264 via set_mode when ready
+		// useH264 defaults to false (atomic.Bool zero value) — starts with JPEG tiles
 		cpuMonitor:          cpuMon,
 		inputFrameTrigger:   make(chan struct{}, 1), // Buffered to avoid blocking
 		modeState: &ModeState{
@@ -387,6 +393,20 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 		}
 	}
 
+	// Add audio track (Opus)
+	audioTrack, err := audio.NewTrack()
+	if err != nil {
+		log.Printf("⚠️ Failed to create audio track: %v", err)
+	} else {
+		m.audioTrack = audioTrack
+		m.audioCapturer = audio.NewCapturer()
+		if _, err := pc.AddTrack(audioTrack.GetTrack()); err != nil {
+			log.Printf("⚠️ Failed to add audio track: %v", err)
+		} else {
+			log.Println("🔊 Audio track added (Opus, 48kHz stereo)")
+		}
+	}
+
 	// Set up ICE connection state handler (more granular than connection state)
 	pc.OnICEConnectionStateChange(func(state pionwebrtc.ICEConnectionState) {
 		log.Printf("🧊 ICE connection state: %s", state.String())
@@ -435,6 +455,15 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 				}()
 				m.startScreenStreaming(m.connCtx)
 			}()
+
+			// Start audio capture
+			if m.audioCapturer != nil && m.audioTrack != nil {
+				go func() {
+					if err := m.audioCapturer.Start(m.connCtx, m.audioTrack); err != nil {
+						log.Printf("⚠️ Audio capture start failed: %v", err)
+					}
+				}()
+			}
 		case pionwebrtc.PeerConnectionStateDisconnected:
 			log.Println("⚠️  WebRTC DISCONNECTED - waiting for ICE recovery...")
 			if m.StatusCallback != nil {
@@ -528,6 +557,9 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 			log.Println("🖥️ Terminal data channel opened")
 			m.terminalChannel = dc
 			m.setupTerminalChannelHandlers(dc)
+		case "process":
+			log.Println("⚙️ Process channel ready")
+			m.setupProcessChannelHandlers(dc)
 		case "chat":
 			log.Println("💬 Chat channel ready")
 			dc.OnOpen(func() {
@@ -851,11 +883,61 @@ func (m *Manager) IsStreaming() bool {
 
 // GetConnectionInfo returns connection type and bytes transferred for monitoring
 func (m *Manager) GetConnectionInfo() (connType string, bytesSent, bytesReceived uint64) {
+	m.statsMu.RLock()
+	defer m.statsMu.RUnlock()
 	return m.connectionType, m.totalBytesSent, m.totalBytesReceived
+}
+
+// Thread-safe stats accessors (used by streaming loop and stats goroutine)
+func (m *Manager) getLastRTT() time.Duration {
+	m.statsMu.RLock()
+	defer m.statsMu.RUnlock()
+	return m.lastRTT
+}
+
+func (m *Manager) getLossPct() float64 {
+	m.statsMu.RLock()
+	defer m.statsMu.RUnlock()
+	return m.lossPct
+}
+
+func (m *Manager) getConnectionType() string {
+	m.statsMu.RLock()
+	defer m.statsMu.RUnlock()
+	return m.connectionType
+}
+
+func (m *Manager) getTotalBytesSent() uint64 {
+	m.statsMu.RLock()
+	defer m.statsMu.RUnlock()
+	return m.totalBytesSent
+}
+
+func (m *Manager) getTotalBytesReceived() uint64 {
+	m.statsMu.RLock()
+	defer m.statsMu.RUnlock()
+	return m.totalBytesReceived
+}
+
+func (m *Manager) setLastInputTime(t time.Time) {
+	m.statsMu.Lock()
+	m.lastInputTime = t
+	m.statsMu.Unlock()
+}
+
+func (m *Manager) getLastInputTime() time.Time {
+	m.statsMu.RLock()
+	defer m.statsMu.RUnlock()
+	return m.lastInputTime
 }
 
 func (m *Manager) Close() {
 	m.isStreaming.Store(false)
+
+	// Stop audio capture
+	if m.audioCapturer != nil {
+		m.audioCapturer.Stop()
+	}
 
 	if m.connCancel != nil {
 		m.connCancel()

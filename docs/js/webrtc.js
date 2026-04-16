@@ -169,6 +169,13 @@ async function initWebRTC(sessionData, ctx) {
     setupFileChannelHandlers(ctx);
     debug('✅ File data channel created');
 
+    // Create process manager data channel (reliable, ordered)
+    ctx.processChannel = ctx.peerConnection.createDataChannel('process', {
+      ordered: true
+    });
+    setupProcessChannelHandlers(ctx);
+    debug('✅ Process data channel created');
+
     // Create offer
     debug('📝 Creating offer...');
     const offer = await ctx.peerConnection.createOffer({
@@ -1523,6 +1530,50 @@ function handleMonitorSwitched(msg) {
 
 // ==================== FILE CHANNEL ====================
 
+// Process manager channel handlers
+function setupProcessChannelHandlers(ctx) {
+  const dc = ctx.processChannel;
+  if (!dc) return;
+
+  dc.onopen = () => {
+    debug('⚙️ Process channel opened for', ctx.id);
+  };
+
+  dc.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.op === 'ps_result') {
+        window.dispatchEvent(new CustomEvent('process-list', { detail: msg.processes }));
+      } else if (msg.op === 'kill_result') {
+        window.dispatchEvent(new CustomEvent('process-killed', { detail: msg }));
+      } else if (msg.op === 'error') {
+        console.error('Process error:', msg.error);
+      }
+    } catch (e) {
+      console.error('Process message parse error:', e);
+    }
+  };
+
+  dc.onclose = () => debug('⚙️ Process channel closed for', ctx.id);
+  dc.onerror = (err) => console.error('Process channel error:', err);
+}
+
+// Request process list from agent
+function requestProcessList() {
+  const ctx = window.SessionManager?.getActiveSession();
+  if (ctx?.processChannel?.readyState === 'open') {
+    ctx.processChannel.send(JSON.stringify({ op: 'ps' }));
+  }
+}
+
+// Kill a process on the remote machine
+function killProcess(pid) {
+  const ctx = window.SessionManager?.getActiveSession();
+  if (ctx?.processChannel?.readyState === 'open') {
+    ctx.processChannel.send(JSON.stringify({ op: 'kill', pid }));
+  }
+}
+
 function setupFileChannelHandlers(ctx) {
   const dc = ctx.fileChannel;
   if (!dc) return;
@@ -1597,6 +1648,82 @@ function addChatMessage(sender, text) {
 window.toggleChat = toggleChat;
 window.sendChat = sendChat;
 window.addChatMessage = addChatMessage;
+
+// === Process Manager ===
+let _processList = [];
+let _processSortKey = 'memory_mb';
+let _processSortAsc = false;
+
+function toggleProcessManager() {
+  const modal = document.getElementById('processModal');
+  if (!modal) return;
+  const isVisible = modal.style.display === 'flex';
+  modal.style.display = isVisible ? 'none' : 'flex';
+  if (!isVisible) requestProcessList();
+}
+
+window.addEventListener('process-list', (e) => {
+  _processList = e.detail || [];
+  renderProcessTable();
+  document.getElementById('processStatus').textContent = `${_processList.length} processer`;
+});
+
+window.addEventListener('process-killed', (e) => {
+  const d = e.detail;
+  if (d.ok) {
+    _processList = _processList.filter(p => p.pid !== d.pid);
+    renderProcessTable();
+  } else {
+    alert('Kunne ikke dræbe process: ' + (d.error || 'ukendt fejl'));
+  }
+});
+
+function sortProcesses(key) {
+  if (_processSortKey === key) {
+    _processSortAsc = !_processSortAsc;
+  } else {
+    _processSortKey = key;
+    _processSortAsc = key === 'name' || key === 'user';
+  }
+  renderProcessTable();
+}
+
+function filterProcesses() {
+  renderProcessTable();
+}
+
+function renderProcessTable() {
+  const body = document.getElementById('processTableBody');
+  if (!body) return;
+  const search = (document.getElementById('processSearch')?.value || '').toLowerCase();
+  let filtered = _processList;
+  if (search) {
+    filtered = filtered.filter(p => p.name.toLowerCase().includes(search) || String(p.pid).includes(search) || (p.user || '').toLowerCase().includes(search));
+  }
+  filtered.sort((a, b) => {
+    let va = a[_processSortKey], vb = b[_processSortKey];
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+    if (va < vb) return _processSortAsc ? -1 : 1;
+    if (va > vb) return _processSortAsc ? 1 : -1;
+    return 0;
+  });
+  body.innerHTML = filtered.map(p => `<tr style="border-bottom:1px solid var(--border,rgba(255,255,255,0.06));">
+    <td style="padding:4px 8px; font-family:monospace;">${p.pid}</td>
+    <td style="padding:4px 8px;">${esc(p.name)}</td>
+    <td style="padding:4px 8px; text-align:right;">${p.memory_mb.toFixed(1)} MB</td>
+    <td style="padding:4px 8px; text-align:right;">${p.cpu > 0 ? p.cpu.toFixed(1) + '%' : '-'}</td>
+    <td style="padding:4px 8px; font-size:0.8rem; opacity:0.7;">${esc(p.user || '')}</td>
+    <td style="padding:4px 8px; text-align:center;"><button onclick="killProcess(${p.pid})" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:0.9rem;" title="Dræb process"><i class="fas fa-times-circle"></i></button></td>
+  </tr>`).join('');
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+window.toggleProcessManager = toggleProcessManager;
+window.requestProcessList = requestProcessList;
+window.killProcess = killProcess;
+window.sortProcesses = sortProcesses;
+window.filterProcesses = filterProcesses;
 
 // Export
 window.initWebRTC = initWebRTC;

@@ -66,11 +66,11 @@ func (m *Manager) SetH264Mode(enabled bool) {
 
 		// Start video track
 		m.videoTrack.Start()
-		m.useH264 = true
+		m.useH264.Store(true)
 		m.videoEncoder.ForceKeyframe()
 		log.Printf("🎬 H.264 tilstand aktiveret (encoder: %s)", encName)
 	} else {
-		m.useH264 = false
+		m.useH264.Store(false)
 		// Stop video track
 		if m.videoTrack != nil {
 			m.videoTrack.Stop()
@@ -124,7 +124,7 @@ func (m *Manager) determineMode(motionPct float64, timeSinceInput time.Duration,
 
 	// When H.264 is active, stay in H.264 mode (encoder handles static screens with tiny P-frames)
 	// Only fall back if conditions are bad (high CPU/RTT/loss)
-	if m.useH264 {
+	if m.useH264.Load() {
 		if avgCPU < 75 && avgRTT < 200*time.Millisecond && lossPct < 3 {
 			return ModeActiveH264
 		}
@@ -280,7 +280,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	defer ticker.Stop()
 
 	// Auto-start video track if H.264 is enabled
-	if m.useH264 && m.videoTrack != nil {
+	if m.useH264.Load() && m.videoTrack != nil {
 		m.videoTrack.Start()
 		if m.videoEncoder != nil {
 			m.videoEncoder.ForceKeyframe()
@@ -432,16 +432,16 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		}
 
 		// Update moving averages for mode switching
-		timeSinceInput := time.Since(m.lastInputTime)
+		timeSinceInput := time.Since(m.getLastInputTime())
 		cpuPct := float64(0)
 		if m.cpuMonitor != nil {
 			cpuPct = m.cpuMonitor.GetCPUPercent()
 		}
 		avgCPU := updateMovingAverage(&m.cpuAvg, cpuPct, 6)
-		avgRTT := updateMovingAverageDuration(&m.rttAvg, m.lastRTT, 6)
+		avgRTT := updateMovingAverageDuration(&m.rttAvg, m.getLastRTT(), 6)
 
 		// Determine and switch mode based on conditions
-		desiredMode := m.determineMode(motionPct, timeSinceInput, avgCPU, avgRTT, m.lossPct)
+		desiredMode := m.determineMode(motionPct, timeSinceInput, avgCPU, avgRTT, m.getLossPct())
 		m.switchMode(desiredMode, &fps, &quality, &scale, &frameInterval, ticker)
 
 		// Track if we're in idle mode for logging
@@ -460,8 +460,12 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 				cpuPct = m.cpuMonitor.GetCPUPercent()
 			}
 
+			// Snapshot stats under lock for congestion checks
+			curLossPct := m.getLossPct()
+			curRTT := m.getLastRTT()
+
 			// Check for congestion: high buffer OR high loss OR high RTT OR high CPU
-			congested := bufferedAmount > bufferHigh || m.lossPct > 5 || m.lastRTT > 250*time.Millisecond || cpuHigh
+			congested := bufferedAmount > bufferHigh || curLossPct > 5 || curRTT > 250*time.Millisecond || cpuHigh
 
 			// CPU-guard: reduce quality if CPU is high
 			if cpuHigh && !congested {
@@ -470,11 +474,11 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			}
 
 			// Auto-switch to tiles-only if conditions are bad
-			if m.useH264 {
+			if m.useH264.Load() {
 				criticalCPU := m.cpuMonitor != nil && m.cpuMonitor.IsCriticalCPU()
-				highRTT := m.lastRTT > 300*time.Millisecond
+				highRTT := curRTT > 300*time.Millisecond
 				if criticalCPU || highRTT {
-					m.useH264 = false
+					m.useH264.Store(false)
 					if criticalCPU {
 						log.Println("⚠️ Auto-switch to tiles-only (CPU > 90%)")
 					} else {
@@ -547,7 +551,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 						if fps > maxFPS { fps = maxFPS }
 						changed = true
 					}
-				} else if m.lossPct < 1 && m.lastRTT < 120*time.Millisecond {
+				} else if curLossPct < 1 && curRTT < 120*time.Millisecond {
 					// WAN: fast recovery
 					if quality < maxQuality {
 						quality += 15
@@ -605,13 +609,13 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		}
 
 		// H.264 mode: encode and send via video track
-		if m.useH264 && m.videoTrack != nil && m.videoEncoder != nil {
+		if m.useH264.Load() && m.videoTrack != nil && m.videoEncoder != nil {
 			// Wrap H.264 encoding in panic recovery
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
 						log.Printf("❌ PANIC i H.264 encoding: %v", r)
-						m.useH264 = false // Disable H.264 on panic
+						m.useH264.Store(false) // Disable H.264 on panic
 						errorCount++
 					}
 				}()
@@ -704,6 +708,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		// Log every second and calculate sendBps
 		if time.Since(lastLogTime) >= time.Second {
 			// Calculate actual send bitrate
+			m.statsMu.Lock()
 			elapsed := time.Since(m.lastSendTime).Seconds()
 			if elapsed > 0 && m.lastBytesSent > 0 {
 				bytesDelta := bytesSent - m.lastBytesSent
@@ -711,11 +716,13 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			}
 			m.lastBytesSent = bytesSent
 			m.lastSendTime = time.Now()
+			localSendBps := m.sendBps
+			m.statsMu.Unlock()
 
 			lastLogTime = time.Now()
 			avgKBPerFrame := float64(bytesSent) / float64(frameCount) / 1024
-			sendMbps := m.sendBps / 1000000
-			rttMs := m.lastRTT.Milliseconds()
+			sendMbps := localSendBps / 1000000
+			rttMs := m.getLastRTT().Milliseconds()
 			cpuPct := float64(0)
 			if m.cpuMonitor != nil {
 				cpuPct = m.cpuMonitor.GetCPUPercent()
@@ -725,7 +732,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			mode := m.modeState.current.String()
 
 			log.Printf("📊 Mode:%s FPS:%d Q:%d Scale:%.0f%% Motion:%.1f%% RTT:%dms Loss:%.1f%% CPU:%.0f%% | %.1fKB/f %.1fMbit/s | Buf:%.1fMB | Err:%d Drop:%d Skip:%d",
-				mode, fps, quality, scale*100, motionPct, rttMs, m.lossPct, cpuPct, avgKBPerFrame, sendMbps,
+				mode, fps, quality, scale*100, motionPct, rttMs, m.getLossPct(), cpuPct, avgKBPerFrame, sendMbps,
 				float64(bufferedAmount)/1024/1024, errorCount, droppedFrames, skippedFrames)
 			droppedFrames = 0 // Reset per-second counter
 			skippedFrames = 0 // Reset per-second counter
@@ -794,9 +801,8 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 	const maxChunkSize = 60000 // 60KB chunks (safely under 64KB limit)
 	const chunkMagic = 0xFE   // Magic byte for chunked frames with frame ID (new format)
 
-	// Increment frame ID for each new frame
-	m.frameID++
-	frameID := m.frameID
+	// Increment frame ID for each new frame (atomic for thread safety)
+	frameID := uint16(m.frameID.Add(1))
 
 	// Channel selection strategy:
 	// - Single-message frames (< 60KB): use video channel (unreliable = lower latency)

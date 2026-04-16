@@ -22,9 +22,9 @@ func (m *Manager) sendStats(fps, quality int, scale float64, mode string, rttMs 
 		"mode":      mode,
 		"rtt":       rttMs,
 		"cpu":       cpuPct,
-		"conn_type": m.connectionType,
-		"bytes_tx":  m.totalBytesSent,
-		"bytes_rx":  m.totalBytesReceived,
+		"conn_type": m.getConnectionType(),
+		"bytes_tx":  m.getTotalBytesSent(),
+		"bytes_rx":  m.getTotalBytesReceived(),
 	}
 
 	data, err := json.Marshal(stats)
@@ -75,6 +75,7 @@ func (m *Manager) collectStats(ctx context.Context) {
 				}
 
 				// RTT from ICE (more accurate than app-level ping)
+				m.statsMu.Lock()
 				if pairStats.CurrentRoundTripTime > 0 {
 					m.lastRTT = time.Duration(pairStats.CurrentRoundTripTime * float64(time.Second))
 				}
@@ -105,6 +106,7 @@ func (m *Manager) collectStats(ctx context.Context) {
 						}
 					}
 				}
+				m.statsMu.Unlock()
 				prevPacketsSent = sent
 				prevPacketsReceived = received
 				break // Only process one nominated pair
@@ -114,6 +116,7 @@ func (m *Manager) collectStats(ctx context.Context) {
 		// Fallback: also check buffer as secondary congestion signal
 		if m.dataChannel != nil {
 			buffered := float64(m.dataChannel.BufferedAmount())
+			m.statsMu.Lock()
 			if buffered > 4*1024*1024 && m.lossPct < 1 {
 				// Buffer is very high but ICE says no loss — report minor congestion
 				m.lossPct = (buffered / (16 * 1024 * 1024)) * 5
@@ -121,6 +124,7 @@ func (m *Manager) collectStats(ctx context.Context) {
 					m.lossPct = 5
 				}
 			}
+			m.statsMu.Unlock()
 		}
 	}
 }
