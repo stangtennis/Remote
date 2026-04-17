@@ -59,6 +59,7 @@
       <div class="header-right">
         <span id="userEmail" class="user-badge"><i class="fas fa-user"></i> <span></span></span>
         <button class="btn btn-icon" id="supportBtn" title="Quick Support"><i class="fas fa-life-ring"></i></button>
+        <button class="btn btn-icon" id="shortcutsBtn" title="Tastaturgenveje (Ctrl+/)"><i class="fas fa-keyboard"></i></button>
         <button class="btn btn-icon" id="updateBtn" title="Tjek opdatering" style="position:relative;"><i class="fas fa-sync-alt"></i><span id="updateBadge" class="update-badge" style="display:none;"></span></button>
         <button class="btn btn-icon" id="themeBtn" title="Skift tema"><i class="fas fa-moon"></i></button>
         <button class="btn btn-icon" id="settingsBtn" title="Indstillinger"><i class="fas fa-cog"></i></button>
@@ -95,7 +96,9 @@
         <div id="deviceList" class="device-grid">
           <div class="empty-state">
             <i class="fas fa-plug"></i>
-            <p>Ingen enheder endnu. Installer agent-software på den computer du vil fjernstyre.</p>
+            <h3>Ingen enheder endnu</h3>
+            <p>Installer agent-software på den computer du vil fjernstyre. Når agenten er online dukker enheden op her.</p>
+            <a class="btn btn-sm btn-primary empty-cta" href="https://updates.hawkeye123.dk" target="_blank" rel="noopener"><i class="fas fa-download"></i> Download agent</a>
           </div>
         </div>
       </section>
@@ -109,7 +112,8 @@
         <div id="pendingList" class="device-grid">
           <div class="empty-state">
             <i class="fas fa-check-circle"></i>
-            <p>Ingen ventende enheder.</p>
+            <h3>Intet at godkende</h3>
+            <p>Nye enheder der registrerer sig vil vises her og afvente din godkendelse.</p>
           </div>
         </div>
       </section>
@@ -379,6 +383,20 @@
         <button onclick="FileTransfer.downloadSelected()" class="tc-fkey"><span>F6</span> Download</button>
         <button onclick="FileTransfer.createDirectoryPrompt()" class="tc-fkey"><span>F7</span> NyMappe</button>
         <button onclick="FileTransfer.deleteSelected()" class="tc-fkey"><span>F8</span> Slet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Modal -->
+  <div id="shortcutsModal" class="modal shortcuts-modal" style="display:none;">
+    <div class="modal-content glass">
+      <div class="modal-header">
+        <h2><i class="fas fa-keyboard"></i> Tastaturgenveje</h2>
+        <button class="modal-close" onclick="closeModal('shortcutsModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="text" class="shortcuts-search" id="shortcutsSearch" placeholder="Søg genveje..." autocomplete="off">
+        <div class="shortcuts-list" id="shortcutsList"></div>
       </div>
     </div>
   </div>

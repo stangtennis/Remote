@@ -164,6 +164,8 @@ const App = {
     document.getElementById('supportBtn').addEventListener('click', () => this.showSupportModal());
     document.getElementById('updateBtn').addEventListener('click', () => this.showUpdateModal());
     document.getElementById('settingsBtn').addEventListener('click', () => this.switchToTab('settings'));
+    const shortcutsBtn = document.getElementById('shortcutsBtn');
+    if (shortcutsBtn) shortcutsBtn.addEventListener('click', () => this.showShortcutsModal());
 
     document.getElementById('refreshDevicesBtn').addEventListener('click', () => this.loadDevices());
     document.getElementById('refreshPendingBtn').addEventListener('click', () => this.loadPendingDevices());
@@ -175,13 +177,17 @@ const App = {
 
   async loadDevices() {
     const container = document.getElementById('deviceList');
+    // Show skeleton only on initial load (when we have no cached devices yet)
+    if (!this._allDevices || this._allDevices.length === 0) {
+      this.showDeviceSkeleton('deviceList', 4);
+    }
     try {
       const devices = await window.go.main.App.GetDevices();
       this._allDevices = devices || [];
       this.renderDevices(devices, container);
       this.updateQuickConnect();
     } catch (err) {
-      container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>${err?.message || err}</p></div>`;
+      container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Kunne ikke hente enheder</h3><p>${err?.message || err}</p></div>`;
     }
   },
 
@@ -769,9 +775,29 @@ const App = {
   },
 
   // ==================== KEYBOARD SHORTCUTS ====================
+  SHORTCUTS: [
+    { category: 'Navigation', keys: ['Ctrl', '1-9'], desc: 'Forbind til online enhed #1-9' },
+    { category: 'Navigation', keys: ['Ctrl', '/'], desc: 'Vis denne genvejsliste' },
+    { category: 'Navigation', keys: ['Esc'], desc: 'Luk modal / forlad fuldskærm' },
+    { category: 'Fjernsession', keys: ['F11'], desc: 'Fuldskærm' },
+    { category: 'Fjernsession', keys: ['Ctrl', 'Alt', 'Del'], desc: 'Send Ctrl+Alt+Del til remote' },
+    { category: 'Filhåndtering', keys: ['F3'], desc: 'Vis fil' },
+    { category: 'Filhåndtering', keys: ['F5'], desc: 'Upload fil(er)' },
+    { category: 'Filhåndtering', keys: ['F6'], desc: 'Download valgt' },
+    { category: 'Filhåndtering', keys: ['F7'], desc: 'Ny mappe' },
+    { category: 'Filhåndtering', keys: ['F8'], desc: 'Slet valgt' },
+  ],
+
   setupKeyboardShortcuts() {
     document.addEventListener('keydown', async (e) => {
-      // Only handle shortcuts when NOT on viewer tab (avoid stealing canvas events)
+      // Ctrl+/ — vis shortcut modal (virker overalt, også på viewer tab)
+      if (e.ctrlKey && (e.key === '/' || e.key === '?')) {
+        e.preventDefault();
+        this.showShortcutsModal();
+        return;
+      }
+
+      // Only handle remaining shortcuts when NOT on viewer tab (avoid stealing canvas events)
       const viewerActive = document.getElementById('viewerTab')?.classList.contains('active');
       if (viewerActive) return;
 
@@ -796,6 +822,65 @@ const App = {
     });
   },
 
+  showShortcutsModal() {
+    const modal = document.getElementById('shortcutsModal');
+    const list = document.getElementById('shortcutsList');
+    const search = document.getElementById('shortcutsSearch');
+    if (!modal || !list) return;
+
+    this.renderShortcutsList('');
+    modal.style.display = 'flex';
+    if (search) {
+      search.value = '';
+      search.focus();
+      search.oninput = () => this.renderShortcutsList(search.value);
+    }
+  },
+
+  renderShortcutsList(filter) {
+    const list = document.getElementById('shortcutsList');
+    if (!list) return;
+    const f = (filter || '').toLowerCase().trim();
+    const groups = {};
+    for (const s of this.SHORTCUTS) {
+      const haystack = (s.desc + ' ' + s.keys.join(' ') + ' ' + s.category).toLowerCase();
+      if (f && !haystack.includes(f)) continue;
+      if (!groups[s.category]) groups[s.category] = [];
+      groups[s.category].push(s);
+    }
+    const categories = Object.keys(groups);
+    if (categories.length === 0) {
+      list.innerHTML = '<div class="shortcuts-empty"><i class="fas fa-search"></i> Ingen genveje matcher</div>';
+      return;
+    }
+    list.innerHTML = categories.map(cat => `
+      <div class="shortcut-category">${this.esc(cat)}</div>
+      ${groups[cat].map(s => `
+        <div class="shortcut-row">
+          <span class="shortcut-desc">${this.esc(s.desc)}</span>
+          <span class="shortcut-keys">${s.keys.map((k,i) => `${i > 0 ? '<span class="plus">+</span>' : ''}<kbd>${this.esc(k)}</kbd>`).join('')}</span>
+        </div>
+      `).join('')}
+    `).join('');
+  },
+
+  // Loading skeleton for device grids
+  showDeviceSkeleton(containerId, count = 4) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = Array.from({length: count}).map(() => `
+      <div class="skeleton skeleton-card">
+        <div style="display:flex; align-items:center; margin-bottom:1rem;">
+          <span class="skeleton-circle"></span>
+          <div class="skeleton-line medium" style="margin:0;"></div>
+        </div>
+        <div class="skeleton-line long"></div>
+        <div class="skeleton-line short"></div>
+        <div class="skeleton-line medium"></div>
+      </div>
+    `).join('');
+  },
+
   // ==================== BACKEND EVENTS ====================
   setupBackendEvents() {
     // Listen for device updates from Go backend
@@ -804,13 +889,16 @@ const App = {
         // Detect online/offline state changes
         const prev = this._allDevices || [];
         const curr = devices || [];
+        const flashTargets = [];
         for (const device of curr) {
           const old = prev.find(d => d.device_id === device.device_id);
           if (old && old.is_online !== device.is_online) {
             if (device.is_online) {
               showToast(`${device.device_name} er nu online`, 'success', 5000);
+              flashTargets.push({ id: device.device_id, offline: false });
             } else {
               showToast(`${device.device_name} gik offline`, 'warning', 5000);
+              flashTargets.push({ id: device.device_id, offline: true });
             }
           }
         }
@@ -819,6 +907,19 @@ const App = {
         const container = document.getElementById('deviceList');
         if (container && document.getElementById('devicesTab').classList.contains('active')) {
           this.renderDevices(devices, container);
+          // Apply flash animation after DOM update
+          requestAnimationFrame(() => {
+            for (const t of flashTargets) {
+              const card = container.querySelector(`.device-card[data-id="${t.id}"]`);
+              if (card) {
+                card.classList.add('status-changed');
+                if (t.offline) card.classList.add('offline-flash');
+                setTimeout(() => {
+                  card.classList.remove('status-changed', 'offline-flash');
+                }, 1300);
+              }
+            }
+          });
         }
         this.updateQuickConnect();
       });
