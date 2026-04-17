@@ -25,6 +25,21 @@ VIAddVersionKey "LegalCopyright" "StangTennis"
 !define MUI_ICON "agent.ico"
 !define MUI_UNICON "agent.ico"
 
+; Welcome page branding
+!define MUI_WELCOMEPAGE_TITLE_3LINES
+!define MUI_WELCOMEPAGE_TITLE "Remote Desktop Agent Console${\n}Velkommen"
+!define MUI_WELCOMEPAGE_TEXT "Denne guide installerer konsol-versionen af Remote Desktop Agent v${VERSION}.$\r$\n$\r$\nKonsol-versionen er beregnet til debugging og logs — den viser live output i et CMD-vindue i stedet for at køre skjult.$\r$\n$\r$\nKlik Næste for at fortsætte."
+
+; Finish page
+!define MUI_FINISHPAGE_TITLE_3LINES
+!define MUI_FINISHPAGE_TITLE "Installation fuldført"
+!define MUI_FINISHPAGE_TEXT "Remote Desktop Agent Console v${VERSION} er installeret.$\r$\n$\r$\nStart agenten fra Startmenuen for at se live logs."
+!define MUI_FINISHPAGE_LINK "Åbn dashboard"
+!define MUI_FINISHPAGE_LINK_LOCATION "https://dashboard.hawkeye123.dk"
+
+; Uninstaller
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "Afinstaller Remote Desktop Agent Console v${VERSION}."
+
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "LICENSE.txt"

@@ -102,10 +102,10 @@ func NewAgentGUI() *AgentGUI {
 	if err := setupLogging(); err != nil {
 		fmt.Printf("Warning: Failed to setup logging: %v\n", err)
 	} else {
-		fmt.Println("✅ Logging setup successful")
+		fmt.Println("Logging setup successful")
 	}
-	log.Println("🖥️ Starting GUI mode...")
-	flushLog() // Force flush immediately
+	log.Println("Starting GUI mode...")
+	flushLog()
 
 	a := app.New()
 	a.Settings().SetTheme(&darkTheme{})
@@ -114,14 +114,14 @@ func NewAgentGUI() *AgentGUI {
 		app: a,
 	}
 
-	log.Println("📱 Creating main window...")
+	log.Println("Creating main window...")
 	gui.window = a.NewWindow("Remote Desktop Agent")
-	gui.window.Resize(fyne.NewSize(450, 500))
-	gui.window.SetFixedSize(true)
+	gui.window.Resize(fyne.NewSize(480, 560))
 	gui.window.CenterOnScreen()
 
 	return gui
 }
+
 
 func (g *AgentGUI) Run() {
 	g.refreshStatus()
@@ -148,21 +148,24 @@ func (g *AgentGUI) refreshStatus() {
 }
 
 func (g *AgentGUI) buildUI() {
-	// Header with logo
-	title := canvas.NewText("🖥️ Remote Desktop Agent", color.White)
-	title.TextSize = 24
+	// Header with accent bar
+	accentBar := canvas.NewRectangle(color.NRGBA{R: 99, G: 102, B: 241, A: 255})
+	accentBar.SetMinSize(fyne.NewSize(4, 0))
+
+	title := canvas.NewText("Remote Desktop Agent", color.White)
+	title.TextSize = 22
 	title.TextStyle = fyne.TextStyle{Bold: true}
-	title.Alignment = fyne.TextAlignCenter
+	title.Alignment = fyne.TextAlignLeading
 
-	version := canvas.NewText("Version "+tray.Version, color.NRGBA{R: 148, G: 163, B: 184, A: 255})
-	version.TextSize = 12
-	version.Alignment = fyne.TextAlignCenter
+	subtitle := canvas.NewText("WebRTC-baseret fjernadgang · v"+tray.Version, color.NRGBA{R: 148, G: 163, B: 184, A: 255})
+	subtitle.TextSize = 11
+	subtitle.Alignment = fyne.TextAlignLeading
 
-	header := container.NewVBox(
-		layout.NewSpacer(),
-		title,
-		version,
-		layout.NewSpacer(),
+	header := container.NewBorder(
+		nil, nil,
+		container.NewHBox(accentBar),
+		nil,
+		container.NewPadded(container.NewVBox(title, subtitle)),
 	)
 
 	// Status card
@@ -193,14 +196,19 @@ func (g *AgentGUI) buildUI() {
 	g.updateActionButtons()
 
 	// Footer with links
-	githubLink := widget.NewHyperlink("GitHub Releases", parseURL("https://github.com/stangtennis/Remote/releases"))
-	dashboardLink := widget.NewHyperlink("Web Dashboard", parseURL("https://stangtennis.github.io/Remote"))
+	githubLink := widget.NewHyperlink("GitHub releases", parseURL("https://github.com/stangtennis/Remote/releases"))
+	dashboardLink := widget.NewHyperlink("Dashboard", parseURL("https://dashboard.hawkeye123.dk"))
+	helpLink := widget.NewHyperlink("Hjælp", parseURL("https://github.com/stangtennis/Remote#readme"))
 
+	footerSep := canvas.NewText("·", color.NRGBA{R: 100, G: 116, B: 139, A: 255})
+	footerSep2 := canvas.NewText("·", color.NRGBA{R: 100, G: 116, B: 139, A: 255})
 	footer := container.NewHBox(
 		layout.NewSpacer(),
-		githubLink,
-		widget.NewLabel(" | "),
 		dashboardLink,
+		widget.NewLabel("  "), footerSep, widget.NewLabel("  "),
+		githubLink,
+		widget.NewLabel("  "), footerSep2, widget.NewLabel("  "),
+		helpLink,
 		layout.NewSpacer(),
 	)
 
@@ -214,26 +222,36 @@ func (g *AgentGUI) buildUI() {
 		footer,
 	)
 
-	// Add padding
 	padded := container.NewPadded(content)
 	g.window.SetContent(padded)
 }
 
 func (g *AgentGUI) updateStatusLabels() {
 	if g.isLoggedIn {
-		g.userLabel.SetText("Logget ind som: " + g.userEmail)
+		g.userLabel.SetText("Logget ind: " + g.userEmail)
 	} else {
 		g.userLabel.SetText("Ikke logget ind")
 	}
 
 	if g.serviceRunning {
-		g.serviceLabel.SetText("Service: ✅ Kører")
+		g.serviceLabel.SetText("Service: Kører")
 	} else if g.serviceInstalled {
-		g.serviceLabel.SetText("Service: ⏸️ Stoppet")
+		g.serviceLabel.SetText("Service: Stoppet")
 	} else if isProgramInstalled() {
-		g.serviceLabel.SetText("Program: ✅ Installeret (autostart)")
+		g.serviceLabel.SetText("Program: Installeret (autostart)")
 	} else {
-		g.serviceLabel.SetText("Tilstand: ❌ Ikke installeret")
+		g.serviceLabel.SetText("Tilstand: Ikke installeret")
+	}
+
+	// Status dot + text
+	if g.serviceRunning {
+		g.statusLabel.SetText("Agent kører og er klar til forbindelser")
+	} else if !g.isLoggedIn {
+		g.statusLabel.SetText("Log ind for at komme i gang")
+	} else if g.serviceInstalled {
+		g.statusLabel.SetText("Service er installeret men stoppet")
+	} else {
+		g.statusLabel.SetText("Vælg installationsmetode nedenfor")
 	}
 }
 
@@ -241,59 +259,54 @@ func (g *AgentGUI) updateActionButtons() {
 	g.actionButtons.Objects = nil
 
 	if !g.isLoggedIn {
-		// Login button
-		loginBtn := widget.NewButton("🔑  Log ind", g.showLoginDialog)
+		loginBtn := widget.NewButtonWithIcon("Log ind", theme.LoginIcon(), g.showLoginDialog)
 		loginBtn.Importance = widget.HighImportance
 		g.actionButtons.Add(loginBtn)
 	} else {
-		// Check program installation status
 		programInstalled := isProgramInstalled()
 
-		// Service management buttons
 		if !g.serviceInstalled {
-			installServiceBtn := widget.NewButton("📦  Installer som Service (anbefalet)", g.doInstall)
+			installServiceBtn := widget.NewButtonWithIcon("Installer som service (anbefalet)", theme.DownloadIcon(), g.doInstall)
 			installServiceBtn.Importance = widget.HighImportance
 			g.actionButtons.Add(installServiceBtn)
 
 			if !programInstalled {
-				installProgramBtn := widget.NewButton("💻  Installer som Program (autostart)", g.doInstallProgram)
+				installProgramBtn := widget.NewButtonWithIcon("Installer som program (autostart)", theme.ComputerIcon(), g.doInstallProgram)
 				g.actionButtons.Add(installProgramBtn)
 			} else {
-				uninstallProgramBtn := widget.NewButton("🗑️  Afinstaller Program", g.doUninstallProgram)
+				uninstallProgramBtn := widget.NewButtonWithIcon("Afinstaller program", theme.DeleteIcon(), g.doUninstallProgram)
 				g.actionButtons.Add(uninstallProgramBtn)
 			}
 
-			runOnceBtn := widget.NewButton("▶️  Kør én gang (denne session)", g.doRunOnce)
+			runOnceBtn := widget.NewButtonWithIcon("Kør én gang (denne session)", theme.MediaPlayIcon(), g.doRunOnce)
 			g.actionButtons.Add(runOnceBtn)
 		} else if !g.serviceRunning {
-			startBtn := widget.NewButton("▶️  Start Service", g.doStart)
+			startBtn := widget.NewButtonWithIcon("Start service", theme.MediaPlayIcon(), g.doStart)
 			startBtn.Importance = widget.HighImportance
 			g.actionButtons.Add(startBtn)
 
-			uninstallBtn := widget.NewButton("🗑️  Afinstaller Service", g.doUninstall)
+			uninstallBtn := widget.NewButtonWithIcon("Afinstaller service", theme.DeleteIcon(), g.doUninstall)
 			g.actionButtons.Add(uninstallBtn)
 		} else {
-			stopBtn := widget.NewButton("⏹️  Stop Service", g.doStop)
+			stopBtn := widget.NewButtonWithIcon("Stop service", theme.MediaStopIcon(), g.doStop)
 			g.actionButtons.Add(stopBtn)
 
-			uninstallBtn := widget.NewButton("🗑️  Afinstaller Service", g.doUninstall)
+			uninstallBtn := widget.NewButtonWithIcon("Afinstaller service", theme.DeleteIcon(), g.doUninstall)
 			g.actionButtons.Add(uninstallBtn)
 		}
 
 		g.actionButtons.Add(widget.NewSeparator())
 
-		// Always show these when logged in
-		updateBtn := widget.NewButton("🔄  Tjek opdateringer", g.doCheckUpdates)
+		updateBtn := widget.NewButtonWithIcon("Tjek opdateringer", theme.ViewRefreshIcon(), g.doCheckUpdates)
 		g.actionButtons.Add(updateBtn)
 
-		logoutBtn := widget.NewButton("🚪  Log ud / Skift konto", g.doLogout)
+		logoutBtn := widget.NewButtonWithIcon("Log ud / skift konto", theme.LogoutIcon(), g.doLogout)
 		g.actionButtons.Add(logoutBtn)
 	}
 
 	g.actionButtons.Add(widget.NewSeparator())
 
-	// Exit button
-	exitBtn := widget.NewButton("❌  Afslut", func() {
+	exitBtn := widget.NewButtonWithIcon("Afslut", theme.CancelIcon(), func() {
 		g.app.Quit()
 	})
 	g.actionButtons.Add(exitBtn)
@@ -568,24 +581,24 @@ func (g *AgentGUI) doRunOnce() {
 	log.Println("✅ Agent started successfully")
 
 	// Update GUI to show running status
-	g.statusLabel.SetText("🟢 Agent kører")
+	g.statusLabel.SetText("Agent kører")
 	g.serviceLabel.SetText("Tilstand: Interaktiv (Kør én gang)")
 	
 	// Disable Run Once button, enable a Stop button
 	g.actionButtons.RemoveAll()
 	
-	stopBtn := widget.NewButton("⏹️  Stop Agent", func() {
-		log.Println("🛑 Stopping agent...")
+	stopBtn := widget.NewButtonWithIcon("Stop agent", theme.MediaStopIcon(), func() {
+		log.Println("Stopping agent...")
 		stopAgent()
-		g.statusLabel.SetText("🔴 Agent stoppet")
+		g.statusLabel.SetText("Agent stoppet")
 		g.serviceLabel.SetText("Tilstand: Stoppet")
 		g.updateActionButtons()
 		dialog.ShowInformation("Agent stoppet", "Agenten er stoppet.", g.window)
 	})
 	stopBtn.Importance = widget.DangerImportance
 	g.actionButtons.Add(stopBtn)
-	
-	exitBtn := widget.NewButton("❌  Afslut", func() {
+
+	exitBtn := widget.NewButtonWithIcon("Afslut", theme.CancelIcon(), func() {
 		stopAgent()
 		g.app.Quit()
 	})
@@ -718,7 +731,7 @@ func (g *AgentGUI) doCheckUpdates() {
 	// Buttons
 	var checkBtn, downloadBtn, installBtn *widget.Button
 
-	checkBtn = widget.NewButton("🔍 Tjek for opdateringer", func() {
+	checkBtn = widget.NewButtonWithIcon("Tjek for opdateringer", theme.SearchIcon(), func() {
 		checkBtn.Disable()
 		statusLabel.SetText("Tjekker for opdateringer...")
 
@@ -744,7 +757,7 @@ func (g *AgentGUI) doCheckUpdates() {
 	checkBtn.Importance = widget.HighImportance
 
 	// Download button (hidden initially)
-	downloadBtn = widget.NewButton("📥 Download opdatering", func() {
+	downloadBtn = widget.NewButtonWithIcon("Download opdatering", theme.DownloadIcon(), func() {
 		downloadBtn.Disable()
 		progressBar.Show()
 		progressBar.SetValue(0)
@@ -777,7 +790,7 @@ func (g *AgentGUI) doCheckUpdates() {
 	downloadBtn.Hide()
 
 	// Install button (hidden initially)
-	installBtn = widget.NewButton("🚀 Installer og genstart", func() {
+	installBtn = widget.NewButtonWithIcon("Installer og genstart", theme.UploadIcon(), func() {
 		dialog.ShowConfirm("Installer opdatering",
 			"Agenten vil lukke og genstarte med den nye version.\n\nFortsæt?",
 			func(confirmed bool) {
@@ -813,7 +826,7 @@ func (g *AgentGUI) doCheckUpdates() {
 
 	// Layout
 	content := container.NewVBox(
-		widget.NewLabelWithStyle("🔄 Opdateringer", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("Opdateringer", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		widget.NewSeparator(),
 		currentVersionLabel,
 		widget.NewSeparator(),
