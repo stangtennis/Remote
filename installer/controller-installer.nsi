@@ -25,6 +25,27 @@ VIAddVersionKey "LegalCopyright" "StangTennis"
 !define MUI_ICON "controller.ico"
 !define MUI_UNICON "controller.ico"
 
+; Welcome page branding
+!define MUI_WELCOMEPAGE_TITLE_3LINES
+!define MUI_WELCOMEPAGE_TITLE "Remote Desktop Controller${\n}Velkommen"
+!define MUI_WELCOMEPAGE_TEXT "Denne guide hjælper dig med at installere Remote Desktop Controller v${VERSION}.$\r$\n$\r$\nControlleren bruges til at forbinde til og fjernstyre dine enheder via WebRTC.$\r$\n$\r$\nKlik Næste for at fortsætte."
+
+; Finish page — run app + link til dashboard
+!define MUI_FINISHPAGE_TITLE_3LINES
+!define MUI_FINISHPAGE_TITLE "Installation fuldført"
+!define MUI_FINISHPAGE_TEXT "Remote Desktop Controller v${VERSION} er installeret.$\r$\n$\r$\nDu kan nu forbinde til dine enheder."
+!define MUI_FINISHPAGE_RUN "$INSTDIR\controller.exe"
+!define MUI_FINISHPAGE_RUN_TEXT "Start Remote Desktop Controller"
+!define MUI_FINISHPAGE_LINK "Åbn web-dashboard"
+!define MUI_FINISHPAGE_LINK_LOCATION "https://dashboard.hawkeye123.dk"
+!define MUI_FINISHPAGE_SHOWREADME ""
+!define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
+!define MUI_FINISHPAGE_SHOWREADME_TEXT "Vis README på GitHub"
+!define MUI_FINISHPAGE_SHOWREADME_FUNCTION OpenReadme
+
+; Uninstaller confirmation wording
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "Afinstaller Remote Desktop Controller v${VERSION}.$\r$\n$\r$\nInstallationen og tilhørende genveje fjernes."
+
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "LICENSE.txt"
@@ -103,10 +124,12 @@ Section "Install"
     
     ; Create uninstaller
     WriteUninstaller "$INSTDIR\uninstall.exe"
-    
-    ; Start controller after install
-    Exec "$INSTDIR\controller.exe"
 SectionEnd
+
+; Helper function — open README in browser
+Function OpenReadme
+    ExecShell "open" "https://github.com/stangtennis/Remote#readme"
+FunctionEnd
 
 ; Uninstaller Section
 Section "Uninstall"

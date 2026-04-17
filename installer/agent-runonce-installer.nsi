@@ -23,8 +23,13 @@ VIAddVersionKey "FileVersion" "${VERSION}"
 
 ; Simple pages
 !insertmacro MUI_PAGE_INSTFILES
+!define MUI_FINISHPAGE_TITLE_3LINES
+!define MUI_FINISHPAGE_TITLE "Klar til brug"
+!define MUI_FINISHPAGE_TEXT "Portable Remote Desktop Agent v${VERSION} er installeret uden Windows-service.$\r$\n$\r$\nStart agenten når du vil have fjernadgang til denne PC — luk når du er færdig."
 !define MUI_FINISHPAGE_RUN "$INSTDIR\remote-agent-console.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Start Remote Desktop Agent nu"
+!define MUI_FINISHPAGE_LINK "Åbn dashboard"
+!define MUI_FINISHPAGE_LINK_LOCATION "https://dashboard.hawkeye123.dk"
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_LANGUAGE "Danish"

@@ -24,6 +24,23 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 !define MUI_ICON "agent.ico"
 !define MUI_UNICON "agent.ico"
 
+; Welcome page branding
+!define MUI_WELCOMEPAGE_TITLE_3LINES
+!define MUI_WELCOMEPAGE_TITLE "Remote Desktop Agent${\n}Velkommen"
+!define MUI_WELCOMEPAGE_TEXT "Denne guide installerer Remote Desktop Agent v${VERSION}.$\r$\n$\r$\nAgenten gør det muligt at fjernstyre denne computer via WebRTC. Den installeres som Windows-service og starter automatisk — også før login (Session 0-support for låseskærm og admin-dialoger).$\r$\n$\r$\nKlik Næste for at fortsætte."
+
+; Finish page
+!define MUI_FINISHPAGE_TITLE_3LINES
+!define MUI_FINISHPAGE_TITLE "Installation fuldført"
+!define MUI_FINISHPAGE_TEXT "Remote Desktop Agent v${VERSION} er installeret og kører nu som Windows-service.$\r$\n$\r$\nStart Agent-GUI'en for at logge ind og godkende denne computer i dit dashboard."
+!define MUI_FINISHPAGE_RUN "$INSTDIR\remote-agent.exe"
+!define MUI_FINISHPAGE_RUN_TEXT "Åbn Agent GUI for at logge ind"
+!define MUI_FINISHPAGE_LINK "Åbn dashboard for at godkende enheden"
+!define MUI_FINISHPAGE_LINK_LOCATION "https://dashboard.hawkeye123.dk"
+
+; Uninstaller
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "Afinstaller Remote Desktop Agent v${VERSION}.$\r$\n$\r$\nDette fjerner agent-servicen, binaries og autostart-indgange."
+
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "LICENSE.txt"
