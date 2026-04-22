@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -19,6 +20,7 @@ import (
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/desktop"
 	"github.com/stangtennis/remote-agent/internal/device"
+	"github.com/stangtennis/remote-agent/internal/metrics"
 	"github.com/stangtennis/remote-agent/internal/screen"
 	"github.com/stangtennis/remote-agent/internal/tray"
 	"github.com/stangtennis/remote-agent/internal/updater"
@@ -1352,6 +1354,9 @@ func startAgent() error {
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
+
+	// Start Prometheus metrics server (gated on RD_METRICS_ENABLED)
+	metrics.Init(context.Background())
 
 	// Log important paths for debugging
 	log.Printf("📁 Credentials path: %s", auth.GetCredentialsPath())

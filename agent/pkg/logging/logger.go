@@ -29,10 +29,17 @@ type Config struct {
 	Console    bool   // Also log to console
 }
 
-// DefaultConfig returns default logging configuration
+// DefaultConfig returns default logging configuration.
+// Env overrides:
+//   RD_LOG_LEVEL  = debug|info|warn|error  (default: info)
+//   RD_LOG_FORMAT = json|console           (default: console for stdout, file is always json)
 func DefaultConfig() *Config {
+	level := os.Getenv("RD_LOG_LEVEL")
+	if level == "" {
+		level = "info"
+	}
 	return &Config{
-		Level:      "info",
+		Level:      level,
 		LogDir:     getDefaultLogDir(),
 		MaxSize:    10,  // 10 MB
 		MaxBackups: 5,   // Keep 5 old files
@@ -75,12 +82,19 @@ func Init(cfg *Config) error {
 	writers = append(writers, fileWriter)
 
 	if cfg.Console {
-		// Console writer with pretty formatting
-		consoleWriter := zerolog.ConsoleWriter{
-			Out:        os.Stdout,
-			TimeFormat: time.RFC3339,
+		// Format mode: json (for log aggregation) or console (human-readable)
+		format := os.Getenv("RD_LOG_FORMAT")
+		if format == "json" {
+			// JSON to stdout — suitable for systemd / docker / log shippers
+			writers = append(writers, os.Stdout)
+		} else {
+			// Pretty console (default)
+			consoleWriter := zerolog.ConsoleWriter{
+				Out:        os.Stdout,
+				TimeFormat: time.RFC3339,
+			}
+			writers = append(writers, consoleWriter)
 		}
-		writers = append(writers, consoleWriter)
 	}
 
 	// Create multi-writer

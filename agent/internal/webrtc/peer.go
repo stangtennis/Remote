@@ -26,6 +26,7 @@ import (
 	"github.com/stangtennis/remote-agent/internal/device"
 	"github.com/stangtennis/remote-agent/internal/filetransfer"
 	"github.com/stangtennis/remote-agent/internal/input"
+	"github.com/stangtennis/remote-agent/internal/metrics"
 	"github.com/stangtennis/remote-agent/internal/monitor"
 	"github.com/stangtennis/remote-agent/internal/screen"
 	"github.com/stangtennis/remote-agent/internal/updater"
@@ -433,6 +434,7 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 		switch state {
 		case pionwebrtc.PeerConnectionStateConnected:
 			log.Println("✅ WebRTC CONNECTED! Starting screen streaming...")
+			metrics.SetActiveSessions(1)
 			if m.StatusCallback != nil {
 				m.StatusCallback("Forbundet")
 			}
@@ -466,6 +468,8 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 			}
 		case pionwebrtc.PeerConnectionStateDisconnected:
 			log.Println("⚠️  WebRTC DISCONNECTED - waiting for ICE recovery...")
+			metrics.RecordReconnect()
+			metrics.SetActiveSessions(0)
 			if m.StatusCallback != nil {
 				m.StatusCallback("Afbrudt — venter på genforbindelse...")
 			}

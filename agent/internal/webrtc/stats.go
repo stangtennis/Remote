@@ -6,6 +6,7 @@ import (
 	"time"
 
 	pionwebrtc "github.com/pion/webrtc/v3"
+	"github.com/stangtennis/remote-agent/internal/metrics"
 )
 
 // sendStats sends streaming stats to controller
@@ -78,6 +79,7 @@ func (m *Manager) collectStats(ctx context.Context) {
 				m.statsMu.Lock()
 				if pairStats.CurrentRoundTripTime > 0 {
 					m.lastRTT = time.Duration(pairStats.CurrentRoundTripTime * float64(time.Second))
+					metrics.RecordRTT(int(m.lastRTT.Milliseconds()))
 				}
 
 				// Track connection type from local candidate

@@ -13,6 +13,7 @@ import (
 	pionwebrtc "github.com/pion/webrtc/v3"
 	"github.com/stangtennis/remote-agent/internal/desktop"
 	"github.com/stangtennis/remote-agent/internal/input"
+	"github.com/stangtennis/remote-agent/internal/metrics"
 	"github.com/stangtennis/remote-agent/internal/screen"
 )
 
@@ -803,6 +804,10 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 
 	// Increment frame ID for each new frame (atomic for thread safety)
 	frameID := uint16(m.frameID.Add(1))
+
+	// Metrics: track frames + bytes
+	metrics.FramesTotal.WithLabelValues("jpeg").Inc()
+	metrics.AddBytesSent("video", len(data))
 
 	// Channel selection strategy:
 	// - Single-message frames (< 60KB): use video channel (unreliable = lower latency)
