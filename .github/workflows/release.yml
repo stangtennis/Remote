@@ -53,6 +53,14 @@ jobs:
             echo "| remote-agent.exe | Agent standalone (GUI mode) |"
             echo "| remote-agent-console.exe | Agent standalone (Console mode) |"
             echo "| controller.exe | Controller standalone |"
+            echo "| SHA256SUMS.txt | SHA256 checksums for alle filer |"
+            echo "| *.sha256 | Per-fil checksum sidecars |"
+            echo ""
+            echo "### Verifikation"
+            echo ""
+            echo "\`\`\`bash"
+            echo "sha256sum -c SHA256SUMS.txt"
+            echo "\`\`\`"
             echo ""
             echo "### System Requirements"
             echo ""
@@ -84,15 +92,23 @@ jobs:
             if curl -sfL -o "release-assets/${DST}" "${BASE_URL}/${SRC}"; then
               SIZE=$(stat -c%s "release-assets/${DST}" 2>/dev/null || stat -f%z "release-assets/${DST}")
               echo "   ✅ ${DST} (${SIZE} bytes)"
+              # Generer SHA256 sidecar
+              (cd release-assets && sha256sum "${DST}" > "${DST}.sha256")
             else
               echo "   ⚠️  ${DST} not available (skipping)"
               rm -f "release-assets/${DST}"
             fi
           done
 
+          # Samlet SHA256SUMS manifest
+          (cd release-assets && sha256sum *.exe 2>/dev/null > "SHA256SUMS.txt" || true)
+
           echo ""
           echo "📦 Release assets:"
           ls -lh release-assets/
+          echo ""
+          echo "🔐 SHA256 manifest:"
+          cat release-assets/SHA256SUMS.txt 2>/dev/null || echo "(none)"
 
       - name: Create Release with assets
         uses: softprops/action-gh-release@v1
@@ -156,6 +172,14 @@ jobs:
             -ldflags "-s -w -X 'main.Version=${TAG}' -X 'main.BuildDate=${BUILD_DATE}'" \
             -o ../release-assets/controller-macos-amd64 .
           echo "✅ Controller amd64 built"
+          cd ..
+
+          # Generer SHA256 sidecars + manifest
+          cd release-assets
+          for f in *; do
+            [ -f "$f" ] && shasum -a 256 "$f" > "$f.sha256"
+          done
+          shasum -a 256 remote-agent-macos-* controller-macos-* > SHA256SUMS-macos.txt 2>/dev/null || true
           cd ..
 
           ls -lh release-assets/

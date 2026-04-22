@@ -188,19 +188,70 @@ fi
 rm -rf "$STAGING"
 
 # =============================================================================
-# Generate SHA256 for agent exe
+# Generate SHA256 sidecars for ALL build artifacts
 # =============================================================================
 echo ""
+echo "🔐 Genererer SHA256 checksums..."
+SHA_MANIFEST="builds/SHA256SUMS-${VERSION}.txt"
+> "$SHA_MANIFEST"
+for f in builds/*${VERSION}*; do
+    # Skip .sha256 files and the manifest itself
+    case "$f" in
+        *.sha256|*SHA256SUMS*) continue ;;
+    esac
+    [ -f "$f" ] || continue
+    HASH=$(sha256sum "$f" | awk '{print $1}')
+    BASENAME=$(basename "$f")
+    echo "$HASH  $BASENAME" > "$f.sha256"
+    echo "$HASH  $BASENAME" >> "$SHA_MANIFEST"
+done
+echo "   ✅ $(wc -l < "$SHA_MANIFEST") filer signeret"
+echo "   📄 Manifest: $SHA_MANIFEST"
+
+# Convenience variables for version.json
 if [ -f "builds/remote-agent-${VERSION}.exe" ]; then
     AGENT_SHA256=$(sha256sum "builds/remote-agent-${VERSION}.exe" | awk '{print $1}')
-    echo "🔐 Agent SHA256: ${AGENT_SHA256}"
-    echo "   Brug denne hash i version.json agent_sha256 feltet"
-else
-    AGENT_SHA256=""
-    echo "⚠️  Ingen agent exe fundet — SHA256 ikke beregnet"
+    echo "   🔑 agent_sha256:      ${AGENT_SHA256}"
+fi
+if [ -f "builds/controller-${VERSION}.exe" ]; then
+    CONTROLLER_SHA256=$(sha256sum "builds/controller-${VERSION}.exe" | awk '{print $1}')
+    echo "   🔑 controller_sha256: ${CONTROLLER_SHA256}"
+fi
+
+# =============================================================================
+# Auto-generer release notes fra git log
+# =============================================================================
+NOTES_FILE="builds/RELEASE_NOTES-${VERSION}.md"
+if command -v git &> /dev/null && git rev-parse --git-dir >/dev/null 2>&1; then
+    echo ""
+    echo "📝 Genererer release notes..."
+    PREV_TAG=$(git tag --sort=-version:refname 2>/dev/null | grep -E '^v[0-9]' | grep -v "^${VERSION}$" | head -1)
+    {
+        echo "## Remote Desktop ${VERSION}"
+        echo ""
+        if [ -n "$PREV_TAG" ]; then
+            echo "_Ændringer siden ${PREV_TAG} (bygget ${BUILD_DATE})_"
+            echo ""
+            echo "### Commits"
+            git log --pretty=format:"- %s" --no-merges "${PREV_TAG}..HEAD" 2>/dev/null || echo "- (kunne ikke læse git log)"
+        else
+            echo "_Bygget ${BUILD_DATE} (ingen tidligere tag fundet)_"
+            echo ""
+            echo "### Seneste commits"
+            git log --pretty=format:"- %s" --no-merges -20
+        fi
+        echo ""
+        echo ""
+        echo "### SHA256 Checksums"
+        echo ""
+        echo "\`\`\`"
+        cat "$SHA_MANIFEST" 2>/dev/null
+        echo "\`\`\`"
+    } > "$NOTES_FILE"
+    echo "   ✅ ${NOTES_FILE}"
 fi
 
 echo ""
 echo "=================================="
 echo "📁 Build output in ./builds/"
-ls -la builds/*$VERSION* 2>/dev/null || echo "No builds found"
+ls -la builds/*$VERSION* 2>/dev/null | grep -v "\.sha256$" || echo "No builds found"

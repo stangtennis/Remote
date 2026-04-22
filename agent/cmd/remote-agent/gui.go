@@ -20,6 +20,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/stangtennis/remote-agent/internal/auth"
 	"github.com/stangtennis/remote-agent/internal/config"
+	"github.com/stangtennis/remote-agent/internal/state"
 	"github.com/stangtennis/remote-agent/internal/tray"
 	"github.com/stangtennis/remote-agent/internal/updater"
 )
@@ -583,13 +584,17 @@ func (g *AgentGUI) doRunOnce() {
 	// Update GUI to show running status
 	g.statusLabel.SetText("Agent kører")
 	g.serviceLabel.SetText("Tilstand: Interaktiv (Kør én gang)")
-	
+
+	// Reset privacy state each Run Once
+	state.SetPrivacyMode(false)
+
 	// Disable Run Once button, enable a Stop button
 	g.actionButtons.RemoveAll()
-	
+
 	stopBtn := widget.NewButtonWithIcon("Stop agent", theme.MediaStopIcon(), func() {
 		log.Println("Stopping agent...")
 		stopAgent()
+		state.SetPrivacyMode(false)
 		g.statusLabel.SetText("Agent stoppet")
 		g.serviceLabel.SetText("Tilstand: Stoppet")
 		g.updateActionButtons()
@@ -598,18 +603,37 @@ func (g *AgentGUI) doRunOnce() {
 	stopBtn.Importance = widget.DangerImportance
 	g.actionButtons.Add(stopBtn)
 
+	// Privacy toggle — only works in Run Once (same process as capture)
+	var privacyBtn *widget.Button
+	privacyBtn = widget.NewButtonWithIcon("Skjul skærm (privacy)", theme.VisibilityOffIcon(), func() {
+		if state.IsPrivacyModeEnabled() {
+			state.SetPrivacyMode(false)
+			privacyBtn.SetText("Skjul skærm (privacy)")
+			privacyBtn.SetIcon(theme.VisibilityOffIcon())
+			log.Println("🔓 Privacy mode OFF — normal capture genoptaget")
+		} else {
+			state.SetPrivacyMode(true)
+			privacyBtn.SetText("Vis skærm igen")
+			privacyBtn.SetIcon(theme.VisibilityIcon())
+			log.Println("🔒 Privacy mode ON — controller får sort skærm")
+		}
+	})
+	g.actionButtons.Add(privacyBtn)
+
 	exitBtn := widget.NewButtonWithIcon("Afslut", theme.CancelIcon(), func() {
 		stopAgent()
+		state.SetPrivacyMode(false)
 		g.app.Quit()
 	})
 	g.actionButtons.Add(exitBtn)
-	
+
 	g.actionButtons.Refresh()
 
-	dialog.ShowInformation("Agent startet", 
+	dialog.ShowInformation("Agent startet",
 		"✅ Agent kører nu!\n\n"+
 		"Du kan minimere dette vindue.\n"+
-		"Klik 'Stop Agent' for at stoppe.", g.window)
+		"Klik 'Skjul skærm' for at sende sort skærm til controlleren.\n"+
+		"Klik 'Stop agent' for at afbryde.", g.window)
 }
 
 func (g *AgentGUI) doInstallProgram() {

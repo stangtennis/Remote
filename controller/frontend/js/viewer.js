@@ -42,7 +42,10 @@ class ViewerSession {
     this.statsInterval = null;
     this.prevBytesReceived = 0;
     this.prevTimestamp = 0;
-    this.statsHistory = { rtt: [], bw: [], fps: [] }; // last 60 data points (1 per sec)
+    this.prevPacketsLost = 0;
+    this.prevPacketsReceived = 0;
+    this.statsHistory = { rtt: [], bw: [], fps: [], loss: [] }; // last 60 data points (1 per sec)
+    this.currentQuality = { rtt: null, loss: null, bw: null, tier: 'unknown' };
 
     this.wrapper.innerHTML = `
       <div class="viewer-connecting" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.5rem; overflow-y:auto; padding:1rem;">
@@ -779,13 +782,15 @@ class ViewerSession {
       let fps = null;
       let bytesReceived = 0;
       let timestamp = 0;
+      let packetsLost = 0;
+      let packetsReceived = 0;
 
       stats.forEach(report => {
         // RTT from active candidate pair
         if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.currentRoundTripTime != null) {
           rtt = Math.round(report.currentRoundTripTime * 1000);
         }
-        // FPS from inbound video track
+        // FPS + packet loss from inbound video track
         if (report.type === 'inbound-rtp' && report.kind === 'video') {
           if (report.framesPerSecond != null) {
             fps = Math.round(report.framesPerSecond);
@@ -794,6 +799,8 @@ class ViewerSession {
             bytesReceived = report.bytesReceived;
             timestamp = report.timestamp;
           }
+          if (report.packetsLost != null) packetsLost += report.packetsLost;
+          if (report.packetsReceived != null) packetsReceived += report.packetsReceived;
         }
         // Also check transport-level for total bandwidth (includes data channels)
         if (report.type === 'transport' && report.bytesReceived != null) {
@@ -803,6 +810,17 @@ class ViewerSession {
           }
         }
       });
+
+      // Calculate packet loss % (delta since last sample)
+      let lossPercent = null;
+      if (this.prevPacketsReceived > 0 || this.prevPacketsLost > 0) {
+        const deltaLost = Math.max(0, packetsLost - this.prevPacketsLost);
+        const deltaReceived = Math.max(0, packetsReceived - this.prevPacketsReceived);
+        const total = deltaLost + deltaReceived;
+        if (total > 0) lossPercent = (deltaLost / total) * 100;
+      }
+      this.prevPacketsLost = packetsLost;
+      this.prevPacketsReceived = packetsReceived;
 
       // Calculate bandwidth
       let bwText = '';
@@ -887,12 +905,20 @@ class ViewerSession {
         : 0;
       this.statsHistory.bw.push(mbpsVal);
       if (this.statsHistory.bw.length > 60) this.statsHistory.bw.shift();
-      if (rtt != null) this.statsHistory.rtt.push(rtt);
-      else this.statsHistory.rtt.push(this.statsHistory.rtt.length > 0 ? this.statsHistory.rtt[this.statsHistory.rtt.length - 1] : 0);
+      const rttVal = rtt != null ? rtt : (this.statsHistory.rtt.length > 0 ? this.statsHistory.rtt[this.statsHistory.rtt.length - 1] : 0);
+      this.statsHistory.rtt.push(rttVal);
       if (this.statsHistory.rtt.length > 60) this.statsHistory.rtt.shift();
       if (fps != null) this.statsHistory.fps.push(fps);
       else this.statsHistory.fps.push(this.statsHistory.fps.length > 0 ? this.statsHistory.fps[this.statsHistory.fps.length - 1] : 0);
       if (this.statsHistory.fps.length > 60) this.statsHistory.fps.shift();
+      this.statsHistory.loss.push(lossPercent != null ? lossPercent : 0);
+      if (this.statsHistory.loss.length > 60) this.statsHistory.loss.shift();
+
+      // Determine connection quality tier
+      let tier = 'good';
+      if (rttVal > 200 || (lossPercent != null && lossPercent > 5)) tier = 'poor';
+      else if (rttVal > 100 || (lossPercent != null && lossPercent > 1)) tier = 'fair';
+      this.currentQuality = { rtt: rttVal, loss: lossPercent, bw: mbpsVal, tier };
 
       this.renderSparkline();
     } catch (e) {
@@ -900,29 +926,48 @@ class ViewerSession {
     }
   }
 
-  // Render sparkline SVG for bitrate history
+  // Render sparkline SVG for connection quality (RTT history) with color tier
   renderSparkline() {
     const container = this.wrapper.querySelector('.viewer-sparkline');
     if (!container) return;
-    const data = this.statsHistory.bw;
+    const data = this.statsHistory.rtt;
     if (data.length < 2) { container.innerHTML = ''; return; }
 
     const w = 120, h = 24, pad = 1;
-    const max = Math.max(...data, 0.1); // avoid division by zero
-    const min = 0;
+    // Dynamisk Y-skala: mindst 100ms, mest max af data * 1.2
+    const max = Math.max(100, Math.max(...data) * 1.2);
     const xStep = (w - pad * 2) / (data.length - 1);
 
     const points = data.map((v, i) => {
       const x = pad + i * xStep;
-      const y = pad + (h - pad * 2) * (1 - (v - min) / (max - min));
+      const y = pad + (h - pad * 2) * (1 - Math.min(v, max) / max);
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     });
 
     const fillPoints = `${pad},${h - pad} ${points.join(' ')} ${(pad + (data.length - 1) * xStep).toFixed(1)},${h - pad}`;
 
-    container.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    // Quality tier → color class
+    const tier = this.currentQuality.tier || 'good';
+    container.setAttribute('data-tier', tier);
+
+    // Format tooltip
+    const q = this.currentQuality;
+    const avgRtt = Math.round(data.reduce((a, b) => a + b, 0) / data.length);
+    const avgLoss = this.statsHistory.loss.length > 0
+      ? (this.statsHistory.loss.reduce((a, b) => a + b, 0) / this.statsHistory.loss.length).toFixed(1)
+      : '—';
+    const tooltipLines = [
+      `RTT: ${q.rtt != null ? q.rtt + 'ms' : '—'} (avg ${avgRtt}ms)`,
+      q.loss != null ? `Loss: ${q.loss.toFixed(2)}% (avg ${avgLoss}%)` : 'Loss: —',
+      q.bw > 0 ? `Bitrate: ${q.bw.toFixed(1)} Mbit/s` : null,
+      `Kvalitet: ${tier === 'good' ? 'God' : tier === 'fair' ? 'OK' : 'Dårlig'}`,
+    ].filter(Boolean).join('\n');
+    container.setAttribute('title', tooltipLines);
+
+    container.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-label="RTT historie: ${tooltipLines.replace(/\n/g, ', ')}">
       <polygon class="sparkline-fill" points="${fillPoints}" />
       <polyline points="${points.join(' ')}" />
+      ${q.loss > 0.5 ? `<circle cx="${(w - 4).toFixed(1)}" cy="4" r="3" class="sparkline-loss-dot" />` : ''}
     </svg>`;
   }
 

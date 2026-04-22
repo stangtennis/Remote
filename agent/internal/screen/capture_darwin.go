@@ -230,6 +230,11 @@ func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Privacy mode — return cached black frame
+	if data, ok := privacyOverride(c.bounds, quality); ok {
+		return data, nil
+	}
+
 	img, err := c.captureRGBAInternal()
 	if err != nil {
 		return nil, err
@@ -251,6 +256,11 @@ func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
 func (c *Capturer) CaptureJPEGIfChanged(quality int) ([]byte, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Privacy mode — return cached black frame (skip change detection)
+	if data, ok := privacyOverride(c.bounds, quality); ok {
+		return data, nil
+	}
 
 	img, err := c.captureRGBAInternal()
 	if err != nil {
@@ -350,6 +360,11 @@ func (c *Capturer) CaptureJPEGScaled(quality int, scale float64) ([]byte, int, i
 	}
 	if scale > 1.0 {
 		scale = 1.0
+	}
+
+	// Privacy mode — return black frame at native resolution
+	if data, ok := privacyOverride(c.bounds, quality); ok {
+		return data, c.bounds.Dx(), c.bounds.Dy(), nil
 	}
 
 	// Get native display resolution for target calculation
