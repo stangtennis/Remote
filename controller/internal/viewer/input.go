@@ -94,20 +94,17 @@ func (h *InputHandler) HandleKeyPress(key string, pressed bool) {
 func (h *InputHandler) convertToRemoteCoords(localX, localY float32) (float32, float32) {
 	// Get canvas size
 	canvasSize := h.viewer.videoCanvas.Size()
-	
-	// Assume remote is 1920x1080 (Full HD)
-	remoteWidth := float32(1920)
-	remoteHeight := float32(1080)
-	
-	// Calculate scale
-	scaleX := remoteWidth / canvasSize.Width
-	scaleY := remoteHeight / canvasSize.Height
-	
-	// Convert coordinates
-	remoteX := localX * scaleX
-	remoteY := localY * scaleY
-	
-	return remoteX, remoteY
+	return ScaleLocalToRemote(localX, localY, canvasSize.Width, canvasSize.Height, 1920, 1080)
+}
+
+// ScaleLocalToRemote converts local canvas pixel coordinates to remote screen
+// coordinates. Pure function for testability (no Fyne dependencies).
+// Returns clamped coordinates when canvas dimensions are non-positive.
+func ScaleLocalToRemote(localX, localY, canvasW, canvasH, remoteW, remoteH float32) (float32, float32) {
+	if canvasW <= 0 || canvasH <= 0 {
+		return 0, 0
+	}
+	return localX * (remoteW / canvasW), localY * (remoteH / canvasH)
 }
 
 // Callback setters
