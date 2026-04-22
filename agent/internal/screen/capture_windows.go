@@ -118,6 +118,11 @@ func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Privacy mode — return black frame instead of real capture
+	if data, ok := privacyOverride(c.bounds, quality); ok {
+		return data, nil
+	}
+
 	// Use Session 0 pipe capturer if available (helper in user session)
 	if c.session0Capturer != nil {
 		data, err := c.session0Capturer.CaptureJPEG(quality)
@@ -163,6 +168,11 @@ func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
 // CaptureJPEGIfChanged only returns a frame if the screen has changed
 // Returns (nil, nil) if no change detected
 func (c *Capturer) CaptureJPEGIfChanged(quality int) ([]byte, error) {
+	// Privacy mode — return cached black frame (skip change detection)
+	if data, ok := privacyOverride(c.bounds, quality); ok {
+		return data, nil
+	}
+
 	// Use DXGI if available (better for RDP)
 	if c.dxgiCapturer != nil {
 		// For DXGI, just capture every time (it's fast enough)
@@ -360,6 +370,11 @@ func (c *Capturer) CaptureJPEGScaled(quality int, scale float64) ([]byte, int, i
 	}
 	if scale > 1.0 {
 		scale = 1.0
+	}
+
+	// Privacy mode — return black frame at scaled resolution
+	if data, ok := privacyOverride(c.bounds, quality); ok {
+		return data, c.bounds.Dx(), c.bounds.Dy(), nil
 	}
 
 	var img *image.RGBA
