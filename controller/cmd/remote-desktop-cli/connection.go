@@ -28,6 +28,68 @@ type DeviceConnection struct {
 	lastUsedAt  time.Time
 	connected   bool
 	mu          sync.RWMutex
+
+	// Routers for op-based JSON channels (shell + process). The exec/ps/sysinfo
+	// commands generate a UUID and register a subscriber here; arriving messages
+	// are delivered to the subscriber whose id matches.
+	shellRouter   *channelRouter
+	processRouter *channelRouter
+	fileRouter    *fileTransferRouter
+}
+
+// channelRouter dispatches incoming JSON-with-"id" messages to per-id subscribers.
+// One subscriber per id; concurrent execs use distinct ids.
+type channelRouter struct {
+	mu   sync.Mutex
+	subs map[string]chan []byte
+}
+
+func newChannelRouter() *channelRouter {
+	return &channelRouter{subs: make(map[string]chan []byte)}
+}
+
+// Subscribe registers a buffered channel for the given id. The buffer must be
+// large enough to absorb burst output without dropping messages.
+func (r *channelRouter) Subscribe(id string) chan []byte {
+	ch := make(chan []byte, 256)
+	r.mu.Lock()
+	r.subs[id] = ch
+	r.mu.Unlock()
+	return ch
+}
+
+// Unsubscribe removes the subscriber and closes its channel.
+func (r *channelRouter) Unsubscribe(id string) {
+	r.mu.Lock()
+	if ch, ok := r.subs[id]; ok {
+		close(ch)
+		delete(r.subs, id)
+	}
+	r.mu.Unlock()
+}
+
+// Dispatch delivers a raw message to the subscriber whose id field matches,
+// falling back to the generic "" subscriber if no id field is present.
+func (r *channelRouter) Dispatch(data []byte) {
+	var probe struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(data, &probe)
+
+	r.mu.Lock()
+	ch, ok := r.subs[probe.ID]
+	if !ok {
+		ch, ok = r.subs[""] // generic fallback (e.g., ps/sysinfo without id)
+	}
+	r.mu.Unlock()
+	if !ok {
+		return
+	}
+	select {
+	case ch <- data:
+	default:
+		// subscriber backed up — drop to avoid blocking the data channel
+	}
 }
 
 // ConnectionManager manages a pool of WebRTC connections
@@ -67,10 +129,13 @@ func (cm *ConnectionManager) Connect(deviceID, deviceName string) error {
 	}
 
 	conn := &DeviceConnection{
-		client:     client,
-		deviceID:   deviceID,
-		deviceName: deviceName,
-		lastUsedAt: time.Now(),
+		client:        client,
+		deviceID:      deviceID,
+		deviceName:    deviceName,
+		lastUsedAt:    time.Now(),
+		shellRouter:   newChannelRouter(),
+		processRouter: newChannelRouter(),
+		fileRouter:    newFileTransferRouter(),
 	}
 
 	client.SetOnFrame(func(frameData []byte) {
@@ -79,6 +144,16 @@ func (cm *ConnectionManager) Connect(deviceID, deviceName string) error {
 		copy(conn.lastFrame, frameData)
 		conn.lastFrameAt = time.Now()
 		conn.mu.Unlock()
+	})
+
+	client.SetOnShellMessage(func(data []byte) {
+		conn.shellRouter.Dispatch(data)
+	})
+	client.SetOnProcessMessage(func(data []byte) {
+		conn.processRouter.Dispatch(data)
+	})
+	client.SetOnFileMessage(func(data []byte) {
+		conn.fileRouter.Dispatch(data)
 	})
 
 	connectedCh := make(chan bool, 1)
@@ -208,6 +283,27 @@ func (dc *DeviceConnection) GetLastFrame() ([]byte, time.Time) {
 func (dc *DeviceConnection) SendInput(inputJSON string) error {
 	return dc.client.SendInput(inputJSON)
 }
+
+// SendShell writes a JSON op message to the shell data channel.
+func (dc *DeviceConnection) SendShell(data []byte) error {
+	return dc.client.SendShellData(data)
+}
+
+// SendProcess writes a JSON op message to the process data channel.
+func (dc *DeviceConnection) SendProcess(data []byte) error {
+	return dc.client.SendProcessData(data)
+}
+
+// SendFile writes a JSON op message to the file data channel.
+func (dc *DeviceConnection) SendFile(data []byte) error {
+	return dc.client.SendFileData(data)
+}
+
+// ShellReady reports whether the shell channel is open.
+func (dc *DeviceConnection) ShellReady() bool { return dc.client.ShellChannelReady() }
+
+// ProcessReady reports whether the process channel is open.
+func (dc *DeviceConnection) ProcessReady() bool { return dc.client.ProcessChannelReady() }
 
 // StartIdleChecker starts a goroutine that disconnects idle connections
 func (cm *ConnectionManager) StartIdleChecker() {

@@ -7,6 +7,7 @@ import (
 
 	pionwebrtc "github.com/pion/webrtc/v3"
 	"github.com/stangtennis/remote-agent/internal/process"
+	"github.com/stangtennis/remote-agent/internal/sysinfo"
 )
 
 // setupProcessChannelHandlers sets up the process management data channel
@@ -29,6 +30,8 @@ func (m *Manager) setupProcessChannelHandlers(dc *pionwebrtc.DataChannel) {
 		case "kill":
 			pidVal, _ := message["pid"].(float64) // JSON numbers are float64
 			m.handleProcessKill(dc, int(pidVal))
+		case "sysinfo":
+			m.handleSysinfo(dc)
 		default:
 			sendProcessError(dc, "unknown op: "+op)
 		}
@@ -75,6 +78,34 @@ func (m *Manager) handleProcessKill(dc *pionwebrtc.DataChannel, pid int) {
 	}
 
 	data, _ := json.Marshal(resp)
+	dc.Send(data)
+}
+
+func (m *Manager) handleSysinfo(dc *pionwebrtc.DataChannel) {
+	info, err := sysinfo.Collect()
+	if err != nil {
+		sendProcessError(dc, err.Error())
+		return
+	}
+
+	// Inline assemble so we can include the literal op tag.
+	resp := map[string]interface{}{
+		"op":             "sysinfo_result",
+		"os":             info.OS,
+		"hostname":       info.Hostname,
+		"cpu":            info.CPU,
+		"cpu_cores":      info.CPUCores,
+		"ram_total_gb":   info.RAMTotalGB,
+		"ram_free_gb":    info.RAMFreeGB,
+		"disks":          info.Disks,
+		"uptime_sec":     info.UptimeSec,
+		"installed_apps": info.InstalledApps,
+	}
+	data, err := json.Marshal(resp)
+	if err != nil {
+		sendProcessError(dc, err.Error())
+		return
+	}
 	dc.Send(data)
 }
 
