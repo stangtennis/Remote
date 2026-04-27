@@ -20,6 +20,8 @@ type Client struct {
 	dataChannel          *webrtc.DataChannel
 	controlChannel       *webrtc.DataChannel // Separate channel for input (low latency)
 	fileChannel          *webrtc.DataChannel // Reliable channel for file transfer
+	shellChannel         *webrtc.DataChannel // Reliable channel for remote shell exec
+	processChannel       *webrtc.DataChannel // Reliable channel for ps/kill/sysinfo
 	videoTrack           *webrtc.TrackRemote
 	onFrame              func([]byte)
 	onH264Frame          func([]byte) // Callback for decoded H.264 frames
@@ -27,6 +29,8 @@ type Client struct {
 	onDisconnected       func()
 	onDataChannelMessage func([]byte)
 	onFileMessage        func([]byte) // Callback for file transfer messages
+	onShellMessage       func([]byte) // Callback for shell channel messages
+	onProcessMessage     func([]byte) // Callback for process/sysinfo channel messages
 	mu                   sync.Mutex
 	connected            bool
 
@@ -269,6 +273,44 @@ func (c *Client) CreateOffer() (string, error) {
 		log.Println("📁 File channel created (ordered=true, reliable)")
 	}
 
+	// Create shell channel for remote command exec (ordered, reliable)
+	shellOrdered := true
+	shellOpts := &webrtc.DataChannelInit{Ordered: &shellOrdered}
+	sc, err := c.peerConnection.CreateDataChannel("shell", shellOpts)
+	if err != nil {
+		log.Printf("⚠️ Failed to create shell channel: %v", err)
+	} else {
+		c.shellChannel = sc
+		sc.OnOpen(func() {
+			log.Println("🐚 Shell channel OPENED (reliable, ordered)")
+		})
+		sc.OnMessage(func(msg webrtc.DataChannelMessage) {
+			if c.onShellMessage != nil {
+				c.onShellMessage(msg.Data)
+			}
+		})
+		log.Println("🐚 Shell channel created (ordered=true, reliable)")
+	}
+
+	// Create process channel for ps/kill/sysinfo (ordered, reliable)
+	procOrdered := true
+	procOpts := &webrtc.DataChannelInit{Ordered: &procOrdered}
+	pc2, err := c.peerConnection.CreateDataChannel("process", procOpts)
+	if err != nil {
+		log.Printf("⚠️ Failed to create process channel: %v", err)
+	} else {
+		c.processChannel = pc2
+		pc2.OnOpen(func() {
+			log.Println("⚙️ Process channel OPENED (reliable, ordered)")
+		})
+		pc2.OnMessage(func(msg webrtc.DataChannelMessage) {
+			if c.onProcessMessage != nil {
+				c.onProcessMessage(msg.Data)
+			}
+		})
+		log.Println("⚙️ Process channel created (ordered=true, reliable)")
+	}
+
 	// Add video transceiver for H.264 (recvonly) - enables agent to send video track
 	// This is critical for H.264 support without renegotiation
 	_, err = c.peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo, webrtc.RTPTransceiverInit{
@@ -420,6 +462,42 @@ func (c *Client) SendFileData(data []byte) error {
 		return fmt.Errorf("file channel not ready")
 	}
 	return c.fileChannel.Send(data)
+}
+
+// SetOnShellMessage registers the callback for shell channel messages.
+func (c *Client) SetOnShellMessage(callback func([]byte)) {
+	c.onShellMessage = callback
+}
+
+// SendShellData writes a JSON message to the shell channel.
+func (c *Client) SendShellData(data []byte) error {
+	if c.shellChannel == nil || c.shellChannel.ReadyState() != webrtc.DataChannelStateOpen {
+		return fmt.Errorf("shell channel not ready")
+	}
+	return c.shellChannel.Send(data)
+}
+
+// SetOnProcessMessage registers the callback for process/sysinfo channel messages.
+func (c *Client) SetOnProcessMessage(callback func([]byte)) {
+	c.onProcessMessage = callback
+}
+
+// SendProcessData writes a JSON message to the process channel.
+func (c *Client) SendProcessData(data []byte) error {
+	if c.processChannel == nil || c.processChannel.ReadyState() != webrtc.DataChannelStateOpen {
+		return fmt.Errorf("process channel not ready")
+	}
+	return c.processChannel.Send(data)
+}
+
+// ShellChannelReady reports whether the shell data channel is open.
+func (c *Client) ShellChannelReady() bool {
+	return c.shellChannel != nil && c.shellChannel.ReadyState() == webrtc.DataChannelStateOpen
+}
+
+// ProcessChannelReady reports whether the process data channel is open.
+func (c *Client) ProcessChannelReady() bool {
+	return c.processChannel != nil && c.processChannel.ReadyState() == webrtc.DataChannelStateOpen
 }
 
 // IsConnected returns the connection status

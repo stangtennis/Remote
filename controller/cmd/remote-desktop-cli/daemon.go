@@ -225,11 +225,27 @@ func runDaemon(deviceID, deviceName string) {
 
 func handleDaemonConnection(conn net.Conn, connMgr *ConnectionManager, deviceID, deviceName string, startTime time.Time) {
 	defer conn.Close()
+
+	// Streaming commands (exec, upload, download) need a generous deadline.
+	// Refresh the deadline once the command type is known.
 	conn.SetDeadline(time.Now().Add(30 * time.Second))
 
 	var req daemonRequest
 	if err := json.NewDecoder(conn).Decode(&req); err != nil {
 		sendResponse(conn, daemonResponse{OK: false, Error: "invalid request"})
+		return
+	}
+
+	// Streaming commands write a series of JSON messages and close the
+	// connection themselves. They never call sendResponse.
+	switch req.Cmd {
+	case "exec":
+		conn.SetDeadline(time.Now().Add(15 * time.Minute))
+		handleExecStream(conn, req, connMgr, deviceID)
+		return
+	case "upload", "download":
+		conn.SetDeadline(time.Now().Add(15 * time.Minute))
+		handleFileStream(conn, req, connMgr, deviceID)
 		return
 	}
 
@@ -267,6 +283,12 @@ func handleCommand(req daemonRequest, connMgr *ConnectionManager, deviceID, devi
 		return handleScroll(req, connMgr, deviceID)
 	case "disconnect":
 		return handleDisconnect(connMgr, deviceID)
+	case "ps":
+		return handlePs(req, connMgr, deviceID)
+	case "kill":
+		return handleKill(req, connMgr, deviceID)
+	case "sysinfo":
+		return handleSysinfo(req, connMgr, deviceID)
 	default:
 		return daemonResponse{OK: false, Error: fmt.Sprintf("unknown command: %s", req.Cmd)}
 	}

@@ -93,6 +93,11 @@ type Manager struct {
 	audioTrack    *audio.Track
 	audioCapturer *audio.Capturer
 
+	// Shell channel state (lazy initialized in shell_handler.go)
+	shellChannel *pionwebrtc.DataChannel
+	shellOnce    sync.Once
+	shellSt      *shellState
+
 	// System monitoring
 	cpuMonitor *monitor.CPUMonitor
 
@@ -564,6 +569,10 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 		case "process":
 			log.Println("⚙️ Process channel ready")
 			m.setupProcessChannelHandlers(dc)
+		case "shell":
+			log.Println("🐚 Shell channel ready")
+			m.shellChannel = dc
+			m.setupShellChannelHandlers(dc)
 		case "chat":
 			log.Println("💬 Chat channel ready")
 			dc.OnOpen(func() {

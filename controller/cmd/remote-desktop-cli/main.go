@@ -37,6 +37,18 @@ func main() {
 		cmdScroll()
 	case "status":
 		cmdStatus()
+	case "exec":
+		cmdExec()
+	case "upload":
+		cmdUpload()
+	case "download":
+		cmdDownload()
+	case "ps":
+		cmdPs()
+	case "kill":
+		cmdKill()
+	case "sysinfo":
+		cmdSysinfo()
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -59,6 +71,14 @@ Commands:
   key <key> [--ctrl] [--shift] [--alt]  Press a key
   scroll <delta> [--at x,y]        Scroll (positive=down, negative=up)
   status                            Show connection status
+
+Remote admin (v3.0.2+ agent):
+  exec [--as-user] [--timeout=N] "<cmd>"  Run PowerShell (Windows) / bash (macOS)
+  upload <local> <remote>                 Upload local file to remote path
+  download <remote> <local>               Download remote file to local path
+  ps                                      List running processes
+  kill <pid>                              Terminate a process by PID
+  sysinfo                                 OS / CPU / RAM / disk / installed apps
 
 Environment:
   RD_EMAIL      Supabase email (required for list/connect)
