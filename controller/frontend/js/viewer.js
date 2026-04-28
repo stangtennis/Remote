@@ -1,6 +1,106 @@
 // Remote Desktop Viewer — Multi-Session Support
 // Each ViewerSession is an independent WebRTC connection with its own canvas/video
 
+// ClipboardBroker centralises clipboard distribution between the controller's
+// own OS clipboard and every connected session. A copy made on remote PC A
+// is written to the controller's clipboard *and* forwarded to PC B, C, ...
+// so a paste anywhere works without the user touching anything. A simple
+// 5-second hash window prevents echo loops between sessions (agent →
+// controller → broadcast back to agent → agent's monitor would otherwise
+// fire again).
+const ClipboardBroker = {
+  recentHashes: new Map(),  // hash -> timestamp (ms)
+  windowMs: 5000,
+
+  hash(kind, payload) {
+    let h = 0;
+    const s = kind + ':' + payload;
+    for (let i = 0; i < s.length; i++) {
+      h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    }
+    return h.toString(36);
+  },
+
+  isRecent(hashKey) {
+    const now = Date.now();
+    // Drop entries older than the dedup window
+    for (const [k, t] of this.recentHashes) {
+      if (now - t > this.windowMs) this.recentHashes.delete(k);
+    }
+    return this.recentHashes.has(hashKey);
+  },
+
+  remember(hashKey) {
+    this.recentHashes.set(hashKey, Date.now());
+  },
+
+  // spread: writes to local OS clipboard + sends to every other open
+  // session. Called when one remote PC reports a clipboard change.
+  spread(kind, payload, sourceSessionId) {
+    const key = this.hash(kind, payload);
+    if (this.isRecent(key)) return;
+    this.remember(key);
+
+    // 1. Update controller's local OS clipboard
+    this._writeLocal(kind, payload);
+
+    // 2. Forward to every other connected session
+    if (typeof SessionManager !== 'undefined') {
+      for (const [id, session] of SessionManager.sessions) {
+        if (id === sourceSessionId) continue;
+        this._sendToSession(session, kind, payload);
+      }
+    }
+  },
+
+  // broadcast: send to every connected session (no source to exclude).
+  // Called on Ctrl+V — the local clipboard is the source of truth.
+  broadcast(kind, payload, _ignored) {
+    const key = this.hash(kind, payload);
+    if (this.isRecent(key)) return;
+    this.remember(key);
+
+    if (typeof SessionManager !== 'undefined') {
+      for (const [, session] of SessionManager.sessions) {
+        this._sendToSession(session, kind, payload);
+      }
+    }
+  },
+
+  _writeLocal(kind, payload) {
+    if (kind === 'text') {
+      navigator.clipboard.writeText(payload).catch(err => {
+        console.warn('clipboard.writeText failed:', err);
+      });
+      return;
+    }
+    if (kind === 'image') {
+      try {
+        const binary = atob(payload);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: 'image/png' });
+        navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).catch(err => {
+          console.warn('clipboard.write image failed:', err);
+        });
+      } catch (e) {
+        console.warn('decode clipboard image failed:', e);
+      }
+    }
+  },
+
+  _sendToSession(session, kind, payload) {
+    const dc = session && session.dataChannel;
+    if (!dc || dc.readyState !== 'open') return;
+    const msgType = kind === 'text' ? 'clipboard_text' : 'clipboard_image';
+    try {
+      dc.send(JSON.stringify({ type: msgType, content: payload }));
+    } catch (e) {
+      console.warn('Failed to forward clipboard to session', session.id, e);
+    }
+  },
+};
+
 class ViewerSession {
   constructor(deviceId, deviceName, container) {
     this.id = crypto.randomUUID();
@@ -517,44 +617,35 @@ class ViewerSession {
         } else if (msg.type === 'chat') {
           this.addChatMessage('Agent', msg.text || msg.message || '');
         } else if (msg.type === 'clipboard_text') {
-          // Remote PC copied text — write it to the local OS clipboard so
-          // the user can paste it into any app on their controller machine.
+          // Remote PC copied text — write it to the local OS clipboard,
+          // and broadcast to every OTHER connected session so the user can
+          // paste it on any of the connected machines (and on the
+          // controller itself).
           if (msg.content) {
-            navigator.clipboard.writeText(msg.content).catch(err => {
-              console.warn('clipboard.writeText failed:', err);
-            });
+            ClipboardBroker.spread('text', msg.content, this.id);
           }
         } else if (msg.type === 'clipboard_image') {
-          // Remote PC copied an image — decode base64 PNG and write it to
-          // the local clipboard via the ClipboardItem API.
+          // Remote PC copied an image — decode base64 PNG, write to local
+          // clipboard, and forward to every other open session.
           if (msg.content) {
-            try {
-              const binary = atob(msg.content);
-              const bytes = new Uint8Array(binary.length);
-              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-              const blob = new Blob([bytes], { type: 'image/png' });
-              navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).catch(err => {
-                console.warn('clipboard.write image failed:', err);
-              });
-            } catch (e) {
-              console.warn('decode clipboard image failed:', e);
-            }
+            ClipboardBroker.spread('image', msg.content, this.id);
           }
         }
       } catch (e) { /* not JSON */ }
     }
   }
 
-  // sendClipboardToAgent reads the local OS clipboard (text first, image as
-  // fallback) and pushes it to the remote agent. Triggered on Ctrl+V over
-  // the canvas — the user's intent to paste implies "give the remote my
-  // local clipboard".
+  // sendClipboardToAgent reads the controller's local OS clipboard and
+  // broadcasts it to *every* connected session. Triggered on Ctrl+V over
+  // any canvas: the user's intent is "make my local clipboard available
+  // for paste here", and broadcasting to all sessions means a copy made
+  // on any machine (or the controller itself) becomes pasteable on every
+  // connected remote PC.
   async sendClipboardToAgent() {
-    if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
     try {
       const text = await navigator.clipboard.readText();
       if (text) {
-        this.dataChannel.send(JSON.stringify({ type: 'clipboard_text', content: text }));
+        ClipboardBroker.broadcast('text', text, null);
         return;
       }
     } catch (_) { /* fall through to image */ }
@@ -565,7 +656,7 @@ class ViewerSession {
           const blob = await item.getType('image/png');
           const buffer = await blob.arrayBuffer();
           const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-          this.dataChannel.send(JSON.stringify({ type: 'clipboard_image', content: base64 }));
+          ClipboardBroker.broadcast('image', base64, null);
           return;
         }
       }
