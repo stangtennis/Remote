@@ -107,11 +107,57 @@ sleep 1
 ```
 
 ### Installer software via winget
+**Foretrukket måde (v3.0.2+, ingen UI-interaktion):**
 ```bash
-# Åbn PowerShell først, så:
+remote-desktop-cli exec "winget install --id Notepad++.Notepad++ --silent --accept-source-agreements"
+```
+Streamer output live, returnerer exit code. Kører som SYSTEM så ingen UAC-prompt.
+
+**Fallback (åbn PowerShell manuelt):**
+```bash
 remote-desktop-cli type "winget install <pakkenavn>"
 remote-desktop-cli key Enter
 ```
+
+## Remote admin uden UI-interaktion (v3.0.2+)
+
+Hvis agenten kører v3.0.2 eller nyere kan du bruge disse direkte i stedet for screenshot/klik-loops:
+
+### Kør PowerShell / bash kommandoer
+```bash
+# Default: SYSTEM på Windows (kan installere/læse alt)
+remote-desktop-cli exec "Get-WmiObject Win32_OperatingSystem | Format-List"
+remote-desktop-cli exec "Get-EventLog -LogName System -Newest 20"
+
+# --as-user: kør som logget-ind bruger (fanger HKCU + AppData)
+remote-desktop-cli exec --as-user "Get-Item HKCU:\\Software\\Microsoft\\Windows"
+
+# --timeout=N: maks N sekunder (default 300)
+remote-desktop-cli exec --timeout=600 "winget upgrade --all --silent"
+```
+
+Stdout/stderr streames live. Exit code propagerer.
+
+### Filoverførsel
+```bash
+# Upload installer til remote
+remote-desktop-cli upload /tmp/setup.msi C:\Temp\setup.msi
+remote-desktop-cli exec "msiexec /i C:\Temp\setup.msi /quiet /norestart"
+
+# Hent log fra remote
+remote-desktop-cli download C:\Windows\Logs\setupact.log /tmp/setupact.log
+```
+
+### Diagnostik
+```bash
+remote-desktop-cli sysinfo            # OS, CPU, RAM, disk, installerede apps
+remote-desktop-cli ps                 # process list (sortérbar tabel)
+remote-desktop-cli kill 1234          # afslut process
+```
+
+**Hvornår skal jeg bruge `exec` vs screenshot+klik?**
+- `exec` når der findes en kommando-baseret løsning (winget, sc.exe, reg.exe, Get-EventLog osv.) — hurtigere, ingen race conditions
+- screenshot+klik når brugeren skal se hvad der sker, eller GUI-only programmer (programmer uden CLI)
 
 ### Browser-navigation
 ```bash
