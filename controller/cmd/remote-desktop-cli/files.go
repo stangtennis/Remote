@@ -147,11 +147,13 @@ func uploadLocalFile(conn *DeviceConnection, localPath, remotePath string, timeo
 		return 0, fmt.Errorf("refuse to upload empty file")
 	}
 
-	const chunkSize = 60000
+	// Chunk size 45000 raw bytes → ~60KB base64 → fits in WebRTC's
+	// 65536-byte max message size with room for JSON wrapper overhead.
+	const chunkSize = 45000
 	totalChunks := uint16((fileSize + chunkSize - 1) / chunkSize)
 	if int64(totalChunks)*chunkSize < fileSize {
-		// fileSize > max representable in uint16 chunks of 60KB (~3.9GB)
-		return 0, fmt.Errorf("file too large (max ~3.9GB)")
+		// fileSize > max representable in uint16 chunks of 45KB (~2.95GB)
+		return 0, fmt.Errorf("file too large (max ~2.9GB)")
 	}
 
 	fid := nextFileID()
