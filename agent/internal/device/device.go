@@ -2,6 +2,7 @@ package device
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 
@@ -22,7 +23,7 @@ type Device struct {
 	Arch          string
 	CPUCount      int
 	RAMBytes      int64
-	APIKey        string
+	APIKey        string // Stable per-device key — survives JWT expiry. Loaded from credentials at startup.
 	cfg           *config.Config
 	tokenProvider *auth.TokenProvider
 	userID        string
@@ -62,6 +63,11 @@ func New(cfg *config.Config, tokenProvider *auth.TokenProvider) (*Device, error)
 		CPUCount:      runtime.NumCPU(),
 		cfg:           cfg,
 		tokenProvider: tokenProvider,
+	}
+
+	// Load existing api_key from credentials (saved during prior registration)
+	if creds, err := auth.LoadCredentials(); err == nil {
+		dev.APIKey = creds.APIKey
 	}
 
 	// Get device name
@@ -112,6 +118,16 @@ func (d *Device) Register() error {
 	d.ID = deviceInfo.DeviceID
 	d.Name = deviceInfo.DeviceName
 	d.userID = creds.UserID
+	if deviceInfo.APIKey != "" {
+		d.APIKey = deviceInfo.APIKey
+		// Persist api_key alongside the JWT credentials so it survives restarts.
+		creds.APIKey = deviceInfo.APIKey
+		if err := auth.SaveCredentials(creds); err != nil {
+			log.Printf("⚠️  Failed to persist api_key to credentials: %v", err)
+		} else {
+			log.Printf("🔑 api_key persisted to credentials")
+		}
+	}
 
 	fmt.Println("✅ Device registered successfully!")
 	fmt.Printf("   Device ID: %s\n", d.ID)
@@ -127,17 +143,20 @@ func (d *Device) SetOffline() error {
 	// Update device status to offline in database
 	fmt.Println("📴 Setting device offline...")
 
-	token, err := d.tokenProvider.GetToken()
-	if err != nil {
-		fmt.Printf("⚠️  Failed to get auth token for offline: %v\n", err)
-		// Fall back to unauthenticated call as last resort
-		token = ""
+	// Try to get a fresh JWT for the call but don't fail if we can't —
+	// the api_key path keeps working even when refresh tokens are dead.
+	token := ""
+	if d.tokenProvider != nil {
+		if t, err := d.tokenProvider.GetToken(); err == nil {
+			token = t
+		}
 	}
 
 	regCfg := RegistrationConfig{
 		SupabaseURL: d.cfg.SupabaseURL,
 		AnonKey:     d.cfg.SupabaseAnonKey,
 		AccessToken: token,
+		APIKey:      d.APIKey,
 	}
 
 	if err := SetOffline(regCfg, d.ID); err != nil {

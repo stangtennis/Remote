@@ -141,14 +141,23 @@ func (m *Manager) LastPollSuccess() time.Time {
 	return time.Unix(m.lastPollSuccess.Load(), 0)
 }
 
-// setAuthHeaders sets apikey and Authorization headers using authenticated JWT token.
+// setAuthHeaders sets apikey + Authorization headers. webrtc_sessions and
+// session_signaling have RLS disabled / device-scoped policies that accept
+// anon — so a JWT failure here is not fatal. We attach a Bearer token when
+// available, but degrade to anon-only auth so the device stays reachable
+// even after the user's refresh token expires (the api_key path on heartbeat
+// handles authorization). x-device-key is also attached for tables that
+// gate on it.
 func (m *Manager) setAuthHeaders(req *http.Request) error {
 	req.Header.Set("apikey", m.cfg.SupabaseAnonKey)
-	token, err := m.tokenProvider.GetToken()
-	if err != nil {
-		return fmt.Errorf("failed to get auth token: %w", err)
+	if m.device != nil && m.device.APIKey != "" {
+		req.Header.Set("x-device-key", m.device.APIKey)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	if m.tokenProvider != nil {
+		if token, err := m.tokenProvider.GetToken(); err == nil && token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+	}
 	return nil
 }
 

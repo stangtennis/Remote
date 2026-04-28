@@ -102,8 +102,23 @@ func fetchPublicIPInfo() (ip, isp string) {
 type RegistrationConfig struct {
 	SupabaseURL string
 	AnonKey     string
-	AccessToken string // User's access token after login
+	AccessToken string // User's access token (may expire — fall back to APIKey)
 	UserID      string // User's ID after login
+	APIKey      string // Per-device api_key — preferred for agent → server calls
+}
+
+// applyAuthHeaders sets the right auth headers on req. Prefers the stable
+// per-device api_key (x-device-key) when available — that path keeps working
+// even if the user's JWT has expired. Falls back to Bearer token for the
+// initial registration where the device row doesn't exist yet.
+func (c *RegistrationConfig) applyAuthHeaders(req *http.Request) {
+	req.Header.Set("apikey", c.AnonKey)
+	if c.APIKey != "" {
+		req.Header.Set("x-device-key", c.APIKey)
+	}
+	if c.AccessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.AccessToken)
+	}
 }
 
 // DeviceInfo represents device information
@@ -112,6 +127,7 @@ type DeviceInfo struct {
 	DeviceName string `json:"device_name"`
 	Platform   string `json:"platform"`
 	Status     string `json:"status"`
+	APIKey     string `json:"api_key,omitempty"` // Returned from upsert; persist to credentials
 }
 
 // RegisterDevice registers the device anonymously with Supabase
@@ -130,7 +146,7 @@ func RegisterDevice(config RegistrationConfig) (*DeviceInfo, error) {
 		Status:     "online",
 	}
 
-	// Register with Supabase (upsert)
+	// Register with Supabase (upsert) — populates device.APIKey on success
 	if err := upsertDevice(config, device); err != nil {
 		return nil, fmt.Errorf("failed to register device: %w", err)
 	}
@@ -171,10 +187,9 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("apikey", config.AnonKey)
-	req.Header.Set("Authorization", "Bearer "+config.AccessToken)
+	config.applyAuthHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Prefer", "resolution=merge-duplicates")
+	req.Header.Set("Prefer", "resolution=merge-duplicates,return=representation")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -199,9 +214,9 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 
 		updateData, _ := json.Marshal(updatePayload)
 		updateReq, _ := http.NewRequest("PATCH", updateURL, bytes.NewBuffer(updateData))
-		updateReq.Header.Set("apikey", config.AnonKey)
-		updateReq.Header.Set("Authorization", "Bearer "+config.AccessToken)
+		config.applyAuthHeaders(updateReq)
 		updateReq.Header.Set("Content-Type", "application/json")
+		updateReq.Header.Set("Prefer", "return=representation")
 
 		updateResp, err := httpClient.Do(updateReq)
 		if err != nil {
@@ -209,21 +224,36 @@ func upsertDevice(config RegistrationConfig, device *DeviceInfo) error {
 		}
 		defer updateResp.Body.Close()
 
+		updateBody, _ := io.ReadAll(updateResp.Body)
 		if updateResp.StatusCode == http.StatusOK || updateResp.StatusCode == http.StatusNoContent {
+			extractAPIKey(updateBody, device)
 			fmt.Println("✅ Device updated successfully (already registered)")
 			return nil
 		}
-
-		updateBody, _ := io.ReadAll(updateResp.Body)
 		return fmt.Errorf("device update failed: %s (status: %d)", string(updateBody), updateResp.StatusCode)
 	}
 
 	if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
+		extractAPIKey(body, device)
 		fmt.Println("✅ Device registered successfully")
 		return nil
 	}
 
 	return fmt.Errorf("registration failed: %s (status: %d)", string(body), resp.StatusCode)
+}
+
+// extractAPIKey pulls the api_key field out of a PostgREST representation
+// response (`Prefer: return=representation`) into the device struct.
+func extractAPIKey(body []byte, device *DeviceInfo) {
+	if len(body) == 0 {
+		return
+	}
+	var rows []struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.Unmarshal(body, &rows); err == nil && len(rows) > 0 {
+		device.APIKey = rows[0].APIKey
+	}
 }
 
 // HeartbeatResult contains information read back from the heartbeat response.
@@ -279,12 +309,9 @@ func UpdateHeartbeat(config RegistrationConfig, deviceID string, isOnline bool, 
 		return result, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("apikey", config.AnonKey)
+	config.applyAuthHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Prefer", "return=representation")
-	if config.AccessToken != "" {
-		req.Header.Set("Authorization", "Bearer "+config.AccessToken)
-	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -325,11 +352,8 @@ func ClearPendingCommand(config RegistrationConfig, deviceID string) error {
 		return err
 	}
 
-	req.Header.Set("apikey", config.AnonKey)
+	config.applyAuthHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
-	if config.AccessToken != "" {
-		req.Header.Set("Authorization", "Bearer "+config.AccessToken)
-	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -339,7 +363,7 @@ func ClearPendingCommand(config RegistrationConfig, deviceID string) error {
 	return nil
 }
 
-// SetOffline marks the device as offline in the database using authenticated token
+// SetOffline marks the device as offline in the database
 func SetOffline(config RegistrationConfig, deviceID string) error {
 	url := fmt.Sprintf("%s/rest/v1/remote_devices?device_id=eq.%s", config.SupabaseURL, deviceID)
 
@@ -358,11 +382,8 @@ func SetOffline(config RegistrationConfig, deviceID string) error {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("apikey", config.AnonKey)
+	config.applyAuthHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
-	if config.AccessToken != "" {
-		req.Header.Set("Authorization", "Bearer "+config.AccessToken)
-	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

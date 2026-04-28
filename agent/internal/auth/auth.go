@@ -19,6 +19,10 @@ type Credentials struct {
 	RefreshToken string `json:"refresh_token"`
 	UserID       string `json:"user_id"`
 	ExpiresAt    int64  `json:"expires_at"`
+	// APIKey is a stable per-device key written during initial registration.
+	// Used for agent → server calls (heartbeat, audit, pending_command) so
+	// the device stays reachable even after the user JWT expires.
+	APIKey string `json:"api_key,omitempty"`
 }
 
 // AuthConfig holds Supabase auth configuration
