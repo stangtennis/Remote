@@ -365,10 +365,12 @@ func (h *Handler) handleGetOp(path string, fid uint16, offset int64) error {
 		f.Seek(offset, 0)
 	}
 
+	// Chunk size 45000 raw bytes → ~60KB base64 → fits in WebRTC's
+	// 65536-byte max message size with room for JSON wrapper overhead.
 	remaining := fileSize - offset
-	totalChunks := uint16((remaining + 59999) / 60000) // 60KB chunks
-	
-	buf := make([]byte, 60000)
+	totalChunks := uint16((remaining + 44999) / 45000)
+
+	buf := make([]byte, 45000)
 	var chunk uint16
 
 	for {
