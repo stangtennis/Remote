@@ -942,10 +942,13 @@ function setupInputCapture() {
     if (!dc || dc.readyState !== 'open') return;
 
     if (e.ctrlKey && e.code === 'KeyV') {
-      e.preventDefault();
-      e.stopPropagation();
-      await sendClipboardToAgent();
-      return;
+      // First sync the local clipboard to the remote PC, then fall
+      // through so the Ctrl+V keystroke is also forwarded — the focused
+      // app on the remote pastes the freshly synced content. Data
+      // channel is ordered+reliable so the clipboard message arrives
+      // before the keystroke.
+      sendClipboardToAgent();
+      // do not return — let keystroke forward below
     }
 
     if (pressedKeys.has(e.code)) return;

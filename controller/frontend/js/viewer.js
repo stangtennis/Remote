@@ -516,8 +516,61 @@ class ViewerSession {
           showToast(msg.message || msg.status, type);
         } else if (msg.type === 'chat') {
           this.addChatMessage('Agent', msg.text || msg.message || '');
+        } else if (msg.type === 'clipboard_text') {
+          // Remote PC copied text — write it to the local OS clipboard so
+          // the user can paste it into any app on their controller machine.
+          if (msg.content) {
+            navigator.clipboard.writeText(msg.content).catch(err => {
+              console.warn('clipboard.writeText failed:', err);
+            });
+          }
+        } else if (msg.type === 'clipboard_image') {
+          // Remote PC copied an image — decode base64 PNG and write it to
+          // the local clipboard via the ClipboardItem API.
+          if (msg.content) {
+            try {
+              const binary = atob(msg.content);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+              const blob = new Blob([bytes], { type: 'image/png' });
+              navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).catch(err => {
+                console.warn('clipboard.write image failed:', err);
+              });
+            } catch (e) {
+              console.warn('decode clipboard image failed:', e);
+            }
+          }
         }
       } catch (e) { /* not JSON */ }
+    }
+  }
+
+  // sendClipboardToAgent reads the local OS clipboard (text first, image as
+  // fallback) and pushes it to the remote agent. Triggered on Ctrl+V over
+  // the canvas — the user's intent to paste implies "give the remote my
+  // local clipboard".
+  async sendClipboardToAgent() {
+    if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        this.dataChannel.send(JSON.stringify({ type: 'clipboard_text', content: text }));
+        return;
+      }
+    } catch (_) { /* fall through to image */ }
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        if (item.types.includes('image/png')) {
+          const blob = await item.getType('image/png');
+          const buffer = await blob.arrayBuffer();
+          const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+          this.dataChannel.send(JSON.stringify({ type: 'clipboard_image', content: base64 }));
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('readClipboard failed:', err);
     }
   }
 
@@ -1529,6 +1582,17 @@ class ViewerSession {
     if (type === 'keydown') {
       if (e.code === 'F11') { this.toggleFullscreen(); return; }
       if (e.code === 'Escape' && this.isFullscreen) { this.toggleFullscreen(); return; }
+
+      // Ctrl+V → first push the controller's local clipboard to the
+      // agent (writes to remote PC clipboard), then fall through so the
+      // Ctrl+V keystroke is also forwarded — the focused app on the
+      // remote PC pastes the just-updated clipboard. Data channel is
+      // ordered + reliable so the clipboard message arrives before the
+      // keystroke.
+      if (e.ctrlKey && e.code === 'KeyV') {
+        this.sendClipboardToAgent();
+        // do not return — let the keystroke forward below
+      }
     }
 
     const evt = {
