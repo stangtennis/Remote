@@ -221,6 +221,24 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 				m.handleClipboardImage(contentB64)
 			}
 			return
+		case "stream_pause":
+			// Controller signalled user-idle — stop sending frames until
+			// stream_resume. Connection + heartbeat stay alive.
+			if !m.pausedByController.Swap(true) {
+				log.Println("⏸️  Streaming paused by controller (idle)")
+			}
+			return
+		case "stream_resume":
+			if m.pausedByController.Swap(false) {
+				log.Println("▶️  Streaming resumed by controller")
+				// Trigger an immediate frame so the viewer sees fresh
+				// content rather than waiting for the next tick.
+				select {
+				case m.inputFrameTrigger <- struct{}{}:
+				default:
+				}
+			}
+			return
 		}
 	}
 

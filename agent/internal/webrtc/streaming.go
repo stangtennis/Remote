@@ -317,6 +317,14 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			time.Sleep(10 * time.Millisecond)
 		}
 
+		// Honour controller-driven pause: while the user is AFK (no input
+		// for several minutes), skip the entire capture+encode+send path.
+		// We still loop on the ticker so we wake up immediately when the
+		// pause is lifted.
+		if m.pausedByController.Load() {
+			continue
+		}
+
 		if m.dataChannel == nil || m.dataChannel.ReadyState() != pionwebrtc.DataChannelStateOpen {
 			dcWaitCount++
 			if !dcWaitLogged {
