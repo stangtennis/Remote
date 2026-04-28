@@ -2,6 +2,103 @@
 // Handles peer connection, media tracks, and data channels
 // All per-session state lives on ctx (session object from SessionManager)
 
+// IdleManager pauses the agent's video stream after the user stops
+// interacting with the canvas (mouse + keyboard quiet for IDLE_THRESHOLD_MS).
+// While paused the WebRTC connection stays open — only frame capture/encode
+// is skipped — so resume is instant. The user sees a centered "Resume"
+// overlay; any click or keypress on the dashboard wakes it.
+const IdleManager = {
+  IDLE_THRESHOLD_MS: 3 * 60 * 1000,   // 3 min of no activity → pause
+  CHECK_INTERVAL_MS: 30 * 1000,        // re-check every 30s
+  lastActivity: Date.now(),
+  paused: false,
+  overlay: null,
+  checkTimer: null,
+  attachedTo: null,
+
+  attach(canvas) {
+    if (!canvas || this.attachedTo === canvas) return;
+    this.attachedTo = canvas;
+
+    const container = canvas.closest('.remote-preview-container') || canvas.parentElement;
+    if (container && !this.overlay) this._buildOverlay(container);
+
+    const nudge = () => this.nudge();
+    ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart', 'touchmove'].forEach(ev => {
+      canvas.addEventListener(ev, nudge, { passive: true });
+    });
+
+    if (this.checkTimer) clearInterval(this.checkTimer);
+    this.checkTimer = setInterval(() => this._tick(), this.CHECK_INTERVAL_MS);
+    this.lastActivity = Date.now();
+  },
+
+  nudge() {
+    this.lastActivity = Date.now();
+    if (this.paused) this.resume();
+  },
+
+  _tick() {
+    if (this.paused) return;
+    if (Date.now() - this.lastActivity >= this.IDLE_THRESHOLD_MS) {
+      this.pause();
+    }
+  },
+
+  pause() {
+    if (this.paused) return;
+    this.paused = true;
+    this._send({ type: 'stream_pause' });
+    if (this.overlay) this.overlay.style.display = 'flex';
+    if (typeof debug === 'function') debug('⏸️ Stream paused (idle ' + Math.round((Date.now() - this.lastActivity) / 1000) + 's)');
+  },
+
+  resume() {
+    if (!this.paused) return;
+    this.paused = false;
+    this._send({ type: 'stream_resume' });
+    if (this.overlay) this.overlay.style.display = 'none';
+    this.lastActivity = Date.now();
+    if (typeof debug === 'function') debug('▶️ Stream resumed');
+  },
+
+  _send(msg) {
+    const dc = (typeof getActiveDataChannel === 'function') ? getActiveDataChannel() : null;
+    if (dc && dc.readyState === 'open') {
+      try { dc.send(JSON.stringify(msg)); } catch (_) {}
+    }
+  },
+
+  _buildOverlay(container) {
+    if (getComputedStyle(container).position === 'static') {
+      container.style.position = 'relative';
+    }
+    const overlay = document.createElement('div');
+    overlay.id = 'idleOverlay';
+    overlay.style.cssText = [
+      'position:absolute', 'inset:0',
+      'display:none', 'align-items:center', 'justify-content:center',
+      'background:rgba(15,23,42,0.85)', 'backdrop-filter:blur(8px)',
+      'z-index:30', 'cursor:pointer',
+      'flex-direction:column', 'gap:1.25rem',
+      'color:white', 'font-family:inherit'
+    ].join(';');
+
+    overlay.innerHTML = [
+      '<div style="font-size:3rem;opacity:0.7">💤</div>',
+      '<div style="font-size:1.1rem;opacity:0.85">Streaming pauset (inaktiv)</div>',
+      '<button type="button" id="idleResumeBtn" style="padding:0.85rem 2rem;border:1px solid rgba(255,255,255,0.4);border-radius:9999px;background:rgba(59,130,246,0.9);color:#fff;font-size:1rem;font-weight:600;cursor:pointer">▶ Resume</button>',
+      '<div style="font-size:0.8rem;opacity:0.5">Klik hvor som helst for at fortsætte</div>'
+    ].join('');
+
+    overlay.addEventListener('click', () => this.resume());
+    container.appendChild(overlay);
+    this.overlay = overlay;
+  },
+};
+window.IdleManager = IdleManager;
+
+
 // ICE Configuration - fetched dynamically for security
 let iceConfig = {
   iceServers: [
@@ -723,6 +820,11 @@ function setupInputCapture() {
     return;
   }
   inputListenersAttached = true;
+
+  // Idle manager: nudge it on every input below so we know when the user
+  // walked away. setupInputCapture runs once per connection so this also
+  // wires the overlay onto the preview container.
+  IdleManager.attach(target);
 
   target.focus();
   debug('🎯 Canvas focused for keyboard input');

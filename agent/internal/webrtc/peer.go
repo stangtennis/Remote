@@ -89,6 +89,13 @@ type Manager struct {
 	videoEncoder *encoder.Manager
 	useH264      atomic.Bool // Whether to use H.264 video track
 
+	// pausedByController is set when the controller signals user idleness
+	// (no input activity). When true, the streaming loop skips frame
+	// capture+encode+send so no bandwidth/CPU is wasted while the user is
+	// AFK. Connection stays open; the controller resumes by sending
+	// stream_resume.
+	pausedByController atomic.Bool
+
 	// Audio streaming
 	audioTrack    *audio.Track
 	audioCapturer *audio.Capturer
