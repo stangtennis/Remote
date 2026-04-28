@@ -118,6 +118,21 @@ async function initWebRTC(sessionData, ctx) {
       throw new Error('Invalid session object - missing session_id');
     }
 
+    // Log SESSION_CREATED event so history can pair it with SESSION_ENDED
+    try {
+      if (window.supabase) {
+        window.supabase.rpc('log_audit_event', {
+          p_session_id: sessionData.session_id,
+          p_device_id: ctx.id,
+          p_event: 'SESSION_CREATED',
+          p_details: { device_name: ctx.deviceName || '' },
+          p_severity: 'info'
+        }).then(({ error }) => {
+          if (error) console.warn('SESSION_CREATED audit failed:', error.message);
+        });
+      }
+    } catch (e) { /* audit is best-effort */ }
+
     // Check if we should force relay mode (for testing TURN)
     const forceRelay = new URLSearchParams(window.location.search).get('relay') === 'true';
 
@@ -168,13 +183,6 @@ async function initWebRTC(sessionData, ctx) {
     });
     setupFileChannelHandlers(ctx);
     debug('✅ File data channel created');
-
-    // Create process manager data channel (reliable, ordered)
-    ctx.processChannel = ctx.peerConnection.createDataChannel('process', {
-      ordered: true
-    });
-    setupProcessChannelHandlers(ctx);
-    debug('✅ Process data channel created');
 
     // Create offer
     debug('📝 Creating offer...');
@@ -942,11 +950,11 @@ function setupInputCapture() {
     if (!dc || dc.readyState !== 'open') return;
 
     if (e.ctrlKey && e.code === 'KeyV') {
-      // First sync the local clipboard to the remote PC, then fall
-      // through so the Ctrl+V keystroke is also forwarded — the focused
-      // app on the remote pastes the freshly synced content. Data
-      // channel is ordered+reliable so the clipboard message arrives
-      // before the keystroke.
+      // First sync the local clipboard to the remote PC (writes to its
+      // clipboard); then fall through so the Ctrl+V keystroke is also
+      // forwarded — the focused app on the remote pastes the freshly
+      // synced content. Data channel is ordered+reliable so the
+      // clipboard message arrives before the keystroke.
       sendClipboardToAgent();
       // do not return — let keystroke forward below
     }
@@ -1370,6 +1378,74 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ==================== CLIPBOARD SYNC ====================
 
+// Pending clipboard write — Chrome/Edge require document focus for
+// navigator.clipboard.writeText to succeed. When the agent sends a
+// clipboard update we try immediately; if blocked, we queue it and
+// flush on the next focus / visibilitychange / pointer / key event so
+// the user's next interaction with the dashboard makes the clipboard
+// land. This also handles the "copy on remote, immediately Alt-Tab to
+// local app to paste" timing where the write would otherwise race.
+let _pendingClipboard = null; // { kind: 'text'|'image', content: string }
+
+async function _tryWriteClipboard(kind, content) {
+  try {
+    if (kind === 'text') {
+      await navigator.clipboard.writeText(content);
+      return true;
+    }
+    if (kind === 'image') {
+      const binary = atob(content);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: 'image/png' });
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      return true;
+    }
+  } catch (err) {
+    return false;
+  }
+  return false;
+}
+
+async function _writeClipboardOrQueue(kind, content) {
+  const ok = await _tryWriteClipboard(kind, content);
+  if (ok) {
+    debug('📋 Clipboard from agent written (' + kind + ', ' + content.length + ' bytes)');
+    _pendingClipboard = null;
+    return;
+  }
+  // Could not write right now — usually because document.hasFocus() is
+  // false. Queue the content; the listeners below flush on next focus /
+  // user gesture and the show-toast indicator tells the user it's there.
+  _pendingClipboard = { kind, content };
+  debug('📋 Clipboard queued (waiting for focus); ' + kind + ' ' + content.length + ' bytes');
+  showToast('Clipboard fra remote venter — klik på dashboard én gang så vi kan skrive den', 'info');
+}
+
+async function _flushPendingClipboard() {
+  if (!_pendingClipboard) return;
+  const { kind, content } = _pendingClipboard;
+  if (await _tryWriteClipboard(kind, content)) {
+    debug('📋 Pending clipboard flushed on focus/gesture (' + kind + ')');
+    _pendingClipboard = null;
+  }
+}
+
+// Hook up flush triggers once the script loads.
+(function _setupClipboardFlush() {
+  const flush = () => { _flushPendingClipboard(); };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') flush();
+  });
+  window.addEventListener('focus', flush);
+  // Any user interaction within the dashboard counts as a gesture and
+  // unlocks clipboard writes. Use { passive: true, capture: true } so we
+  // observe before any handler that might preventDefault.
+  ['pointerdown', 'keydown', 'click'].forEach(ev => {
+    window.addEventListener(ev, flush, { passive: true, capture: true });
+  });
+})();
+
 function handleAgentMessage(msg) {
   if (!msg.type) return;
 
@@ -1395,33 +1471,13 @@ function handleAgentMessage(msg) {
 
     case 'clipboard_text':
       if (msg.content) {
-        navigator.clipboard.writeText(msg.content).then(() => {
-          debug('📋 Clipboard received from agent (text:', msg.content.length, 'bytes)');
-        }).catch(err => {
-          console.warn('Failed to write clipboard:', err);
-        });
+        _writeClipboardOrQueue('text', msg.content);
       }
       break;
 
     case 'clipboard_image':
       if (msg.content) {
-        try {
-          const binary = atob(msg.content);
-          const bytes = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) {
-            bytes[i] = binary.charCodeAt(i);
-          }
-          const blob = new Blob([bytes], { type: 'image/png' });
-          navigator.clipboard.write([
-            new ClipboardItem({ 'image/png': blob })
-          ]).then(() => {
-            debug('📋 Clipboard received from agent (image:', bytes.length, 'bytes)');
-          }).catch(err => {
-            console.warn('Failed to write image clipboard:', err);
-          });
-        } catch (e) {
-          console.warn('Failed to decode clipboard image:', e);
-        }
+        _writeClipboardOrQueue('image', msg.content);
       }
       break;
   }
@@ -1533,50 +1589,6 @@ function handleMonitorSwitched(msg) {
 
 // ==================== FILE CHANNEL ====================
 
-// Process manager channel handlers
-function setupProcessChannelHandlers(ctx) {
-  const dc = ctx.processChannel;
-  if (!dc) return;
-
-  dc.onopen = () => {
-    debug('⚙️ Process channel opened for', ctx.id);
-  };
-
-  dc.onmessage = (event) => {
-    try {
-      const msg = JSON.parse(event.data);
-      if (msg.op === 'ps_result') {
-        window.dispatchEvent(new CustomEvent('process-list', { detail: msg.processes }));
-      } else if (msg.op === 'kill_result') {
-        window.dispatchEvent(new CustomEvent('process-killed', { detail: msg }));
-      } else if (msg.op === 'error') {
-        console.error('Process error:', msg.error);
-      }
-    } catch (e) {
-      console.error('Process message parse error:', e);
-    }
-  };
-
-  dc.onclose = () => debug('⚙️ Process channel closed for', ctx.id);
-  dc.onerror = (err) => console.error('Process channel error:', err);
-}
-
-// Request process list from agent
-function requestProcessList() {
-  const ctx = window.SessionManager?.getActiveSession();
-  if (ctx?.processChannel?.readyState === 'open') {
-    ctx.processChannel.send(JSON.stringify({ op: 'ps' }));
-  }
-}
-
-// Kill a process on the remote machine
-function killProcess(pid) {
-  const ctx = window.SessionManager?.getActiveSession();
-  if (ctx?.processChannel?.readyState === 'open') {
-    ctx.processChannel.send(JSON.stringify({ op: 'kill', pid }));
-  }
-}
-
 function setupFileChannelHandlers(ctx) {
   const dc = ctx.fileChannel;
   if (!dc) return;
@@ -1651,82 +1663,6 @@ function addChatMessage(sender, text) {
 window.toggleChat = toggleChat;
 window.sendChat = sendChat;
 window.addChatMessage = addChatMessage;
-
-// === Process Manager ===
-let _processList = [];
-let _processSortKey = 'memory_mb';
-let _processSortAsc = false;
-
-function toggleProcessManager() {
-  const modal = document.getElementById('processModal');
-  if (!modal) return;
-  const isVisible = modal.style.display === 'flex';
-  modal.style.display = isVisible ? 'none' : 'flex';
-  if (!isVisible) requestProcessList();
-}
-
-window.addEventListener('process-list', (e) => {
-  _processList = e.detail || [];
-  renderProcessTable();
-  document.getElementById('processStatus').textContent = `${_processList.length} processer`;
-});
-
-window.addEventListener('process-killed', (e) => {
-  const d = e.detail;
-  if (d.ok) {
-    _processList = _processList.filter(p => p.pid !== d.pid);
-    renderProcessTable();
-  } else {
-    alert('Kunne ikke dræbe process: ' + (d.error || 'ukendt fejl'));
-  }
-});
-
-function sortProcesses(key) {
-  if (_processSortKey === key) {
-    _processSortAsc = !_processSortAsc;
-  } else {
-    _processSortKey = key;
-    _processSortAsc = key === 'name' || key === 'user';
-  }
-  renderProcessTable();
-}
-
-function filterProcesses() {
-  renderProcessTable();
-}
-
-function renderProcessTable() {
-  const body = document.getElementById('processTableBody');
-  if (!body) return;
-  const search = (document.getElementById('processSearch')?.value || '').toLowerCase();
-  let filtered = _processList;
-  if (search) {
-    filtered = filtered.filter(p => p.name.toLowerCase().includes(search) || String(p.pid).includes(search) || (p.user || '').toLowerCase().includes(search));
-  }
-  filtered.sort((a, b) => {
-    let va = a[_processSortKey], vb = b[_processSortKey];
-    if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
-    if (va < vb) return _processSortAsc ? -1 : 1;
-    if (va > vb) return _processSortAsc ? 1 : -1;
-    return 0;
-  });
-  body.innerHTML = filtered.map(p => `<tr style="border-bottom:1px solid var(--border,rgba(255,255,255,0.06));">
-    <td style="padding:4px 8px; font-family:monospace;">${p.pid}</td>
-    <td style="padding:4px 8px;">${esc(p.name)}</td>
-    <td style="padding:4px 8px; text-align:right;">${p.memory_mb.toFixed(1)} MB</td>
-    <td style="padding:4px 8px; text-align:right;">${p.cpu > 0 ? p.cpu.toFixed(1) + '%' : '-'}</td>
-    <td style="padding:4px 8px; font-size:0.8rem; opacity:0.7;">${esc(p.user || '')}</td>
-    <td style="padding:4px 8px; text-align:center;"><button onclick="killProcess(${p.pid})" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:0.9rem;" title="Dræb process"><i class="fas fa-times-circle"></i></button></td>
-  </tr>`).join('');
-}
-
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
-window.toggleProcessManager = toggleProcessManager;
-window.requestProcessList = requestProcessList;
-window.killProcess = killProcess;
-window.sortProcesses = sortProcesses;
-window.filterProcesses = filterProcesses;
 
 // Export
 window.initWebRTC = initWebRTC;
