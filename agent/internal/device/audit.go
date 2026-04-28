@@ -51,7 +51,11 @@ func (d *Device) writeAuditSync(ev AuditEvent) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("apikey", d.cfg.SupabaseAnonKey)
 
-	if d.tokenProvider != nil {
+	// Prefer the stable per-device api_key — works even after the user's JWT
+	// has expired. Fall back to a Bearer JWT if api_key isn't set yet.
+	if d.APIKey != "" {
+		req.Header.Set("x-device-key", d.APIKey)
+	} else if d.tokenProvider != nil {
 		if tok, err := d.tokenProvider.GetToken(); err == nil && tok != "" {
 			req.Header.Set("Authorization", "Bearer "+tok)
 		}

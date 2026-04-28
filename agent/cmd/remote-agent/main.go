@@ -1368,21 +1368,32 @@ func startAgent() error {
 		AnonKey:     cfg.SupabaseAnonKey,
 	}
 
-	// Check and refresh credentials if needed (important for service mode)
+	// Check and refresh credentials if needed (important for service mode).
+	// New in v3.0.4: even if the user's JWT can't be refreshed, we proceed
+	// as long as a per-device api_key is present — the agent stays reachable
+	// for heartbeats and pending_command commands and only loses the ability
+	// to *initiate* operations that need the user's identity.
+	creds, _ := auth.LoadCredentials()
+	hasAPIKey := creds != nil && creds.APIKey != ""
+
 	if !auth.IsLoggedIn() {
-		log.Println("⚠️  No valid credentials found")
-		// Try to refresh token
-		creds, err := auth.LoadCredentials()
-		if err == nil && creds.RefreshToken != "" {
+		log.Println("⚠️  Access token expired or missing")
+		if creds != nil && creds.RefreshToken != "" {
 			log.Println("🔄 Attempting to refresh token...")
 			result, err := auth.RefreshToken(authConfig, creds.RefreshToken)
 			if err == nil && result.Success {
 				log.Printf("✅ Token refreshed for: %s", result.Email)
 				currentUser, _ = auth.GetCurrentUser()
+			} else if hasAPIKey {
+				log.Printf("⚠️  Token refresh failed but api_key is present — continuing in degraded mode (heartbeat + audit work, new sessions may need fresh login)")
+				currentUser = creds
 			} else {
-				log.Println("❌ Token refresh failed - please run agent interactively to login")
+				log.Println("❌ Token refresh failed and no api_key — run agent interactively to login")
 				return fmt.Errorf("authentication required - run agent interactively first")
 			}
+		} else if hasAPIKey {
+			log.Println("⚠️  No JWT but api_key is present — continuing in degraded mode")
+			currentUser = creds
 		} else {
 			return fmt.Errorf("no credentials found - run agent interactively to login first")
 		}
@@ -1391,10 +1402,12 @@ func startAgent() error {
 		log.Printf("✅ Using saved credentials for: %s", currentUser.Email)
 	}
 
-	// Create TokenProvider for authenticated API calls
-	creds, err := auth.LoadCredentials()
-	if err != nil {
-		return fmt.Errorf("failed to load credentials for token provider: %w", err)
+	// Create TokenProvider for authenticated API calls (creds was loaded above)
+	if creds == nil {
+		creds, err = auth.LoadCredentials()
+		if err != nil {
+			return fmt.Errorf("failed to load credentials for token provider: %w", err)
+		}
 	}
 	tokenProvider := auth.NewTokenProvider(authConfig, creds)
 	tokenProvider.StartBackgroundRefresh()
@@ -1406,13 +1419,24 @@ func startAgent() error {
 		return fmt.Errorf("failed to initialize device: %w", err)
 	}
 
-	// Register device with Supabase
-	log.Println("📱 Registering device...")
-	if err := dev.Register(); err != nil {
-		return fmt.Errorf("failed to register device: %w", err)
+	// Register device with Supabase. If we already have a per-device api_key
+	// and the user JWT is unavailable, skip — the device is already known to
+	// the server and heartbeat will keep it reachable. This is what makes
+	// "PC offline for weeks" recovery work.
+	if dev.APIKey != "" && (currentUser == nil || currentUser.AccessToken == "") {
+		log.Println("📱 Skipping registration — using existing api_key (no fresh JWT)")
+	} else {
+		log.Println("📱 Registering device...")
+		if err := dev.Register(); err != nil {
+			if dev.APIKey != "" {
+				log.Printf("⚠️  Registration refresh failed (%v) — continuing with cached api_key", err)
+			} else {
+				return fmt.Errorf("failed to register device: %w", err)
+			}
+		}
 	}
 
-	log.Printf("✅ Device registered: %s", dev.ID)
+	log.Printf("✅ Device ready: %s", dev.ID)
 	log.Printf("   Name: %s", dev.Name)
 	log.Printf("   Platform: %s", dev.Platform)
 	log.Printf("   Arch: %s", dev.Arch)

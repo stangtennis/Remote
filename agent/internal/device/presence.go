@@ -18,41 +18,41 @@ func (d *Device) StartPresence() {
 		interval = 30 * time.Second // Default 30 seconds
 	}
 
-	// Send initial heartbeat with authenticated token
-	token, err := d.tokenProvider.GetToken()
-	if err != nil {
-		fmt.Printf("⚠️  Failed to get auth token for heartbeat: %v\n", err)
+	// Build heartbeat config — prefer per-device api_key (never expires);
+	// JWT is best-effort and only used as a secondary auth path.
+	makeConfig := func() RegistrationConfig {
+		token := ""
+		if d.tokenProvider != nil {
+			if t, err := d.tokenProvider.GetToken(); err == nil {
+				token = t
+			}
+		}
+		return RegistrationConfig{
+			SupabaseURL: d.cfg.SupabaseURL,
+			AnonKey:     d.cfg.SupabaseAnonKey,
+			AccessToken: token,
+			APIKey:      d.APIKey,
+		}
 	}
 
-	config := RegistrationConfig{
-		SupabaseURL: d.cfg.SupabaseURL,
-		AnonKey:     d.cfg.SupabaseAnonKey,
-		AccessToken: token,
+	if d.APIKey == "" {
+		fmt.Println("⚠️  Heartbeat: api_key missing — falling back to JWT-only auth (expect failures after token expiry)")
 	}
 
+	// Send initial heartbeat
+	config := makeConfig()
 	if result, err := UpdateHeartbeat(config, d.ID, true); err != nil {
 		fmt.Printf("⚠️  Initial heartbeat failed: %v\n", err)
 	} else {
 		d.handlePendingCommand(config, result)
 	}
 
-	// Start periodic heartbeats with token refresh
+	// Start periodic heartbeats
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		// Get fresh token for each heartbeat
-		token, err := d.tokenProvider.GetToken()
-		if err != nil {
-			fmt.Printf("⚠️  Heartbeat auth failed: %v\n", err)
-			continue
-		}
-
-		config := RegistrationConfig{
-			SupabaseURL: d.cfg.SupabaseURL,
-			AnonKey:     d.cfg.SupabaseAnonKey,
-			AccessToken: token,
-		}
+		config := makeConfig()
 
 		// Determine health status — if polling is unhealthy, report offline
 		isHealthy := true
