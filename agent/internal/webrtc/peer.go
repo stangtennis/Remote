@@ -740,10 +740,25 @@ func (m *Manager) setupControlChannelHandlers(dc *pionwebrtc.DataChannel) {
 		if m.keyController != nil {
 			m.keyController.ClearModifiers()
 		}
+		// Start clipboard monitoring here too — the dashboard only opens
+		// a "control" channel and reuses it for frame streaming. Without
+		// this the agent would never push clipboard updates to the
+		// dashboard. setupDataChannelHandlers also calls this, but only
+		// if a separate "data" channel is opened (controller path).
+		if m.clipboardMonitor == nil {
+			log.Println("📋 Starting clipboard monitoring (via control channel)...")
+			m.startClipboardMonitoring()
+		}
 	})
 
 	dc.OnClose(func() {
 		log.Println("🎮 Control channel closed")
+		// Stop clipboard monitoring (only if started here — the data
+		// channel handler stops it too, this is a no-op if already stopped).
+		if m.clipboardMonitor != nil {
+			m.clipboardMonitor.Stop()
+			m.clipboardMonitor = nil
+		}
 	})
 
 	dc.OnMessage(func(msg pionwebrtc.DataChannelMessage) {
