@@ -64,15 +64,46 @@ func (m *Manager) handleClipboardImage(contentB64 string) {
 
 // startClipboardMonitoring initializes and starts clipboard monitoring.
 //
-// KNOWN LIMITATION on Windows: when the agent runs as a service in
-// Session 0, the per-session Windows clipboard means clipboard.Watch in
-// Session 0 doesn't see the user's copies in Session 1+. A user-session
-// bridge helper is sketched in clipboard/helper_windows.go but not yet
-// reliable (clipboard.Read inside the helper hangs in some cases). For
-// now: copy/paste from the dashboard works only when the agent runs in
-// the user session (console mode, autostart-from-Program-Files mode).
-// Service mode users should use the controller app instead.
+// On Windows when running as a service in Session 0, the OS clipboard is
+// per-session — a clipboard.Watch in Session 0 never sees the user's
+// copies in Session 1+. We bridge it with a small helper process spawned
+// in the active console user's session via CreateProcessAsUser; the
+// helper polls GetClipboardSequenceNumber + raw OpenClipboard and
+// forwards events back over a named pipe.
 func (m *Manager) startClipboardMonitoring() {
+	send := func(msg map[string]interface{}) {
+		if m.dataChannel == nil || m.dataChannel.ReadyState() != pionwebrtc.DataChannelStateOpen {
+			return
+		}
+		data, err := json.Marshal(msg)
+		if err != nil {
+			log.Printf("❌ Failed to marshal clipboard msg: %v", err)
+			return
+		}
+		if err := m.dataChannel.Send(data); err != nil {
+			log.Printf("❌ Failed to send clipboard msg: %v", err)
+		}
+	}
+
+	if m.startedInSession0 {
+		log.Println("📋 Spawning clipboard helper in user session (Session 0 service can't see user's clipboard directly)")
+		helper := clipboard.NewSessionHelper()
+		helper.SetOnTextChange(func(text string) {
+			send(map[string]interface{}{"type": "clipboard_text", "content": text})
+		})
+		helper.SetOnImageChange(func(imageData []byte) {
+			send(map[string]interface{}{"type": "clipboard_image", "content": base64.StdEncoding.EncodeToString(imageData)})
+		})
+		if err := helper.Start(); err != nil {
+			log.Printf("⚠️  Clipboard session helper failed to start: %v — falling back to in-process monitor", err)
+		} else {
+			m.clipboardSessionHelper = helper
+			return
+		}
+	}
+
+	// In-process monitor (used when agent runs in user session: console
+	// mode, --as-user, macOS).
 	m.clipboardMonitor = clipboard.NewMonitor()
 
 	// Set up text clipboard callback
