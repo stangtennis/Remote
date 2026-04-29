@@ -1,0 +1,304 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "Dockge" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e7]: Dockge
+    - list [ref=e8]:
+      - listitem [ref=e9]:
+        - link "Home" [ref=e10] [cursor=pointer]:
+          - /url: /
+          - img [ref=e11]
+          - text: Home
+      - listitem [ref=e13]:
+        - link "Console" [ref=e14] [cursor=pointer]:
+          - /url: /console
+          - img [ref=e15]
+          - text: Console
+      - listitem [ref=e17]:
+        - generic [ref=e19] [cursor=pointer]:
+          - generic [ref=e20]: A
+          - img [ref=e21]
+  - main [ref=e23]:
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - link "Compose" [ref=e28] [cursor=pointer]:
+          - /url: /compose
+          - img [ref=e29]
+          - text: Compose
+        - generic [ref=e31]:
+          - generic [ref=e34]:
+            - img [ref=e36]
+            - textbox [ref=e39]
+          - generic [ref=e40]:
+            - link "active archon" [ref=e70] [cursor=pointer]:
+              - /url: /compose/archon
+              - generic [ref=e71]: active
+              - generic [ref=e72]: archon
+            - link "active beszel" [ref=e73] [cursor=pointer]:
+              - /url: /compose/beszel
+              - generic [ref=e74]: active
+              - generic [ref=e75]: beszel
+            - link "active caddy" [ref=e76] [cursor=pointer]:
+              - /url: /compose/caddy
+              - generic [ref=e77]: active
+              - generic [ref=e78]: caddy
+            - link "active coturn" [ref=e79] [cursor=pointer]:
+              - /url: /compose/coturn
+              - generic [ref=e80]: active
+              - generic [ref=e81]: coturn
+            - link "active filebrowser" [ref=e82] [cursor=pointer]:
+              - /url: /compose/filebrowser
+              - generic [ref=e83]: active
+              - generic [ref=e84]: filebrowser
+            - link "active glance" [ref=e85] [cursor=pointer]:
+              - /url: /compose/glance
+              - generic [ref=e86]: active
+              - generic [ref=e87]: glance
+            - link "active supabase" [ref=e88] [cursor=pointer]:
+              - /url: /compose/supabase
+              - generic [ref=e89]: active
+              - generic [ref=e90]: supabase
+      - generic [ref=e91]:
+        - heading "active archon" [level=1] [ref=e92]:
+          - generic [ref=e93]: active
+          - text: archon
+        - generic [ref=e94]:
+          - group [ref=e95]:
+            - button "Edit" [ref=e96] [cursor=pointer]:
+              - img [ref=e97]
+              - text: Edit
+            - button "Restart" [ref=e99] [cursor=pointer]:
+              - img [ref=e100]
+              - text: Restart
+            - button "Update" [ref=e102] [cursor=pointer]:
+              - img [ref=e103]
+              - text: Update
+            - button "Stop" [ref=e105] [cursor=pointer]:
+              - img [ref=e106]
+              - text: Stop
+            - button [ref=e109] [cursor=pointer]
+          - button "Delete" [ref=e110] [cursor=pointer]:
+            - img [ref=e111]
+            - text: Delete
+        - generic [ref=e113]:
+          - generic [ref=e114]:
+            - heading "Containers" [level=4] [ref=e115]
+            - generic [ref=e116]:
+              - generic [ref=e118]:
+                - generic [ref=e119]:
+                  - heading "archon-server" [level=4] [ref=e120]
+                  - generic [ref=e121]: ":"
+                  - generic [ref=e122]:
+                    - generic [ref=e123]: healthy
+                    - link "8181" [ref=e124] [cursor=pointer]:
+                      - /url: http://localhost:8181
+                      - generic [ref=e125]: "8181"
+                - link "Bash" [ref=e128] [cursor=pointer]:
+                  - /url: /terminal/archon/archon-server/bash
+                  - img [ref=e129]
+                  - text: Bash
+              - generic [ref=e132]:
+                - generic [ref=e133]:
+                  - heading "archon-mcp" [level=4] [ref=e134]
+                  - generic [ref=e135]: ":"
+                  - generic [ref=e136]:
+                    - generic [ref=e137]: healthy
+                    - link "8051" [ref=e138] [cursor=pointer]:
+                      - /url: http://localhost:8051
+                      - generic [ref=e139]: "8051"
+                - link "Bash" [ref=e142] [cursor=pointer]:
+                  - /url: /terminal/archon/archon-mcp/bash
+                  - img [ref=e143]
+                  - text: Bash
+              - generic [ref=e146]:
+                - generic [ref=e147]:
+                  - heading "archon-frontend" [level=4] [ref=e148]
+                  - generic [ref=e149]: ":"
+                  - generic [ref=e150]:
+                    - generic [ref=e151]: healthy
+                    - link "3737" [ref=e152] [cursor=pointer]:
+                      - /url: http://localhost:3737
+                      - generic [ref=e153]: "3737"
+                - link "Bash" [ref=e156] [cursor=pointer]:
+                  - /url: /terminal/archon/archon-frontend/bash
+                  - img [ref=e157]
+                  - text: Bash
+            - generic [ref=e159]:
+              - heading "Terminal" [level=4] [ref=e160]
+              - generic [ref=e165]:
+                - textbox "Terminal input" [active] [ref=e166]
+                - generic:
+                  - generic:
+                    - generic: "O | URL: http://0.0.0.0:8051/mcp"
+                  - generic:
+                    - generic: archon-mcp |
+                    - generic: 2026-04-08 06:30:45 | mcp | INFO |
+                    - generic: 🔥
+                  - generic:
+                    - generic: Logfire initialized for MCP server
+                  - generic:
+                    - generic: archon-mcp |
+                    - generic: 2026-04-08 06:30:45 | mcp | INFO |
+                    - generic: 🌟
+                  - generic:
+                    - generic: Starting MCP server - host=0.0.0.0, port=8051
+                  - generic:
+                    - generic: archon-mcp |
+                    - generic: "INFO: Started server process [1]"
+                  - generic:
+                    - generic: archon-mcp |
+                    - generic: "INFO: Waiting for application st"
+                  - generic:
+                    - generic: artup.
+                  - generic:
+                    - generic: archon-mcp |
+                    - generic: 2026-04-08 06:30:46 | mcp.server.str
+                  - generic:
+                    - generic: eamable_http_manager | INFO | StreamableHTTP session
+                  - generic:
+                    - generic: manager started
+                  - generic:
+                    - generic: archon-mcp |
+                    - generic: "INFO: Application startup comple"
+                  - generic:
+                    - generic: te.
+                  - generic:
+                    - generic: archon-mcp |
+                    - generic: "INFO: Uvicorn running on http://"
+                  - generic:
+                    - generic: 0.0.0.0:8051 (Press CTRL+C to quit)
+          - generic [ref=e167]:
+            - heading "compose.yaml" [level=4] [ref=e168]
+            - generic [ref=e170]:
+              - generic [ref=e171]:
+                - generic [ref=e172]: "1"
+                - generic [ref=e173]: "2"
+                - generic [ref=e174]: "3"
+                - generic [ref=e175]: "4"
+                - generic [ref=e176]: "5"
+                - generic [ref=e177]: "6"
+                - generic [ref=e178]: "7"
+                - generic [ref=e179]: "8"
+                - generic [ref=e180]: "9"
+                - generic [ref=e181]: "10"
+                - generic [ref=e182]: "11"
+                - generic [ref=e183]: "12"
+                - generic [ref=e184]: "13"
+                - generic [ref=e185]: "14"
+                - generic [ref=e186]: "15"
+                - generic [ref=e187]: "16"
+                - generic [ref=e188]: "17"
+                - generic [ref=e189]: "18"
+                - generic [ref=e190]: "19"
+                - generic [ref=e191]: "20"
+                - generic [ref=e192]: "21"
+                - generic [ref=e193]: "22"
+                - generic [ref=e194]: "23"
+                - generic [ref=e195]: "24"
+                - generic [ref=e196]: "25"
+                - generic [ref=e197]: "26"
+                - generic [ref=e198]: "27"
+                - generic [ref=e199]: "28"
+                - generic [ref=e200]: "29"
+                - generic [ref=e201]: "30"
+                - generic [ref=e202]: "31"
+                - generic [ref=e203]: "32"
+                - generic [ref=e204]: "33"
+                - generic [ref=e205]: "34"
+                - generic [ref=e206]: "35"
+                - generic [ref=e207]: "36"
+                - generic [ref=e208]: "37"
+                - generic [ref=e209]: "38"
+                - generic [ref=e210]: "39"
+                - generic [ref=e211]: "40"
+                - generic [ref=e212]: "41"
+                - generic [ref=e213]: "42"
+                - generic [ref=e214]: "43"
+                - generic [ref=e215]: "44"
+                - generic [ref=e216]: "45"
+                - generic [ref=e217]: "46"
+                - generic [ref=e218]: "47"
+                - generic [ref=e219]: "48"
+                - generic [ref=e220]: "49"
+                - generic [ref=e221]: "50"
+                - generic [ref=e222]: "51"
+                - generic [ref=e223]: "52"
+                - generic [ref=e224]: "53"
+                - generic [ref=e225]: "54"
+                - generic [ref=e226]: "55"
+                - generic [ref=e227]: "56"
+                - generic [ref=e228]: "57"
+                - generic [ref=e229]: "58"
+                - generic [ref=e230]: "59"
+                - generic [ref=e231]: "60"
+                - generic [ref=e232]: "61"
+                - generic [ref=e233]: "62"
+                - generic [ref=e234]: "63"
+                - generic [ref=e235]: "64"
+                - generic [ref=e236]: "65"
+                - generic [ref=e237]: "66"
+                - generic [ref=e238]: "67"
+                - generic [ref=e239]: "68"
+                - generic [ref=e240]: "69"
+                - generic [ref=e241]: "70"
+                - generic [ref=e242]: "71"
+                - generic [ref=e243]: "72"
+                - generic [ref=e244]: "73"
+                - generic [ref=e245]: "74"
+                - generic [ref=e246]: "75"
+                - generic [ref=e247]: "76"
+                - generic [ref=e248]: "77"
+                - generic [ref=e249]: "78"
+                - generic [ref=e250]: "79"
+                - generic [ref=e251]: "80"
+                - generic [ref=e252]: "81"
+                - generic [ref=e253]: "82"
+                - generic [ref=e254]: "83"
+                - generic [ref=e255]: "84"
+                - generic [ref=e256]: "85"
+                - generic [ref=e257]: "86"
+                - generic [ref=e258]: "87"
+                - generic [ref=e259]: "88"
+                - generic [ref=e260]: "89"
+                - generic [ref=e261]: "90"
+                - generic [ref=e262]: "91"
+                - generic [ref=e263]: "92"
+                - generic [ref=e264]: "93"
+                - generic [ref=e265]: "94"
+                - generic [ref=e266]: "95"
+                - generic [ref=e267]: "96"
+                - generic [ref=e268]: "97"
+                - generic [ref=e269]: "98"
+                - generic [ref=e270]: "99"
+                - generic [ref=e271]: "100"
+                - generic [ref=e272]: "101"
+                - generic [ref=e273]: "102"
+                - generic [ref=e274]: "103"
+                - generic [ref=e275]: "104"
+                - generic [ref=e276]: "105"
+                - generic [ref=e277]: "106"
+                - generic [ref=e278]: "107"
+                - generic [ref=e279]: "108"
+                - generic [ref=e280]: "109"
+                - generic [ref=e281]: "110"
+                - generic [ref=e282]: "111"
+                - generic [ref=e283]: "112"
+                - generic [ref=e284]: "113"
+                - generic [ref=e285]: "114"
+                - generic [ref=e286]: "115"
+                - generic [ref=e287]: "116"
+                - generic [ref=e288]: "117"
+                - generic [ref=e289]: "118"
+                - generic [ref=e290]: "119"
+                - generic [ref=e291]: "120"
+                - generic [ref=e292]: "121"
+                - generic [ref=e293]: "122"
+                - generic [ref=e294]: "123"
+                - generic [ref=e295]: "124"
+                - generic [ref=e296]: "125"
+                - generic [ref=e297]: "126"
+                - generic [ref=e298]: "127"
+                - generic [ref=e299]: "128"
+              - generic [ref=e300]:
+                - textbox [ref=e301]: "services: archon-server: build: context: /home/dennis/projects/archon/python dockerfile: Dockerfile.server args: BUILDKIT_INLINE_CACHE: 1 ARCHON_SERVER_PORT: ${ARCHON_SERVER_PORT:-8181} container_name: archon-server ports: - ${ARCHON_SERVER_PORT:-8181}:${ARCHON_SERVER_PORT:-8181} environment: - SUPABASE_URL=${SUPABASE_URL} - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY} - OPENAI_API_KEY=${OPENAI_API_KEY:-} - LOGFIRE_TOKEN=${LOGFIRE_TOKEN:-} - SERVICE_DISCOVERY_MODE=docker_compose - LOG_LEVEL=${LOG_LEVEL:-INFO} - ARCHON_SERVER_PORT=${ARCHON_SERVER_PORT:-8181} - ARCHON_MCP_PORT=${ARCHON_MCP_PORT:-8051} - ARCHON_AGENTS_PORT=${ARCHON_AGENTS_PORT:-8052} - AGENTS_ENABLED=${AGENTS_ENABLED:-false} - ARCHON_HOST=${HOST:-localhost} networks: - app-network volumes: - /var/run/docker.sock:/var/run/docker.sock - /home/dennis/projects/archon/python/src:/app/src - /home/dennis/projects/archon/python/tests:/app/tests - /home/dennis/projects/archon/migration:/app/migration extra_hosts: - host.docker.internal:host-gateway command: - python - -m - uvicorn - src.server.main:app - --host - 0.0.0.0 - --port - ${ARCHON_SERVER_PORT:-8181} - --reload healthcheck: test: - CMD - sh - -c - python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${ARCHON_SERVER_PORT:-8181}/health')\" interval: 30s timeout: 10s retries: 3 start_period: 40s archon-mcp: build: context: /home/dennis/projects/archon/python dockerfile: Dockerfile.mcp args: BUILDKIT_INLINE_CACHE: 1 ARCHON_MCP_PORT: ${ARCHON_MCP_PORT:-8051} container_name: archon-mcp ports: - ${ARCHON_MCP_PORT:-8051}:${ARCHON_MCP_PORT:-8051} environment: - SUPABASE_URL=${SUPABASE_URL} - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY} - LOGFIRE_TOKEN=${LOGFIRE_TOKEN:-} - SERVICE_DISCOVERY_MODE=docker_compose - TRANSPORT=sse - LOG_LEVEL=${LOG_LEVEL:-INFO} - API_SERVICE_URL=http://archon-server:${ARCHON_SERVER_PORT:-8181} - AGENTS_ENABLED=${AGENTS_ENABLED:-false} - AGENTS_SERVICE_URL=${AGENTS_SERVICE_URL:-http://archon-agents:${ARCHON_AGENTS_PORT:-8052}} - ARCHON_MCP_PORT=${ARCHON_MCP_PORT:-8051} - ARCHON_SERVER_PORT=${ARCHON_SERVER_PORT:-8181} - ARCHON_AGENTS_PORT=${ARCHON_AGENTS_PORT:-8052} networks: - app-network depends_on: archon-server: condition: service_healthy extra_hosts: - host.docker.internal:host-gateway healthcheck: test: - CMD - sh - -c - python -c \"import socket; s=socket.socket(); s.connect(('localhost', ${ARCHON_MCP_PORT:-8051})); s.close()\" interval: 30s timeout: 10s retries: 3 start_period: 60s archon-frontend: build: /home/dennis/projects/archon/archon-ui-main container_name: archon-ui ports: - ${ARCHON_UI_PORT:-3737}:3737 environment: - VITE_ARCHON_SERVER_PORT=${ARCHON_SERVER_PORT:-8181} - ARCHON_SERVER_PORT=${ARCHON_SERVER_PORT:-8181} - HOST=${HOST:-localhost} - PROD=${PROD:-false} - VITE_ALLOWED_HOSTS=${VITE_ALLOWED_HOSTS:-} - VITE_SHOW_DEVTOOLS=${VITE_SHOW_DEVTOOLS:-false} - DOCKER_ENV=true networks: - app-network healthcheck: test: - CMD - curl - -f - http://localhost:3737 interval: 30s timeout: 10s retries: 3 volumes: - /home/dennis/projects/archon/archon-ui-main/src:/app/src - /home/dennis/projects/archon/archon-ui-main/public:/app/public depends_on: archon-server: condition: service_healthy networks: app-network: driver: bridge"
+                - generic: "services: archon-server: build: context: /home/dennis/projects/archon/python dockerfile: Dockerfile.server args: BUILDKIT_INLINE_CACHE: 1 ARCHON_SERVER_PORT: ${ARCHON_SERVER_PORT:-8181} container_name: archon-server ports: - ${ARCHON_SERVER_PORT:-8181}:${ARCHON_SERVER_PORT:-8181} environment: - SUPABASE_URL=${SUPABASE_URL} - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY} - OPENAI_API_KEY=${OPENAI_API_KEY:-} - LOGFIRE_TOKEN=${LOGFIRE_TOKEN:-} - SERVICE_DISCOVERY_MODE=docker_compose - LOG_LEVEL=${LOG_LEVEL:-INFO} - ARCHON_SERVER_PORT=${ARCHON_SERVER_PORT:-8181} - ARCHON_MCP_PORT=${ARCHON_MCP_PORT:-8051} - ARCHON_AGENTS_PORT=${ARCHON_AGENTS_PORT:-8052} - AGENTS_ENABLED=${AGENTS_ENABLED:-false} - ARCHON_HOST=${HOST:-localhost} networks: - app-network volumes: - /var/run/docker.sock:/var/run/docker.sock - /home/dennis/projects/archon/python/src:/app/src - /home/dennis/projects/archon/python/tests:/app/tests - /home/dennis/projects/archon/migration:/app/migration extra_hosts: - host.docker.internal:host-gateway command: - python - -m - uvicorn - src.server.main:app - --host - 0.0.0.0 - --port - ${ARCHON_SERVER_PORT:-8181} - --reload healthcheck: test: - CMD - sh - -c - python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${ARCHON_SERVER_PORT:-8181}/health')\" interval: 30s timeout: 10s retries: 3 start_period: 40s archon-mcp: build: context: /home/dennis/projects/archon/python dockerfile: Dockerfile.mcp args: BUILDKIT_INLINE_CACHE: 1 ARCHON_MCP_PORT: ${ARCHON_MCP_PORT:-8051} container_name: archon-mcp ports: - ${ARCHON_MCP_PORT:-8051}:${ARCHON_MCP_PORT:-8051} environment: - SUPABASE_URL=${SUPABASE_URL} - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY} - LOGFIRE_TOKEN=${LOGFIRE_TOKEN:-} - SERVICE_DISCOVERY_MODE=docker_compose - TRANSPORT=sse - LOG_LEVEL=${LOG_LEVEL:-INFO} - API_SERVICE_URL=http://archon-server:${ARCHON_SERVER_PORT:-8181} - AGENTS_ENABLED=${AGENTS_ENABLED:-false} - AGENTS_SERVICE_URL=${AGENTS_SERVICE_URL:-http://archon-agents:${ARCHON_AGENTS_PORT:-8052}} - ARCHON_MCP_PORT=${ARCHON_MCP_PORT:-8051} - ARCHON_SERVER_PORT=${ARCHON_SERVER_PORT:-8181} - ARCHON_AGENTS_PORT=${ARCHON_AGENTS_PORT:-8052} networks: - app-network depends_on: archon-server: condition: service_healthy extra_hosts: - host.docker.internal:host-gateway healthcheck: test: - CMD - sh - -c - python -c \"import socket; s=socket.socket(); s.connect(('localhost', ${ARCHON_MCP_PORT:-8051})); s.close()\" interval: 30s timeout: 10s retries: 3 start_period: 60s archon-frontend: build: /home/dennis/projects/archon/archon-ui-main container_name: archon-ui ports: - ${ARCHON_UI_PORT:-3737}:3737 environment: - VITE_ARCHON_SERVER_PORT=${ARCHON_SERVER_PORT:-8181} - ARCHON_SERVER_PORT=${ARCHON_SERVER_PORT:-8181} - HOST=${HOST:-localhost} - PROD=${PROD:-false} - VITE_ALLOWED_HOSTS=${VITE_ALLOWED_HOSTS:-} - VITE_SHOW_DEVTOOLS=${VITE_SHOW_DEVTOOLS:-false} - DOCKER_ENV=true networks: - app-network healthcheck: test: - CMD - curl - -f - http://localhost:3737 interval: 30s timeout: 10s retries: 3 volumes: - /home/dennis/projects/archon/archon-ui-main/src:/app/src - /home/dennis/projects/archon/archon-ui-main/public:/app/public depends_on: archon-server: condition: service_healthy networks: app-network: driver: bridge"

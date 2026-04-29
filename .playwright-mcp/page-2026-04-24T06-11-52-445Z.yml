@@ -1,0 +1,16 @@
+- generic [ref=e1]:
+  - article
+  - img [ref=e3]
+  - generic [ref=e8]:
+    - link "stangtennis.cloudflareaccess.com" [ref=e9] [cursor=pointer]:
+      - /url: ""
+      - generic [ref=e10]: stangtennis.cloudflareaccess.com
+    - generic [ref=e12]: SSH Ubuntu (Claude Code)
+    - generic [ref=e14]:
+      - generic [ref=e15]: Get a login code emailed to you
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - generic [ref=e18]: Email
+          - textbox "example@email.com" [active] [ref=e19]
+        - button "Send me a code" [ref=e21] [cursor=pointer]
+  - img [ref=e23]

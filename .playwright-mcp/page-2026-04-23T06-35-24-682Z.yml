@@ -1,0 +1,110 @@
+- generic [active] [ref=e1]:
+  - link "Spring til hovedindhold" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - banner [ref=e7]:
+    - generic [ref=e8]:
+      - heading " Fjernskrivebord" [level=1] [ref=e9]:
+        - generic [ref=e10]: 
+        - text: Fjernskrivebord
+      - generic [ref=e11]:
+        - button "Skift mellem lyst og mørkt tema" [ref=e12] [cursor=pointer]:
+          - generic [ref=e13]: 
+        - button "" [ref=e14] [cursor=pointer]:
+          - generic [ref=e15]: 
+        - text: 
+        - button " Quick Support" [ref=e16] [cursor=pointer]:
+          - generic [ref=e17]: 
+          - text: Quick Support
+        - link " Historik" [ref=e18] [cursor=pointer]:
+          - /url: history.html
+          - generic [ref=e19]: 
+          - text: Historik
+        - link " Admin" [ref=e20] [cursor=pointer]:
+          - /url: admin.html
+          - generic [ref=e21]: 
+          - text: Admin
+        - button "Log ud" [ref=e22] [cursor=pointer]
+  - main [ref=e23]:
+    - generic [ref=e24]:
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - heading "Fjernsessioner" [level=2] [ref=e28]
+          - generic [ref=e29]:
+            - button "" [ref=e30] [cursor=pointer]:
+              - generic [ref=e31]: 
+            - button "" [ref=e32] [cursor=pointer]:
+              - generic [ref=e33]: 
+        - generic [ref=e34]:
+          - generic [ref=e36]: Klik Connect for at starte en session
+          - button "+" [ref=e37] [cursor=pointer]
+        - generic [ref=e38]:
+          - generic [ref=e39]:
+            - button "" [ref=e42] [cursor=pointer]:
+              - generic [ref=e43]: 
+            - generic [ref=e45]:
+              - generic [ref=e47]: 
+              - heading "Ingen aktiv forbindelse" [level=3] [ref=e48]
+              - paragraph [ref=e49]: Vælg en enhed nedenfor for at starte en fjernsession
+              - generic [ref=e50]:
+                - generic [ref=e51]:
+                  - generic [ref=e52]: 
+                  - text: Krypteret
+                - generic [ref=e53]:
+                  - generic [ref=e54]: 
+                  - text: Lav forsinkelse
+                - generic [ref=e55]:
+                  - generic [ref=e56]: 
+                  - text: Fuld kontrol
+          - text:      
+      - generic [ref=e57]:
+        - generic [ref=e58]:
+          - heading " Downloads" [level=2] [ref=e60]:
+            - generic [ref=e61]: 
+            - text: Downloads
+          - generic [ref=e62]:
+            - link " Agent Installer" [ref=e63] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e64]: 
+              - text: Agent Installer
+            - link " Quick Connect" [ref=e65] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e66]: 
+              - text: Quick Connect
+            - link " Web Agent" [ref=e67] [cursor=pointer]:
+              - /url: agent.html
+              - generic [ref=e68]: 
+              - text: Web Agent
+            - link " Controller" [ref=e69] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e70]: 
+              - text: Controller
+          - paragraph [ref=e71]: "Agent Installer: permanent installation med service + tray • Quick Connect: kør én gang uden installation"
+        - generic [ref=e72]:
+          - generic [ref=e73]:
+            - heading "Dine enheder" [level=2] [ref=e74]
+            - button "" [ref=e75] [cursor=pointer]:
+              - generic [ref=e76]: 
+          - generic [ref=e77]:
+            - textbox "Søg enheder..." [ref=e78]
+            - combobox [ref=e79] [cursor=pointer]:
+              - option "Alle" [selected]
+              - option "Online"
+              - option "Offline"
+          - text:   
+          - paragraph [ref=e82]: Indlæser enheder...
+        - generic [ref=e84] [cursor=pointer]:
+          - heading "▶ Seneste aktivitet" [level=2] [ref=e85]:
+            - generic [ref=e86]: ▶
+            - text: Seneste aktivitet
+          - generic [ref=e87]:
+            - combobox [ref=e88]:
+              - option "Alle" [selected]
+              - option "Sessions"
+              - option "Enheder"
+              - option "Support"
+            - button "" [ref=e89]:
+              - generic [ref=e90]: 
+    - text:  
+  - text:     ⚠️ 
+  - button "Vis tastaturgenveje" [ref=e91] [cursor=pointer]:
+    - generic [ref=e92]: 

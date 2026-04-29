@@ -1,0 +1,58 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "Dockge" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e7]: Dockge
+    - list [ref=e8]:
+      - listitem [ref=e9]:
+        - link "Home" [ref=e10] [cursor=pointer]:
+          - /url: /
+          - img [ref=e11]
+          - text: Home
+      - listitem [ref=e13]:
+        - link "Console" [ref=e14] [cursor=pointer]:
+          - /url: /console
+          - img [ref=e15]
+          - text: Console
+      - listitem [ref=e17]:
+        - generic [ref=e19] [cursor=pointer]:
+          - generic [ref=e20]: A
+          - img [ref=e21]
+  - main [ref=e23]:
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - link "Compose" [ref=e28] [cursor=pointer]:
+          - /url: /compose
+          - img [ref=e29]
+          - text: Compose
+        - generic [ref=e31]:
+          - generic [ref=e34]:
+            - img [ref=e36]
+            - textbox [ref=e39]
+          - link "Compose your first stack!" [ref=e42] [cursor=pointer]:
+            - /url: /compose
+      - generic [ref=e44]:
+        - heading "Home" [level=1] [ref=e45]
+        - generic [ref=e46]:
+          - generic [ref=e47]:
+            - generic [ref=e49]:
+              - generic [ref=e50]:
+                - heading "active" [level=3] [ref=e51]
+                - generic [ref=e52]: "0"
+              - generic [ref=e53]:
+                - heading "exited" [level=3] [ref=e54]
+                - generic [ref=e55]: "0"
+              - generic [ref=e56]:
+                - heading "inactive" [level=3] [ref=e57]
+                - generic [ref=e58]: "0"
+            - heading "Docker Run" [level=2] [ref=e59]
+            - textbox "docker run ..." [ref=e61]
+            - button "Convert to Compose" [ref=e62] [cursor=pointer]
+          - generic [ref=e64]:
+            - heading "Dockge Agents beta" [level=4] [ref=e65]:
+              - text: Dockge Agents
+              - generic [ref=e66]: beta
+            - generic [ref=e67]:
+              - generic [ref=e68]: Online
+              - text: Current
+            - button "Add Agent" [ref=e69] [cursor=pointer]

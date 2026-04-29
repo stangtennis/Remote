@@ -1,0 +1,101 @@
+- generic [active] [ref=e1]:
+  - link "Spring til hovedindhold" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - banner [ref=e7]:
+    - generic [ref=e8]:
+      - heading " Fjernskrivebord" [level=1] [ref=e9]:
+        - generic [ref=e10]: 
+        - text: Fjernskrivebord
+      - generic [ref=e11]:
+        - button "Skift mellem lyst og mørkt tema" [ref=e12] [cursor=pointer]:
+          - generic [ref=e13]: 
+        - button "" [ref=e14] [cursor=pointer]:
+          - generic [ref=e15]: 
+        - button "" [ref=e16] [cursor=pointer]:
+          - generic [ref=e17]: 
+        - text: 
+        - link " Historik" [ref=e18] [cursor=pointer]:
+          - /url: history.html
+          - generic [ref=e19]: 
+          - text: Historik
+        - text: 
+        - button " Log ud" [ref=e20] [cursor=pointer]
+  - main [ref=e21]:
+    - generic [ref=e22]:
+      - generic [ref=e24]:
+        - generic [ref=e25]:
+          - heading "Fjernsessioner" [level=2] [ref=e26]
+          - generic [ref=e27]:
+            - button "" [ref=e28] [cursor=pointer]:
+              - generic [ref=e29]: 
+            - button "" [ref=e30] [cursor=pointer]:
+              - generic [ref=e31]: 
+        - generic [ref=e32]:
+          - generic [ref=e34]: Klik Connect for at starte en session
+          - button "+" [ref=e35] [cursor=pointer]
+        - generic [ref=e36]:
+          - generic [ref=e37]:
+            - button "" [ref=e40] [cursor=pointer]:
+              - generic [ref=e41]: 
+            - generic [ref=e43]:
+              - generic [ref=e45]: 
+              - heading "Ingen aktiv forbindelse" [level=3] [ref=e46]
+              - paragraph [ref=e47]: Vælg en enhed nedenfor for at starte en fjernsession
+              - generic [ref=e48]:
+                - generic [ref=e49]:
+                  - generic [ref=e50]: 
+                  - text: Krypteret
+                - generic [ref=e51]:
+                  - generic [ref=e52]: 
+                  - text: Lav forsinkelse
+                - generic [ref=e53]:
+                  - generic [ref=e54]: 
+                  - text: Fuld kontrol
+          - text:      
+      - generic [ref=e55]:
+        - generic [ref=e56]:
+          - heading " Downloads" [level=2] [ref=e58]:
+            - generic [ref=e59]: 
+            - text: Downloads
+          - generic [ref=e60]:
+            - link " Agent Installer" [ref=e61] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e62]: 
+              - text: Agent Installer
+            - link " Quick Connect" [ref=e63] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e64]: 
+              - text: Quick Connect
+            - link " Web Agent" [ref=e65] [cursor=pointer]:
+              - /url: agent.html
+              - generic [ref=e66]: 
+              - text: Web Agent
+          - paragraph [ref=e67]: "Agent Installer: permanent installation med service + tray • Quick Connect: kør én gang uden installation"
+        - generic [ref=e68]:
+          - generic [ref=e69]:
+            - heading "Dine enheder" [level=2] [ref=e70]
+            - button "" [ref=e71] [cursor=pointer]:
+              - generic [ref=e72]: 
+          - generic [ref=e73]:
+            - textbox "Søg enheder..." [ref=e74]
+            - combobox [ref=e75] [cursor=pointer]:
+              - option "Alle" [selected]
+              - option "Online"
+              - option "Offline"
+          - text:   
+        - generic [ref=e77] [cursor=pointer]:
+          - heading "▶ Seneste aktivitet" [level=2] [ref=e78]:
+            - generic [ref=e79]: ▶
+            - text: Seneste aktivitet
+          - generic [ref=e80]:
+            - combobox [ref=e81]:
+              - option "Alle" [selected]
+              - option "Sessions"
+              - option "Enheder"
+              - option "Support"
+            - button "" [ref=e82]:
+              - generic [ref=e83]: 
+    - text:  
+  - text:     ⚠️ 
+  - button "Vis tastaturgenveje" [ref=e84] [cursor=pointer]:
+    - generic [ref=e85]: 

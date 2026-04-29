@@ -51,8 +51,10 @@ type Manager struct {
 	mouseController     *input.MouseController
 	keyController       *input.KeyboardController
 	fileTransferHandler *filetransfer.Handler
-	clipboardMonitor    *clipboard.Monitor
-	clipboardReceiver   *clipboard.Receiver
+	clipboardMonitor       *clipboard.Monitor
+	clipboardReceiver      *clipboard.Receiver
+	clipboardSessionHelper *clipboard.SessionHelper // Set when running as Session 0 service on Windows
+
 	sessionID           string
 	isStreaming         atomic.Bool
 	isSession0          bool // Running in Session 0 (before user login)
@@ -760,11 +762,13 @@ func (m *Manager) setupControlChannelHandlers(dc *pionwebrtc.DataChannel) {
 
 	dc.OnClose(func() {
 		log.Println("🎮 Control channel closed")
-		// Stop clipboard monitoring (only if started here — the data
-		// channel handler stops it too, this is a no-op if already stopped).
 		if m.clipboardMonitor != nil {
 			m.clipboardMonitor.Stop()
 			m.clipboardMonitor = nil
+		}
+		if m.clipboardSessionHelper != nil {
+			m.clipboardSessionHelper.Stop()
+			m.clipboardSessionHelper = nil
 		}
 	})
 

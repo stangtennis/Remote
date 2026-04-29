@@ -1,0 +1,125 @@
+- generic [active] [ref=e1]:
+  - link "Spring til hovedindhold" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - banner [ref=e7]:
+    - generic [ref=e8]:
+      - heading " Fjernskrivebord" [level=1] [ref=e9]:
+        - generic [ref=e10]: 
+        - text: Fjernskrivebord
+      - generic [ref=e11]:
+        - button "Skift mellem lyst og mørkt tema" [ref=e12] [cursor=pointer]:
+          - generic [ref=e13]: 
+        - button "" [ref=e14] [cursor=pointer]:
+          - generic [ref=e15]: 
+        - button " Quick Support" [ref=e16] [cursor=pointer]:
+          - generic [ref=e17]: 
+          - text: Quick Support
+        - link " Admin" [ref=e18] [cursor=pointer]:
+          - /url: admin.html
+          - generic [ref=e19]: 
+          - text: Admin
+        - generic [ref=e20]: test@hawkeye123.dk
+        - button "Log ud" [ref=e21] [cursor=pointer]
+  - main [ref=e22]:
+    - generic [ref=e23]:
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - heading "Fjernsessioner" [level=2] [ref=e27]
+          - generic [ref=e28]:
+            - button "" [ref=e29] [cursor=pointer]:
+              - generic [ref=e30]: 
+            - button "" [ref=e31] [cursor=pointer]:
+              - generic [ref=e32]: 
+        - generic [ref=e33]:
+          - generic [ref=e35]: Klik Connect for at starte en session
+          - button "+" [ref=e36] [cursor=pointer]
+        - generic [ref=e37]:
+          - generic [ref=e38]:
+            - button "" [ref=e41] [cursor=pointer]:
+              - generic [ref=e42]: 
+            - generic [ref=e44]:
+              - generic [ref=e46]: 
+              - heading "Ingen aktiv forbindelse" [level=3] [ref=e47]
+              - paragraph [ref=e48]: Vælg en enhed nedenfor for at starte en fjernsession
+              - generic [ref=e49]:
+                - generic [ref=e50]:
+                  - generic [ref=e51]: 
+                  - text: Krypteret
+                - generic [ref=e52]:
+                  - generic [ref=e53]: 
+                  - text: Lav forsinkelse
+                - generic [ref=e54]:
+                  - generic [ref=e55]: 
+                  - text: Fuld kontrol
+          - text:      
+      - generic [ref=e56]:
+        - generic [ref=e57]:
+          - heading " Downloads" [level=2] [ref=e59]:
+            - generic [ref=e60]: 
+            - text: Downloads
+          - generic [ref=e61]:
+            - link " Agent Installer" [ref=e62] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e63]: 
+              - text: Agent Installer
+            - link " Quick Connect" [ref=e64] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e65]: 
+              - text: Quick Connect
+            - link " Web Agent" [ref=e66] [cursor=pointer]:
+              - /url: agent.html
+              - generic [ref=e67]: 
+              - text: Web Agent
+            - link " Controller" [ref=e68] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e69]: 
+              - text: Controller
+          - paragraph [ref=e70]: "Agent Installer: permanent installation med service + tray • Quick Connect: kør én gang uden installation"
+        - generic [ref=e71]:
+          - generic [ref=e72]:
+            - heading "Dine enheder" [level=2] [ref=e73]
+            - button "" [ref=e74] [cursor=pointer]:
+              - generic [ref=e75]: 
+          - generic [ref=e76]:
+            - textbox "Søg enheder..." [ref=e77]
+            - combobox [ref=e78] [cursor=pointer]:
+              - option "Alle" [selected]
+              - option "Online"
+              - option "Offline"
+          - generic [ref=e79]:
+            - generic [ref=e80]: Online (2)
+            - generic [ref=e82] [cursor=pointer]:
+              - button "☆" [ref=e83]
+              - generic [ref=e85]:
+                - generic [ref=e86]: sat12-bq146-41bdc55f-72f8-4e63-92eb-2af661cead33-9651160984B4
+                - generic [ref=e87]: macOS · dev · 13.105.117.173 · AS8075 Microsoft Corporation · STUN
+              - generic [ref=e88]:
+                - button "Connect" [ref=e89]
+                - button "⋮" [ref=e90]
+            - generic [ref=e91] [cursor=pointer]:
+              - button "☆" [ref=e92]
+              - generic [ref=e94]:
+                - generic [ref=e95]: WIN-TEST
+                - generic [ref=e96]: Windows · v2.99.57 · 188.228.14.94 · AS214875 Altibox Danmark AS · P2P
+              - generic [ref=e97]:
+                - button "Connect" [ref=e98]
+                - button "⋮" [ref=e99]
+            - generic [ref=e100]: Offline (1)
+            - generic [ref=e102] [cursor=pointer]:
+              - button "☆" [ref=e103]
+              - generic [ref=e105]:
+                - generic [ref=e106]: Denniss MacBook Pro
+                - generic [ref=e107]: macOS · v2.99.50 · 188.228.14.94 · ALTIBOX
+              - button "⋮" [ref=e109]
+          - text:   
+        - generic [ref=e111] [cursor=pointer]:
+          - heading "▶ Seneste aktivitet" [level=2] [ref=e112]:
+            - generic [ref=e113]: ▶
+            - text: Seneste aktivitet
+          - combobox [ref=e114]:
+            - option "Alle" [selected]
+            - option "Sessions"
+            - option "Enheder"
+            - option "Support"
+    - text:  
+  - text:     ⚠️

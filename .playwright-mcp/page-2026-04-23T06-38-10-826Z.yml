@@ -1,0 +1,130 @@
+- generic [active] [ref=e1]:
+  - link "Spring til hovedindhold" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - heading " Adminpanel" [level=1] [ref=e9]:
+        - generic [ref=e10]: 
+        - text: Adminpanel
+      - generic [ref=e11]:
+        - button "Skift mellem lyst og mørkt tema" [ref=e12] [cursor=pointer]:
+          - generic [ref=e13]: 
+        - button "" [ref=e14] [cursor=pointer]:
+          - generic [ref=e15]: 
+        - button "← Kontrolpanel" [ref=e16] [cursor=pointer]
+        - button "Log ud" [ref=e17] [cursor=pointer]
+    - text: 
+    - generic [ref=e18]:
+      - button " Brugergodkendelser" [ref=e19] [cursor=pointer]:
+        - generic [ref=e20]: 
+        - text: Brugergodkendelser
+      - button " Enhedsstyring" [ref=e21] [cursor=pointer]:
+        - generic [ref=e22]: 
+        - text: Enhedsstyring
+      - button " Remote Control" [ref=e23] [cursor=pointer]:
+        - generic [ref=e24]: 
+        - text: Remote Control
+      - button " Invitationer" [ref=e25] [cursor=pointer]:
+        - generic [ref=e26]: 
+        - text: Invitationer
+      - text: 
+    - generic [ref=e27]:
+      - heading " Downloads" [level=3] [ref=e28]:
+        - generic [ref=e29]: 
+        - text: Downloads
+      - generic [ref=e30]:
+        - link " Windows Agent" [ref=e31] [cursor=pointer]:
+          - /url: https://downloads.hawkeye123.dk/remote-agent.exe
+          - generic [ref=e32]: 
+          - text: Windows Agent
+        - link " Web Agent" [ref=e33] [cursor=pointer]:
+          - /url: agent.html
+          - generic [ref=e34]: 
+          - text: Web Agent
+        - link " Controller" [ref=e35] [cursor=pointer]:
+          - /url: https://downloads.hawkeye123.dk/controller.exe
+          - generic [ref=e36]: 
+          - text: Controller
+      - paragraph [ref=e37]: Windows Agent (anbefalet) • Web Agent (browser) • Controller (kontrol enheder)
+    - generic [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: "5"
+          - generic [ref=e42]: Brugere i alt
+        - generic [ref=e43]:
+          - generic [ref=e44]: "0"
+          - generic [ref=e45]: Afventer godkendelse
+        - generic [ref=e46]:
+          - generic [ref=e47]: "5"
+          - generic [ref=e48]: Godkendte brugere
+      - generic [ref=e49]:
+        - button "Alle brugere" [ref=e50] [cursor=pointer]
+        - button "Afventende" [ref=e51] [cursor=pointer]
+        - button "Godkendte" [ref=e52] [cursor=pointer]
+      - generic [ref=e56]:
+        - generic [ref=e57]:
+          - generic [ref=e58]:
+            - generic [ref=e59]:
+              - text: uffe@ufi-tech.dk
+              - generic [ref=e60]: 👑 Admin
+            - generic [ref=e61]: ✅ Approved
+          - generic [ref=e62]:
+            - generic [ref=e63]: "Requested: 2/20/2026, 7:18:37 PM"
+            - generic [ref=e64]: "Approved: 2/20/2026, 7:19:25 PM"
+            - generic [ref=e65]: "Role: admin"
+          - generic [ref=e66]:
+            - button "Already Approved" [disabled] [ref=e67]
+            - button "❌ Remove Admin" [ref=e68] [cursor=pointer]
+        - generic [ref=e69]:
+          - generic [ref=e70]:
+            - generic [ref=e71]:
+              - text: test@hawkeye123.dk
+              - generic [ref=e72]: 👑 Admin
+            - generic [ref=e73]: ✅ Approved
+          - generic [ref=e74]:
+            - generic [ref=e75]: "Requested: 2/2/2026, 4:20:32 AM"
+            - generic [ref=e76]: "Approved: 2/17/2026, 2:26:34 AM"
+            - generic [ref=e77]: "Role: admin"
+          - generic [ref=e78]:
+            - button "Already Approved" [disabled] [ref=e79]
+            - button "❌ Remove Admin" [ref=e80] [cursor=pointer]
+        - generic [ref=e81]:
+          - generic [ref=e82]:
+            - generic [ref=e83]: stangtennis77@protonmail.com
+            - generic [ref=e84]: ✅ Approved
+          - generic [ref=e85]:
+            - generic [ref=e86]: "Requested: 11/28/2025, 11:25:39 PM"
+            - generic [ref=e87]: "Approved: 4/7/2026, 8:40:22 AM"
+            - generic [ref=e88]: "Notes: Approved by admin"
+            - generic [ref=e89]: "Role: user"
+          - generic [ref=e90]:
+            - button "Already Approved" [disabled] [ref=e91]
+            - button "👑 Make Admin" [ref=e92] [cursor=pointer]
+        - generic [ref=e93]:
+          - generic [ref=e94]:
+            - generic [ref=e95]: stangtennis77@gmail.com
+            - generic [ref=e96]: ✅ Approved
+          - generic [ref=e97]:
+            - generic [ref=e98]: "Requested: 11/28/2025, 11:05:41 PM"
+            - generic [ref=e99]: "Approved: 4/7/2026, 8:40:24 AM"
+            - generic [ref=e100]: "Notes: Approved by admin"
+            - generic [ref=e101]: "Role: user"
+          - generic [ref=e102]:
+            - button "Already Approved" [disabled] [ref=e103]
+            - button "👑 Make Admin" [ref=e104] [cursor=pointer]
+        - generic [ref=e105]:
+          - generic [ref=e106]:
+            - generic [ref=e107]: hansemand@gmail.com
+            - generic [ref=e108]: ✅ Approved
+          - generic [ref=e109]:
+            - generic [ref=e110]: "Requested: 11/26/2025, 11:00:40 AM"
+            - generic [ref=e111]: "Approved: 11/26/2025, 11:03:03 AM"
+            - generic [ref=e112]: "Notes: Admin user"
+            - generic [ref=e113]: "Role: super_admin"
+          - generic [ref=e114]:
+            - button "Already Approved" [disabled] [ref=e115]
+            - button "👑 Make Admin" [ref=e116] [cursor=pointer]
+    - text:   
+  - text: 
+  - button "Vis tastaturgenveje" [ref=e53] [cursor=pointer]:
+    - generic [ref=e54]: 

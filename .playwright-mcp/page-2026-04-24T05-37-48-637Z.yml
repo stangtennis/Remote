@@ -1,0 +1,9 @@
+- generic [ref=e3]:
+  - img "Cloudflare logo" [ref=e4]
+  - heading "Cloudflare One is now at dash.cloudflare.com" [level=1] [ref=e8]
+  - paragraph [ref=e9]: We're streamlining our dashboard to keep all of your tools in one place. Please update your bookmarks to use dash.cloudflare.com.
+  - paragraph [ref=e10]:
+    - text: You will be redirected to
+    - link "https://dash.cloudflare.com/9350e3c67707c81cf80a588bfbc777ee/one/access/apps" [ref=e12] [cursor=pointer]:
+      - /url: https://dash.cloudflare.com/9350e3c67707c81cf80a588bfbc777ee/one/access/apps
+    - text: in 10 seconds.
