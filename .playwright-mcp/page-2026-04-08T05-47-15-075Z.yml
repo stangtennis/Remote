@@ -1,0 +1,85 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "Dockge" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e7]: Dockge
+    - list [ref=e21]:
+      - listitem [ref=e22]:
+        - link "Home" [ref=e23] [cursor=pointer]:
+          - /url: /
+          - img [ref=e24]
+          - text: Home
+      - listitem [ref=e26]:
+        - link "Console" [ref=e27] [cursor=pointer]:
+          - /url: /console
+          - img [ref=e28]
+          - text: Console
+      - listitem [ref=e30]:
+        - generic [ref=e32] [cursor=pointer]:
+          - generic [ref=e33]: A
+          - img [ref=e34]
+  - main [ref=e8]:
+    - generic [ref=e37]:
+      - generic [ref=e38]:
+        - link "Compose" [ref=e40] [cursor=pointer]:
+          - /url: /compose
+          - img [ref=e41]
+          - text: Compose
+        - generic [ref=e43]:
+          - generic [ref=e46]:
+            - img [ref=e48]
+            - textbox [ref=e51]
+          - generic [ref=e52]:
+            - link "active beszel" [ref=e53] [cursor=pointer]:
+              - /url: /compose/beszel
+              - generic [ref=e54]: active
+              - generic [ref=e55]: beszel
+            - link "active caddy" [ref=e56] [cursor=pointer]:
+              - /url: /compose/caddy
+              - generic [ref=e57]: active
+              - generic [ref=e58]: caddy
+            - link "active coturn" [ref=e59] [cursor=pointer]:
+              - /url: /compose/coturn
+              - generic [ref=e60]: active
+              - generic [ref=e61]: coturn
+            - link "active filebrowser" [ref=e62] [cursor=pointer]:
+              - /url: /compose/filebrowser
+              - generic [ref=e63]: active
+              - generic [ref=e64]: filebrowser
+            - link "active glance" [ref=e65] [cursor=pointer]:
+              - /url: /compose/glance
+              - generic [ref=e66]: active
+              - generic [ref=e67]: glance
+            - link "active archon" [ref=e68] [cursor=pointer]:
+              - /url: /compose/archon
+              - generic [ref=e69]: active
+              - generic [ref=e70]: archon
+            - link "active supabase" [ref=e71] [cursor=pointer]:
+              - /url: /compose/supabase
+              - generic [ref=e72]: active
+              - generic [ref=e73]: supabase
+      - generic [ref=e75]:
+        - heading "Home" [level=1] [ref=e76]
+        - generic [ref=e77]:
+          - generic [ref=e78]:
+            - generic [ref=e80]:
+              - generic [ref=e81]:
+                - heading "active" [level=3] [ref=e82]
+                - generic [ref=e83]: "7"
+              - generic [ref=e84]:
+                - heading "exited" [level=3] [ref=e85]
+                - generic [ref=e86]: "0"
+              - generic [ref=e87]:
+                - heading "inactive" [level=3] [ref=e88]
+                - generic [ref=e89]: "0"
+            - heading "Docker Run" [level=2] [ref=e90]
+            - textbox "docker run ..." [ref=e92]
+            - button "Convert to Compose" [ref=e93] [cursor=pointer]
+          - generic [ref=e95]:
+            - heading "Dockge Agents beta" [level=4] [ref=e96]:
+              - text: Dockge Agents
+              - generic [ref=e97]: beta
+            - generic [ref=e98]:
+              - generic [ref=e99]: Online
+              - text: Current
+            - button "Add Agent" [ref=e100] [cursor=pointer]

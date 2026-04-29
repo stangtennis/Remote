@@ -21,6 +21,7 @@ import (
 	"github.com/stangtennis/remote-agent/internal/desktop"
 	"github.com/stangtennis/remote-agent/internal/device"
 	"github.com/stangtennis/remote-agent/internal/metrics"
+	"github.com/stangtennis/remote-agent/internal/clipboard"
 	"github.com/stangtennis/remote-agent/internal/screen"
 	"github.com/stangtennis/remote-agent/internal/tray"
 	"github.com/stangtennis/remote-agent/internal/updater"
@@ -297,6 +298,18 @@ func main() {
 	if len(os.Args) >= 3 && os.Args[1] == "--capture-helper" {
 		if err := screen.RunCaptureHelper(os.Args[2]); err != nil {
 			log.Printf("Capture helper error: %v", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Clipboard helper — same Session 0 → user session bridge pattern as
+	// capture, but for the per-session Windows clipboard. The service
+	// (Session 0, SYSTEM) cannot see clipboards in interactive sessions,
+	// so it spawns this helper there to monitor and bridge events.
+	if len(os.Args) >= 3 && os.Args[1] == "--clipboard-helper" {
+		if err := clipboard.RunHelper(os.Args[2]); err != nil {
+			log.Printf("Clipboard helper error: %v", err)
 			os.Exit(1)
 		}
 		return

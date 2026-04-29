@@ -1,0 +1,62 @@
+- generic [active] [ref=e1]:
+  - link "Spring til hovedindhold" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - banner [ref=e6]:
+    - generic [ref=e7]:
+      - heading " Session-historik" [level=1] [ref=e8]:
+        - generic [ref=e9]: 
+        - text: Session-historik
+      - generic [ref=e10]:
+        - button "Skift mellem lyst og mørkt tema" [ref=e11] [cursor=pointer]:
+          - generic [ref=e12]: 
+        - button "" [ref=e13] [cursor=pointer]:
+          - generic [ref=e14]: 
+        - link " Dashboard" [ref=e15] [cursor=pointer]:
+          - /url: dashboard.html
+          - generic [ref=e16]: 
+          - text: Dashboard
+        - button "Log ud" [ref=e17] [cursor=pointer]
+  - main [ref=e18]:
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]: 
+        - text: Fra
+        - textbox " Fra" [ref=e22]
+      - generic [ref=e23]:
+        - text: Til
+        - textbox "Til" [ref=e24]
+      - generic [ref=e25]:
+        - text: Enhed
+        - combobox "Enhed" [ref=e26]:
+          - option "Alle" [selected]
+      - generic [ref=e27]:
+        - text: Type
+        - combobox "Type" [ref=e28]:
+          - option "Alle hændelser"
+          - option "Kun sessioner" [selected]
+          - option "Enhed online/offline"
+          - option "Support-sessioner"
+      - button "" [ref=e29] [cursor=pointer]:
+        - generic [ref=e30]: 
+      - button " Export CSV" [ref=e31] [cursor=pointer]:
+        - generic [ref=e32]: 
+        - text: Export CSV
+    - generic [ref=e33]:
+      - generic [ref=e34]:
+        - generic [ref=e35]: —
+        - generic [ref=e36]: Sessioner
+      - generic [ref=e37]:
+        - generic [ref=e38]: —
+        - generic [ref=e39]: Samlet tid
+      - generic [ref=e40]:
+        - generic [ref=e41]: —
+        - generic [ref=e42]: Gennemsnit
+      - generic [ref=e43]:
+        - generic [ref=e44]: —
+        - generic [ref=e45]: Enheder
+    - generic [ref=e47]:
+      - generic [ref=e48]: 
+      - text: Indlæser...
+  - text: 
+  - button "Vis tastaturgenveje" [ref=e49] [cursor=pointer]:
+    - generic [ref=e50]: 

@@ -1,0 +1,768 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "Dockge" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e7]: Dockge
+    - list [ref=e8]:
+      - listitem [ref=e9]:
+        - link "Home" [ref=e10] [cursor=pointer]:
+          - /url: /
+          - img [ref=e11]
+          - text: Home
+      - listitem [ref=e13]:
+        - link "Console" [ref=e14] [cursor=pointer]:
+          - /url: /console
+          - img [ref=e15]
+          - text: Console
+      - listitem [ref=e17]:
+        - generic [ref=e19] [cursor=pointer]:
+          - generic [ref=e20]: A
+          - img [ref=e21]
+  - main [ref=e23]:
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - link "Compose" [ref=e28] [cursor=pointer]:
+          - /url: /compose
+          - img [ref=e29]
+          - text: Compose
+        - generic [ref=e31]:
+          - generic [ref=e34]:
+            - img [ref=e36]
+            - textbox [ref=e39]
+          - generic [ref=e40]:
+            - link "active archon" [ref=e70] [cursor=pointer]:
+              - /url: /compose/archon
+              - generic [ref=e71]: active
+              - generic [ref=e72]: archon
+            - link "active beszel" [ref=e73] [cursor=pointer]:
+              - /url: /compose/beszel
+              - generic [ref=e74]: active
+              - generic [ref=e75]: beszel
+            - link "active caddy" [ref=e76] [cursor=pointer]:
+              - /url: /compose/caddy
+              - generic [ref=e77]: active
+              - generic [ref=e78]: caddy
+            - link "active coturn" [ref=e79] [cursor=pointer]:
+              - /url: /compose/coturn
+              - generic [ref=e80]: active
+              - generic [ref=e81]: coturn
+            - link "active filebrowser" [ref=e82] [cursor=pointer]:
+              - /url: /compose/filebrowser
+              - generic [ref=e83]: active
+              - generic [ref=e84]: filebrowser
+            - link "active glance" [ref=e85] [cursor=pointer]:
+              - /url: /compose/glance
+              - generic [ref=e86]: active
+              - generic [ref=e87]: glance
+            - link "active supabase" [ref=e88] [cursor=pointer]:
+              - /url: /compose/supabase
+              - generic [ref=e89]: active
+              - generic [ref=e90]: supabase
+      - generic [ref=e302]:
+        - heading "active supabase" [level=1] [ref=e303]:
+          - generic [ref=e304]: active
+          - text: supabase
+        - generic [ref=e305]:
+          - group [ref=e306]:
+            - button "Edit" [ref=e307] [cursor=pointer]:
+              - img [ref=e308]
+              - text: Edit
+            - button "Restart" [ref=e310] [cursor=pointer]:
+              - img [ref=e311]
+              - text: Restart
+            - button "Update" [ref=e313] [cursor=pointer]:
+              - img [ref=e314]
+              - text: Update
+            - button "Stop" [ref=e316] [cursor=pointer]:
+              - img [ref=e317]
+              - text: Stop
+            - button [ref=e320] [cursor=pointer]
+          - button "Delete" [ref=e321] [cursor=pointer]:
+            - img [ref=e322]
+            - text: Delete
+        - generic [ref=e324]:
+          - generic [ref=e325]:
+            - heading "Containers" [level=4] [ref=e326]
+            - generic [ref=e327]:
+              - generic [ref=e329]:
+                - generic [ref=e330]:
+                  - heading "studio" [level=4] [ref=e331]
+                  - generic [ref=e332]: supabase/studio:2025.11.10-sha-5291fe3
+                  - generic [ref=e334]: healthy
+                - link "Bash" [ref=e337] [cursor=pointer]:
+                  - /url: /terminal/supabase/studio/bash
+                  - img [ref=e338]
+                  - text: Bash
+              - generic [ref=e341]:
+                - generic [ref=e342]:
+                  - heading "kong" [level=4] [ref=e343]
+                  - generic [ref=e344]: kong:2.8.1
+                  - generic [ref=e345]:
+                    - generic [ref=e346]: healthy
+                    - link "8888" [ref=e347] [cursor=pointer]:
+                      - /url: http://localhost:8888
+                      - generic [ref=e348]: "8888"
+                    - link "8443" [ref=e349] [cursor=pointer]:
+                      - /url: http://localhost:8443
+                      - generic [ref=e350]: "8443"
+                - link "Bash" [ref=e353] [cursor=pointer]:
+                  - /url: /terminal/supabase/kong/bash
+                  - img [ref=e354]
+                  - text: Bash
+              - generic [ref=e357]:
+                - generic [ref=e358]:
+                  - heading "auth" [level=4] [ref=e359]
+                  - generic [ref=e360]: supabase/gotrue:v2.182.1
+                  - generic [ref=e362]: healthy
+                - link "Bash" [ref=e365] [cursor=pointer]:
+                  - /url: /terminal/supabase/auth/bash
+                  - img [ref=e366]
+                  - text: Bash
+              - generic [ref=e369]:
+                - generic [ref=e370]:
+                  - heading "rest" [level=4] [ref=e371]
+                  - generic [ref=e372]: postgrest/postgrest:v13.0.7
+                  - generic [ref=e374]: running
+                - link "Bash" [ref=e377] [cursor=pointer]:
+                  - /url: /terminal/supabase/rest/bash
+                  - img [ref=e378]
+                  - text: Bash
+              - generic [ref=e381]:
+                - generic [ref=e382]:
+                  - heading "realtime" [level=4] [ref=e383]
+                  - generic [ref=e384]: supabase/realtime:v2.63.0
+                  - generic [ref=e386]: healthy
+                - link "Bash" [ref=e389] [cursor=pointer]:
+                  - /url: /terminal/supabase/realtime/bash
+                  - img [ref=e390]
+                  - text: Bash
+              - generic [ref=e393]:
+                - generic [ref=e394]:
+                  - heading "storage" [level=4] [ref=e395]
+                  - generic [ref=e396]: supabase/storage-api:v1.29.0
+                  - generic [ref=e398]: healthy
+                - link "Bash" [ref=e401] [cursor=pointer]:
+                  - /url: /terminal/supabase/storage/bash
+                  - img [ref=e402]
+                  - text: Bash
+              - generic [ref=e405]:
+                - generic [ref=e406]:
+                  - heading "imgproxy" [level=4] [ref=e407]
+                  - generic [ref=e408]: darthsim/imgproxy:v3.8.0
+                  - generic [ref=e410]: healthy
+                - link "Bash" [ref=e413] [cursor=pointer]:
+                  - /url: /terminal/supabase/imgproxy/bash
+                  - img [ref=e414]
+                  - text: Bash
+              - generic [ref=e417]:
+                - generic [ref=e418]:
+                  - heading "meta" [level=4] [ref=e419]
+                  - generic [ref=e420]: supabase/postgres-meta:v0.93.1
+                  - generic [ref=e422]: healthy
+                - link "Bash" [ref=e425] [cursor=pointer]:
+                  - /url: /terminal/supabase/meta/bash
+                  - img [ref=e426]
+                  - text: Bash
+              - generic [ref=e429]:
+                - generic [ref=e430]:
+                  - heading "functions" [level=4] [ref=e431]
+                  - generic [ref=e432]: supabase/edge-runtime:v1.69.23
+                  - generic [ref=e434]: running
+                - link "Bash" [ref=e437] [cursor=pointer]:
+                  - /url: /terminal/supabase/functions/bash
+                  - img [ref=e438]
+                  - text: Bash
+              - generic [ref=e441]:
+                - generic [ref=e442]:
+                  - heading "analytics" [level=4] [ref=e443]
+                  - generic [ref=e444]: supabase/logflare:1.22.6
+                  - generic [ref=e445]:
+                    - generic [ref=e446]: healthy
+                    - link "4000" [ref=e447] [cursor=pointer]:
+                      - /url: http://localhost:4000
+                      - generic [ref=e448]: "4000"
+                - link "Bash" [ref=e451] [cursor=pointer]:
+                  - /url: /terminal/supabase/analytics/bash
+                  - img [ref=e452]
+                  - text: Bash
+              - generic [ref=e455]:
+                - generic [ref=e456]:
+                  - heading "db" [level=4] [ref=e457]
+                  - generic [ref=e458]: supabase/postgres:15.8.1.085
+                  - generic [ref=e460]: healthy
+                - link "Bash" [ref=e463] [cursor=pointer]:
+                  - /url: /terminal/supabase/db/bash
+                  - img [ref=e464]
+                  - text: Bash
+              - generic [ref=e467]:
+                - generic [ref=e468]:
+                  - heading "vector" [level=4] [ref=e469]
+                  - generic [ref=e470]: timberio/vector:0.28.1-alpine
+                  - generic [ref=e472]: healthy
+                - link "Bash" [ref=e475] [cursor=pointer]:
+                  - /url: /terminal/supabase/vector/bash
+                  - img [ref=e476]
+                  - text: Bash
+              - generic [ref=e479]:
+                - generic [ref=e480]:
+                  - heading "supavisor" [level=4] [ref=e481]
+                  - generic [ref=e482]: supabase/supavisor:2.7.4
+                  - generic [ref=e483]:
+                    - generic [ref=e484]: healthy
+                    - link "5432" [ref=e485] [cursor=pointer]:
+                      - /url: http://localhost:5432
+                      - generic [ref=e486]: "5432"
+                    - link "6543" [ref=e487] [cursor=pointer]:
+                      - /url: http://localhost:6543
+                      - generic [ref=e488]: "6543"
+                - link "Bash" [ref=e491] [cursor=pointer]:
+                  - /url: /terminal/supabase/supavisor/bash
+                  - img [ref=e492]
+                  - text: Bash
+            - generic [ref=e494]:
+              - heading "Terminal" [level=4] [ref=e495]
+              - generic [ref=e500]:
+                - textbox "Terminal input" [active] [ref=e501]
+                - generic:
+                  - generic:
+                    - generic: supabase-pooler |
+                    - generic: 06:32:17.437 reques
+                  - generic:
+                    - generic: t_id=GKROBTl1EYMOp18AAABi region=local [info] Sent 20
+                  - generic:
+                    - generic: 4 in 1ms
+                  - generic:
+                    - generic: supabase-analytics |
+                  - generic:
+                    - generic: supabase-analytics |
+                    - generic: 06:32:17.456 [info]
+                  - generic:
+                    - generic: All logs logged!
+                  - generic:
+                    - generic: supabase-analytics |
+                  - generic:
+                    - generic: supabase-analytics |
+                    - generic: 06:32:17.456 [info]
+                  - generic:
+                    - generic: Logs last second!
+                  - generic:
+                    - generic: realtime-dev.supabase-realtime |
+                    - generic: 06:32:17.819 reques
+                  - generic:
+                    - generic: t_id=GKROBVBFxjKaAYcAAAgG [info] HEAD /api/tenants/re
+                  - generic:
+                    - generic: altime-dev/health
+                  - generic:
+                    - generic: realtime-dev.supabase-realtime |
+                    - generic: 06:32:17.851 reques
+                  - generic:
+                    - generic: t_id=GKROBVBFxjKaAYcAAAgG project=realtime-dev extern
+                  - generic:
+                    - generic: al_id=realtime-dev [info] Sent 200 in 32ms
+          - generic [ref=e502]:
+            - heading "compose.yaml" [level=4] [ref=e503]
+            - generic [ref=e505]:
+              - generic [ref=e506]:
+                - generic [ref=e507]: "1"
+                - generic [ref=e508]: "2"
+                - generic [ref=e509]: "3"
+                - generic [ref=e510]: "4"
+                - generic [ref=e511]: "5"
+                - generic [ref=e512]: "6"
+                - generic [ref=e513]: "7"
+                - generic [ref=e514]: "8"
+                - generic [ref=e515]: "9"
+                - generic [ref=e516]: "10"
+                - generic [ref=e517]: "11"
+                - generic [ref=e518]: "12"
+                - generic [ref=e519]: "13"
+                - generic [ref=e520]: "14"
+                - generic [ref=e521]: "15"
+                - generic [ref=e522]: "16"
+                - generic [ref=e523]: "17"
+                - generic [ref=e524]: "18"
+                - generic [ref=e525]: "19"
+                - generic [ref=e526]: "20"
+                - generic [ref=e527]: "21"
+                - generic [ref=e528]: "22"
+                - generic [ref=e529]: "23"
+                - generic [ref=e530]: "24"
+                - generic [ref=e531]: "25"
+                - generic [ref=e532]: "26"
+                - generic [ref=e533]: "27"
+                - generic [ref=e534]: "28"
+                - generic [ref=e535]: "29"
+                - generic [ref=e536]: "30"
+                - generic [ref=e537]: "31"
+                - generic [ref=e538]: "32"
+                - generic [ref=e539]: "33"
+                - generic [ref=e540]: "34"
+                - generic [ref=e541]: "35"
+                - generic [ref=e542]: "36"
+                - generic [ref=e543]: "37"
+                - generic [ref=e544]: "38"
+                - generic [ref=e545]: "39"
+                - generic [ref=e546]: "40"
+                - generic [ref=e547]: "41"
+                - generic [ref=e548]: "42"
+                - generic [ref=e549]: "43"
+                - generic [ref=e550]: "44"
+                - generic [ref=e551]: "45"
+                - generic [ref=e552]: "46"
+                - generic [ref=e553]: "47"
+                - generic [ref=e554]: "48"
+                - generic [ref=e555]: "49"
+                - generic [ref=e556]: "50"
+                - generic [ref=e557]: "51"
+                - generic [ref=e558]: "52"
+                - generic [ref=e559]: "53"
+                - generic [ref=e560]: "54"
+                - generic [ref=e561]: "55"
+                - generic [ref=e562]: "56"
+                - generic [ref=e563]: "57"
+                - generic [ref=e564]: "58"
+                - generic [ref=e565]: "59"
+                - generic [ref=e566]: "60"
+                - generic [ref=e567]: "61"
+                - generic [ref=e568]: "62"
+                - generic [ref=e569]: "63"
+                - generic [ref=e570]: "64"
+                - generic [ref=e571]: "65"
+                - generic [ref=e572]: "66"
+                - generic [ref=e573]: "67"
+                - generic [ref=e574]: "68"
+                - generic [ref=e575]: "69"
+                - generic [ref=e576]: "70"
+                - generic [ref=e577]: "71"
+                - generic [ref=e578]: "72"
+                - generic [ref=e579]: "73"
+                - generic [ref=e580]: "74"
+                - generic [ref=e581]: "75"
+                - generic [ref=e582]: "76"
+                - generic [ref=e583]: "77"
+                - generic [ref=e584]: "78"
+                - generic [ref=e585]: "79"
+                - generic [ref=e586]: "80"
+                - generic [ref=e587]: "81"
+                - generic [ref=e588]: "82"
+                - generic [ref=e589]: "83"
+                - generic [ref=e590]: "84"
+                - generic [ref=e591]: "85"
+                - generic [ref=e592]: "86"
+                - generic [ref=e593]: "87"
+                - generic [ref=e594]: "88"
+                - generic [ref=e595]: "89"
+                - generic [ref=e596]: "90"
+                - generic [ref=e597]: "91"
+                - generic [ref=e598]: "92"
+                - generic [ref=e599]: "93"
+                - generic [ref=e600]: "94"
+                - generic [ref=e601]: "95"
+                - generic [ref=e602]: "96"
+                - generic [ref=e603]: "97"
+                - generic [ref=e604]: "98"
+                - generic [ref=e605]: "99"
+                - generic [ref=e606]: "100"
+                - generic [ref=e607]: "101"
+                - generic [ref=e608]: "102"
+                - generic [ref=e609]: "103"
+                - generic [ref=e610]: "104"
+                - generic [ref=e611]: "105"
+                - generic [ref=e612]: "106"
+                - generic [ref=e613]: "107"
+                - generic [ref=e614]: "108"
+                - generic [ref=e615]: "109"
+                - generic [ref=e616]: "110"
+                - generic [ref=e617]: "111"
+                - generic [ref=e618]: "112"
+                - generic [ref=e619]: "113"
+                - generic [ref=e620]: "114"
+                - generic [ref=e621]: "115"
+                - generic [ref=e622]: "116"
+                - generic [ref=e623]: "117"
+                - generic [ref=e624]: "118"
+                - generic [ref=e625]: "119"
+                - generic [ref=e626]: "120"
+                - generic [ref=e627]: "121"
+                - generic [ref=e628]: "122"
+                - generic [ref=e629]: "123"
+                - generic [ref=e630]: "124"
+                - generic [ref=e631]: "125"
+                - generic [ref=e632]: "126"
+                - generic [ref=e633]: "127"
+                - generic [ref=e634]: "128"
+                - generic [ref=e635]: "129"
+                - generic [ref=e636]: "130"
+                - generic [ref=e637]: "131"
+                - generic [ref=e638]: "132"
+                - generic [ref=e639]: "133"
+                - generic [ref=e640]: "134"
+                - generic [ref=e641]: "135"
+                - generic [ref=e642]: "136"
+                - generic [ref=e643]: "137"
+                - generic [ref=e644]: "138"
+                - generic [ref=e645]: "139"
+                - generic [ref=e646]: "140"
+                - generic [ref=e647]: "141"
+                - generic [ref=e648]: "142"
+                - generic [ref=e649]: "143"
+                - generic [ref=e650]: "144"
+                - generic [ref=e651]: "145"
+                - generic [ref=e652]: "146"
+                - generic [ref=e653]: "147"
+                - generic [ref=e654]: "148"
+                - generic [ref=e655]: "149"
+                - generic [ref=e656]: "150"
+                - generic [ref=e657]: "151"
+                - generic [ref=e658]: "152"
+                - generic [ref=e659]: "153"
+                - generic [ref=e660]: "154"
+                - generic [ref=e661]: "155"
+                - generic [ref=e662]: "156"
+                - generic [ref=e663]: "157"
+                - generic [ref=e664]: "158"
+                - generic [ref=e665]: "159"
+                - generic [ref=e666]: "160"
+                - generic [ref=e667]: "161"
+                - generic [ref=e668]: "162"
+                - generic [ref=e669]: "163"
+                - generic [ref=e670]: "164"
+                - generic [ref=e671]: "165"
+                - generic [ref=e672]: "166"
+                - generic [ref=e673]: "167"
+                - generic [ref=e674]: "168"
+                - generic [ref=e675]: "169"
+                - generic [ref=e676]: "170"
+                - generic [ref=e677]: "171"
+                - generic [ref=e678]: "172"
+                - generic [ref=e679]: "173"
+                - generic [ref=e680]: "174"
+                - generic [ref=e681]: "175"
+                - generic [ref=e682]: "176"
+                - generic [ref=e683]: "177"
+                - generic [ref=e684]: "178"
+                - generic [ref=e685]: "179"
+                - generic [ref=e686]: "180"
+                - generic [ref=e687]: "181"
+                - generic [ref=e688]: "182"
+                - generic [ref=e689]: "183"
+                - generic [ref=e690]: "184"
+                - generic [ref=e691]: "185"
+                - generic [ref=e692]: "186"
+                - generic [ref=e693]: "187"
+                - generic [ref=e694]: "188"
+                - generic [ref=e695]: "189"
+                - generic [ref=e696]: "190"
+                - generic [ref=e697]: "191"
+                - generic [ref=e698]: "192"
+                - generic [ref=e699]: "193"
+                - generic [ref=e700]: "194"
+                - generic [ref=e701]: "195"
+                - generic [ref=e702]: "196"
+                - generic [ref=e703]: "197"
+                - generic [ref=e704]: "198"
+                - generic [ref=e705]: "199"
+                - generic [ref=e706]: "200"
+                - generic [ref=e707]: "201"
+                - generic [ref=e708]: "202"
+                - generic [ref=e709]: "203"
+                - generic [ref=e710]: "204"
+                - generic [ref=e711]: "205"
+                - generic [ref=e712]: "206"
+                - generic [ref=e713]: "207"
+                - generic [ref=e714]: "208"
+                - generic [ref=e715]: "209"
+                - generic [ref=e716]: "210"
+                - generic [ref=e717]: "211"
+                - generic [ref=e718]: "212"
+                - generic [ref=e719]: "213"
+                - generic [ref=e720]: "214"
+                - generic [ref=e721]: "215"
+                - generic [ref=e722]: "216"
+                - generic [ref=e723]: "217"
+                - generic [ref=e724]: "218"
+                - generic [ref=e725]: "219"
+                - generic [ref=e726]: "220"
+                - generic [ref=e727]: "221"
+                - generic [ref=e728]: "222"
+                - generic [ref=e729]: "223"
+                - generic [ref=e730]: "224"
+                - generic [ref=e731]: "225"
+                - generic [ref=e732]: "226"
+                - generic [ref=e733]: "227"
+                - generic [ref=e734]: "228"
+                - generic [ref=e735]: "229"
+                - generic [ref=e736]: "230"
+                - generic [ref=e737]: "231"
+                - generic [ref=e738]: "232"
+                - generic [ref=e739]: "233"
+                - generic [ref=e740]: "234"
+                - generic [ref=e741]: "235"
+                - generic [ref=e742]: "236"
+                - generic [ref=e743]: "237"
+                - generic [ref=e744]: "238"
+                - generic [ref=e745]: "239"
+                - generic [ref=e746]: "240"
+                - generic [ref=e747]: "241"
+                - generic [ref=e748]: "242"
+                - generic [ref=e749]: "243"
+                - generic [ref=e750]: "244"
+                - generic [ref=e751]: "245"
+                - generic [ref=e752]: "246"
+                - generic [ref=e753]: "247"
+                - generic [ref=e754]: "248"
+                - generic [ref=e755]: "249"
+                - generic [ref=e756]: "250"
+                - generic [ref=e757]: "251"
+                - generic [ref=e758]: "252"
+                - generic [ref=e759]: "253"
+                - generic [ref=e760]: "254"
+                - generic [ref=e761]: "255"
+                - generic [ref=e762]: "256"
+                - generic [ref=e763]: "257"
+                - generic [ref=e764]: "258"
+                - generic [ref=e765]: "259"
+                - generic [ref=e766]: "260"
+                - generic [ref=e767]: "261"
+                - generic [ref=e768]: "262"
+                - generic [ref=e769]: "263"
+                - generic [ref=e770]: "264"
+                - generic [ref=e771]: "265"
+                - generic [ref=e772]: "266"
+                - generic [ref=e773]: "267"
+                - generic [ref=e774]: "268"
+                - generic [ref=e775]: "269"
+                - generic [ref=e776]: "270"
+                - generic [ref=e777]: "271"
+                - generic [ref=e778]: "272"
+                - generic [ref=e779]: "273"
+                - generic [ref=e780]: "274"
+                - generic [ref=e781]: "275"
+                - generic [ref=e782]: "276"
+                - generic [ref=e783]: "277"
+                - generic [ref=e784]: "278"
+                - generic [ref=e785]: "279"
+                - generic [ref=e786]: "280"
+                - generic [ref=e787]: "281"
+                - generic [ref=e788]: "282"
+                - generic [ref=e789]: "283"
+                - generic [ref=e790]: "284"
+                - generic [ref=e791]: "285"
+                - generic [ref=e792]: "286"
+                - generic [ref=e793]: "287"
+                - generic [ref=e794]: "288"
+                - generic [ref=e795]: "289"
+                - generic [ref=e796]: "290"
+                - generic [ref=e797]: "291"
+                - generic [ref=e798]: "292"
+                - generic [ref=e799]: "293"
+                - generic [ref=e800]: "294"
+                - generic [ref=e801]: "295"
+                - generic [ref=e802]: "296"
+                - generic [ref=e803]: "297"
+                - generic [ref=e804]: "298"
+                - generic [ref=e805]: "299"
+                - generic [ref=e806]: "300"
+                - generic [ref=e807]: "301"
+                - generic [ref=e808]: "302"
+                - generic [ref=e809]: "303"
+                - generic [ref=e810]: "304"
+                - generic [ref=e811]: "305"
+                - generic [ref=e812]: "306"
+                - generic [ref=e813]: "307"
+                - generic [ref=e814]: "308"
+                - generic [ref=e815]: "309"
+                - generic [ref=e816]: "310"
+                - generic [ref=e817]: "311"
+                - generic [ref=e818]: "312"
+                - generic [ref=e819]: "313"
+                - generic [ref=e820]: "314"
+                - generic [ref=e821]: "315"
+                - generic [ref=e822]: "316"
+                - generic [ref=e823]: "317"
+                - generic [ref=e824]: "318"
+                - generic [ref=e825]: "319"
+                - generic [ref=e826]: "320"
+                - generic [ref=e827]: "321"
+                - generic [ref=e828]: "322"
+                - generic [ref=e829]: "323"
+                - generic [ref=e830]: "324"
+                - generic [ref=e831]: "325"
+                - generic [ref=e832]: "326"
+                - generic [ref=e833]: "327"
+                - generic [ref=e834]: "328"
+                - generic [ref=e835]: "329"
+                - generic [ref=e836]: "330"
+                - generic [ref=e837]: "331"
+                - generic [ref=e838]: "332"
+                - generic [ref=e839]: "333"
+                - generic [ref=e840]: "334"
+                - generic [ref=e841]: "335"
+                - generic [ref=e842]: "336"
+                - generic [ref=e843]: "337"
+                - generic [ref=e844]: "338"
+                - generic [ref=e845]: "339"
+                - generic [ref=e846]: "340"
+                - generic [ref=e847]: "341"
+                - generic [ref=e848]: "342"
+                - generic [ref=e849]: "343"
+                - generic [ref=e850]: "344"
+                - generic [ref=e851]: "345"
+                - generic [ref=e852]: "346"
+                - generic [ref=e853]: "347"
+                - generic [ref=e854]: "348"
+                - generic [ref=e855]: "349"
+                - generic [ref=e856]: "350"
+                - generic [ref=e857]: "351"
+                - generic [ref=e858]: "352"
+                - generic [ref=e859]: "353"
+                - generic [ref=e860]: "354"
+                - generic [ref=e861]: "355"
+                - generic [ref=e862]: "356"
+                - generic [ref=e863]: "357"
+                - generic [ref=e864]: "358"
+                - generic [ref=e865]: "359"
+                - generic [ref=e866]: "360"
+                - generic [ref=e867]: "361"
+                - generic [ref=e868]: "362"
+                - generic [ref=e869]: "363"
+                - generic [ref=e870]: "364"
+                - generic [ref=e871]: "365"
+                - generic [ref=e872]: "366"
+                - generic [ref=e873]: "367"
+                - generic [ref=e874]: "368"
+                - generic [ref=e875]: "369"
+                - generic [ref=e876]: "370"
+                - generic [ref=e877]: "371"
+                - generic [ref=e878]: "372"
+                - generic [ref=e879]: "373"
+                - generic [ref=e880]: "374"
+                - generic [ref=e881]: "375"
+                - generic [ref=e882]: "376"
+                - generic [ref=e883]: "377"
+                - generic [ref=e884]: "378"
+                - generic [ref=e885]: "379"
+                - generic [ref=e886]: "380"
+                - generic [ref=e887]: "381"
+                - generic [ref=e888]: "382"
+                - generic [ref=e889]: "383"
+                - generic [ref=e890]: "384"
+                - generic [ref=e891]: "385"
+                - generic [ref=e892]: "386"
+                - generic [ref=e893]: "387"
+                - generic [ref=e894]: "388"
+                - generic [ref=e895]: "389"
+                - generic [ref=e896]: "390"
+                - generic [ref=e897]: "391"
+                - generic [ref=e898]: "392"
+                - generic [ref=e899]: "393"
+                - generic [ref=e900]: "394"
+                - generic [ref=e901]: "395"
+                - generic [ref=e902]: "396"
+                - generic [ref=e903]: "397"
+                - generic [ref=e904]: "398"
+                - generic [ref=e905]: "399"
+                - generic [ref=e906]: "400"
+                - generic [ref=e907]: "401"
+                - generic [ref=e908]: "402"
+                - generic [ref=e909]: "403"
+                - generic [ref=e910]: "404"
+                - generic [ref=e911]: "405"
+                - generic [ref=e912]: "406"
+                - generic [ref=e913]: "407"
+                - generic [ref=e914]: "408"
+                - generic [ref=e915]: "409"
+                - generic [ref=e916]: "410"
+                - generic [ref=e917]: "411"
+                - generic [ref=e918]: "412"
+                - generic [ref=e919]: "413"
+                - generic [ref=e920]: "414"
+                - generic [ref=e921]: "415"
+                - generic [ref=e922]: "416"
+                - generic [ref=e923]: "417"
+                - generic [ref=e924]: "418"
+                - generic [ref=e925]: "419"
+                - generic [ref=e926]: "420"
+                - generic [ref=e927]: "421"
+                - generic [ref=e928]: "422"
+                - generic [ref=e929]: "423"
+                - generic [ref=e930]: "424"
+                - generic [ref=e931]: "425"
+                - generic [ref=e932]: "426"
+                - generic [ref=e933]: "427"
+                - generic [ref=e934]: "428"
+                - generic [ref=e935]: "429"
+                - generic [ref=e936]: "430"
+                - generic [ref=e937]: "431"
+                - generic [ref=e938]: "432"
+                - generic [ref=e939]: "433"
+                - generic [ref=e940]: "434"
+                - generic [ref=e941]: "435"
+                - generic [ref=e942]: "436"
+                - generic [ref=e943]: "437"
+                - generic [ref=e944]: "438"
+                - generic [ref=e945]: "439"
+                - generic [ref=e946]: "440"
+                - generic [ref=e947]: "441"
+                - generic [ref=e948]: "442"
+                - generic [ref=e949]: "443"
+                - generic [ref=e950]: "444"
+                - generic [ref=e951]: "445"
+                - generic [ref=e952]: "446"
+                - generic [ref=e953]: "447"
+                - generic [ref=e954]: "448"
+                - generic [ref=e955]: "449"
+                - generic [ref=e956]: "450"
+                - generic [ref=e957]: "451"
+                - generic [ref=e958]: "452"
+                - generic [ref=e959]: "453"
+                - generic [ref=e960]: "454"
+                - generic [ref=e961]: "455"
+                - generic [ref=e962]: "456"
+                - generic [ref=e963]: "457"
+                - generic [ref=e964]: "458"
+                - generic [ref=e965]: "459"
+                - generic [ref=e966]: "460"
+                - generic [ref=e967]: "461"
+                - generic [ref=e968]: "462"
+                - generic [ref=e969]: "463"
+                - generic [ref=e970]: "464"
+                - generic [ref=e971]: "465"
+                - generic [ref=e972]: "466"
+                - generic [ref=e973]: "467"
+                - generic [ref=e974]: "468"
+                - generic [ref=e975]: "469"
+                - generic [ref=e976]: "470"
+                - generic [ref=e977]: "471"
+                - generic [ref=e978]: "472"
+                - generic [ref=e979]: "473"
+                - generic [ref=e980]: "474"
+                - generic [ref=e981]: "475"
+                - generic [ref=e982]: "476"
+                - generic [ref=e983]: "477"
+                - generic [ref=e984]: "478"
+                - generic [ref=e985]: "479"
+                - generic [ref=e986]: "480"
+                - generic [ref=e987]: "481"
+                - generic [ref=e988]: "482"
+                - generic [ref=e989]: "483"
+                - generic [ref=e990]: "484"
+                - generic [ref=e991]: "485"
+                - generic [ref=e992]: "486"
+                - generic [ref=e993]: "487"
+                - generic [ref=e994]: "488"
+                - generic [ref=e995]: "489"
+                - generic [ref=e996]: "490"
+                - generic [ref=e997]: "491"
+                - generic [ref=e998]: "492"
+                - generic [ref=e999]: "493"
+                - generic [ref=e1000]: "494"
+                - generic [ref=e1001]: "495"
+                - generic [ref=e1002]: "496"
+                - generic [ref=e1003]: "497"
+                - generic [ref=e1004]: "498"
+                - generic [ref=e1005]: "499"
+                - generic [ref=e1006]: "500"
+              - generic [ref=e1007]:
+                - textbox [ref=e1008]: "# Usage # Start: docker compose up # With helpers: docker compose -f docker-compose.yml -f ./dev/docker-compose.dev.yml up # Stop: docker compose down # Destroy: docker compose -f docker-compose.yml -f ./dev/docker-compose.dev.yml down -v --remove-orphans # Reset everything: ./reset.sh name: supabase services: studio: container_name: supabase-studio image: supabase/studio:2025.11.10-sha-5291fe3 restart: unless-stopped healthcheck: test: - CMD - node - -e - fetch('http://studio:3000/api/platform/profile').then((r) => {if (r.status !== 200) throw new Error(r.status)}) timeout: 10s interval: 5s retries: 3 depends_on: analytics: condition: service_healthy environment: # Binds nestjs listener to both IPv4 and IPv6 network interfaces HOSTNAME: \"::\" STUDIO_PG_META_URL: http://meta:8080 POSTGRES_PORT: ${POSTGRES_PORT} POSTGRES_HOST: ${POSTGRES_HOST} POSTGRES_DB: ${POSTGRES_DB} POSTGRES_PASSWORD: ${POSTGRES_PASSWORD} PG_META_CRYPTO_KEY: ${PG_META_CRYPTO_KEY} DEFAULT_ORGANIZATION_NAME: ${STUDIO_DEFAULT_ORGANIZATION} DEFAULT_PROJECT_NAME: ${STUDIO_DEFAULT_PROJECT} OPENAI_API_KEY: ${OPENAI_API_KEY:-} SUPABASE_URL: http://kong:8000 SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL} SUPABASE_ANON_KEY: ${ANON_KEY} SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY} AUTH_JWT_SECRET: ${JWT_SECRET} # LOGFLARE_API_KEY is deprecated LOGFLARE_API_KEY: ${LOGFLARE_PUBLIC_ACCESS_TOKEN} LOGFLARE_PUBLIC_ACCESS_TOKEN: ${LOGFLARE_PUBLIC_ACCESS_TOKEN} LOGFLARE_PRIVATE_ACCESS_TOKEN: ${LOGFLARE_PRIVATE_ACCESS_TOKEN} LOGFLARE_URL: http://analytics:4000 NEXT_PUBLIC_ENABLE_LOGS: true # Comment to use Big Query backend for analytics NEXT_ANALYTICS_BACKEND_PROVIDER: postgres # Uncomment to use Big Query backend for analytics # NEXT_ANALYTICS_BACKEND_PROVIDER: bigquery kong: container_name: supabase-kong image: kong:2.8.1 restart: unless-stopped ports: - ${KONG_HTTP_PORT}:8000/tcp - ${KONG_HTTPS_PORT}:8443/tcp volumes: # https://github.com/supabase/supabase/issues/12661 - /home/dennis/supabase-local/volumes/api/kong.yml:/home/kong/temp.yml:ro,z depends_on: analytics: condition: service_healthy environment: KONG_DATABASE: off KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml # https://github.com/supabase/cli/issues/14 KONG_DNS_ORDER: LAST,A,CNAME KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth,request-termination,ip-restriction KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k SUPABASE_ANON_KEY: ${ANON_KEY} SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY} DASHBOARD_USERNAME: ${DASHBOARD_USERNAME} DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD} # https://unix.stackexchange.com/a/294837 entrypoint: bash -c 'eval \"echo \\\"$$(cat ~/temp.yml)\\\"\" > ~/kong.yml && /docker-entrypoint.sh kong docker-start' auth: container_name: supabase-auth image: supabase/gotrue:v2.182.1 restart: unless-stopped healthcheck: test: - CMD - wget - --no-verbose - --tries=1 - --spider - http://localhost:9999/health timeout: 5s interval: 5s retries: 3 depends_on: db: # Disable this if you are using an external Postgres database condition: service_healthy analytics: condition: service_healthy environment: GOTRUE_API_HOST: 0.0.0.0 GOTRUE_API_PORT: 9999 API_EXTERNAL_URL: ${API_EXTERNAL_URL} GOTRUE_DB_DRIVER: postgres GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} GOTRUE_SITE_URL: ${SITE_URL} GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS} GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP} GOTRUE_JWT_ADMIN_ROLES: service_role GOTRUE_JWT_AUD: authenticated GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated GOTRUE_JWT_EXP: ${JWT_EXPIRY} GOTRUE_JWT_SECRET: ${JWT_SECRET} GOTRUE_EXTERNAL_EMAIL_ENABLED: ${ENABLE_EMAIL_SIGNUP} GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: ${ENABLE_ANONYMOUS_USERS} GOTRUE_MAILER_AUTOCONFIRM: ${ENABLE_EMAIL_AUTOCONFIRM} # Uncomment to bypass nonce check in ID Token flow. Commonly set to true when using Google Sign In on mobile. # GOTRUE_EXTERNAL_SKIP_NONCE_CHECK: true # GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED: true # GOTRUE_SMTP_MAX_FREQUENCY: 1s GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL} GOTRUE_SMTP_HOST: ${SMTP_HOST} GOTRUE_SMTP_PORT: ${SMTP_PORT} GOTRUE_SMTP_USER: ${SMTP_USER} GOTRUE_SMTP_PASS: ${SMTP_PASS} GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME} GOTRUE_MAILER_URLPATHS_INVITE: ${MAILER_URLPATHS_INVITE} GOTRUE_MAILER_URLPATHS_CONFIRMATION: ${MAILER_URLPATHS_CONFIRMATION} GOTRUE_MAILER_URLPATHS_RECOVERY: ${MAILER_URLPATHS_RECOVERY} GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: ${MAILER_URLPATHS_EMAIL_CHANGE} GOTRUE_EXTERNAL_PHONE_ENABLED: ${ENABLE_PHONE_SIGNUP} GOTRUE_SMS_AUTOCONFIRM: ${ENABLE_PHONE_AUTOCONFIRM} # Uncomment to enable custom access token hook. Please see: https://supabase.com/docs/guides/auth/auth-hooks for full list of hooks and additional details about custom_access_token_hook # GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_ENABLED: \"true\" # GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_URI: \"pg-functions://postgres/public/custom_access_token_hook\" # GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_SECRETS: \"<standard-base64-secret>\" # GOTRUE_HOOK_MFA_VERIFICATION_ATTEMPT_ENABLED: \"true\" # GOTRUE_HOOK_MFA_VERIFICATION_ATTEMPT_URI: \"pg-functions://postgres/public/mfa_verification_attempt\" # GOTRUE_HOOK_PASSWORD_VERIFICATION_ATTEMPT_ENABLED: \"true\" # GOTRUE_HOOK_PASSWORD_VERIFICATION_ATTEMPT_URI: \"pg-functions://postgres/public/password_verification_attempt\" # GOTRUE_HOOK_SEND_SMS_ENABLED: \"false\" # GOTRUE_HOOK_SEND_SMS_URI: \"pg-functions://postgres/public/custom_access_token_hook\" # GOTRUE_HOOK_SEND_SMS_SECRETS: \"v1,whsec_VGhpcyBpcyBhbiBleGFtcGxlIG9mIGEgc2hvcnRlciBCYXNlNjQgc3RyaW5n\" # GOTRUE_HOOK_SEND_EMAIL_ENABLED: \"false\" # GOTRUE_HOOK_SEND_EMAIL_URI: \"http://host.docker.internal:54321/functions/v1/email_sender\" # GOTRUE_HOOK_SEND_EMAIL_SECRETS: \"v1,whsec_VGhpcyBpcyBhbiBleGFtcGxlIG9mIGEgc2hvcnRlciBCYXNlNjQgc3RyaW5n\" rest: container_name: supabase-rest image: postgrest/postgrest:v13.0.7 restart: unless-stopped depends_on: db: # Disable this if you are using an external Postgres database condition: service_healthy analytics: condition: service_healthy environment: PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS} PGRST_DB_ANON_ROLE: anon PGRST_JWT_SECRET: ${JWT_SECRET} PGRST_DB_USE_LEGACY_GUCS: \"false\" PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET} PGRST_APP_SETTINGS_JWT_EXP: ${JWT_EXPIRY} command: - postgrest realtime: # This container name looks inconsistent but is correct because realtime constructs tenant id by parsing the subdomain container_name: realtime-dev.supabase-realtime image: supabase/realtime:v2.63.0 restart: unless-stopped depends_on: db: # Disable this if you are using an external Postgres database condition: service_healthy analytics: condition: service_healthy healthcheck: test: - CMD - curl - -sSfL - --head - -o - /dev/null - -H - \"Authorization: Bearer ${ANON_KEY}\" - http://localhost:4000/api/tenants/realtime-dev/health timeout: 5s interval: 5s retries: 3 environment: PORT: 4000 DB_HOST: ${POSTGRES_HOST} DB_PORT: ${POSTGRES_PORT} DB_USER: supabase_admin DB_PASSWORD: ${POSTGRES_PASSWORD} DB_NAME: ${POSTGRES_DB} DB_AFTER_CONNECT_QUERY: SET search_path TO _realtime DB_ENC_KEY: supabaserealtime API_JWT_SECRET: ${JWT_SECRET} SECRET_KEY_BASE: ${SECRET_KEY_BASE} ERL_AFLAGS: -proto_dist inet_tcp DNS_NODES: \"''\" RLIMIT_NOFILE: \"10000\" APP_NAME: realtime SEED_SELF_HOST: true RUN_JANITOR: true # To use S3 backed storage: docker compose -f docker-compose.yml -f docker-compose.s3.yml up storage: container_name: supabase-storage image: supabase/storage-api:v1.29.0 restart: unless-stopped volumes: - /home/dennis/supabase-local/volumes/storage:/var/lib/storage:z healthcheck: test: - CMD - wget - --no-verbose - --tries=1 - --spider - http://storage:5000/status timeout: 5s interval: 5s retries: 3 depends_on: db: # Disable this if you are using an external Postgres database condition: service_healthy rest: condition: service_started imgproxy: condition: service_started environment: ANON_KEY: ${ANON_KEY} SERVICE_KEY: ${SERVICE_ROLE_KEY} POSTGREST_URL: http://rest:3000 PGRST_JWT_SECRET: ${JWT_SECRET} DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} REQUEST_ALLOW_X_FORWARDED_PATH: \"true\" FILE_SIZE_LIMIT: 52428800 STORAGE_BACKEND: file FILE_STORAGE_BACKEND_PATH: /var/lib/storage TENANT_ID: stub # TODO: https://github.com/supabase/storage-api/issues/55 REGION: stub GLOBAL_S3_BUCKET: stub ENABLE_IMAGE_TRANSFORMATION: \"true\" IMGPROXY_URL: http://imgproxy:5001 imgproxy: container_name: supabase-imgproxy image: darthsim/imgproxy:v3.8.0 restart: unless-stopped volumes: - /home/dennis/supabase-local/volumes/storage:/var/lib/storage:z healthcheck: test: - CMD - imgproxy - health timeout: 5s interval: 5s retries: 3 environment: IMGPROXY_BIND: :5001 IMGPROXY_LOCAL_FILESYSTEM_ROOT: / IMGPROXY_USE_ETAG: \"true\" IMGPROXY_ENABLE_WEBP_DETECTION: ${IMGPROXY_ENABLE_WEBP_DETECTION} meta: container_name: supabase-meta image: supabase/postgres-meta:v0.93.1 restart: unless-stopped depends_on: db: # Disable this if you are using an external Postgres database condition: service_healthy analytics: condition: service_healthy environment: PG_META_PORT: 8080 PG_META_DB_HOST: ${POSTGRES_HOST} PG_META_DB_PORT: ${POSTGRES_PORT} PG_META_DB_NAME: ${POSTGRES_DB} PG_META_DB_USER: supabase_admin PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD} CRYPTO_KEY: ${PG_META_CRYPTO_KEY} functions: container_name: supabase-edge-functions image: supabase/edge-runtime:v1.69.23 restart: unless-stopped volumes: - /home/dennis/supabase-local/volumes/functions:/home/deno/functions:Z depends_on: analytics: condition: service_healthy environment: JWT_SECRET: ${JWT_SECRET} SUPABASE_URL: http://kong:8000 SUPABASE_ANON_KEY: ${ANON_KEY} SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY} SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} # TODO: Allow configuring VERIFY_JWT per function. This PR might help: https://github.com/supabase/cli/pull/786 VERIFY_JWT: ${FUNCTIONS_VERIFY_JWT} # TURN server for WebRTC NAT traversal TURN_SERVER: turn:188.228.14.94:3478 TURN_SECRET: HawkeyeTurnSecret2026x # Cloudflare TURN (primary, coturn as fallback) CF_TURN_KEY_ID: ${CF_TURN_KEY_ID} CF_TURN_API_TOKEN: ${CF_TURN_API_TOKEN} command: - start - --main-service - /home/deno/functions/main analytics: container_name: supabase-analytics image: supabase/logflare:1.22.6 restart: unless-stopped ports: - 4000:4000 # Uncomment to use Big Query backend for analytics # volumes: # - type: bind # source: ${PWD}/gcloud.json # target: /opt/app/rel/logflare/bin/gcloud.json # read_only: true healthcheck: test: - CMD - curl - http://localhost:4000/health timeout: 5s interval: 5s retries: 10 depends_on: db: # Disable this if you are using an external Postgres database condition: service_healthy environment: LOGFLARE_NODE_HOST: 127.0.0.1 DB_USERNAME: supabase_admin DB_DATABASE: _supabase DB_HOSTNAME: ${POSTGRES_HOST} DB_PORT: ${POSTGRES_PORT} DB_PASSWORD: ${POSTGRES_PASSWORD} DB_SCHEMA: _analytics LOGFLARE_PUBLIC_ACCESS_TOKEN: ${LOGFLARE_PUBLIC_ACCESS_TOKEN} LOGFLARE_PRIVATE_ACCESS_TOKEN: ${LOGFLARE_PRIVATE_ACCESS_TOKEN} LOGFLARE_SINGLE_TENANT: true LOGFLARE_SUPABASE_MODE: true # Comment variables to use Big Query backend for analytics POSTGRES_BACKEND_URL: postgresql://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/_supabase POSTGRES_BACKEND_SCHEMA: _analytics LOGFLARE_FEATURE_FLAG_OVERRIDE: multibackend=true # Uncomment to use Big Query backend for analytics # GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID} # GOOGLE_PROJECT_NUMBER: ${GOOGLE_PROJECT_NUMBER} # Comment out everything below this point if you are using an external Postgres database db: container_name: supabase-db image: supabase/postgres:15.8.1.085 restart: unless-stopped volumes: - /home/dennis/supabase-local/volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z # Must be superuser to create event trigger - /home/dennis/supabase-local/volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:Z # Must be superuser to alter reserved role - /home/dennis/supabase-local/volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:Z # Initialize the database settings with JWT_SECRET and JWT_EXP - /home/dennis/supabase-local/volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z # PGDATA directory is persisted between restarts - /home/dennis/supabase-local/volumes/db/data:/var/lib/postgresql/data:Z # Changes required for internal supabase data such as _analytics - /home/dennis/supabase-local/volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z # Changes required for Analytics support - /home/dennis/supabase-local/volumes/db/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:Z # Changes required for Pooler support - /home/dennis/supabase-local/volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z # Use named volume to persist pgsodium decryption key between restarts - db-config:/etc/postgresql-custom healthcheck: test: - CMD - pg_isready - -U - postgres - -h - localhost interval: 5s timeout: 5s retries: 10 depends_on: vector: condition: service_healthy environment: POSTGRES_HOST: /var/run/postgresql PGPORT: ${POSTGRES_PORT} POSTGRES_PORT: ${POSTGRES_PORT} PGPASSWORD: ${POSTGRES_PASSWORD} POSTGRES_PASSWORD: ${POSTGRES_PASSWORD} PGDATABASE: ${POSTGRES_DB} POSTGRES_DB: ${POSTGRES_DB} JWT_SECRET: ${JWT_SECRET} JWT_EXP: ${JWT_EXPIRY} command: - postgres - -c - config_file=/etc/postgresql/postgresql.conf - -c - log_min_messages=fatal # prevents Realtime polling queries from appearing in logs vector: container_name: supabase-vector image: timberio/vector:0.28.1-alpine restart: unless-stopped volumes: - /home/dennis/supabase-local/volumes/logs/vector.yml:/etc/vector/vector.yml:ro,z - ${DOCKER_SOCKET_LOCATION}:/var/run/docker.sock:ro,z healthcheck: test: - CMD - wget - --no-verbose - --tries=1 - --spider - http://vector:9001/health timeout: 5s interval: 5s retries: 3 environment: LOGFLARE_PUBLIC_ACCESS_TOKEN: ${LOGFLARE_PUBLIC_ACCESS_TOKEN} command: - --config - /etc/vector/vector.yml security_opt: - label=disable # Update the DATABASE_URL if you are using an external Postgres database supavisor: container_name: supabase-pooler image: supabase/supavisor:2.7.4 restart: unless-stopped ports: - ${POSTGRES_PORT}:5432 - ${POOLER_PROXY_PORT_TRANSACTION}:6543 volumes: - /home/dennis/supabase-local/volumes/pooler/pooler.exs:/etc/pooler/pooler.exs:ro,z healthcheck: test: - CMD - curl - -sSfL - --head - -o - /dev/null - http://127.0.0.1:4000/api/health interval: 10s timeout: 5s retries: 5 depends_on: db: condition: service_healthy analytics: condition: service_healthy environment: PORT: 4000 POSTGRES_PORT: ${POSTGRES_PORT} POSTGRES_DB: ${POSTGRES_DB} POSTGRES_PASSWORD: ${POSTGRES_PASSWORD} DATABASE_URL: ecto://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/_supabase CLUSTER_POSTGRES: true SECRET_KEY_BASE: ${SECRET_KEY_BASE} VAULT_ENC_KEY: ${VAULT_ENC_KEY} API_JWT_SECRET: ${JWT_SECRET} METRICS_JWT_SECRET: ${JWT_SECRET} REGION: local ERL_AFLAGS: -proto_dist inet_tcp POOLER_TENANT_ID: ${POOLER_TENANT_ID} POOLER_DEFAULT_POOL_SIZE: ${POOLER_DEFAULT_POOL_SIZE} POOLER_MAX_CLIENT_CONN: ${POOLER_MAX_CLIENT_CONN} POOLER_POOL_MODE: transaction DB_POOL_SIZE: ${POOLER_DB_POOL_SIZE} command: - /bin/sh - -c - /app/bin/migrate && /app/bin/supavisor eval \"$$(cat /etc/pooler/pooler.exs)\" && /app/bin/server volumes: db-config: null"
+                - generic: "# Usage # Start: docker compose up # With helpers: docker compose -f docker-compose.yml -f ./dev/docker-compose.dev.yml up # Stop: docker compose down # Destroy: docker compose -f docker-compose.yml -f ./dev/docker-compose.dev.yml down -v --remove-orphans # Reset everything: ./reset.sh name: supabase services: studio: container_name: supabase-studio image: supabase/studio:2025.11.10-sha-5291fe3 restart: unless-stopped healthcheck: test: - CMD - node - -e - fetch('http://studio:3000/api/platform/profile').then((r) => {if (r.status !== 200) throw new Error(r.status)}) timeout: 10s interval: 5s retries: 3 depends_on: analytics: condition: service_healthy environment: # Binds nestjs listener to both IPv4 and IPv6 network interfaces HOSTNAME: \"::\" STUDIO_PG_META_URL: http://meta:8080 POSTGRES_PORT: ${POSTGRES_PORT} POSTGRES_HOST: ${POSTGRES_HOST} POSTGRES_DB: ${POSTGRES_DB} POSTGRES_PASSWORD: ${POSTGRES_PASSWORD} PG_META_CRYPTO_KEY: ${PG_META_CRYPTO_KEY} DEFAULT_ORGANIZATION_NAME: ${STUDIO_DEFAULT_ORGANIZATION} DEFAULT_PROJECT_NAME: ${STUDIO_DEFAULT_PROJECT} OPENAI_API_KEY: ${OPENAI_API_KEY:-} SUPABASE_URL: http://kong:8000 SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL} SUPABASE_ANON_KEY: ${ANON_KEY} SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY} AUTH_JWT_SECRET: ${JWT_SECRET} # LOGFLARE_API_KEY is deprecated LOGFLARE_API_KEY: ${LOGFLARE_PUBLIC_ACCESS_TOKEN} LOGFLARE_PUBLIC_ACCESS_TOKEN: ${LOGFLARE_PUBLIC_ACCESS_TOKEN} LOGFLARE_PRIVATE_ACCESS_TOKEN: ${LOGFLARE_PRIVATE_ACCESS_TOKEN} LOGFLARE_URL: http://analytics:4000 NEXT_PUBLIC_ENABLE_LOGS: true # Comment to use Big Query backend for analytics NEXT_ANALYTICS_BACKEND_PROVIDER: postgres # Uncomment to use Big Query backend for analytics # NEXT_ANALYTICS_BACKEND_PROVIDER: bigquery kong: container_name: supabase-kong image: kong:2.8.1 restart: unless-stopped ports: - ${KONG_HTTP_PORT}:8000/tcp - ${KONG_HTTPS_PORT}:8443/tcp volumes: # https://github.com/supabase/supabase/issues/12661 - /home/dennis/supabase-local/volumes/api/kong.yml:/home/kong/temp.yml:ro,z depends_on: analytics: condition: service_healthy environment: KONG_DATABASE: off KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml # https://github.com/supabase/cli/issues/14 KONG_DNS_ORDER: LAST,A,CNAME KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth,request-termination,ip-restriction KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k SUPABASE_ANON_KEY: ${ANON_KEY} SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY} DASHBOARD_USERNAME: ${DASHBOARD_USERNAME} DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD} # https://unix.stackexchange.com/a/294837 entrypoint: bash -c 'eval \"echo \\\"$$(cat ~/temp.yml)\\\"\" > ~/kong.yml && /docker-entrypoint.sh kong docker-start' auth: container_name: supabase-auth image: supabase/gotrue:v2.182.1 restart: unless-stopped healthcheck: test: - CMD - wget - --no-verbose - --tries=1 - --spider - http://localhost:9999/health timeout: 5s interval: 5s retries: 3 depends_on: db: # Disable this if you are using an external Postgres database condition: service_healthy analytics: condition: service_healthy environment: GOTRUE_API_HOST: 0.0.0.0 GOTRUE_API_PORT: 9999 API_EXTERNAL_URL: ${API_EXTERNAL_URL} GOTRUE_DB_DRIVER: postgres GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} GOTRUE_SITE_URL: ${SITE_URL} GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS} GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP} GOTRUE_JWT_ADMIN_ROLES: service_role GOTRUE_JWT_AUD: authenticated GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated GOTRUE_JWT_EXP: ${JWT_EXPIRY} GOTRUE_JWT_SECRET: ${JWT_SECRET} GOTRUE_EXTERNAL_EMAIL_ENABLED: ${ENABLE_EMAIL_SIGNUP} GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: ${ENABLE_ANONYMOUS_USERS} GOTRUE_MAILER_AUTOCONFIRM: ${ENABLE_EMAIL_AUTOCONFIRM} # Uncomment to bypass nonce check in ID Token flow. Commonly set to true when using Google Sign In on mobile. # GOTRUE_EXTERNAL_SKIP_NONCE_CHECK: true # GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED: true # GOTRUE_SMTP_MAX_FREQUENCY: 1s GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL} GOTRUE_SMTP_HOST: ${SMTP_HOST} GOTRUE_SMTP_PORT: ${SMTP_PORT} GOTRUE_SMTP_USER: ${SMTP_USER} GOTRUE_SMTP_PASS: ${SMTP_PASS} GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME} GOTRUE_MAILER_URLPATHS_INVITE: ${MAILER_URLPATHS_INVITE} GOTRUE_MAILER_URLPATHS_CONFIRMATION: ${MAILER_URLPATHS_CONFIRMATION} GOTRUE_MAILER_URLPATHS_RECOVERY: ${MAILER_URLPATHS_RECOVERY} GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: ${MAILER_URLPATHS_EMAIL_CHANGE} GOTRUE_EXTERNAL_PHONE_ENABLED: ${ENABLE_PHONE_SIGNUP} GOTRUE_SMS_AUTOCONFIRM: ${ENABLE_PHONE_AUTOCONFIRM} # Uncomment to enable custom access token hook. Please see: https://supabase.com/docs/guides/auth/auth-hooks for full list of hooks and additional details about custom_access_token_hook # GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_ENABLED: \"true\" # GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_URI: \"pg-functions://postgres/public/custom_access_token_hook\" # GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_SECRETS: \"<standard-base64-secret>\" # GOTRUE_HOOK_MFA_VERIFICATION_ATTEMPT_ENABLED: \"true\" # GOTRUE_HOOK_MFA_VERIFICATION_ATTEMPT_URI: \"pg-functions://postgres/public/mfa_verification_attempt\" # GOTRUE_HOOK_PASSWORD_VERIFICATION_ATTEMPT_ENABLED: \"true\" # GOTRUE_HOOK_PASSWORD_VERIFICATION_ATTEMPT_URI: \"pg-functions://postgres/public/password_verification_attempt\" # GOTRUE_HOOK_SEND_SMS_ENABLED: \"false\" # GOTRUE_HOOK_SEND_SMS_URI: \"pg-functions://postgres/public/custom_access_token_hook\" # GOTRUE_HOOK_SEND_SMS_SECRETS: \"v1,whsec_VGhpcyBpcyBhbiBleGFtcGxlIG9mIGEgc2hvcnRlciBCYXNlNjQgc3RyaW5n\" # GOTRUE_HOOK_SEND_EMAIL_ENABLED: \"false\" # GOTRUE_HOOK_SEND_EMAIL_URI: \"http://host.docker.internal:54321/functions/v1/email_sender\" # GOTRUE_HOOK_SEND_EMAIL_SECRETS: \"v1,whsec_VGhpcyBpcyBhbiBleGFtcGxlIG9mIGEgc2hvcnRlciBCYXNlNjQgc3RyaW5n\" rest: container_name: supabase-rest image: postgrest/postgrest:v13.0.7 restart: unless-stopped depends_on: db: # Disable this if you are using an external Postgres database condition: service_healthy analytics: condition: service_healthy environment: PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS} PGRST_DB_ANON_ROLE: anon PGRST_JWT_SECRET: ${JWT_SECRET} PGRST_DB_USE_LEGACY_GUCS: \"false\" PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET} PGRST_APP_SETTINGS_JWT_EXP: ${JWT_EXPIRY} command: - postgrest realtime: # This container name looks inconsistent but is correct because realtime constructs tenant id by parsing the subdomain container_name: realtime-dev.supabase-realtime image: supabase/realtime:v2.63.0 restart: unless-stopped depends_on: db: # Disable this if you are using an external Postgres database condition: service_healthy analytics: condition: service_healthy healthcheck: test: - CMD - curl - -sSfL - --head - -o - /dev/null - -H - \"Authorization: Bearer ${ANON_KEY}\" - http://localhost:4000/api/tenants/realtime-dev/health timeout: 5s interval: 5s retries: 3 environment: PORT: 4000 DB_HOST: ${POSTGRES_HOST} DB_PORT: ${POSTGRES_PORT} DB_USER: supabase_admin DB_PASSWORD: ${POSTGRES_PASSWORD} DB_NAME: ${POSTGRES_DB} DB_AFTER_CONNECT_QUERY: SET search_path TO _realtime DB_ENC_KEY: supabaserealtime API_JWT_SECRET: ${JWT_SECRET} SECRET_KEY_BASE: ${SECRET_KEY_BASE} ERL_AFLAGS: -proto_dist inet_tcp DNS_NODES: \"''\" RLIMIT_NOFILE: \"10000\" APP_NAME: realtime SEED_SELF_HOST: true RUN_JANITOR: true # To use S3 backed storage: docker compose -f docker-compose.yml -f docker-compose.s3.yml up storage: container_name: supabase-storage image: supabase/storage-api:v1.29.0 restart: unless-stopped volumes: - /home/dennis/supabase-local/volumes/storage:/var/lib/storage:z healthcheck: test: - CMD - wget - --no-verbose - --tries=1 - --spider - http://storage:5000/status timeout: 5s interval: 5s retries: 3 depends_on: db: # Disable this if you are using an external Postgres database condition: service_healthy rest: condition: service_started imgproxy: condition: service_started environment: ANON_KEY: ${ANON_KEY} SERVICE_KEY: ${SERVICE_ROLE_KEY} POSTGREST_URL: http://rest:3000 PGRST_JWT_SECRET: ${JWT_SECRET} DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} REQUEST_ALLOW_X_FORWARDED_PATH: \"true\" FILE_SIZE_LIMIT: 52428800 STORAGE_BACKEND: file FILE_STORAGE_BACKEND_PATH: /var/lib/storage TENANT_ID: stub # TODO: https://github.com/supabase/storage-api/issues/55 REGION: stub GLOBAL_S3_BUCKET: stub ENABLE_IMAGE_TRANSFORMATION: \"true\" IMGPROXY_URL: http://imgproxy:5001 imgproxy: container_name: supabase-imgproxy image: darthsim/imgproxy:v3.8.0 restart: unless-stopped volumes: - /home/dennis/supabase-local/volumes/storage:/var/lib/storage:z healthcheck: test: - CMD - imgproxy - health timeout: 5s interval: 5s retries: 3 environment: IMGPROXY_BIND: :5001 IMGPROXY_LOCAL_FILESYSTEM_ROOT: / IMGPROXY_USE_ETAG: \"true\" IMGPROXY_ENABLE_WEBP_DETECTION: ${IMGPROXY_ENABLE_WEBP_DETECTION} meta: container_name: supabase-meta image: supabase/postgres-meta:v0.93.1 restart: unless-stopped depends_on: db: # Disable this if you are using an external Postgres database condition: service_healthy analytics: condition: service_healthy environment: PG_META_PORT: 8080 PG_META_DB_HOST: ${POSTGRES_HOST} PG_META_DB_PORT: ${POSTGRES_PORT} PG_META_DB_NAME: ${POSTGRES_DB} PG_META_DB_USER: supabase_admin PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD} CRYPTO_KEY: ${PG_META_CRYPTO_KEY} functions: container_name: supabase-edge-functions image: supabase/edge-runtime:v1.69.23 restart: unless-stopped volumes: - /home/dennis/supabase-local/volumes/functions:/home/deno/functions:Z depends_on: analytics: condition: service_healthy environment: JWT_SECRET: ${JWT_SECRET} SUPABASE_URL: http://kong:8000 SUPABASE_ANON_KEY: ${ANON_KEY} SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY} SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} # TODO: Allow configuring VERIFY_JWT per function. This PR might help: https://github.com/supabase/cli/pull/786 VERIFY_JWT: ${FUNCTIONS_VERIFY_JWT} # TURN server for WebRTC NAT traversal TURN_SERVER: turn:188.228.14.94:3478 TURN_SECRET: HawkeyeTurnSecret2026x # Cloudflare TURN (primary, coturn as fallback) CF_TURN_KEY_ID: ${CF_TURN_KEY_ID} CF_TURN_API_TOKEN: ${CF_TURN_API_TOKEN} command: - start - --main-service - /home/deno/functions/main analytics: container_name: supabase-analytics image: supabase/logflare:1.22.6 restart: unless-stopped ports: - 4000:4000 # Uncomment to use Big Query backend for analytics # volumes: # - type: bind # source: ${PWD}/gcloud.json # target: /opt/app/rel/logflare/bin/gcloud.json # read_only: true healthcheck: test: - CMD - curl - http://localhost:4000/health timeout: 5s interval: 5s retries: 10 depends_on: db: # Disable this if you are using an external Postgres database condition: service_healthy environment: LOGFLARE_NODE_HOST: 127.0.0.1 DB_USERNAME: supabase_admin DB_DATABASE: _supabase DB_HOSTNAME: ${POSTGRES_HOST} DB_PORT: ${POSTGRES_PORT} DB_PASSWORD: ${POSTGRES_PASSWORD} DB_SCHEMA: _analytics LOGFLARE_PUBLIC_ACCESS_TOKEN: ${LOGFLARE_PUBLIC_ACCESS_TOKEN} LOGFLARE_PRIVATE_ACCESS_TOKEN: ${LOGFLARE_PRIVATE_ACCESS_TOKEN} LOGFLARE_SINGLE_TENANT: true LOGFLARE_SUPABASE_MODE: true # Comment variables to use Big Query backend for analytics POSTGRES_BACKEND_URL: postgresql://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/_supabase POSTGRES_BACKEND_SCHEMA: _analytics LOGFLARE_FEATURE_FLAG_OVERRIDE: multibackend=true # Uncomment to use Big Query backend for analytics # GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID} # GOOGLE_PROJECT_NUMBER: ${GOOGLE_PROJECT_NUMBER} # Comment out everything below this point if you are using an external Postgres database db: container_name: supabase-db image: supabase/postgres:15.8.1.085 restart: unless-stopped volumes: - /home/dennis/supabase-local/volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z # Must be superuser to create event trigger - /home/dennis/supabase-local/volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:Z # Must be superuser to alter reserved role - /home/dennis/supabase-local/volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:Z # Initialize the database settings with JWT_SECRET and JWT_EXP - /home/dennis/supabase-local/volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z # PGDATA directory is persisted between restarts - /home/dennis/supabase-local/volumes/db/data:/var/lib/postgresql/data:Z # Changes required for internal supabase data such as _analytics - /home/dennis/supabase-local/volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z # Changes required for Analytics support - /home/dennis/supabase-local/volumes/db/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:Z # Changes required for Pooler support - /home/dennis/supabase-local/volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z # Use named volume to persist pgsodium decryption key between restarts - db-config:/etc/postgresql-custom healthcheck: test: - CMD - pg_isready - -U - postgres - -h - localhost interval: 5s timeout: 5s retries: 10 depends_on: vector: condition: service_healthy environment: POSTGRES_HOST: /var/run/postgresql PGPORT: ${POSTGRES_PORT} POSTGRES_PORT: ${POSTGRES_PORT} PGPASSWORD: ${POSTGRES_PASSWORD} POSTGRES_PASSWORD: ${POSTGRES_PASSWORD} PGDATABASE: ${POSTGRES_DB} POSTGRES_DB: ${POSTGRES_DB} JWT_SECRET: ${JWT_SECRET} JWT_EXP: ${JWT_EXPIRY} command: - postgres - -c - config_file=/etc/postgresql/postgresql.conf - -c - log_min_messages=fatal # prevents Realtime polling queries from appearing in logs vector: container_name: supabase-vector image: timberio/vector:0.28.1-alpine restart: unless-stopped volumes: - /home/dennis/supabase-local/volumes/logs/vector.yml:/etc/vector/vector.yml:ro,z - ${DOCKER_SOCKET_LOCATION}:/var/run/docker.sock:ro,z healthcheck: test: - CMD - wget - --no-verbose - --tries=1 - --spider - http://vector:9001/health timeout: 5s interval: 5s retries: 3 environment: LOGFLARE_PUBLIC_ACCESS_TOKEN: ${LOGFLARE_PUBLIC_ACCESS_TOKEN} command: - --config - /etc/vector/vector.yml security_opt: - label=disable # Update the DATABASE_URL if you are using an external Postgres database supavisor: container_name: supabase-pooler image: supabase/supavisor:2.7.4 restart: unless-stopped ports: - ${POSTGRES_PORT}:5432 - ${POOLER_PROXY_PORT_TRANSACTION}:6543 volumes: - /home/dennis/supabase-local/volumes/pooler/pooler.exs:/etc/pooler/pooler.exs:ro,z healthcheck: test: - CMD - curl - -sSfL - --head - -o - /dev/null - http://127.0.0.1:4000/api/health interval: 10s timeout: 5s retries: 5 depends_on: db: condition: service_healthy analytics: condition: service_healthy environment: PORT: 4000 POSTGRES_PORT: ${POSTGRES_PORT} POSTGRES_DB: ${POSTGRES_DB} POSTGRES_PASSWORD: ${POSTGRES_PASSWORD} DATABASE_URL: ecto://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/_supabase CLUSTER_POSTGRES: true SECRET_KEY_BASE: ${SECRET_KEY_BASE} VAULT_ENC_KEY: ${VAULT_ENC_KEY} API_JWT_SECRET: ${JWT_SECRET} METRICS_JWT_SECRET: ${JWT_SECRET} REGION: local ERL_AFLAGS: -proto_dist inet_tcp POOLER_TENANT_ID: ${POOLER_TENANT_ID} POOLER_DEFAULT_POOL_SIZE: ${POOLER_DEFAULT_POOL_SIZE} POOLER_MAX_CLIENT_CONN: ${POOLER_MAX_CLIENT_CONN} POOLER_POOL_MODE: transaction DB_POOL_SIZE: ${POOLER_DB_POOL_SIZE} command: - /bin/sh - -c - /app/bin/migrate && /app/bin/supavisor eval \"$$(cat /etc/pooler/pooler.exs)\" && /app/bin/server volumes: db-config: null"

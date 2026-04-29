@@ -9,8 +9,18 @@ import (
 	"github.com/stangtennis/remote-agent/internal/clipboard"
 )
 
-// handleClipboardText handles incoming clipboard text from controller
+// handleClipboardText handles incoming clipboard text from controller.
+// On Windows when running as a service we route writes through the
+// user-session helper so the user's clipboard is updated (per-session).
 func (m *Manager) handleClipboardText(content string) {
+	if m.clipboardSessionHelper != nil {
+		if err := m.clipboardSessionHelper.SetText(content); err != nil {
+			log.Printf("❌ Helper SetText failed: %v", err)
+		} else {
+			log.Println("✅ Clipboard text set via session helper")
+		}
+		return
+	}
 	if m.clipboardReceiver == nil {
 		m.clipboardReceiver = clipboard.NewReceiver()
 	}
@@ -24,11 +34,19 @@ func (m *Manager) handleClipboardText(content string) {
 	}
 }
 
-// handleClipboardImage handles incoming clipboard image from controller
+// handleClipboardImage handles incoming clipboard image from controller.
 func (m *Manager) handleClipboardImage(contentB64 string) {
 	imageData, err := base64.StdEncoding.DecodeString(contentB64)
 	if err != nil {
 		log.Printf("❌ Failed to decode clipboard image: %v", err)
+		return
+	}
+	if m.clipboardSessionHelper != nil {
+		if err := m.clipboardSessionHelper.SetImage(imageData); err != nil {
+			log.Printf("❌ Helper SetImage failed: %v", err)
+		} else {
+			log.Println("✅ Clipboard image set via session helper")
+		}
 		return
 	}
 	if m.clipboardReceiver == nil {
@@ -44,9 +62,17 @@ func (m *Manager) handleClipboardImage(contentB64 string) {
 	}
 }
 
-// startClipboardMonitoring initializes and starts clipboard monitoring
+// startClipboardMonitoring initializes and starts clipboard monitoring.
+//
+// KNOWN LIMITATION on Windows: when the agent runs as a service in
+// Session 0, the per-session Windows clipboard means clipboard.Watch in
+// Session 0 doesn't see the user's copies in Session 1+. A user-session
+// bridge helper is sketched in clipboard/helper_windows.go but not yet
+// reliable (clipboard.Read inside the helper hangs in some cases). For
+// now: copy/paste from the dashboard works only when the agent runs in
+// the user session (console mode, autostart-from-Program-Files mode).
+// Service mode users should use the controller app instead.
 func (m *Manager) startClipboardMonitoring() {
-	// Initialize clipboard monitor
 	m.clipboardMonitor = clipboard.NewMonitor()
 
 	// Set up text clipboard callback

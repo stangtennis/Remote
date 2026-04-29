@@ -1,0 +1,67 @@
+- generic [active] [ref=e1]:
+  - link "Spring til hovedindhold" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - heading " Adminpanel" [level=1] [ref=e9]:
+        - generic [ref=e10]: 
+        - text: Adminpanel
+      - generic [ref=e11]:
+        - button "Skift mellem lyst og mørkt tema" [ref=e12] [cursor=pointer]:
+          - generic [ref=e13]: 
+        - button "" [ref=e14] [cursor=pointer]:
+          - generic [ref=e15]: 
+        - button "← Kontrolpanel" [ref=e16] [cursor=pointer]
+        - button "Log ud" [ref=e17] [cursor=pointer]
+    - text: 
+    - generic [ref=e18]:
+      - button " Brugergodkendelser" [ref=e19] [cursor=pointer]:
+        - generic [ref=e20]: 
+        - text: Brugergodkendelser
+      - button " Enhedsstyring" [ref=e21] [cursor=pointer]:
+        - generic [ref=e22]: 
+        - text: Enhedsstyring
+      - button " Remote Control" [ref=e23] [cursor=pointer]:
+        - generic [ref=e24]: 
+        - text: Remote Control
+      - button " Invitationer" [ref=e25] [cursor=pointer]:
+        - generic [ref=e26]: 
+        - text: Invitationer
+      - text: 
+    - generic [ref=e27]:
+      - heading " Downloads" [level=3] [ref=e28]:
+        - generic [ref=e29]: 
+        - text: Downloads
+      - generic [ref=e30]:
+        - link " Windows Agent" [ref=e31] [cursor=pointer]:
+          - /url: https://downloads.hawkeye123.dk/remote-agent.exe
+          - generic [ref=e32]: 
+          - text: Windows Agent
+        - link " Web Agent" [ref=e33] [cursor=pointer]:
+          - /url: agent.html
+          - generic [ref=e34]: 
+          - text: Web Agent
+        - link " Controller" [ref=e35] [cursor=pointer]:
+          - /url: https://downloads.hawkeye123.dk/controller.exe
+          - generic [ref=e36]: 
+          - text: Controller
+      - paragraph [ref=e37]: Windows Agent (anbefalet) • Web Agent (browser) • Controller (kontrol enheder)
+    - generic [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: "0"
+          - generic [ref=e42]: Brugere i alt
+        - generic [ref=e43]:
+          - generic [ref=e44]: "0"
+          - generic [ref=e45]: Afventer godkendelse
+        - generic [ref=e46]:
+          - generic [ref=e47]: "0"
+          - generic [ref=e48]: Godkendte brugere
+      - generic [ref=e49]:
+        - button "Alle brugere" [ref=e50] [cursor=pointer]
+        - button "Afventende" [ref=e51] [cursor=pointer]
+        - button "Godkendte" [ref=e52] [cursor=pointer]
+    - text:   
+  - text: 
+  - button "Vis tastaturgenveje" [ref=e53] [cursor=pointer]:
+    - generic [ref=e54]: 

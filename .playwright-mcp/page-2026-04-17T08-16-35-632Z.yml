@@ -1,0 +1,32 @@
+- generic [active] [ref=e1]:
+  - link "Spring til hovedindhold" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e8]:
+    - generic [ref=e11]: 🖥️
+    - heading "Fjernskrivebord" [level=1] [ref=e12]
+    - paragraph [ref=e13]: Sikker fjernadgang drevet af Supabase & WebRTC
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - generic [ref=e16]: E-mail
+        - textbox "E-mail" [ref=e17]:
+          - /placeholder: din@email.dk
+      - generic [ref=e18]:
+        - generic [ref=e19]: Adgangskode
+        - textbox "Adgangskode" [ref=e20]:
+          - /placeholder: ••••••••
+        - button "Vis adgangskode" [ref=e21] [cursor=pointer]:
+          - generic [ref=e22]: 
+      - button "Log ind" [ref=e23] [cursor=pointer]:
+        - generic [ref=e24]: Log ind
+    - link "Glemt adgangskode?" [ref=e26] [cursor=pointer]:
+      - /url: "#"
+    - generic [ref=e27]: eller
+    - button "Opret ny konto" [ref=e28] [cursor=pointer]
+    - text:  
+    - generic [ref=e30]:
+      - generic [ref=e31]:
+        - generic [ref=e32]: 
+        - text: Ende-til-ende krypteret
+      - generic [ref=e33]:
+        - generic [ref=e34]: 
+        - text: WebRTC drevet
