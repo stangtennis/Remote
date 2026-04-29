@@ -44,6 +44,10 @@ async function loadDevices() {
 
     const isAdmin = approval && (approval.role === 'admin' || approval.role === 'super_admin');
     const isSuperAdmin = approval && approval.role === 'super_admin';
+    // Expose role for downstream UI helpers (showDeviceMenu, assignDeviceUI)
+    window.__rdRole = approval ? approval.role : null;
+    window.__rdIsAdmin = !!isAdmin;
+    window.__rdIsSuperAdmin = !!isSuperAdmin;
 
     // Load devices, tags, and favorites in parallel
     // super_admin: sees ALL devices
@@ -166,7 +170,7 @@ function applyDeviceFilters() {
   if (onlineDevices.length > 0) {
     const header = document.createElement('div');
     header.style.cssText = 'padding: 0.4rem 0.75rem; font-size: 0.7rem; font-weight: 600; color: #22c55e; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.4rem;';
-    header.innerHTML = `<span style="width:6px; height:6px; border-radius:50%; background:#22c55e; box-shadow:0 0 6px rgba(34,197,94,0.5);"></span> Online (${onlineDevices.length})`;
+    header.innerHTML = `<span class="online-pulse-dot" aria-hidden="true"></span> Online (${onlineDevices.length})`;
     devicesList.appendChild(header);
     for (const device of onlineDevices) {
       devicesList.appendChild(createDeviceCard(device));
@@ -307,6 +311,8 @@ function showDeviceMenu(anchor, device) {
     { label: '🏷️ Tag', action: () => addTagPrompt(device.device_id) },
     { label: '✏️ Omdøb', action: () => renameDevice(device) },
     { label: '🔄 Opdater agent', action: () => forceUpdateDevice(device), show: device.is_online },
+    // Admin-only — assign / transfer device ownership
+    { label: '👥 Tildel adgang', action: () => assignDevicePrompt(device), show: !!window.__rdIsAdmin },
     { label: '🗑️ Slet', action: () => deleteDevice(device), danger: true }
   ].filter(i => i.show !== false);
 
@@ -363,7 +369,19 @@ async function toggleFavorite(deviceId) {
 // ==================== TAGS ====================
 
 async function addTagPrompt(deviceId) {
-  const tag = prompt('Indtast tag:');
+  const tag = await showPrompt('Skriv et tag for at organisere denne enhed', {
+    title: 'Tilføj tag',
+    icon: '🏷️',
+    placeholder: 'fx prod, kontor, server',
+    confirmText: 'Tilføj',
+    validator: (v) => {
+      const t = (v || '').trim();
+      if (!t) return 'Skriv et tag-navn';
+      if (t.length > 30) return 'Maks 30 tegn';
+      if (!/^[a-zA-Z0-9æøåÆØÅ_-]+$/.test(t)) return 'Kun bogstaver, tal, _ og -';
+      return null;
+    },
+  });
   if (!tag || !tag.trim()) return;
   const cleanTag = tag.trim().toLowerCase().substring(0, 30);
 
@@ -474,7 +492,19 @@ async function claimDevice(device) {
 
 async function renameDevice(device) {
   const currentName = device.device_name || device.device_id;
-  const newName = prompt(`Nyt navn for "${currentName}":`, currentName);
+  const newName = await showPrompt(`Vælg et nyt navn for "${currentName}"`, {
+    title: 'Omdøb enhed',
+    icon: '✏️',
+    defaultValue: currentName,
+    placeholder: 'Enhedens nye navn',
+    confirmText: 'Gem',
+    validator: (v) => {
+      const t = (v || '').trim();
+      if (!t) return 'Navnet kan ikke være tomt';
+      if (t.length > 64) return 'Maks 64 tegn';
+      return null;
+    },
+  });
   if (!newName || newName === currentName) return;
 
   try {
@@ -578,6 +608,112 @@ function subscribeToDeviceUpdates() {
   debug('📡 Subscribed to device updates');
 }
 
+// ─── Device assignment (admin/super_admin only) ──────────────────────
+//
+// Two ways to give another user access to a device:
+//   1. Reassign owner_id   → recipient becomes the owner (current owner
+//      loses access unless they're also admin)
+//   2. Delegate access      → row in device_assignments table; recipient
+//      sees the device alongside their own without changing ownership
+async function assignDevicePrompt(device) {
+  if (!window.__rdIsAdmin) {
+    showToast('Kun admin/super_admin kan tildele', 'error');
+    return;
+  }
+
+  // Build modal
+  const overlay = document.createElement('div');
+  overlay.id = 'assignModal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px)';
+  overlay.innerHTML = `
+    <div style="background:var(--surface,#1e1e2e);border:1px solid var(--border,#333);border-radius:12px;padding:1.5rem;width:min(420px,92vw);box-shadow:0 12px 32px rgba(0,0,0,0.5);font-family:inherit;color:var(--text,#fff)">
+      <h3 style="margin:0 0 .25rem 0;font-size:1.1rem">Tildel adgang til enhed</h3>
+      <div style="opacity:0.7;font-size:.85rem;margin-bottom:1rem">${device.device_name || device.device_id}</div>
+
+      <label style="display:block;font-size:.85rem;margin-bottom:.4rem">E-mail på modtager</label>
+      <input type="email" id="assignEmail" placeholder="bruger@example.dk" style="width:100%;padding:.55rem .7rem;border:1px solid var(--border,#333);border-radius:6px;background:rgba(255,255,255,0.05);color:inherit;font-size:.95rem;margin-bottom:1rem" autocomplete="email" />
+
+      <label style="display:block;font-size:.85rem;margin-bottom:.4rem">Type</label>
+      <div style="display:flex;flex-direction:column;gap:.4rem;margin-bottom:1.25rem">
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;cursor:pointer">
+          <input type="radio" name="assignKind" value="delegate" checked />
+          <span><strong>Tildel adgang</strong> — modtager ser enheden, ejer beholder fuld kontrol</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;cursor:pointer">
+          <input type="radio" name="assignKind" value="transfer" />
+          <span><strong>Overdrag ejerskab</strong> — modtager bliver ny ejer (kun admin)</span>
+        </label>
+      </div>
+
+      <div style="display:flex;gap:.5rem;justify-content:flex-end">
+        <button id="assignCancel" type="button" style="padding:.5rem 1rem;border:1px solid var(--border,#444);border-radius:6px;background:transparent;color:inherit;cursor:pointer">Annullér</button>
+        <button id="assignSubmit" type="button" style="padding:.5rem 1.25rem;border:none;border-radius:6px;background:var(--primary,#3b82f6);color:#fff;font-weight:600;cursor:pointer">Tildel</button>
+      </div>
+
+      <div id="assignStatus" style="margin-top:.85rem;font-size:.85rem;min-height:1.2em"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector('#assignCancel').addEventListener('click', close);
+  document.addEventListener('keydown', function escClose(e) {
+    if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escClose); }
+  });
+  setTimeout(() => overlay.querySelector('#assignEmail').focus(), 50);
+
+  overlay.querySelector('#assignSubmit').addEventListener('click', async () => {
+    const email = overlay.querySelector('#assignEmail').value.trim().toLowerCase();
+    const kind = overlay.querySelector('input[name="assignKind"]:checked').value;
+    const status = overlay.querySelector('#assignStatus');
+    status.style.color = 'var(--text,#fff)';
+    if (!email || !email.includes('@')) {
+      status.textContent = 'Ugyldig e-mail.';
+      status.style.color = '#ef4444';
+      return;
+    }
+    status.textContent = 'Søger bruger...';
+    try {
+      // Look up the recipient by email — works only with sufficient
+      // privileges. The auth.users table isn't directly queryable, so we
+      // use a small RPC (defined in a migration below) that resolves
+      // email → user_id under SECURITY DEFINER.
+      const { data: lookup, error: lookupErr } = await supabase.rpc('find_user_id_by_email', { p_email: email });
+      if (lookupErr) throw lookupErr;
+      if (!lookup) {
+        status.textContent = 'Ingen bruger fundet med den e-mail.';
+        status.style.color = '#ef4444';
+        return;
+      }
+      const userId = lookup;
+
+      if (kind === 'transfer') {
+        const { error } = await supabase
+          .from('remote_devices')
+          .update({ owner_id: userId })
+          .eq('device_id', device.device_id);
+        if (error) throw error;
+        status.style.color = '#22c55e';
+        status.textContent = '✓ Ejerskab overdraget';
+      } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        const { error } = await supabase
+          .from('device_assignments')
+          .insert({ device_id: device.device_id, user_id: userId, assigned_by: session?.user?.id });
+        if (error) throw error;
+        status.style.color = '#22c55e';
+        status.textContent = '✓ Adgang tildelt';
+      }
+
+      setTimeout(() => { close(); if (typeof loadDevices === 'function') loadDevices(); }, 800);
+    } catch (err) {
+      status.style.color = '#ef4444';
+      status.textContent = 'Fejl: ' + (err.message || err);
+    }
+  });
+}
+
 // Export
 window.initDevices = initDevices;
 window.loadDevices = loadDevices;
+window.assignDevicePrompt = assignDevicePrompt;
