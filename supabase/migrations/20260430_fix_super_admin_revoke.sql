@@ -95,3 +95,72 @@ BEGIN
   ORDER BY d.created_at DESC;
 END;
 $$ LANGUAGE plpgsql;
+
+-- v3.1.6: Fix assign_device cast bug — owner_id is uuid, not text.
+-- The 20251104 function did `owner_id = p_user_id::TEXT` which now fails
+-- because remote_devices.owner_id was changed to uuid at some point.
+-- Drop the cast so the uuid value goes through cleanly.
+
+CREATE OR REPLACE FUNCTION public.assign_device(
+  p_device_id      TEXT,
+  p_user_id        UUID,
+  p_approve_device BOOLEAN DEFAULT TRUE,
+  p_notes          TEXT    DEFAULT NULL
+)
+RETURNS JSONB
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_admin_id UUID;
+  v_result   JSONB;
+BEGIN
+  SELECT user_id::uuid INTO v_admin_id
+  FROM user_approvals
+  WHERE user_id::uuid = auth.uid()
+    AND role IN ('admin', 'super_admin');
+
+  IF v_admin_id IS NULL THEN
+    RAISE EXCEPTION 'Access denied: Admin role required';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM remote_devices WHERE device_id = p_device_id) THEN
+    RAISE EXCEPTION 'Device not found: %', p_device_id;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM user_approvals
+    WHERE user_id::uuid = p_user_id
+      AND approved = TRUE
+  ) THEN
+    RAISE EXCEPTION 'User not found or not approved: %', p_user_id;
+  END IF;
+
+  INSERT INTO device_assignments (device_id, user_id, assigned_by, notes)
+  VALUES (p_device_id, p_user_id, v_admin_id, p_notes)
+  ON CONFLICT (device_id, user_id, revoked_at)
+  DO UPDATE SET
+    assigned_at = NOW(),
+    assigned_by = v_admin_id,
+    notes       = p_notes;
+
+  IF p_approve_device THEN
+    UPDATE remote_devices
+    SET approved    = TRUE,
+        assigned_by = v_admin_id,
+        assigned_at = NOW(),
+        owner_id    = p_user_id            -- was: p_user_id::TEXT (column is uuid)
+    WHERE device_id = p_device_id;
+  END IF;
+
+  SELECT jsonb_build_object(
+    'success',     TRUE,
+    'device_id',   p_device_id,
+    'user_id',     p_user_id,
+    'assigned_by', v_admin_id,
+    'approved',    p_approve_device
+  ) INTO v_result;
+
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql;
