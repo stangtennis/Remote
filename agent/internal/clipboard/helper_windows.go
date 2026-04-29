@@ -3,20 +3,18 @@
 package clipboard
 
 import (
-	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 	"unsafe"
 
-	"golang.design/x/clipboard"
 	"golang.org/x/sys/windows"
 )
 
@@ -60,14 +58,15 @@ func (p *pipeWriter) Write(data []byte) error {
 	if p.closed {
 		return fmt.Errorf("pipe closed")
 	}
-	// Frame: 4-byte length + payload
-	header := make([]byte, 4)
-	binary.LittleEndian.PutUint32(header, uint32(len(data)))
+	// Frame: 4-byte length + payload, written as a single WriteFile so the
+	// counterpart reader sees one contiguous block. Some versions of
+	// Windows hang on partial writes when both ends are in PIPE_WAIT mode
+	// with small buffers, so we coalesce here.
+	buf := make([]byte, 4+len(data))
+	binary.LittleEndian.PutUint32(buf[:4], uint32(len(data)))
+	copy(buf[4:], data)
 	var n uint32
-	if err := windows.WriteFile(p.handle, header, &n, nil); err != nil {
-		return err
-	}
-	if err := windows.WriteFile(p.handle, data, &n, nil); err != nil {
+	if err := windows.WriteFile(p.handle, buf, &n, nil); err != nil {
 		return err
 	}
 	return nil
@@ -115,8 +114,13 @@ func (h *SessionHelper) Start() error {
 		SecurityDescriptor: sd,
 	}
 	pipeNameUTF16, _ := windows.UTF16PtrFromString(h.pipeName)
+	// One-way pipe: service is the inbound reader, helper is the outbound
+	// writer. Bidirectional duplex pipes serialize concurrent ReadFile +
+	// WriteFile from different goroutines on the same handle, which dead-
+	// locked the helper. For "set clipboard from controller" we go
+	// through the shell.Run user-session bridge instead.
 	pipe, err := windows.CreateNamedPipe(pipeNameUTF16,
-		windows.PIPE_ACCESS_DUPLEX,
+		windows.PIPE_ACCESS_INBOUND,
 		windows.PIPE_TYPE_BYTE|windows.PIPE_WAIT,
 		1, 65536, 65536, 0, sa)
 	if err != nil {
@@ -146,84 +150,72 @@ func (h *SessionHelper) Start() error {
 
 // readLoop consumes length-prefixed JSON messages from the helper.
 func (h *SessionHelper) readLoop(ctx context.Context, pipe windows.Handle) {
-	headerBuf := make([]byte, 4)
+	log.Println("📋 Service-side readLoop started")
+	// Read in chunks; assemble length-prefixed messages from the byte stream.
+	var carry []byte
+	chunk := make([]byte, 65536)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
-		// Read length header
 		var n uint32
-		if err := windows.ReadFile(pipe, headerBuf, &n, nil); err != nil || n != 4 {
-			if err != nil && err != windows.ERROR_BROKEN_PIPE {
+		if err := windows.ReadFile(pipe, chunk, &n, nil); err != nil {
+			if err != windows.ERROR_BROKEN_PIPE {
 				log.Printf("⚠️  Clipboard helper pipe read failed: %v", err)
 			}
 			return
 		}
-		size := binary.LittleEndian.Uint32(headerBuf)
-		if size == 0 || size > 50*1024*1024 {
-			log.Printf("⚠️  Clipboard helper sent invalid size: %d", size)
-			return
-		}
-		body := make([]byte, size)
-		var got uint32
-		for got < size {
-			var read uint32
-			if err := windows.ReadFile(pipe, body[got:], &read, nil); err != nil {
-				log.Printf("⚠️  Clipboard helper pipe body read failed: %v", err)
-				return
-			}
-			got += read
-		}
-
-		var msg struct {
-			Type    string `json:"type"`    // "text" or "image"
-			Content string `json:"content"` // text payload, or base64-encoded PNG
-		}
-		if err := json.Unmarshal(body, &msg); err != nil {
-			log.Printf("⚠️  Clipboard helper sent bad JSON: %v", err)
+		if n == 0 {
 			continue
 		}
-		switch msg.Type {
-		case "text":
-			if h.onTextChange != nil {
-				h.onTextChange(msg.Content)
+		carry = append(carry, chunk[:n]...)
+		// Drain as many complete messages as we have.
+		for len(carry) >= 4 {
+			size := binary.LittleEndian.Uint32(carry[:4])
+			if size == 0 || size > 50*1024*1024 {
+				log.Printf("⚠️  Clipboard helper sent invalid size: %d", size)
+				return
 			}
-		case "image":
-			data, err := b64Decode(msg.Content)
-			if err == nil && h.onImageChange != nil {
-				h.onImageChange(data)
+			if uint32(len(carry)) < 4+size {
+				break // incomplete, wait for more
+			}
+			body := make([]byte, size)
+			copy(body, carry[4:4+size])
+			carry = carry[4+size:]
+
+			var msg struct {
+				Type    string `json:"type"`
+				Content string `json:"content"`
+			}
+			if err := json.Unmarshal(body, &msg); err != nil {
+				log.Printf("⚠️  Clipboard helper sent bad JSON: %v", err)
+				continue
+			}
+			log.Printf("📋 readLoop got %s message (%d bytes)", msg.Type, len(msg.Content))
+			switch msg.Type {
+			case "text":
+				if h.onTextChange != nil {
+					h.onTextChange(msg.Content)
+				}
+			case "image":
+				data, err := b64Decode(msg.Content)
+				if err == nil && h.onImageChange != nil {
+					h.onImageChange(data)
+				}
 			}
 		}
 	}
 }
 
-// SetText pushes text to the helper so it lands in the user-session clipboard.
-func (h *SessionHelper) SetText(text string) error {
-	return h.send(map[string]interface{}{"cmd": "set_text", "content": text})
-}
-
-// SetImage pushes a PNG to the helper.
-func (h *SessionHelper) SetImage(pngData []byte) error {
-	return h.send(map[string]interface{}{"cmd": "set_image", "content": b64Encode(pngData)})
-}
-
-// RememberText / RememberImage notify the helper that a clipboard write came
-// from us so the helper's monitor doesn't bounce the same content back.
-func (h *SessionHelper) RememberText(text string)             { _ = h.send(map[string]interface{}{"cmd": "remember_text", "content": text}) }
-func (h *SessionHelper) RememberImage(pngData []byte)         { _ = h.send(map[string]interface{}{"cmd": "remember_image", "content": b64Encode(pngData)}) }
-
-func (h *SessionHelper) send(msg map[string]interface{}) error {
-	if h.pipeWriter == nil {
-		return fmt.Errorf("pipe not ready")
-	}
-	body, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	return h.pipeWriter.Write(body)
-}
+// SetText / SetImage are no-ops on this code path — the pipe is one-way
+// (helper → service). The service uses shell.Run with --as-user to write
+// the clipboard from the controller, bypassing the helper entirely.
+func (h *SessionHelper) SetText(text string) error  { _ = text; return nil }
+func (h *SessionHelper) SetImage(pngData []byte) error { _ = pngData; return nil }
+func (h *SessionHelper) RememberText(_ string)         {}
+func (h *SessionHelper) RememberImage(_ []byte)        {}
 
 func (h *SessionHelper) Stop() {
 	h.mu.Lock()
@@ -235,12 +227,7 @@ func (h *SessionHelper) Stop() {
 	if h.cancelCtx != nil {
 		h.cancelCtx()
 	}
-	if h.pipeWriter != nil {
-		// Send quit so the helper exits cleanly
-		_ = h.pipeWriter.Write([]byte(`{"cmd":"quit"}`))
-		h.pipeWriter.Close()
-	}
-	if h.pipeListener != 0 && h.pipeWriter == nil {
+	if h.pipeListener != 0 {
 		windows.CloseHandle(h.pipeListener)
 	}
 	if h.helperProc != 0 {
@@ -281,8 +268,9 @@ func RunHelper(pipeName string) error {
 	var pipeHandle windows.Handle
 	var err error
 	for i := 0; i < 30; i++ {
+		// Write-only matches the service's PIPE_ACCESS_INBOUND.
 		pipeHandle, err = windows.CreateFile(pipeNameUTF16,
-			windows.GENERIC_READ|windows.GENERIC_WRITE,
+			windows.GENERIC_WRITE,
 			0, nil, windows.OPEN_EXISTING, 0, 0)
 		if err == nil {
 			log.Printf("Pipe opened on attempt %d", i+1)
@@ -297,91 +285,68 @@ func RunHelper(pipeName string) error {
 	defer windows.CloseHandle(pipeHandle)
 	log.Println("Connected to pipe")
 
-	if err := clipboard.Init(); err != nil {
-		log.Printf("clipboard.Init failed: %v", err)
-		return fmt.Errorf("clipboard.Init: %w", err)
-	}
-	log.Println("clipboard.Init OK")
-
 	w := &pipeWriter{handle: pipeHandle}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Watch text + image changes, forward as length-prefixed JSON.
-	textCh := clipboard.Watch(ctx, clipboard.FmtText)
-	imgCh := clipboard.Watch(ctx, clipboard.FmtImage)
-	log.Printf("Watch channels created: text=%v image=%v", textCh != nil, imgCh != nil)
-
-	if data := clipboard.Read(clipboard.FmtText); len(data) > 0 {
-		log.Printf("Initial text in clipboard: %d bytes", len(data))
-	}
-
-	// Diagnostic heartbeat goroutine — separate from poller, just to
-	// confirm the runtime scheduler is alive.
+	// Polling-based change detection using GetClipboardSequenceNumber
+	// (no OpenClipboard required) plus raw OpenClipboard with bounded
+	// retries for the actual read. Bypasses golang.design/x/clipboard
+	// whose internal OpenClipboard retry loop hangs in this context.
+	var lastTextHash string
 	go func() {
-		for i := 0; ; i++ {
-			time.Sleep(2 * time.Second)
-			log.Printf("[heartbeat #%d]", i)
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		log.Println("clipboard poller goroutine alive (raw Win32, OS thread locked)")
+		var lastSeq uint32
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		// Send the initial state once so the dashboard sees what's there
+		// at connect time.
+		log.Printf("Initial sequence number: %d", rawSequence())
+		log.Println("Calling rawReadText...")
+		t, ok := rawReadText()
+		log.Printf("Initial rawReadText: ok=%v len=%d", ok, len(t))
+		if ok && t != "" {
+			lastTextHash = hashString(t)
+			body, _ := json.Marshal(map[string]interface{}{"type": "text", "content": t})
+			log.Printf("Calling pipe Write (initial)...")
+			err := w.Write(body)
+			log.Printf("Pipe Write returned: %v", err)
+			if err == nil {
+				log.Printf("📋 sent initial text (%d bytes)", len(t))
+			}
 		}
-	}()
-
-	// Backup polling — log every read to debug
-	go func() {
-		log.Println("manual poller goroutine alive")
-		var lastHash string
-		readCount := 0
+		log.Println("Entering poll loop")
+		tickCount := 0
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			default:
+			case <-ticker.C:
 			}
-			time.Sleep(500 * time.Millisecond)
-			{
-				data := clipboard.Read(clipboard.FmtText)
-				readCount++
-				if readCount%4 == 0 { // log every 2s
-					preview := string(data)
-					if len(preview) > 40 {
-						preview = preview[:40] + "..."
-					}
-					log.Printf("[poll #%d] clipboard.Read returned %d bytes: %q", readCount, len(data), preview)
-				}
-				if len(data) == 0 || len(data) > 10*1024*1024 {
-					continue
-				}
-				h := hashString(string(data))
-				if h == lastHash {
-					continue
-				}
-				lastHash = h
-				body, _ := json.Marshal(map[string]interface{}{
-					"type":    "text",
-					"content": string(data),
-				})
-				if err := w.Write(body); err == nil {
-					log.Printf("📋 [poll] sent text event (%d bytes)", len(data))
-				} else {
-					log.Printf("[poll] write failed: %v", err)
-				}
+			tickCount++
+			seq := rawSequence()
+			if tickCount%10 == 0 {
+				log.Printf("[poll #%d] seq=%d lastSeq=%d", tickCount, seq, lastSeq)
 			}
-		}
-	}()
-
-	var lastTextHash, lastImageHash string
-
-	go func() {
-		log.Println("text watcher goroutine alive")
-		for data := range textCh {
-			if len(data) == 0 || len(data) > 10*1024*1024 {
+			if seq == lastSeq {
 				continue
 			}
-			text := string(data)
+			log.Printf("📋 seq changed: %d → %d", lastSeq, seq)
+			lastSeq = seq
+
+			text, ok := rawReadText()
+			if !ok || text == "" {
+				log.Printf("rawReadText after seq change: ok=%v len=%d", ok, len(text))
+				continue
+			}
 			h := hashString(text)
 			if h == lastTextHash {
 				continue
 			}
 			lastTextHash = h
+
 			body, _ := json.Marshal(map[string]interface{}{
 				"type":    "text",
 				"content": text,
@@ -391,93 +356,16 @@ func RunHelper(pipeName string) error {
 				cancel()
 				return
 			}
-			log.Printf("📋 sent text event (%d bytes)", len(text))
-		}
-	}()
-	go func() {
-		log.Println("image watcher goroutine alive")
-		for data := range imgCh {
-			if len(data) == 0 || len(data) > 50*1024*1024 {
-				continue
-			}
-			h := hashBytes(data)
-			if h == lastImageHash {
-				continue
-			}
-			lastImageHash = h
-			body, _ := json.Marshal(map[string]interface{}{
-				"type":    "image",
-				"content": b64Encode(data),
-			})
-			if err := w.Write(body); err != nil {
-				log.Printf("write image event failed: %v", err)
-				cancel()
-				return
-			}
-			log.Printf("📋 sent image event (%d bytes)", len(data))
+			log.Printf("📋 sent text event (%d bytes, seq=%d)", len(text), seq)
 		}
 	}()
 
-	// Read commands from service. Each command is length-prefixed JSON.
-	r := bufio.NewReader(&pipeReader{handle: pipeHandle})
-	headerBuf := make([]byte, 4)
-	for {
-		if _, err := io.ReadFull(r, headerBuf); err != nil {
-			log.Printf("Pipe closed: %v", err)
-			cancel()
-			return nil
-		}
-		size := binary.LittleEndian.Uint32(headerBuf)
-		if size == 0 || size > 50*1024*1024 {
-			continue
-		}
-		body := make([]byte, size)
-		if _, err := io.ReadFull(r, body); err != nil {
-			log.Printf("Read body failed: %v", err)
-			cancel()
-			return nil
-		}
-		var cmd struct {
-			Cmd     string `json:"cmd"`
-			Content string `json:"content"`
-		}
-		if err := json.Unmarshal(body, &cmd); err != nil {
-			continue
-		}
-		switch cmd.Cmd {
-		case "set_text":
-			clipboard.Write(clipboard.FmtText, []byte(cmd.Content))
-			lastTextHash = hashString(cmd.Content)
-		case "set_image":
-			if data, err := b64Decode(cmd.Content); err == nil {
-				clipboard.Write(clipboard.FmtImage, data)
-				lastImageHash = hashBytes(data)
-			}
-		case "remember_text":
-			lastTextHash = hashString(cmd.Content)
-		case "remember_image":
-			if data, err := b64Decode(cmd.Content); err == nil {
-				lastImageHash = hashBytes(data)
-			}
-		case "quit":
-			log.Println("Quit command received")
-			return nil
-		}
-	}
-}
-
-type pipeReader struct{ handle windows.Handle }
-
-func (p *pipeReader) Read(b []byte) (int, error) {
-	var n uint32
-	err := windows.ReadFile(p.handle, b, &n, nil)
-	if err != nil {
-		return int(n), err
-	}
-	if n == 0 {
-		return 0, io.EOF
-	}
-	return int(n), nil
+	// Pipe is write-only from helper's side. Service writes to clipboard
+	// via shell.Run (separate code path), not via this pipe. Block on
+	// context cancel; the writer goroutines call cancel() if pipe breaks.
+	<-ctx.Done()
+	log.Println("Helper exiting (context cancelled)")
+	return nil
 }
 
 // ─── helper process spawn (CreateProcessAsUser) ───────────────────────
