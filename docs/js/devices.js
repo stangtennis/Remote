@@ -626,33 +626,95 @@ async function assignDevicePrompt(device) {
   overlay.id = 'assignModal';
   overlay.style.cssText = 'position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px)';
   overlay.innerHTML = `
-    <div style="background:var(--surface,#1e1e2e);border:1px solid var(--border,#333);border-radius:12px;padding:1.5rem;width:min(420px,92vw);box-shadow:0 12px 32px rgba(0,0,0,0.5);font-family:inherit;color:var(--text,#fff)">
+    <div style="background:var(--surface,#1e1e2e);border:1px solid var(--border,#333);border-radius:12px;padding:1.5rem;width:min(480px,92vw);max-height:90vh;overflow-y:auto;box-shadow:0 12px 32px rgba(0,0,0,0.5);font-family:inherit;color:var(--text,#fff)">
       <h3 style="margin:0 0 .25rem 0;font-size:1.1rem">Tildel adgang til enhed</h3>
       <div style="opacity:0.7;font-size:.85rem;margin-bottom:1rem">${device.device_name || device.device_id}</div>
 
-      <label style="display:block;font-size:.85rem;margin-bottom:.4rem">E-mail på modtager</label>
-      <input type="email" id="assignEmail" placeholder="bruger@example.dk" style="width:100%;padding:.55rem .7rem;border:1px solid var(--border,#333);border-radius:6px;background:rgba(255,255,255,0.05);color:inherit;font-size:.95rem;margin-bottom:1rem" autocomplete="email" />
+      <div style="font-size:.85rem;font-weight:600;margin-bottom:.4rem;opacity:0.85">Nuværende adgang</div>
+      <div id="assignList" style="border:1px solid var(--border,#333);border-radius:6px;padding:.5rem;background:rgba(255,255,255,0.02);margin-bottom:1.25rem;font-size:.85rem;min-height:2.5rem">
+        <div style="opacity:0.5;text-align:center;padding:.5rem">Indlæser...</div>
+      </div>
 
-      <label style="display:block;font-size:.85rem;margin-bottom:.4rem">Type</label>
-      <div style="display:flex;flex-direction:column;gap:.4rem;margin-bottom:1.25rem">
-        <label style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;cursor:pointer">
+      <div style="font-size:.85rem;font-weight:600;margin-bottom:.4rem;opacity:0.85">Tilføj ny</div>
+      <input type="email" id="assignEmail" placeholder="bruger@example.dk" style="width:100%;padding:.55rem .7rem;border:1px solid var(--border,#333);border-radius:6px;background:rgba(255,255,255,0.05);color:inherit;font-size:.95rem;margin-bottom:.75rem;box-sizing:border-box" autocomplete="email" />
+
+      <div style="display:flex;flex-direction:column;gap:.35rem;margin-bottom:1.25rem">
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;cursor:pointer">
           <input type="radio" name="assignKind" value="delegate" checked />
           <span><strong>Tildel adgang</strong> — modtager ser enheden, ejer beholder fuld kontrol</span>
         </label>
-        <label style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;cursor:pointer">
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;cursor:pointer">
           <input type="radio" name="assignKind" value="transfer" />
-          <span><strong>Overdrag ejerskab</strong> — modtager bliver ny ejer (kun admin)</span>
+          <span><strong>Overdrag ejerskab</strong> — modtager bliver ny ejer</span>
         </label>
       </div>
 
       <div style="display:flex;gap:.5rem;justify-content:flex-end">
-        <button id="assignCancel" type="button" style="padding:.5rem 1rem;border:1px solid var(--border,#444);border-radius:6px;background:transparent;color:inherit;cursor:pointer">Annullér</button>
-        <button id="assignSubmit" type="button" style="padding:.5rem 1.25rem;border:none;border-radius:6px;background:var(--primary,#3b82f6);color:#fff;font-weight:600;cursor:pointer">Tildel</button>
+        <button id="assignCancel" type="button" style="padding:.5rem 1rem;border:1px solid var(--border,#444);border-radius:6px;background:transparent;color:inherit;cursor:pointer">Luk</button>
+        <button id="assignSubmit" type="button" style="padding:.5rem 1.25rem;border:none;border-radius:6px;background:var(--primary,#3b82f6);color:#fff;font-weight:600;cursor:pointer">Tilføj</button>
       </div>
 
       <div id="assignStatus" style="margin-top:.85rem;font-size:.85rem;min-height:1.2em"></div>
     </div>`;
   document.body.appendChild(overlay);
+
+  // Load + render existing assignments for this device
+  const refreshList = async () => {
+    const list = overlay.querySelector('#assignList');
+    list.innerHTML = '<div style="opacity:0.5;text-align:center;padding:.5rem">Indlæser...</div>';
+    try {
+      const { data, error } = await supabase.rpc('list_device_access', { p_device_id: device.device_id });
+      if (error) throw error;
+      list.innerHTML = '';
+
+      // Show owner first
+      if (data && data.length) {
+        const ownerRow = data.find(r => r.access_kind === 'owner');
+        const assigned = data.filter(r => r.access_kind === 'assignment');
+        if (ownerRow) {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:.4rem .25rem;border-bottom:1px solid rgba(255,255,255,0.06)';
+          row.innerHTML = `<span><strong>👑 Ejer:</strong> ${ownerRow.email}</span>`;
+          list.appendChild(row);
+        }
+        for (const a of assigned) {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:.4rem .25rem;border-bottom:1px solid rgba(255,255,255,0.06)';
+          const span = document.createElement('span');
+          span.innerHTML = `👤 ${a.email}`;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = '✕ Fjern';
+          btn.style.cssText = 'padding:.25rem .6rem;border:1px solid rgba(239,68,68,0.4);border-radius:4px;background:transparent;color:#ef4444;cursor:pointer;font-size:.78rem';
+          btn.addEventListener('click', async () => {
+            if (!confirm(`Fjern adgang for ${a.email}?`)) return;
+            btn.disabled = true;
+            btn.textContent = '...';
+            const { error: revokeErr } = await supabase
+              .from('device_assignments')
+              .update({ revoked_at: new Date().toISOString() })
+              .eq('id', a.assignment_id);
+            if (revokeErr) {
+              alert('Fejl: ' + revokeErr.message);
+              btn.disabled = false;
+              btn.textContent = '✕ Fjern';
+              return;
+            }
+            await refreshList();
+            if (typeof loadDevices === 'function') loadDevices();
+          });
+          row.append(span, btn);
+          list.appendChild(row);
+        }
+      }
+      if (!list.children.length) {
+        list.innerHTML = '<div style="opacity:0.5;text-align:center;padding:.5rem">Ingen tildelinger</div>';
+      }
+    } catch (err) {
+      list.innerHTML = `<div style="color:#ef4444;text-align:center;padding:.5rem">Kunne ikke indlæse: ${err.message || err}</div>`;
+    }
+  };
+  refreshList();
 
   const close = () => overlay.remove();
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
@@ -705,7 +767,12 @@ async function assignDevicePrompt(device) {
         status.textContent = '✓ Adgang tildelt';
       }
 
-      setTimeout(() => { close(); if (typeof loadDevices === 'function') loadDevices(); }, 800);
+      // Refresh the in-modal list and the main device card view, but
+      // keep the modal open so the admin can stack more assignments.
+      overlay.querySelector('#assignEmail').value = '';
+      await refreshList();
+      if (typeof loadDevices === 'function') loadDevices();
+      setTimeout(() => { status.textContent = ''; }, 2000);
     } catch (err) {
       status.style.color = '#ef4444';
       status.textContent = 'Fejl: ' + (err.message || err);
