@@ -10,9 +10,11 @@ import (
 // TokenProvider manages JWT token lifecycle with auto-refresh.
 // Thread-safe - can be shared across goroutines.
 type TokenProvider struct {
-	mu     sync.Mutex
-	config AuthConfig
-	creds  *Credentials
+	mu              sync.Mutex
+	config          AuthConfig
+	creds           *Credentials
+	lastRefreshFail time.Time // for backoff so we don't hammer GoTrue when the refresh token is dead
+	refreshBackoff  time.Duration
 }
 
 // NewTokenProvider creates a TokenProvider from existing credentials.
@@ -25,6 +27,12 @@ func NewTokenProvider(config AuthConfig, creds *Credentials) *TokenProvider {
 
 // GetToken returns a valid access token, refreshing if needed.
 // Uses a 60-second margin before expiry to avoid mid-request expiration.
+//
+// On refresh failure (e.g. refresh_token rotated out by GoTrue), GetToken
+// applies an exponential backoff so it doesn't spam the auth endpoint
+// every poll cycle. Callers that have an api_key fallback (heartbeat,
+// signaling, audit) treat the empty-token return as "use api_key path"
+// — see setAuthHeaders in webrtc/peer.go.
 func (tp *TokenProvider) GetToken() (string, error) {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
@@ -38,14 +46,30 @@ func (tp *TokenProvider) GetToken() (string, error) {
 		return tp.creds.AccessToken, nil
 	}
 
-	// Token expired or about to expire - refresh
+	// Backoff if previous refresh failed recently — caps GoTrue load
+	// and log spam to once per 60s in steady state.
+	if !tp.lastRefreshFail.IsZero() && time.Since(tp.lastRefreshFail) < tp.refreshBackoff {
+		return "", fmt.Errorf("token refresh on cooldown (%s remaining)",
+			(tp.refreshBackoff - time.Since(tp.lastRefreshFail)).Round(time.Second))
+	}
+
 	log.Println("🔄 Token expired or expiring soon, refreshing...")
 
 	result, err := RefreshToken(tp.config, tp.creds.RefreshToken)
-	if err != nil {
-		return "", fmt.Errorf("token refresh failed: %w", err)
-	}
-	if !result.Success {
+	if err != nil || !result.Success {
+		tp.lastRefreshFail = time.Now()
+		// Exponential backoff: 5s → 10s → 20s → ... → 60s cap
+		if tp.refreshBackoff == 0 {
+			tp.refreshBackoff = 5 * time.Second
+		} else if tp.refreshBackoff < 60*time.Second {
+			tp.refreshBackoff *= 2
+			if tp.refreshBackoff > 60*time.Second {
+				tp.refreshBackoff = 60 * time.Second
+			}
+		}
+		if err != nil {
+			return "", fmt.Errorf("token refresh failed: %w", err)
+		}
 		return "", fmt.Errorf("token refresh failed: %s", result.Message)
 	}
 
@@ -56,6 +80,8 @@ func (tp *TokenProvider) GetToken() (string, error) {
 	}
 
 	tp.creds = newCreds
+	tp.lastRefreshFail = time.Time{}
+	tp.refreshBackoff = 0
 	log.Printf("✅ Token refreshed successfully (expires: %s)",
 		time.Unix(tp.creds.ExpiresAt, 0).Format("15:04:05"))
 
