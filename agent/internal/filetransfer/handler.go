@@ -32,16 +32,31 @@ type activeTransfer struct {
 }
 
 // sanitizePath validates and cleans a file path received from network input.
-// It rejects paths containing ".." traversal sequences and resolves symlinks
-// to prevent symlink-based path traversal attacks.
+// Rejects: "..", UNC paths, Windows device-namespace paths (\\?\, \\.\),
+// and resolves symlinks to detect symlink-based traversal.
 func sanitizePath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("empty path")
 	}
+
+	// Reject Windows UNC and device-namespace paths early. These bypass
+	// our drive-letter checks and let attacker-controlled SMB shares or
+	// raw devices be the target. \\?\ allows long paths but also
+	// bypasses path normalisation; \\.\ exposes raw devices.
+	if strings.HasPrefix(path, `\\`) || strings.HasPrefix(path, `//`) {
+		return "", fmt.Errorf("UNC/device-namespace paths not allowed: %s", path)
+	}
+
 	cleaned := filepath.Clean(path)
 	if strings.Contains(cleaned, "..") {
 		return "", fmt.Errorf("path traversal not allowed: %s", path)
 	}
+
+	// Re-check after Clean — Clean might collapse \\? but not always.
+	if strings.HasPrefix(cleaned, `\\`) {
+		return "", fmt.Errorf("UNC/device-namespace paths not allowed: %s", path)
+	}
+
 	// Resolve symlinks to detect symlink-based traversal
 	resolved, err := filepath.EvalSymlinks(cleaned)
 	if err != nil {
@@ -61,9 +76,27 @@ func sanitizePath(path string) (string, error) {
 	return resolved, nil
 }
 
-// isProtectedPath checks if a path is a critical system directory that should not be deleted or overwritten.
+// isProtectedPath checks if a path is a critical system directory that
+// should not be written to or removed. Uses HasPrefix (not equality) so
+// subpaths of protected roots are also blocked, e.g. dropping a binary
+// into C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\.
 func isProtectedPath(path string) bool {
 	p := strings.ToLower(filepath.Clean(path))
+
+	hasProtectedPrefix := func(p string, roots []string) bool {
+		for _, r := range roots {
+			r = strings.ToLower(r)
+			// Match exact or as a path-prefix (with separator).
+			if p == r {
+				return true
+			}
+			sep := string(filepath.Separator)
+			if strings.HasPrefix(p, r+sep) {
+				return true
+			}
+		}
+		return false
+	}
 
 	if runtime.GOOS == "windows" {
 		// Block drive roots (C:\, D:\, etc.)
@@ -75,39 +108,34 @@ func isProtectedPath(path string) bool {
 			`c:\program files`,
 			`c:\program files (x86)`,
 			`c:\programdata`,
-			`c:\users`,
 			`c:\system volume information`,
+			`c:\$recycle.bin`,
+			`c:\boot`,
+			`c:\config.msi`,
 		}
-		for _, pp := range protected {
-			if p == pp {
-				return true
-			}
-		}
-	} else {
-		// macOS / Linux
-		if p == "/" {
+		// c:\users is special: block c:\users itself but allow subdirs
+		// (the agent legitimately needs to read/write into per-user dirs).
+		if p == `c:\users` {
 			return true
 		}
-		protected := []string{
-			"/system",
-			"/usr",
-			"/bin",
-			"/sbin",
-			"/etc",
-			"/var",
-			"/tmp",
-			"/private",
-			"/applications",
-			"/library",
-			"/users",
-		}
-		for _, pp := range protected {
-			if p == pp {
-				return true
-			}
-		}
+		return hasProtectedPrefix(p, protected)
 	}
-	return false
+
+	// macOS / Linux
+	if p == "/" {
+		return true
+	}
+	protected := []string{
+		"/system",
+		"/usr",
+		"/bin",
+		"/sbin",
+		"/etc",
+		"/var",
+		"/private",
+		"/library",
+	}
+	return hasProtectedPrefix(p, protected)
 }
 
 // NewHandler creates a new file transfer handler

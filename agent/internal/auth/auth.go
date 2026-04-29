@@ -259,6 +259,7 @@ func SaveCredentials(creds *Credentials) error {
 			log.Printf("📁 Writing to: %s", credPath)
 			if err := os.WriteFile(credPath, data, 0600); err == nil {
 				log.Printf("✅ Saved to AppData: %s", credPath)
+				lockCredentialsACL(credPath)
 				saved = true
 			} else {
 				log.Printf("❌ Failed to write to AppData: %v", err)
@@ -278,6 +279,7 @@ func SaveCredentials(creds *Credentials) error {
 			credPath := filepath.Join(credDir, ".credentials")
 			if err := os.WriteFile(credPath, data, 0600); err == nil {
 				log.Printf("✅ Saved to ProgramData: %s", credPath)
+				lockCredentialsACL(credPath)
 				saved = true
 			} else {
 				log.Printf("⚠️ Failed to write to ProgramData: %v", err)
