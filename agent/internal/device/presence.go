@@ -1,7 +1,6 @@
 package device
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -37,7 +36,7 @@ func (d *Device) StartPresence() {
 	}
 
 	if d.APIKey == "" {
-		fmt.Println("⚠️  Heartbeat: api_key missing — falling back to JWT-only auth (expect failures after token expiry)")
+		log.Println("⚠️  Heartbeat: api_key missing — falling back to JWT-only auth (expect failures after token expiry)")
 	}
 
 	// Single heartbeat attempt. Returns true on success.
@@ -72,7 +71,7 @@ func (d *Device) StartPresence() {
 	if doHeartbeat() {
 		atomic.StoreInt64(&d.lastHeartbeatSuccess, time.Now().Unix())
 	} else {
-		fmt.Printf("⚠️  Initial heartbeat failed: %v\n", d.lastHeartbeatErr)
+		log.Printf("⚠️  Initial heartbeat failed: %v", d.lastHeartbeatErr)
 	}
 
 	// Adaptive heartbeat loop with exponential backoff on failure.
@@ -107,7 +106,7 @@ func (d *Device) StartPresence() {
 			atomic.StoreInt64(&d.lastHeartbeatSuccess, now.Unix())
 			if consecutiveFailures > 0 {
 				downtime := time.Since(outageStart).Round(time.Second)
-				fmt.Printf("✅ Heartbeat genoptaget efter %s nedetid (%d fejlede forsøg)\n", downtime, consecutiveFailures)
+				log.Printf("✅ Heartbeat genoptaget efter %s nedetid (%d fejlede forsøg)", downtime, consecutiveFailures)
 			}
 			consecutiveFailures = 0
 			degradedAnnounced = false
@@ -120,13 +119,13 @@ func (d *Device) StartPresence() {
 
 		if consecutiveFailures == 1 {
 			outageStart = time.Now()
-			fmt.Printf("⚠️  Heartbeat failed: %v (retry om %s)\n", d.lastHeartbeatErr, delay)
+			log.Printf("⚠️  Heartbeat failed: %v (retry om %s)", d.lastHeartbeatErr, delay)
 		} else if !degradedAnnounced && consecutiveFailures >= 3 {
-			fmt.Printf("⚠️  Heartbeat: vedvarende nedetid (%d forsøg fejlet) — backoff %s\n", consecutiveFailures, delay)
+			log.Printf("⚠️  Heartbeat: vedvarende nedetid (%d forsøg fejlet) — backoff %s", consecutiveFailures, delay)
 			degradedAnnounced = true
 			lastErrLog = time.Now()
 		} else if time.Since(lastErrLog) >= time.Minute {
-			fmt.Printf("⚠️  Heartbeat: stadig nede efter %d forsøg (sidste fejl: %v)\n", consecutiveFailures, d.lastHeartbeatErr)
+			log.Printf("⚠️  Heartbeat: stadig nede efter %d forsøg (sidste fejl: %v)", consecutiveFailures, d.lastHeartbeatErr)
 			lastErrLog = time.Now()
 		}
 	}
