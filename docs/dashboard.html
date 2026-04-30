@@ -4,15 +4,37 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fjernskrivebord - Kontrolpanel</title>
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="noindex, nofollow">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
   <link rel="stylesheet" href="css/styles.css?v=6">
   <link rel="stylesheet" href="css/loading-states.css?v=6">
   <link rel="stylesheet" href="css/mobile.css?v=12">
   <link rel="stylesheet" href="css/accessibility.css?v=6">
-  <link rel="stylesheet" href="css/empty-states.css?v=6">
+  <link rel="stylesheet" href="css/empty-states.css?v=8">
   <link rel="stylesheet" href="css/modern.css?v=6">
   <link rel="stylesheet" href="css/redesign.css?v=4">
-  <script>if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');</script>
+  <link rel="stylesheet" href="css/polish.css?v=7">
+  <script>
+    (function() {
+      try {
+        var t = localStorage.getItem('rd-theme');
+        if (t !== 'light' && t !== 'dark') {
+          // Migration fra gammel 'theme'-nøgle
+          var old = localStorage.getItem('theme');
+          if (old === 'light' || old === 'dark') {
+            t = old;
+            try { localStorage.setItem('rd-theme', t); } catch(_) {}
+          } else {
+            t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          }
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (_) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body class="dashboard-page">
@@ -29,6 +51,7 @@
       <div class="header-actions">
         <button id="notificationToggleBtn" class="btn btn-icon" onclick="BrowserNotifications.toggle()" title="Notifikationer"><i class="fas fa-bell"></i></button>
         <button id="quickSupportBtn" class="btn btn-secondary" style="margin-right: 10px; display: none;" onclick="showSupportModal()"><i class="fas fa-life-ring"></i> Quick Support</button>
+        <a href="history.html" class="btn btn-secondary" style="margin-right: 10px;" title="Session-historik"><i class="fas fa-clock-rotate-left"></i> Historik</a>
         <a href="admin.html" id="adminLink" class="btn btn-secondary" style="margin-right: 10px; display: none;"><i class="fas fa-shield-halved"></i> Admin</a>
         <span id="userEmail" class="user-info"></span>
         <button id="logoutBtn" class="btn btn-secondary">Log ud</button>
@@ -118,7 +141,6 @@
                 <button class="toolbar-btn" title="Synkroniser udklipsholder" onclick="sendClipboardToAgent()"><i class="fas fa-clipboard"></i></button>
                 <button class="toolbar-btn" title="Filøverførsel" onclick="FileTransfer.open()"><i class="fas fa-folder-open"></i></button>
                 <button class="toolbar-btn" title="Skærmbillede" onclick="saveScreenshot()"><i class="fas fa-camera"></i></button>
-                <button class="toolbar-btn" title="Processer" onclick="toggleProcessManager()"><i class="fas fa-microchip"></i></button>
                 <button class="toolbar-btn" id="qualityToggleBtn" title="Skift H264/JPEG tilstand"><i class="fas fa-sliders"></i></button>
                 <span id="monitorSelectContainer" style="display: none; align-items: center; gap: 4px;">
                   <label for="monitorSelect" style="font-size: 0.8rem; color: #aaa;"><i class="fas fa-desktop"></i></label>
@@ -238,17 +260,78 @@
             <!-- Devices will be inserted here -->
           </div>
 
-          <!-- Empty State -->
-          <div id="emptyState" class="empty-state" style="display: none;">
-            <p><i class="fas fa-plug"></i> Ingen enheder registreret endnu</p>
-            <p class="muted">Download og kør agenten på en computer for at komme i gang</p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="#" onclick="signedDownload('remote-agent.exe'); return false;"
-                 class="btn btn-primary" style="text-decoration: none;"><i class="fas fa-desktop"></i> Hent Client Agent</a>
-              <a href="agent.html"
-                 class="btn btn-primary" style="text-decoration: none;"><i class="fas fa-globe"></i> Web Agent</a>
+          <!-- Empty State / Quickstart Onboarding -->
+          <div id="emptyState" class="empty-state quickstart-panel" style="display: none;">
+            <div class="quickstart-hero">
+              <div class="quickstart-icon">🖥️</div>
+              <h2>Velkommen til Fjernskrivebord</h2>
+              <p class="muted">Kom i gang på 30 sekunder</p>
             </div>
+
+            <ol class="quickstart-steps">
+              <li>
+                <div class="step-num">1</div>
+                <div class="step-body">
+                  <div class="step-title">Hent og installér agenten</div>
+                  <div class="step-desc">På den computer du vil styre — vælg din platform:</div>
+                  <div class="quickstart-platforms" id="quickstartPlatforms">
+                    <a href="#" data-platform="windows" onclick="signedDownload('RemoteDesktopAgent-Setup.exe'); return false;"
+                       class="platform-btn" title="Windows installer"><i class="fab fa-windows"></i> Windows</a>
+                    <a href="#" data-platform="macos" onclick="signedDownload('remote-agent-macos'); return false;"
+                       class="platform-btn" title="macOS agent"><i class="fab fa-apple"></i> macOS</a>
+                    <a href="#" data-platform="quick" onclick="signedDownload('remote-agent.exe'); return false;"
+                       class="platform-btn" title="Quick Connect (Windows, ingen installation)"><i class="fas fa-bolt"></i> Quick Connect</a>
+                    <a href="agent.html" class="platform-btn" title="Web Agent (browser)"><i class="fas fa-globe"></i> Web Agent</a>
+                  </div>
+                </div>
+              </li>
+              <li>
+                <div class="step-num">2</div>
+                <div class="step-body">
+                  <div class="step-title">Log ind med samme konto</div>
+                  <div class="step-desc">Brug den samme email + password som her — din enhed kobles automatisk til kontoen.</div>
+                </div>
+              </li>
+              <li>
+                <div class="step-num">3</div>
+                <div class="step-body">
+                  <div class="step-title">Klar til fjernstyring</div>
+                  <div class="step-desc">Maskinen dukker op her som <strong>Online</strong> indenfor 30 sekunder.</div>
+                </div>
+              </li>
+            </ol>
+
+            <div class="quickstart-status">
+              <span class="quickstart-spinner"></span>
+              <span>Venter på din første enhed...</span>
+            </div>
+
+            <details class="quickstart-faq">
+              <summary>Agent dukker ikke op?</summary>
+              <ul>
+                <li>Tjek at firewallen tillader udgående HTTPS til <code>supabase.hawkeye123.dk</code></li>
+                <li>Verificér at du loggede ind i agenten med <em>samme</em> konto som her</li>
+                <li>Genstart agenten — den prøver at oprette forbindelse hvert 30. sekund</li>
+                <li>På Windows: kig i Event Viewer → Application for fejl fra <code>RemoteDesktopAgent</code></li>
+              </ul>
+            </details>
           </div>
+          <script>
+            // Highlight the platform button matching the user's OS so first-
+            // time users immediately see "their" download.
+            (function() {
+              const ua = navigator.userAgent;
+              const isWin   = /Windows/.test(ua);
+              const isMac   = /Mac/.test(ua) && !/iPhone|iPad/.test(ua);
+              const isLinux = /Linux/.test(ua) && !/Android/.test(ua);
+              const target = isWin ? 'windows' : isMac ? 'macos' : isLinux ? 'quick' : null;
+              if (!target) return;
+              document.addEventListener('DOMContentLoaded', () => {
+                const btn = document.querySelector(`.platform-btn[data-platform="${target}"]`);
+                if (btn) btn.classList.add('platform-btn-suggested');
+              });
+            })();
+          </script>
 
           <!-- Loading State -->
           <div id="loadingDevices" class="loading" style="display: none;">
@@ -264,12 +347,15 @@
               <span id="activityLogToggle" style="display: inline-block; width: 1.2em; text-align: center; font-size: 0.8em;">▶</span>
               Seneste aktivitet
             </h2>
-            <select id="activityLogFilter" style="padding: 0.3rem 0.5rem; background: var(--surface, #1a1a2e); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); font-size: 0.8rem; cursor: pointer;">
-              <option value="all">Alle</option>
-              <option value="sessions">Sessions</option>
-              <option value="devices">Enheder</option>
-              <option value="support">Support</option>
-            </select>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <select id="activityLogFilter" style="padding: 0.3rem 0.5rem; background: var(--surface, #1a1a2e); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); font-size: 0.8rem; cursor: pointer;">
+                <option value="all">Alle</option>
+                <option value="sessions">Sessions</option>
+                <option value="devices">Enheder</option>
+                <option value="support">Support</option>
+              </select>
+              <button id="activityExportCsv" class="btn btn-sm btn-secondary" title="Eksporter aktuelt filter som CSV" style="padding: 0.3rem 0.55rem; font-size: 0.75rem;"><i class="fas fa-file-csv"></i></button>
+            </div>
           </div>
           <div id="activityLogContent" style="display: none;">
             <div id="activityLogList"></div>
@@ -432,38 +518,6 @@
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 
-  <!-- Process Manager Modal -->
-  <div id="processModal" class="modal" style="display: none;">
-    <div class="modal-content" style="max-width: 800px; max-height: 80vh; display: flex; flex-direction: column;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-        <h3 style="margin: 0;"><i class="fas fa-microchip"></i> Processer</h3>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <input type="text" id="processSearch" placeholder="Søg..." oninput="filterProcesses()" style="padding: 4px 8px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 0.85rem;">
-          <button onclick="requestProcessList()" class="btn btn-primary" style="padding: 4px 12px; font-size: 0.85rem;"><i class="fas fa-sync"></i> Opdater</button>
-          <button onclick="toggleProcessManager()" class="btn" style="padding: 4px 8px;"><i class="fas fa-times"></i></button>
-        </div>
-      </div>
-      <div id="processTableContainer" style="flex: 1; overflow-y: auto;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
-          <thead>
-            <tr style="position: sticky; top: 0; background: var(--bg-primary); border-bottom: 1px solid var(--border);">
-              <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="sortProcesses('pid')">PID</th>
-              <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="sortProcesses('name')">Navn</th>
-              <th style="text-align: right; padding: 6px 8px; cursor: pointer;" onclick="sortProcesses('memory_mb')">RAM</th>
-              <th style="text-align: right; padding: 6px 8px; cursor: pointer;" onclick="sortProcesses('cpu')">CPU</th>
-              <th style="text-align: left; padding: 6px 8px;">Bruger</th>
-              <th style="text-align: center; padding: 6px 8px; width: 60px;"></th>
-            </tr>
-          </thead>
-          <tbody id="processTableBody">
-            <tr><td colspan="6" style="text-align: center; padding: 20px; opacity: 0.5;">Klik "Opdater" for at hente processer</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div id="processStatus" style="margin-top: 8px; font-size: 0.8rem; opacity: 0.6;"></div>
-    </div>
-  </div>
-
   <!-- File Transfer Modal -->
   <div id="fileTransferModal" class="modal" style="display: none;">
     <div class="modal-content" style="max-width: 700px; max-height: 80vh; display: flex; flex-direction: column;">
@@ -502,8 +556,19 @@
   </style>
 
   <script>
-    function promptNewFolder() {
-      const name = prompt('Ny mappe navn:');
+    async function promptNewFolder() {
+      const name = await showPrompt('Hvad skal den nye mappe hedde?', {
+        title: 'Ny mappe',
+        icon: '📁',
+        placeholder: 'Mappenavn',
+        confirmText: 'Opret',
+        validator: (v) => {
+          const t = (v || '').trim();
+          if (!t) return 'Skriv et mappenavn';
+          if (/[\\/:*?"<>|]/.test(t)) return 'Mappenavn må ikke indeholde \\/:*?"<>|';
+          return null;
+        },
+      });
       if (!name) return;
       const sep = FileTransfer._currentPath.includes('/') ? '/' : '\\';
       FileTransfer.createDirectory(FileTransfer._currentPath + sep + name);
@@ -552,13 +617,13 @@
       try {
         const { data: { session } } = await window.supabase.auth.getSession();
         if (!session) {
-          alert('Du skal være logget ind for at downloade.');
+          await showAlert('Du skal være logget ind for at downloade.', { title: 'Adgang nægtet', type: 'warning' });
           return;
         }
         window.location.href = 'https://downloads.hawkeye123.dk/' + filename + '?token=' + session.access_token;
       } catch (e) {
         console.error('Download fejl:', e);
-        alert('Kunne ikke starte download. Prøv at genindlæse siden.');
+        await showAlert('Kunne ikke starte download. Prøv at genindlæse siden.', { title: 'Download mislykkedes', type: 'error' });
       }
     }
   </script>
@@ -566,6 +631,7 @@
   <!-- Scripts -->
   <!-- Error Boundary -->
   <script src="js/error-boundary.js?v=6"></script>
+  <script src="js/polish.js?v=3" defer></script>
   
   <!-- UI Helpers -->
   <script src="js/ui-helpers.js?v=6"></script>
@@ -574,12 +640,12 @@
   <script src="js/config.js?v=6"></script>
   <script src="js/auth.js?v=8"></script>
   <script src="js/app.js?v=10"></script>
-  <script src="js/devices.js?v=14"></script>
+  <script src="js/devices.js?v=15"></script>
   <script src="js/sessions.js?v=8"></script>
-  <script src="js/webrtc.js?v=30"></script>
+  <script src="js/webrtc.js?v=31"></script>
   <script src="js/signaling.js?v=103"></script>
   <script src="js/notifications.js?v=1"></script>
-  <script src="js/activity-log.js?v=1"></script>
+  <script src="js/activity-log.js?v=2"></script>
   <script src="js/file-transfer.js?v=1"></script>
   <script src="js/support-viewer.js?v=4"></script>
   
