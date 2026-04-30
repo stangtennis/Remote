@@ -2,7 +2,7 @@
 
 A **professional remote desktop solution** built with **Supabase**, **WebRTC**, and **Go** — like TeamViewer, but self-hosted and open-source.
 
-**Current version: v3.0.0** | [Download](https://github.com/stangtennis/Remote/releases/latest) | [Dashboard](https://dashboard.hawkeye123.dk)
+**Current version: v3.1.8** | [Download](https://github.com/stangtennis/Remote/releases/latest) | [Dashboard](https://dashboard.hawkeye123.dk)
 
 ## Features
 
@@ -41,7 +41,8 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 - **Coturn fallback** — self-hosted Docker coturn as backup
 - **STUN** — Google + Cloudflare STUN servers for NAT traversal
 - **Connection-type badge** — viewer toolbar shows P2P/STUN/Relay icon
-- **Auto-reconnect** — handles network interruptions gracefully
+- **Heartbeat auto-reconnect** — exponential backoff (30s → 60s → 120s → 240s → 300s cap), recovers automatically when Supabase or network comes back
+- **Per-device api_key auth** — survives JWT expiry; agents offline for weeks reconnect cleanly without re-login
 
 ### Infrastructure
 - **Cloudflare Tunnel** — all HTTP traffic via tunnel (no port forwarding needed)
@@ -64,10 +65,15 @@ A **professional remote desktop solution** built with **Supabase**, **WebRTC**, 
 
 ### Management
 - **Admin panel** — centralized user & device management at `/admin.html`
+- **Tildel adgang modal** — assign/revoke device access from dashboard (admin + super_admin)
 - **Device approval** — two-factor: user approval + device approval
 - **System tray** — live status updates (connection mode, bitrate)
 - **Console mode** — real-time log output for debugging
-- **CLI tool** — `remote-desktop-cli` for scripted remote control
+- **Onboarding quickstart** — rich empty-state for new users with platform-aware installer links
+- **History view** — session timeline with CSV export, audit-log of every connect/disconnect
+- **Prometheus metrics** — `/metrics` endpoint (RD_METRICS_ENABLED=true) for Grafana
+- **Remote admin CLI** — `remote-desktop-cli` with `exec` (PowerShell as SYSTEM or `--as-user`), `upload`/`download`, `sysinfo`, `ps`/`kill`. All shell-execs audit-logged
+- **Pending commands** — `force_update`, `restart`, `lock`, `shutdown` triggered from dashboard
 - **Claude Code integration** — `/remote-desktop` slash command for AI-assisted remote control
 
 ## Architecture
@@ -126,7 +132,7 @@ cd agent && CGO_ENABLED=1 go build -tags turbo -o remote-agent ./cmd/remote-agen
 
 ```bash
 # Full build (all platforms + installers)
-./build-local.sh v3.0.0
+./build-local.sh v3.1.8
 
 # Manual Windows agent (with turbo JPEG)
 cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
