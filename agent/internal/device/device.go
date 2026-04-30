@@ -29,6 +29,11 @@ type Device struct {
 	userID        string
 	healthCheck   HealthChecker
 	connInfoFunc  ConnInfoProvider
+
+	// Heartbeat health telemetry (atomic for lock-free reads from any goroutine)
+	consecutiveHeartbeatFailures int32 // updated by StartPresence
+	lastHeartbeatSuccess         int64 // unix timestamp; updated by StartPresence
+	lastHeartbeatErr             error // last error observed; only read inside StartPresence
 }
 
 // SetConnInfoProvider sets a callback to get WebRTC connection info for heartbeat
