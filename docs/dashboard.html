@@ -17,17 +17,14 @@
   <link rel="stylesheet" href="css/polish.css?v=7">
   <script>
     (function() {
+      // Mørk er altid default — kun et eksplicit gemt valg kan overstyre.
+      // Vi følger BEVIDST IKKE prefers-color-scheme længere.
       try {
         var t = localStorage.getItem('rd-theme');
         if (t !== 'light' && t !== 'dark') {
-          // Migration fra gammel 'theme'-nøgle
-          var old = localStorage.getItem('theme');
-          if (old === 'light' || old === 'dark') {
-            t = old;
-            try { localStorage.setItem('rd-theme', t); } catch(_) {}
-          } else {
-            t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-          }
+          var old = localStorage.getItem('theme'); // migration fra gammel nøgle
+          t = (old === 'light' || old === 'dark') ? old : 'dark';
+          try { localStorage.setItem('rd-theme', t); } catch(_) {}
         }
         document.documentElement.setAttribute('data-theme', t);
       } catch (_) {
@@ -631,7 +628,7 @@
   <!-- Scripts -->
   <!-- Error Boundary -->
   <script src="js/error-boundary.js?v=6"></script>
-  <script src="js/polish.js?v=3" defer></script>
+  <script src="js/polish.js?v=4" defer></script>
   
   <!-- UI Helpers -->
   <script src="js/ui-helpers.js?v=6"></script>
