@@ -25,4 +25,15 @@
       <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
     </application>
   </compatibility>
+  <!-- Per-monitor v2 DPI awareness — ESSENTIELT for korrekt screen capture
+       på Windows-maskiner med display-scaling > 100%. Uden dette virtualiserer
+       Windows skærmen og GetSystemMetrics returnerer en mindre logical-size
+       end den faktiske pixel-størrelse, så bunden af skærmen (taskbar) og
+       højre-kanten bliver klippet væk i den capture vi sender til controlleren. -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/PM</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
 </assembly>

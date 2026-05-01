@@ -315,6 +315,11 @@ func main() {
 		return
 	}
 
+	// Per-Monitor V2 DPI awareness — KRITISK før screen-capture initialiseres.
+	// Manifestet sætter dette statisk, men loadere ignorerer manifest i visse
+	// service-scenarier — kald runtime som backup. Idempotent.
+	screen.EnableDPIAwareness()
+
 	// Check if running from Program Files install directory (autostart mode)
 	isService, _ := svc.IsWindowsService()
 	runningFromProgramFiles := isRunningFromProgramFiles()
