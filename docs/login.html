@@ -4,7 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fjernskrivebord - Log ind</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://supabase.hawkeye123.dk wss://supabase.hawkeye123.dk; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="noindex, nofollow">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
+  <script>
+    // Theme FOUC prevention — sætes før CSS loader
+    (function() {
+      try {
+        var t = localStorage.getItem('rd-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = 'dark'; // mørk er altid default
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (_) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="css/styles.css?v=3">
   <link rel="stylesheet" href="css/loading-states.css?v=3">
   <link rel="stylesheet" href="css/mobile.css?v=12">
@@ -12,6 +29,7 @@
   <link rel="stylesheet" href="css/empty-states.css?v=3">
   <link rel="stylesheet" href="css/modern.css?v=6">
   <link rel="stylesheet" href="css/redesign.css?v=4">
+  <link rel="stylesheet" href="css/polish.css?v=7">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body class="login-page">
@@ -116,11 +134,14 @@
     </div>
   </div>
 
+  <!-- Polish: caps lock, password reqs, lockout banner, shortcuts modal, theme toggle -->
+  <script src="js/polish.js?v=4" defer></script>
+
   <!-- Error Boundary -->
   <script src="js/error-boundary.js?v=3"></script>
   
   <!-- UI Helpers -->
-  <script src="js/ui-helpers.js?v=3"></script>
+  <script src="js/ui-helpers.js?v=4"></script>
   
   <!-- Supabase Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

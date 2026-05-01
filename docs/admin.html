@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Adminpanel - Fjernskrivebord</title>
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="noindex, nofollow">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
   <link rel="stylesheet" href="css/styles.css?v=4">
   <link rel="stylesheet" href="css/loading-states.css?v=4">
@@ -12,7 +14,26 @@
   <link rel="stylesheet" href="css/empty-states.css?v=4">
   <link rel="stylesheet" href="css/modern.css?v=4">
   <link rel="stylesheet" href="css/redesign.css?v=4">
-  <script>if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');</script>
+  <link rel="stylesheet" href="css/polish.css?v=7">
+  <script>
+    (function() {
+      try {
+        var t = localStorage.getItem('rd-theme');
+        if (t !== 'light' && t !== 'dark') {
+          var old = localStorage.getItem('theme');
+          if (old === 'light' || old === 'dark') {
+            t = old;
+            try { localStorage.setItem('rd-theme', t); } catch(_) {}
+          } else {
+            t = 'dark'; // mørk er altid default
+          }
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (_) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
@@ -244,6 +265,7 @@
 
   <!-- Error Boundary -->
   <script src="js/error-boundary.js?v=4"></script>
+  <script src="js/polish.js?v=4" defer></script>
   
   <!-- UI Helpers -->
   <script src="js/ui-helpers.js?v=4"></script>

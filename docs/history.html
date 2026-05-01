@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Historik - Fjernskrivebord</title>
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
+  <link rel="stylesheet" href="css/styles.css?v=4">
+  <link rel="stylesheet" href="css/loading-states.css?v=4">
+  <link rel="stylesheet" href="css/mobile.css?v=4">
+  <link rel="stylesheet" href="css/accessibility.css?v=4">
+  <link rel="stylesheet" href="css/empty-states.css?v=4">
+  <link rel="stylesheet" href="css/modern.css?v=4">
+  <link rel="stylesheet" href="css/redesign.css?v=4">
+  <link rel="stylesheet" href="css/polish.css?v=7">
+  <script>
+    (function() {
+      try {
+        var t = localStorage.getItem('rd-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = 'dark'; // mørk er altid default
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (_) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    .history-container { max-width: 960px; margin: 1.5rem auto; padding: 0 1rem; }
+    .history-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+    .history-header h1 { font-size: 1.4rem; margin: 0; color: var(--text); }
+    .history-filters { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: end; margin-bottom: 1rem; padding: 0.85rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+    .history-filters label { font-size: 0.7rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.3rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+    .history-filters input, .history-filters select {
+      padding: 0.5rem 0.7rem;
+      background: var(--background-secondary);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.85rem;
+      text-transform: none;
+      letter-spacing: normal;
+      font-weight: 400;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .history-filters input:focus, .history-filters select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-light);
+    }
+    .filter-actions { display: flex; gap: 0.4rem; margin-left: auto; align-items: end; }
+    .history-summary { display: flex; gap: 1rem; margin: 0.5rem 0 1rem; flex-wrap: wrap; }
+    .history-summary .stat { flex: 1; min-width: 160px; padding: 0.8rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+    .history-summary .stat-value { font-size: 1.4rem; font-weight: 600; color: var(--primary); }
+    .history-summary .stat-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; }
+    .history-day { margin-bottom: 1.5rem; }
+    .history-day-header {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 0.5rem;
+      position: sticky;
+      top: 0;
+      background: var(--background);
+      z-index: 2;
+    }
+    .history-event {
+      display: grid;
+      grid-template-columns: auto 80px 1fr auto;
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.55rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      transition: background 0.15s;
+    }
+    .history-event:hover { background: var(--surface-hover); }
+    .history-event .h-icon { font-size: 1.1rem; text-align: center; }
+    .history-event .h-time { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--text-muted); }
+    .history-event .h-label { color: var(--text); }
+    .history-event .h-device { font-size: 0.75rem; color: var(--text-muted); }
+    .history-event .h-duration { padding: 0.15rem 0.5rem; font-size: 0.75rem; background: var(--primary-light); color: var(--primary); border-radius: 4px; white-space: nowrap; }
+    .history-event.session-completed { border-left: 3px solid #22c55e; padding-left: 0.6rem; }
+    .history-empty { text-align: center; padding: 3rem 1rem; color: var(--text-muted); }
+    .history-empty i { font-size: 2rem; margin-bottom: 0.75rem; opacity: 0.5; }
+    .history-loading { text-align: center; padding: 2rem; color: var(--text-muted); }
+    .back-link { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--text-muted); font-size: 0.85rem; text-decoration: none; margin-bottom: 0.5rem; }
+    .back-link:hover { color: var(--primary); }
+    @media (max-width: 600px) {
+      .history-event { grid-template-columns: auto 1fr; }
+      .history-event .h-time { grid-column: 2; }
+      .history-event .h-duration { grid-column: 2; margin-top: 0.25rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="animated-bg">
+    <div class="gradient-orb orb-1"></div>
+    <div class="gradient-orb orb-2"></div>
+  </div>
+
+  <header class="dashboard-header">
+    <div class="header-content">
+      <h1><i class="fas fa-clock-rotate-left"></i> Session-historik</h1>
+      <div class="header-actions">
+        <a href="dashboard.html" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Dashboard</a>
+        <button id="logoutBtn" class="btn btn-secondary">Log ud</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="history-container">
+    <div class="history-filters">
+      <label><i class="fas fa-calendar"></i> Fra
+        <input type="date" id="filterFrom">
+      </label>
+      <label>Til
+        <input type="date" id="filterTo">
+      </label>
+      <label>Enhed
+        <select id="filterDevice"><option value="">Alle</option></select>
+      </label>
+      <label>Type
+        <select id="filterType">
+          <option value="all">Alle hændelser</option>
+          <option value="sessions" selected>Kun sessioner</option>
+          <option value="devices">Enhed online/offline</option>
+          <option value="support">Support-sessioner</option>
+        </select>
+      </label>
+      <div class="filter-actions">
+        <button id="refreshBtn" class="btn btn-sm btn-secondary" title="Genindlæs"><i class="fas fa-rotate"></i></button>
+        <button id="exportCsvBtn" class="btn btn-sm btn-primary"><i class="fas fa-file-csv"></i> Export CSV</button>
+      </div>
+    </div>
+
+    <div class="history-summary">
+      <div class="stat">
+        <div class="stat-value" id="statSessions">—</div>
+        <div class="stat-label">Sessioner</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="statTotalTime">—</div>
+        <div class="stat-label">Samlet tid</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="statAvgTime">—</div>
+        <div class="stat-label">Gennemsnit</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="statDevices">—</div>
+        <div class="stat-label">Enheder</div>
+      </div>
+    </div>
+
+    <div id="historyContent">
+      <div class="history-loading"><i class="fas fa-spinner fa-spin"></i> Indlæser...</div>
+    </div>
+  </main>
+
+  <script src="js/polish.js?v=4" defer></script>
+  <script src="js/error-boundary.js?v=3"></script>
+  <script src="js/ui-helpers.js?v=4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js?v=3"></script>
+  <script src="js/auth.js?v=3"></script>
+  <script src="js/history.js?v=1"></script>
+</body>
+</html>
