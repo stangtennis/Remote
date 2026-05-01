@@ -669,6 +669,12 @@ body::before {
   background: var(--surface);
   border-radius: var(--radius);
   padding: 1.5rem;
+  flex: 1 1 auto;          /* fyld resterende dashboard-main højde */
+  min-height: 0;           /* tillader flex-children at krympe */
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow: hidden;        /* canvas styrer sin egen scrolling */
 }
 
 .session-info {
@@ -711,32 +717,31 @@ body::before {
   color: var(--primary);
 }
 
-/* ===== Viewer ===== */
+/* ===== Viewer =====
+   Vokser så det fylder al ledig plads i .session-section (flex column).
+   Canvas/video bruger object-fit: contain → letterbox uanset remote-aspect.
+   Intet aspect-ratio og intet max-height: 70vh — det braek tidligere
+   layout'et på små viewports og lod en stor del af vinduet stå ubrugt. */
 .viewer-container {
   position: relative;
   background: #000;
   border-radius: var(--radius);
   overflow: hidden;
-  aspect-ratio: 16/9;
-  max-height: 70vh;
+  flex: 1 1 auto;
+  min-height: 240px;       /* så det aldrig kollapser til 0 */
 }
 
-#remoteVideo {
+#remoteVideo,
+#remoteCanvas {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  position: absolute;
-  top: 0;
-  left: 0;
+  object-fit: contain;     /* skalerer remote-skærm til at passe i viewport */
+  display: block;
 }
 
 #remoteCanvas {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  position: absolute;
-  top: 0;
-  left: 0;
   z-index: 10;
 }
 
