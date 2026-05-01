@@ -702,12 +702,72 @@ class ViewerSession {
         canvas.height = img.height;
         this.screenWidth = img.width;
         this.screenHeight = img.height;
+        this._ensureCanvasAutoFit(canvas);
+        this._fitCanvasToContainer(canvas);
       }
       ctx.drawImage(img, 0, 0);
       URL.revokeObjectURL(img.src);
     };
     img.onerror = () => URL.revokeObjectURL(img.src);
     img.src = URL.createObjectURL(blob);
+  }
+
+  // ===================================================================
+  // Canvas letterbox auto-fit
+  //
+  // CSS object-fit: contain på <canvas> er upålideligt på tværs af
+  // browsere/Wails-WebView/HiDPI. I stedet sætter vi canvas' inline
+  // CSS-dimensioner eksplicit ud fra parent-box og canvas-buffer-aspect.
+  // ===================================================================
+  _fitCanvasToContainer(canvas) {
+    if (!canvas || !canvas.parentElement) return;
+    const intW = canvas.width, intH = canvas.height;
+    if (!intW || !intH) return;
+    const parent = canvas.parentElement;
+    const cw = parent.clientWidth, ch = parent.clientHeight;
+    if (!cw || !ch) return;
+    const scale = Math.min(cw / intW, ch / intH);
+    const w = Math.floor(intW * scale);
+    const h = Math.floor(intH * scale);
+    canvas.style.width  = w + 'px';
+    canvas.style.height = h + 'px';
+    canvas.style.left   = Math.floor((cw - w) / 2) + 'px';
+    canvas.style.top    = Math.floor((ch - h) / 2) + 'px';
+    canvas.style.right  = 'auto';
+    canvas.style.bottom = 'auto';
+  }
+
+  _ensureCanvasAutoFit(canvas) {
+    if (!canvas || canvas._autoFitWired) return;
+    canvas._autoFitWired = true;
+    const fit = () => this._fitCanvasToContainer(canvas);
+    fit();
+    if (typeof ResizeObserver === 'function' && canvas.parentElement) {
+      const ro = new ResizeObserver(() => fit());
+      ro.observe(canvas.parentElement);
+      canvas._fitObserver = ro;
+    }
+    if (!window._viewerFitWired) {
+      window._viewerFitWired = true;
+      window.addEventListener('resize', () => {
+        document.querySelectorAll('.viewer-screen canvas').forEach(c => {
+          if (c._fitObserver) {
+            // observer fyrer; gør det også manuelt for sikkerheds skyld
+          }
+          // fitCanvasToContainer er en ren funktion — tilgå direkte
+          const intW = c.width, intH = c.height;
+          if (!intW || !intH || !c.parentElement) return;
+          const cw = c.parentElement.clientWidth, ch = c.parentElement.clientHeight;
+          if (!cw || !ch) return;
+          const scale = Math.min(cw / intW, ch / intH);
+          const w = Math.floor(intW * scale), h = Math.floor(intH * scale);
+          c.style.width = w + 'px';
+          c.style.height = h + 'px';
+          c.style.left = Math.floor((cw - w) / 2) + 'px';
+          c.style.top  = Math.floor((ch - h) / 2) + 'px';
+        });
+      });
+    }
   }
 
   renderRegion(data, x, y, w, h) {
