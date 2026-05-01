@@ -1308,6 +1308,65 @@ async function updateConnectionType(ctx) {
   }
 }
 
+// =====================================================================
+// Canvas auto-fit — bulletproof letterbox uden afhængighed af object-fit
+//
+// CSS'en sætter canvas til width/height: 100% + object-fit: contain, men
+// object-fit på <canvas> er upålidelig på tværs af browsere/scaler-DPI'er.
+// I stedet holder vi en ResizeObserver på preview-screen og sætter
+// canvas.style.width/height eksplicit til den dimension der lader hele
+// remote-skærmen være synlig (letterbox med sorte bånd hvor nødvendigt).
+// =====================================================================
+function fitCanvasToContainer(canvas) {
+  if (!canvas || !canvas.parentElement) return;
+  const intW = canvas.width, intH = canvas.height;
+  if (!intW || !intH) return;
+
+  // Brug parentens (preview-screen) faktiske box, ikke viewport
+  const parent = canvas.parentElement;
+  const cw = parent.clientWidth, ch = parent.clientHeight;
+  if (!cw || !ch) return;
+
+  // Letterbox-fit: skalér så min(cw/intW, ch/intH) styrer
+  const scale = Math.min(cw / intW, ch / intH);
+  const w = Math.floor(intW * scale);
+  const h = Math.floor(intH * scale);
+
+  canvas.style.width  = w + 'px';
+  canvas.style.height = h + 'px';
+  canvas.style.left   = Math.floor((cw - w) / 2) + 'px';
+  canvas.style.top    = Math.floor((ch - h) / 2) + 'px';
+  canvas.style.right  = 'auto';
+  canvas.style.bottom = 'auto';
+}
+
+let _fitObserver = null;
+function ensureCanvasAutoFit(canvas) {
+  if (!canvas || canvas._autoFitWired) return;
+  canvas._autoFitWired = true;
+  // Kør én gang straks
+  fitCanvasToContainer(canvas);
+  // Re-fit når preview-screen resizer (vinduesresize, sidebar-toggle, fullscreen)
+  if (typeof ResizeObserver === 'function' && canvas.parentElement) {
+    if (!_fitObserver) {
+      _fitObserver = new ResizeObserver(entries => {
+        for (const entry of entries) {
+          const c = entry.target.querySelector('canvas');
+          if (c) fitCanvasToContainer(c);
+        }
+      });
+    }
+    _fitObserver.observe(canvas.parentElement);
+  }
+  // Window-resize fallback (nogle browsere fyrer ikke RO på iframe-resize)
+  if (!window._canvasFitWired) {
+    window._canvasFitWired = true;
+    window.addEventListener('resize', () => {
+      document.querySelectorAll('#previewCanvas, #remoteCanvas').forEach(c => fitCanvasToContainer(c));
+    });
+  }
+}
+
 // Cached DOM elements for frame rendering (avoid getElementById per frame)
 let _frameCanvas, _frameCanvasCtx, _frameRemoteCanvas, _frameRemoteCtx, _frameIdle, _frameConnecting;
 function initFrameElements() {
@@ -1380,6 +1439,8 @@ function displayVideoFrame(data, ctx) {
       canvas.width = img.width;
       canvas.height = img.height;
       debug(`📐 Canvas resized to ${img.width}x${img.height}`);
+      ensureCanvasAutoFit(canvas);
+      fitCanvasToContainer(canvas);
     }
 
     canvasCtx.drawImage(img, 0, 0);
@@ -1389,6 +1450,8 @@ function displayVideoFrame(data, ctx) {
       if (remoteCanvas.width !== img.width || remoteCanvas.height !== img.height) {
         remoteCanvas.width = img.width;
         remoteCanvas.height = img.height;
+        ensureCanvasAutoFit(remoteCanvas);
+        fitCanvasToContainer(remoteCanvas);
       }
       remoteCtx.drawImage(img, 0, 0);
     }
@@ -1672,6 +1735,8 @@ function handleMonitorSwitched(msg) {
   if (canvas) {
     canvas.width = width;
     canvas.height = height;
+    ensureCanvasAutoFit(canvas);
+    fitCanvasToContainer(canvas);
   }
 
   // Update active session ctx
