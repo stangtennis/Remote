@@ -22,10 +22,19 @@ var (
 	downloadsDir string
 	jwtSecret    []byte
 	allowedFiles = map[string]bool{
+		// Bare executables (auto-update + manual download)
 		"remote-agent.exe":         true,
 		"remote-agent-console.exe": true,
 		"controller.exe":           true,
 		"input-helper.exe":         true,
+		"remote-agent-macos":       true,
+		"controller-macos":         true,
+
+		// NSIS installers (dashboard "Hent installer"-knapper)
+		"RemoteDesktopAgent-Setup.exe":         true,
+		"RemoteDesktopAgentConsole-Setup.exe":  true,
+		"RemoteDesktopAgent-RunOnce-Setup.exe": true,
+		"RemoteDesktopController-Setup.exe":    true,
 	}
 )
 
