@@ -1,6 +1,32 @@
 // Remote Desktop Viewer — Multi-Session Support
 // Each ViewerSession is an independent WebRTC connection with its own canvas/video
 
+// Global console interceptor — fanger sidste 500 log-events til "Vis log"-knappen.
+// Wails' WebView2 har ingen indbygget DevTools i prod-build, så uden dette
+// ville support-debug kræve at udvikleren sad foran maskinen.
+(function() {
+  if (window._globalConsoleLog) return; // already wired
+  window._globalConsoleLog = [];
+  const RING_MAX = 500;
+  const orig = { log: console.log, warn: console.warn, error: console.error, info: console.info };
+  function record(level, args) {
+    try {
+      const ts = new Date().toISOString().substring(11, 23);
+      const msg = Array.from(args).map(a => {
+        if (a instanceof Error) return a.stack || a.message;
+        if (typeof a === 'object') { try { return JSON.stringify(a); } catch (_) { return String(a); } }
+        return String(a);
+      }).join(' ');
+      window._globalConsoleLog.push(`[${ts}] [${level}] ${msg}`);
+      if (window._globalConsoleLog.length > RING_MAX) window._globalConsoleLog.shift();
+    } catch (_) { /* never break logging */ }
+  }
+  console.log   = function() { record('log',   arguments); orig.log.apply(console, arguments); };
+  console.info  = function() { record('info',  arguments); orig.info.apply(console, arguments); };
+  console.warn  = function() { record('warn',  arguments); orig.warn.apply(console, arguments); };
+  console.error = function() { record('error', arguments); orig.error.apply(console, arguments); };
+})();
+
 // ClipboardBroker centralises clipboard distribution between the controller's
 // own OS clipboard and every connected session. A copy made on remote PC A
 // is written to the controller's clipboard *and* forwarded to PC B, C, ...
@@ -173,6 +199,7 @@ class ViewerSession {
           <button class="btn btn-sm btn-icon session-update-btn" title="Opdater agent"><i class="fas fa-sync-alt"></i></button>
           <button class="btn btn-sm btn-icon session-screenshot-btn" title="Tag screenshot"><i class="fas fa-camera"></i></button>
           <button class="btn btn-sm btn-icon session-terminal-btn" title="Terminal"><i class="fas fa-terminal"></i></button>
+          <button class="btn btn-sm btn-icon session-log-btn" title="Vis session-log"><i class="fas fa-file-alt"></i></button>
           <button class="btn btn-sm btn-icon session-chat-btn" title="Chat"><i class="fas fa-comment"></i></button>
           <button class="btn btn-sm btn-icon session-fullscreen-btn" title="Fuldskærm"><i class="fas fa-expand"></i></button>
           <button class="btn btn-sm btn-danger session-disconnect-btn">Afbryd</button>
@@ -1571,9 +1598,66 @@ class ViewerSession {
       if (panel) panel.classList.toggle('visible');
     });
     this.wrapper.querySelector('.session-screenshot-btn').addEventListener('click', () => this.takeScreenshot());
+    const logBtn = this.wrapper.querySelector('.session-log-btn');
+    if (logBtn) logBtn.addEventListener('click', () => this.showSessionLog());
     this.wrapper.querySelectorAll('.quality-preset-btn').forEach(btn => {
       btn.addEventListener('click', () => this.applyQualityPreset(btn.dataset.preset));
     });
+  }
+
+  // Vis session-log i en modal — samler connect-log + recent console-events
+  // + WebRTC-stats. Brugeren kan kopiere alt med ét klik og pase til support.
+  showSessionLog() {
+    const lines = [];
+    lines.push(`=== SESSION LOG: ${this.deviceName} ===`);
+    lines.push(`Tid: ${new Date().toISOString()}`);
+    lines.push(`Device ID: ${this.deviceId || '?'}`);
+    lines.push(`Codec: ${this.usingH264 ? 'H.264' : 'JPEG'}`);
+    lines.push(`Connection: ${this.peerConnection ? this.peerConnection.connectionState : '?'}`);
+    lines.push(`ICE: ${this.peerConnection ? this.peerConnection.iceConnectionState : '?'}`);
+    if (this.canvasEl) {
+      lines.push(`Canvas: ${this.canvasEl.width}x${this.canvasEl.height} (display ${this.canvasEl.clientWidth}x${this.canvasEl.clientHeight})`);
+    }
+    if (this.videoEl) {
+      lines.push(`Video: ${this.videoEl.videoWidth}x${this.videoEl.videoHeight}`);
+    }
+    lines.push('');
+    lines.push('=== Connect log ===');
+    lines.push((this._connectLog || []).join('\n'));
+    if (window._globalConsoleLog && window._globalConsoleLog.length) {
+      lines.push('');
+      lines.push('=== Recent console events ===');
+      lines.push(window._globalConsoleLog.slice(-100).join('\n'));
+    }
+    const text = lines.join('\n');
+
+    // Modal med textarea + kopier-knap
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:var(--surface,#1a2332);color:var(--text,#fff);border-radius:8px;padding:1rem;width:80vw;max-width:900px;max-height:80vh;display:flex;flex-direction:column;gap:0.5rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <h3 style="margin:0;">Session-log: ${this.deviceName}</h3>
+          <div>
+            <button class="btn btn-sm btn-primary log-copy-btn"><i class="fas fa-copy"></i> Kopier alt</button>
+            <button class="btn btn-sm btn-secondary log-close-btn">Luk</button>
+          </div>
+        </div>
+        <textarea readonly style="flex:1;min-height:400px;font-family:monospace;font-size:0.8rem;background:#0a0e1a;color:#cde;border:1px solid #333;padding:0.5rem;resize:none;">${text.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</textarea>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('.log-close-btn').onclick = () => modal.remove();
+    modal.querySelector('.log-copy-btn').onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('Log kopieret til clipboard', 'success');
+      } catch (e) {
+        modal.querySelector('textarea').select();
+        document.execCommand('copy');
+        showToast('Log kopieret', 'success');
+      }
+    };
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
   }
 
   applyQualityPreset(preset) {
