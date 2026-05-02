@@ -8,6 +8,9 @@ import (
 	"image/color"
 	"log"
 	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -300,6 +303,9 @@ func (g *AgentGUI) updateActionButtons() {
 
 		updateBtn := widget.NewButtonWithIcon("Tjek opdateringer", theme.ViewRefreshIcon(), g.doCheckUpdates)
 		g.actionButtons.Add(updateBtn)
+
+		logBtn := widget.NewButtonWithIcon("Vis log", theme.DocumentIcon(), g.doShowLog)
+		g.actionButtons.Add(logBtn)
 
 		logoutBtn := widget.NewButtonWithIcon("Log ud / skift konto", theme.LogoutIcon(), g.doLogout)
 		g.actionButtons.Add(logoutBtn)
@@ -866,6 +872,79 @@ func (g *AgentGUI) doCheckUpdates() {
 	scrollContent.SetMinSize(fyne.NewSize(400, 300))
 
 	dialog.ShowCustom("Opdateringer", "Luk", scrollContent, g.window)
+}
+
+// doShowLog viser service-log'en. Først forsøger den at åbne filen i
+// Notepad (åben i baggrunden), og hvis det fejler eller log'en mangler,
+// viser den de sidste linjer i et dialog-vindue så brugeren kan kopiere
+// teksten direkte til support-chatten.
+func (g *AgentGUI) doShowLog() {
+	logPath := filepath.Join(os.Getenv("ProgramData"), "RemoteDesktopAgent", "service.log")
+
+	// 1) Åben i Notepad (foretrukket — let at scrolle og kopiere)
+	if _, err := os.Stat(logPath); err == nil {
+		cmd := exec.Command("notepad.exe", logPath)
+		if err := cmd.Start(); err == nil {
+			// Process starter — vinduet detacher fra agenten
+			return
+		}
+	}
+
+	// 2) Fallback — vis de sidste 50 linjer i et tekst-dialog
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("Kunne ikke åbne log: %v\nForventet sti: %s", err, logPath), g.window)
+		return
+	}
+
+	// Tail sidste ~50 linjer
+	lines := splitLines(string(data))
+	tailFrom := 0
+	if len(lines) > 50 {
+		tailFrom = len(lines) - 50
+	}
+	tail := joinLines(lines[tailFrom:])
+
+	logEntry := widget.NewMultiLineEntry()
+	logEntry.SetText(tail)
+	logEntry.Wrapping = fyne.TextWrapWord
+	logEntry.Disable()
+	scroll := container.NewScroll(logEntry)
+	scroll.SetMinSize(fyne.NewSize(700, 400))
+
+	pathLabel := widget.NewLabel(logPath)
+	pathLabel.TextStyle = fyne.TextStyle{Italic: true}
+	content := container.NewBorder(pathLabel, nil, nil, nil, scroll)
+
+	d := dialog.NewCustom("Service log (sidste 50 linjer)", "Luk", content, g.window)
+	d.Resize(fyne.NewSize(750, 500))
+	d.Show()
+}
+
+func splitLines(s string) []string {
+	out := []string{}
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		out = append(out, s[start:])
+	}
+	return out
+}
+
+func joinLines(lines []string) string {
+	out := ""
+	for i, l := range lines {
+		if i > 0 {
+			out += "\n"
+		}
+		out += l
+	}
+	return out
 }
 
 func (g *AgentGUI) doLogout() {
