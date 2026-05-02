@@ -471,6 +471,12 @@ func RunCaptureHelper(pipeName string) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
+	// DPI awareness: defensive re-call. main() har allerede sat det, men hvis
+	// fremtidige refactorings flytter kaldet eller helperen blev startet på
+	// en anden måde, så er capture-virtualisering den værste fejlmode (silently
+	// klipper bunden af skærmen). Idempotent, gør ingen skade hvis allerede sat.
+	EnableDPIAwareness()
+
 	// Set up logging to temp file
 	logDir := filepath.Join(os.TempDir(), "RemoteDesktopAgent")
 	os.MkdirAll(logDir, 0755)
