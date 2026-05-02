@@ -797,13 +797,14 @@ func (m *Manager) setupControlChannelHandlers(dc *pionwebrtc.DataChannel) {
 			case "set_stream_params":
 				m.handleSetStreamParams(event)
 				return
-			case "set_mode", "switch_monitor", "force_update":
-				// Control-plane events: route via handleControlEvent
-				// (mode-switch H.264↔tiles, monitor-switch, force-update).
-				// Tidligere blev disse silently droppet på control-channel
-				// fordi handleInputEvent læser event["t"] (input shorthand)
-				// mens disse bruger event["type"] → set_mode aldrig nåede
-				// SetH264Mode → H.264 aktiverede aldrig.
+			case "switch_monitor", "force_update":
+				// Control-plane events: route via handleControlEvent.
+				// NB: set_mode er BEVIDST udeladt — H.264 NVENC-output
+				// kunne ikke decoder af WebView2 i mindst ét miljø
+				// (Win11 host m/ NVIDIA GTX, agent v3.1.13 → black screen).
+				// Indtil vi har en pålidelig codec-negotiation forbliver
+				// agenten i JPEG-tile-mode. Større bandwidth-forbrug, men
+				// fungerer med 100% sikkerhed.
 				m.handleControlEvent(event)
 				return
 			}
