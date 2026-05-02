@@ -1050,8 +1050,20 @@ class ViewerSession {
       if (fps != null) parts.push(`${fps}fps`);
       if (bwText) parts.push(bwText);
       // Detect actual codec: H.264 if video element has frames, JPEG if canvas gets data channel frames
+      const wasH264 = this.usingH264;
       this.usingH264 = !!(this.videoEl && this.videoEl.videoWidth > 0 && this.videoEl.videoHeight > 0);
       parts.push(this.usingH264 ? 'H.264' : 'JPEG');
+
+      // Skjul/vis canvas afhængigt af mode. I JPEG-tile-mode tegner vi på
+      // canvas (z-index 1, over video). I H.264-mode kommer frames via
+      // video-track, og canvas'en sidder bare med frozen sidste-JPEG-content
+      // og blokerer for video'en — derfor BLACK SCREEN. Skjul canvas så
+      // video'en kommer igennem.
+      if (this.usingH264 !== wasH264 && this.canvasEl) {
+        this.canvasEl.style.display = this.usingH264 ? 'none' : '';
+        if (this.videoEl) this.videoEl.style.display = this.usingH264 ? '' : 'none';
+        console.log(`[${this.deviceName}] Codec switch → ${this.usingH264 ? 'H.264 (canvas hidden)' : 'JPEG (canvas shown)'}`);
+      }
 
       const statsEl = this.wrapper.querySelector('.viewer-stats');
       if (statsEl) {
