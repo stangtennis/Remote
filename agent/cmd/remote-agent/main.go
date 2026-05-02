@@ -288,6 +288,13 @@ func runAsAdmin() error {
 }
 
 func main() {
+	// Per-Monitor V2 DPI awareness ALLERFØRST — gælder også for helper-modes
+	// (--capture-helper, --clipboard-helper). GDI capture i user-session-helperen
+	// bruger GetSystemMetrics(SM_CXSCREEN) som ellers ville returnere virtualiseret
+	// (mindre) skærm når brugeren har display-scaling > 100%, og den nederste
+	// + højre del af skærmen ville falde ud af capture'n.
+	screen.EnableDPIAwareness()
+
 	// Check for update mode FIRST (before admin check or anything else)
 	if len(os.Args) >= 3 && os.Args[1] == "--update-from" {
 		runUpdateMode(os.Args[2])
@@ -315,10 +322,7 @@ func main() {
 		return
 	}
 
-	// Per-Monitor V2 DPI awareness — KRITISK før screen-capture initialiseres.
-	// Manifestet sætter dette statisk, men loadere ignorerer manifest i visse
-	// service-scenarier — kald runtime som backup. Idempotent.
-	screen.EnableDPIAwareness()
+	// (DPI awareness sat allerede øverst i main() før args-tjek)
 
 	// Check if running from Program Files install directory (autostart mode)
 	isService, _ := svc.IsWindowsService()
