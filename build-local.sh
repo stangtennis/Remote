@@ -31,6 +31,15 @@ echo ""
 echo "📦 Building Agent (Windows) with turbo JPEG..."
 echo "   Note: Agent requires Windows SDK headers for DXGI"
 echo "   If this fails, build on Windows instead"
+
+# Re-compile manifest+versioninfo to .syso every build. Without this,
+# manifest changes (fx DPI awareness flags) ligger ubrugte i kildemappen
+# fordi Go bare linker den eksisterende .syso uden at se på .rc/.manifest.
+# Bug oplevet: v3.1.10/11 manifest havde PerMonitorV2, men .syso var fra
+# marts uden flaget, så DPI-virtualisering blev ved til v3.1.12.
+echo "   🔧 Re-compiling manifest resource (.syso)..."
+(cd agent/cmd/remote-agent && x86_64-w64-mingw32-windres -i versioninfo.rc -o resource_windows_amd64.syso -O coff) || echo "⚠️  windres failed — manifest may be stale"
+
 cd agent
 timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -tags turbo -ldflags \"$AGENT_LDFLAGS\" -o ../builds/remote-agent-$VERSION.exe ./cmd/remote-agent" 2>&1 && echo "✅ Agent built (turbo JPEG)" || echo "⚠️  Agent build failed (try on Windows)"
 cd ..
