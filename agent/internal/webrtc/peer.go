@@ -797,6 +797,15 @@ func (m *Manager) setupControlChannelHandlers(dc *pionwebrtc.DataChannel) {
 			case "set_stream_params":
 				m.handleSetStreamParams(event)
 				return
+			case "set_mode", "switch_monitor", "force_update":
+				// Control-plane events: route via handleControlEvent
+				// (mode-switch H.264↔tiles, monitor-switch, force-update).
+				// Tidligere blev disse silently droppet på control-channel
+				// fordi handleInputEvent læser event["t"] (input shorthand)
+				// mens disse bruger event["type"] → set_mode aldrig nåede
+				// SetH264Mode → H.264 aktiverede aldrig.
+				m.handleControlEvent(event)
+				return
 			}
 		}
 
