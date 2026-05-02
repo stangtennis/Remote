@@ -60,7 +60,14 @@ func (m *Manager) SetH264Mode(enabled bool) {
 			return
 		}
 		encName := m.videoEncoder.GetEncoderName()
-		if encName != "openh264" {
+		// Whitelist alle encodere der outputter H.264. NVENC (Nvidia HW),
+		// QSV (Intel QuickSync), AMF (AMD), og openh264 (software fallback).
+		// Tidligere blev kun "openh264" accepteret, så maskiner med GPU-encoder
+		// loadet endte alligevel i JPEG-tile-mode med ~40 Mbit/s ved 1440p.
+		switch encName {
+		case "openh264", "nvenc", "qsv", "amf", "h264_nvenc", "h264_qsv", "h264_amf":
+			// OK — er en H.264-encoder
+		default:
 			log.Printf("⚠️ Kan ikke aktivere H.264 - encoder understøtter ikke H.264 (encoder: %s)", encName)
 			return
 		}
