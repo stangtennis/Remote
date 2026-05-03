@@ -38,6 +38,20 @@ func main() {
 		return
 	}
 
+	// Disable WebRTC mDNS hostname obfuscation i WebView2.
+	//
+	// Edge/Chromium gemmer som default lokale IPs bag tilfældige *.local
+	// hostnames i WebRTC-host-candidates (privacy-feature siden 2018).
+	// Pion-agenten kan ikke resolve .local → afviser host candidates →
+	// connection falder tilbage til TURN selv på samme LAN.
+	//
+	// Sæt env-var FØR Wails starter, så WebView2 instans bruger flagsene.
+	// WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS er den officielle MS API.
+	if runtime.GOOS == "windows" {
+		_ = os.Setenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+			"--disable-features=WebRtcHideLocalIpsWithMdns")
+	}
+
 	// Create application
 	app := NewApp()
 
