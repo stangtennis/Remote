@@ -45,11 +45,86 @@ var (
 
 	procWTSGetActiveConsoleSessionId = modKernel32s.NewProc("WTSGetActiveConsoleSessionId")
 	procWTSQueryUserToken            = modWtsapi32.NewProc("WTSQueryUserToken")
+	procWTSEnumerateSessionsW        = modWtsapi32.NewProc("WTSEnumerateSessionsW")
+	procWTSFreeMemory                = modWtsapi32.NewProc("WTSFreeMemory")
 	procCreateEnvironmentBlock       = modUserenv.NewProc("CreateEnvironmentBlock")
 	procDestroyEnvironmentBlock      = modUserenv.NewProc("DestroyEnvironmentBlock")
 	procLookupPrivilegeValueW        = modAdvapi32s.NewProc("LookupPrivilegeValueW")
 	procAdjustTokenPrivileges        = modAdvapi32s.NewProc("AdjustTokenPrivileges")
 )
+
+// WTS session state-konstanter (https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/ne-wtsapi32-wts_connectstate_class)
+const (
+	wtsActive       = 0 // Active user session (RDP eller console)
+	wtsConnected    = 1
+	wtsConnectQuery = 2
+	wtsShadow       = 3
+	wtsDisconnected = 4 // RDP disconnected, session frozen
+	wtsIdle         = 5
+	wtsListen       = 6
+	wtsReset        = 7
+	wtsDown         = 8
+	wtsInit         = 9
+)
+
+type wtsSessionInfo struct {
+	SessionID      uint32
+	WinStationName *uint16
+	State          int32 // WTS_CONNECTSTATE_CLASS
+}
+
+// findBestUserSession returnerer den bedste session at capture'r fra:
+//   1. ACTIVE user session (uanset om det er physical console eller RDP)
+//   2. WTSGetActiveConsoleSessionId fallback (legacy)
+//   3. 0xFFFFFFFF hvis ingenting er logget ind (kalder skal håndtere
+//      pre-login-capture via Winlogon-desktop)
+//
+// Tidligere brugte vi kun WTSGetActiveConsoleSessionId. Den returnerer
+// PHYSICAL console-session — fungerer ikke pålideligt på server-installs
+// hvor brugeren primært tilgår via RDP. Eks: efter en RDP-disconnect kan
+// API'en returnere en stale session-ID (4) selv om aktiv session nu er en
+// ny RDP-session (3) → capture-helper spawn'es i forkert session → no
+// frames.
+func findBestUserSession() uint32 {
+	// Default: WTSGetActiveConsoleSessionId
+	consoleSession, _, _ := procWTSGetActiveConsoleSessionId.Call()
+
+	// Enumerér alle sessions og find ACTIVE (en bruger er logget ind)
+	var pInfo uintptr
+	var count uint32
+	const wtsCurrentServer = 0
+	ret, _, _ := procWTSEnumerateSessionsW.Call(
+		uintptr(wtsCurrentServer),
+		0, 1,
+		uintptr(unsafe.Pointer(&pInfo)),
+		uintptr(unsafe.Pointer(&count)),
+	)
+	if ret == 0 || pInfo == 0 {
+		return uint32(consoleSession) // fallback
+	}
+	defer procWTSFreeMemory.Call(pInfo)
+
+	// pInfo peger på en array af WTS_SESSION_INFO-strukturer.
+	// Hver entry er sizeof(uint32 sessionID) + sizeof(*uint16 winstationName) + sizeof(int32 state)
+	// På 64-bit: 4 + 4 padding + 8 + 4 + 4 padding = 24 bytes
+	const entrySize = 24
+	var bestActive uint32 = 0xFFFFFFFF
+	for i := uint32(0); i < count; i++ {
+		entry := unsafe.Pointer(pInfo + uintptr(i)*entrySize)
+		sessionID := *(*uint32)(entry)
+		state := *(*int32)(unsafe.Pointer(uintptr(entry) + 16))
+		if state == wtsActive && sessionID != 0 {
+			// Foretrukket: en active user session (ikke session 0 = service-session)
+			bestActive = sessionID
+			break
+		}
+	}
+
+	if bestActive != 0xFFFFFFFF {
+		return bestActive
+	}
+	return uint32(consoleSession)
+}
 
 // pipeRW wraps a Windows named pipe handle as io.ReadWriter.
 type pipeRW struct {
@@ -249,8 +324,8 @@ func NewSession0PipeCapturer() (*Session0PipeCapturer, error) {
 	c.width = w
 	c.height = h
 
-	// Remember current session ID for session monitor
-	c.sessionID, _, _ = procWTSGetActiveConsoleSessionId.Call()
+	// Remember current session ID for session monitor (enum-based, fanger RDP)
+	c.sessionID = uintptr(findBestUserSession())
 
 	log.Printf("✅ Session 0 pipe capturer ready: %dx%d (helper in user session %d)", c.width, c.height, c.sessionID)
 
@@ -271,12 +346,16 @@ func (c *Session0PipeCapturer) launchHelper() error {
 		}
 	}
 
-	// Get active console session (the session with the physical display)
-	sessionID, _, _ := procWTSGetActiveConsoleSessionId.Call()
-	if sessionID == 0xFFFFFFFF {
+	// Find the best user session — først ACTIVE (RDP eller console),
+	// derefter physical console fallback. Tidligere brugte vi kun
+	// WTSGetActiveConsoleSessionId men den fanger kun physical display
+	// og kan returnere stale session-IDs efter RDP-disconnects.
+	sessionIDu := findBestUserSession()
+	if sessionIDu == 0xFFFFFFFF {
 		return fmt.Errorf("no active user session (nobody is logged in)")
 	}
-	log.Printf("📋 Active console session: %d", sessionID)
+	sessionID := uintptr(sessionIDu)
+	log.Printf("📋 Active session: %d (via session enum)", sessionID)
 
 	// Try to get a token for the console session.
 	// Method 1: WTSQueryUserToken (works when a user is logged in)
@@ -652,8 +731,10 @@ func (c *Session0PipeCapturer) monitorSession() {
 		case <-c.stopCh:
 			return
 		case <-ticker.C:
-			newSession, _, _ := procWTSGetActiveConsoleSessionId.Call()
-			if newSession == 0xFFFFFFFF {
+			// Brug enum-based detection — fanger RDP-skifter
+			newSessionU := findBestUserSession()
+			newSession := uintptr(newSessionU)
+			if newSessionU == 0xFFFFFFFF {
 				continue // No session available
 			}
 			if newSession != c.sessionID {
