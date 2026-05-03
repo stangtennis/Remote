@@ -199,6 +199,7 @@ class ViewerSession {
           <button class="btn btn-sm btn-icon session-update-btn" title="Opdater agent"><i class="fas fa-sync-alt"></i></button>
           <button class="btn btn-sm btn-icon session-screenshot-btn" title="Tag screenshot"><i class="fas fa-camera"></i></button>
           <button class="btn btn-sm btn-icon session-terminal-btn" title="Terminal"><i class="fas fa-terminal"></i></button>
+          <button class="btn btn-sm btn-icon session-codec-btn" title="Skift codec (H.264 ⇄ JPEG)"><i class="fas fa-film"></i></button>
           <button class="btn btn-sm btn-icon session-log-btn" title="Vis session-log"><i class="fas fa-file-alt"></i></button>
           <button class="btn btn-sm btn-icon session-chat-btn" title="Chat"><i class="fas fa-comment"></i></button>
           <button class="btn btn-sm btn-icon session-fullscreen-btn" title="Fuldskærm"><i class="fas fa-expand"></i></button>
@@ -1090,6 +1091,7 @@ class ViewerSession {
         this.canvasEl.style.display = this.usingH264 ? 'none' : '';
         if (this.videoEl) this.videoEl.style.display = this.usingH264 ? '' : 'none';
         console.log(`[${this.deviceName}] Codec switch → ${this.usingH264 ? 'H.264 (canvas hidden)' : 'JPEG (canvas shown)'}`);
+        if (this._updateCodecBtn) this._updateCodecBtn();
       }
 
       const statsEl = this.wrapper.querySelector('.viewer-stats');
@@ -1600,9 +1602,49 @@ class ViewerSession {
     this.wrapper.querySelector('.session-screenshot-btn').addEventListener('click', () => this.takeScreenshot());
     const logBtn = this.wrapper.querySelector('.session-log-btn');
     if (logBtn) logBtn.addEventListener('click', () => this.showSessionLog());
+    const codecBtn = this.wrapper.querySelector('.session-codec-btn');
+    if (codecBtn) codecBtn.addEventListener('click', () => this.toggleCodec());
     this.wrapper.querySelectorAll('.quality-preset-btn').forEach(btn => {
       btn.addEventListener('click', () => this.applyQualityPreset(btn.dataset.preset));
     });
+    // Initial codec-btn-state opdatering (default JPEG indtil agent skifter)
+    this._updateCodecBtn();
+  }
+
+  // Skift mellem H.264 og JPEG-tile-mode. Sender set_mode-message til agent
+  // via control-channel. Agenten skifter encoder + opdaterer streaming-loop.
+  toggleCodec() {
+    const dc = this.dataChannel;
+    if (!dc || dc.readyState !== 'open') {
+      showToast('Ikke forbundet til agent', 'error');
+      return;
+    }
+    // Hvis vi er i H.264 nu, skift til tiles. Ellers prøv H.264.
+    const newMode = this.usingH264 ? 'tiles' : 'h264';
+    const bitrate = newMode === 'h264' ? 16000 : 0;
+    try {
+      dc.send(JSON.stringify({ type: 'set_mode', mode: newMode, bitrate: bitrate }));
+      showToast(`Skifter til ${newMode === 'h264' ? 'H.264' : 'JPEG'}-mode...`, 'info');
+      console.log(`[${this.deviceName}] Requested codec: ${newMode}`);
+    } catch (e) {
+      showToast(`Kunne ikke skifte codec: ${e.message}`, 'error');
+    }
+  }
+
+  _updateCodecBtn() {
+    const btn = this.wrapper && this.wrapper.querySelector('.session-codec-btn');
+    if (!btn) return;
+    if (this.usingH264) {
+      btn.title = 'Skift til JPEG (nu: H.264)';
+      btn.innerHTML = '<i class="fas fa-film"></i>';
+      btn.classList.add('codec-active-h264');
+      btn.classList.remove('codec-active-jpeg');
+    } else {
+      btn.title = 'Skift til H.264 (nu: JPEG)';
+      btn.innerHTML = '<i class="fas fa-image"></i>';
+      btn.classList.add('codec-active-jpeg');
+      btn.classList.remove('codec-active-h264');
+    }
   }
 
   // Vis session-log i en modal — samler connect-log + recent console-events
