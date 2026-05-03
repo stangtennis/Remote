@@ -18,6 +18,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -122,16 +123,36 @@ func NewAgentGUI() *AgentGUI {
 	gui.window = a.NewWindow("Remote Desktop Agent")
 	gui.window.Resize(fyne.NewSize(480, 560))
 	gui.window.CenterOnScreen()
+	gui.window.SetMaster() // markér som hovedvindue så app ikke quitter når den hides
+
+	// Tilføj system-tray ikon via Fyne's desktop-driver. Det er Fyne's egen
+	// indbyggede tray-API (forskellig fra getlantern/systray som
+	// tray_windows.go bruger i runInteractive-mode). Når Hide() kaldes
+	// forbliver app'en kørende fordi vi har et tray-ikon.
+	if desk, ok := a.(desktop.App); ok {
+		menu := fyne.NewMenu("Remote Desktop Agent",
+			fyne.NewMenuItem("Vis vindue", func() {
+				gui.window.Show()
+				gui.window.RequestFocus()
+			}),
+			fyne.NewMenuItemSeparator(),
+			fyne.NewMenuItem("Afslut", func() {
+				gui.app.Quit()
+			}),
+		)
+		desk.SetSystemTrayMenu(menu)
+		// SetSystemTrayIcon kan ikke umiddelbart sættes til en custom ikon
+		// uden at have ikon-resource — Fyne bruger sit default ikon.
+		log.Println("✅ System tray-ikon registreret via Fyne desktop API")
+	} else {
+		log.Println("⚠️ Fyne desktop API ikke tilgængelig — tray vil ikke vises (sjældent på Windows)")
+	}
 
 	// Minimer-til-tray: når brugeren klikker X (luk-knappen), HIDE
-	// vinduet i stedet for at lukke applikationen. Trayen kører stadig
-	// i baggrunden — brugeren kan vise vinduet igen via tray-menuen.
-	// Hvis tray-ikonet er skjult af Windows-overflow, kan brugeren
-	// genåbne fra Start-menuen ved at køre remote-agent.exe igen
-	// (som så bare viser eksisterende vindue i stedet for at starte
-	// en ny instans — håndteres separat).
+	// vinduet i stedet for at quitte. Tray-ikonet ovenfor lader brugeren
+	// gen-åbne vinduet via "Vis vindue"-menupunktet.
 	gui.window.SetCloseIntercept(func() {
-		log.Println("📥 Vindue minimeret til tray (luk via tray-menu eller 'Afslut'-knap)")
+		log.Println("📥 Vindue skjult — klik tray-ikon for at vise igen")
 		gui.window.Hide()
 	})
 
