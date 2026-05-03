@@ -174,6 +174,7 @@ const App = {
   // ==================== DEVICES ====================
   _allDevices: [],  // cached for search/filter
   _favorites: [],   // favorite device_ids
+  _deviceRefreshTimer: null,
 
   async loadDevices() {
     const container = document.getElementById('deviceList');
@@ -188,6 +189,21 @@ const App = {
       this.updateQuickConnect();
     } catch (err) {
       container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Kunne ikke hente enheder</h3><p>${err?.message || err}</p></div>`;
+    }
+
+    // Auto-refresh hver 15. sek så agent_version, status, last_seen
+    // forbliver synkroniseret uden brugeren skal trykke refresh manuelt.
+    // Specielt vigtig efter force_update, hvor agent_version ændres efter
+    // ~10-30 sek når servicen er færdig med at restarte.
+    if (!this._deviceRefreshTimer) {
+      this._deviceRefreshTimer = setInterval(() => {
+        // Kun refresh hvis enheds-fanen er synlig (ikke når brugeren er
+        // i en aktiv session) — undgår unødige Supabase-requests.
+        const devicesTab = document.getElementById('devicesTabContent');
+        if (devicesTab && devicesTab.style.display !== 'none' && document.visibilityState === 'visible') {
+          this.loadDevices();
+        }
+      }, 15000);
     }
   },
 
@@ -981,6 +997,16 @@ const App = {
           pending_command: command
         }).eq('device_id', deviceId);
         showToast(`${label}-kommando sendt til ${deviceName}`, 'success');
+
+        // For force_update: refresh device-listen efter agenten har haft tid til
+        // at downloade + installere + restarte service (~30 sek). Ellers viser
+        // device-card'et stadig den gamle version selvom update faktisk skete.
+        if (command === 'force_update') {
+          showToast(`Tjekker version igen om 30 sek...`, 'info');
+          setTimeout(() => this.loadDevices(), 30000);
+          // Plus en mellem-refresh for at fange løbende status-ændringer
+          setTimeout(() => this.loadDevices(), 60000);
+        }
       }
     } catch (err) {
       showToast(`Fejl: ${err?.message || err}`, 'error');
