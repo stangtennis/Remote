@@ -124,9 +124,18 @@ Section "Install"
     ; Remove old startup shortcut
     Delete "$SMSTARTUP\Remote Desktop Agent.lnk"
 
-    ; Auto-start tray icon at user login (service handles the actual work,
-    ; tray shows status icon when user is logged in)
-    WriteRegStr HKCU "SOFTWARE\Microsoft\Windows\CurrentVersion\Run" "RemoteDesktopAgent" '"$INSTDIR\remote-agent.exe"'
+    ; Auto-start tray icon for ALL users via HKLM (not HKCU).
+    ; Tidligere brugte vi HKCU, men når brugeren kører installeren med admin-
+    ; elevation havner Run-entry'en i Administrator's HKCU — IKKE den
+    ; faktiske brugers. HKLM Run fyrer for alle brugere ved logon.
+    WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Run" "RemoteDesktopAgent" '"$INSTDIR\remote-agent.exe"'
+
+    ; Backup: All Users StartUp folder shortcut for systemer hvor HKLM\Run
+    ; måtte være blokeret af GPO/AntiVirus
+    CreateShortcut "$SMSTARTUP\Remote Desktop Agent.lnk" "$INSTDIR\remote-agent.exe"
+
+    ; Ryd potentielt forældet HKCU-entry (migration fra ældre installer)
+    DeleteRegValue HKCU "SOFTWARE\Microsoft\Windows\CurrentVersion\Run" "RemoteDesktopAgent"
 
     ; Stop and remove existing service (if upgrading)
     nsExec::ExecToLog 'sc stop RemoteDesktopAgent'
@@ -192,7 +201,8 @@ Section "Uninstall"
     ; Remove install directory
     RMDir "$INSTDIR"
     
-    ; Remove auto-start registry key
+    ; Remove auto-start registry keys (begge HKLM + legacy HKCU)
+    DeleteRegValue HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Run" "RemoteDesktopAgent"
     DeleteRegValue HKCU "SOFTWARE\Microsoft\Windows\CurrentVersion\Run" "RemoteDesktopAgent"
 
     ; Remove registry keys
