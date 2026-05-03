@@ -123,6 +123,18 @@ func NewAgentGUI() *AgentGUI {
 	gui.window.Resize(fyne.NewSize(480, 560))
 	gui.window.CenterOnScreen()
 
+	// Minimer-til-tray: når brugeren klikker X (luk-knappen), HIDE
+	// vinduet i stedet for at lukke applikationen. Trayen kører stadig
+	// i baggrunden — brugeren kan vise vinduet igen via tray-menuen.
+	// Hvis tray-ikonet er skjult af Windows-overflow, kan brugeren
+	// genåbne fra Start-menuen ved at køre remote-agent.exe igen
+	// (som så bare viser eksisterende vindue i stedet for at starte
+	// en ny instans — håndteres separat).
+	gui.window.SetCloseIntercept(func() {
+		log.Println("📥 Vindue minimeret til tray (luk via tray-menu eller 'Afslut'-knap)")
+		gui.window.Hide()
+	})
+
 	return gui
 }
 
@@ -312,6 +324,16 @@ func (g *AgentGUI) updateActionButtons() {
 	}
 
 	g.actionButtons.Add(widget.NewSeparator())
+
+	// Minimer-til-tray: alternativ til at lukke X. Vinduet skjules men
+	// processen kører videre i tray. Eksplicit knap så brugeren kan se at
+	// det er muligt — særligt vigtigt på Windows hvor tray-ikonet ofte er
+	// skjult i overflow-menuen og brugeren ikke ved at appen stadig kører.
+	minimizeBtn := widget.NewButtonWithIcon("Minimer til tray", theme.WindowMinimizeIcon(), func() {
+		log.Println("📥 Vindue minimeret til tray via knap")
+		g.window.Hide()
+	})
+	g.actionButtons.Add(minimizeBtn)
 
 	exitBtn := widget.NewButtonWithIcon("Afslut", theme.CancelIcon(), func() {
 		g.app.Quit()
