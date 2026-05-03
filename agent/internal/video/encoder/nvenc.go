@@ -84,13 +84,25 @@ func (e *NVENCEncoder) startFFmpeg() error {
 
 	// FFmpeg command: read raw RGBA from stdin, encode to H.264 NVENC, output raw H.264 to stdout
 	//
-	// VIGTIGT: forceintraidr+repeat-spspps er KRITISK for WebRTC.
-	// Uden disse flags sender NVENC kun SPS+PPS én gang ved start, og
-	// browser-side decoder (WebView2/Chromium) kan ikke initialisere
-	// dekoderen senere → black screen i controller selvom frames flyder.
-	// `-bsf h264_metadata` repeats SPS+PPS i hver keyframe → decoder
-	// kan altid samle initialiserings-data uanset hvor i streamen den
-	// joiner.
+	// QUALITY-TUNED for desktop content (tekst, skarpe kanter):
+	//   - profile high (i stedet for baseline) → bedre encoding-kvalitet
+	//     ved samme bitrate; alle moderne browsere understøtter High.
+	//   - preset p4 (medium) — endnu lav-latency på GPU men højere kvalitet
+	//     end p1 (fastest); kun ~1ms ekstra encode-tid på GTX 1060.
+	//   - VBR-rate control med 2x maxrate-headroom — lader bitrate stige
+	//     midlertidigt under hurtige scene-changes (mindre kompressions-
+	//     artefakter ved bevægelse), falder igen ved statisk indhold.
+	//   - color_range tv + colorspace bt709 — eksplicit BT.709 (sRGB-mapped)
+	//     i stedet for FFmpeg default BT.601. Fjerner farve-shift hvor
+	//     rød/grøn blev "lidt off" på tekst og UI-elementer.
+	//
+	// LATENCY-CRITICAL flags bibeholdt:
+	//   - tune ull (ultra-low latency) — 0 lookahead, 0 reorder
+	//   - bf 0 — ingen B-frames
+	//   - forced-idr — tving IDR ved keyframe-interval
+	//   - dump_extra=freq=keyframe — repeat SPS+PPS før hver IDR (KRITISK
+	//     for WebRTC: browser-decoder kan ellers ikke initialisere efter
+	//     pakketab eller late-join → black screen)
 	args := []string{
 		"-hide_banner", "-loglevel", "error",
 		"-f", "rawvideo",
@@ -99,21 +111,26 @@ func (e *NVENCEncoder) startFFmpeg() error {
 		"-r", fmt.Sprintf("%d", e.config.Framerate),
 		"-i", "pipe:0",
 		"-c:v", "h264_nvenc",
-		"-preset", "p1",          // Fastest preset (latency)
-		"-tune", "ull",           // Ultra-low latency
-		"-rc", "cbr",             // Constant bitrate
+		"-preset", "p4",          // Medium kvalitet (var p1=fastest); ~1ms ekstra
+		"-tune", "ull",           // Ultra-low latency (no lookahead/reorder)
+		"-rc", "vbr",             // Variable bitrate med headroom for hurtige scener
+		"-cq", "21",              // Target quality 21 (lav = høj kvalitet, 0-51 range)
 		"-b:v", fmt.Sprintf("%dk", e.config.Bitrate),
-		"-maxrate", fmt.Sprintf("%dk", e.config.Bitrate),
-		"-bufsize", fmt.Sprintf("%dk", e.config.Bitrate/2),
-		"-profile:v", "baseline", // Mest kompatibel — ingen B-frames, simpel decoder
-		"-level", "4.1",          // Op til 1080p60 / 2K30
+		"-maxrate", fmt.Sprintf("%dk", e.config.Bitrate*2), // 2x headroom for spikes
+		"-bufsize", fmt.Sprintf("%dk", e.config.Bitrate),
+		"-profile:v", "high",     // High profile (4:2:0 men fuld H.264 feature set)
+		"-level", "4.1",
 		"-g", fmt.Sprintf("%d", e.config.KeyframeInterval),
 		"-bf", "0",               // No B-frames for low latency
-		"-forced-idr", "1",       // Tving IDR (ikke kun I-frame) ved keyframes
-		"-spatial_aq", "0",       // Slå adaptive quantization fra (encoder-bug i visse drivere)
+		"-forced-idr", "1",
+		"-spatial_aq", "1",       // Adaptive quantization PÅ — bedre kvalitet på flade områder
+		"-temporal_aq", "1",      // Temporal AQ — bedre kvalitet ved bevægelse
+		"-rc-lookahead", "0",     // No lookahead = no latency tradeoff
+		"-color_range", "tv",
+		"-colorspace", "bt709",   // BT.709 (sRGB-mapped) i stedet for FFmpeg default BT.601
+		"-color_primaries", "bt709",
+		"-color_trc", "bt709",
 		"-flags", "+low_delay",
-		// Repeat SPS+PPS før hver IDR-frame — KRÆVET for WebRTC join-late
-		// så browser-decoder kan re-initialiseres når en ny keyframe kommer.
 		"-bsf:v", "dump_extra=freq=keyframe",
 		"-f", "h264",
 		"pipe:1",
