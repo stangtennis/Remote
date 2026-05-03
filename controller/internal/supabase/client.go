@@ -761,17 +761,23 @@ func (c *Client) JoinSupportSession(pin string) (*JoinSupportSessionResult, erro
 
 // UserApproval represents a user's approval record
 type UserApproval struct {
-	UserID    string `json:"user_id"`
-	Email     string `json:"email"`
-	Role      string `json:"role"`
-	Approved  bool   `json:"approved"`
-	CreatedAt string `json:"created_at"`
+	UserID      string `json:"user_id"`
+	Email       string `json:"email"`
+	Role        string `json:"role"`
+	Approved    bool   `json:"approved"`
+	RequestedAt string `json:"requested_at"`
+	ApprovedAt  string `json:"approved_at"`
+	// CreatedAt er en alias for RequestedAt — kolonnen findes ikke
+	// i user_approvals-tabellen (vi bruger requested_at i stedet).
+	// Beholdt for backwards-compat hvis frontend læser den.
+	CreatedAt string `json:"created_at,omitempty"`
 }
 
 // GetAllUsers fetches all user approvals (admin only)
 func (c *Client) GetAllUsers() ([]UserApproval, error) {
 	c.ensureValidToken()
-	url := fmt.Sprintf("%s/rest/v1/user_approvals?select=user_id,email,role,approved,created_at&order=created_at.desc", c.URL)
+	// Use requested_at — created_at column does not exist on user_approvals
+	url := fmt.Sprintf("%s/rest/v1/user_approvals?select=user_id,email,role,approved,requested_at,approved_at&order=requested_at.desc", c.URL)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -790,6 +796,11 @@ func (c *Client) GetAllUsers() ([]UserApproval, error) {
 	var users []UserApproval
 	if err := json.Unmarshal(body, &users); err != nil {
 		return nil, err
+	}
+	// Fill CreatedAt from RequestedAt for backwards-compat med frontend
+	// (frontend display'er stadig "created_at" hvis den findes på objektet)
+	for i := range users {
+		users[i].CreatedAt = users[i].RequestedAt
 	}
 	return users, nil
 }
