@@ -1276,6 +1276,12 @@ func runService() {
 
 	log.Println("Starter som Windows Service...")
 
+	// Cleanup zombie helper-processer fra forrige service-instanser.
+	// Når servicen kill'es (update, crash) bliver capture/clipboard-helpers
+	// detached fordi vi spawn'er via CreateProcessAsUser. Uden cleanup
+	// akkumulerer de — set 9 zombier på én VM efter mange connect/disconnect.
+	screen.CleanupOrphanedHelpers()
+
 	// Setup firewall rules (service runs as SYSTEM, has admin rights)
 	setupFirewallRules()
 
