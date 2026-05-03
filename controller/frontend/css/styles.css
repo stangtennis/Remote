@@ -1065,6 +1065,11 @@ body.viewer-fullscreen .fullscreen-exit-hint.hidden { opacity: 0; }
 .viewer-toolbar .btn-icon { width: 30px; height: 30px; font-size: 0.8rem; }
 .session-timer { font-variant-numeric: tabular-nums; }
 
+/* Codec-toggle: subtil farvekode så brugeren ser hvilken mode der kører */
+.session-codec-btn.codec-active-h264 { color: #22c55e; }   /* grøn = H.264 (effektiv) */
+.session-codec-btn.codec-active-jpeg { color: #f59e0b; }   /* gul = JPEG (bandwidth-tung) */
+.session-codec-btn:hover { transform: scale(1.05); }
+
 /* ===== RESPONSIVE DESIGN ===== */
 
 /* Tablet: 768px and below */
