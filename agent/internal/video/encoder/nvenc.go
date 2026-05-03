@@ -83,6 +83,14 @@ func (e *NVENCEncoder) startFFmpeg() error {
 	}
 
 	// FFmpeg command: read raw RGBA from stdin, encode to H.264 NVENC, output raw H.264 to stdout
+	//
+	// VIGTIGT: forceintraidr+repeat-spspps er KRITISK for WebRTC.
+	// Uden disse flags sender NVENC kun SPS+PPS én gang ved start, og
+	// browser-side decoder (WebView2/Chromium) kan ikke initialisere
+	// dekoderen senere → black screen i controller selvom frames flyder.
+	// `-bsf h264_metadata` repeats SPS+PPS i hver keyframe → decoder
+	// kan altid samle initialiserings-data uanset hvor i streamen den
+	// joiner.
 	args := []string{
 		"-hide_banner", "-loglevel", "error",
 		"-f", "rawvideo",
@@ -91,17 +99,22 @@ func (e *NVENCEncoder) startFFmpeg() error {
 		"-r", fmt.Sprintf("%d", e.config.Framerate),
 		"-i", "pipe:0",
 		"-c:v", "h264_nvenc",
-		"-preset", "p1",          // Fastest preset
+		"-preset", "p1",          // Fastest preset (latency)
 		"-tune", "ull",           // Ultra-low latency
 		"-rc", "cbr",             // Constant bitrate
 		"-b:v", fmt.Sprintf("%dk", e.config.Bitrate),
 		"-maxrate", fmt.Sprintf("%dk", e.config.Bitrate),
 		"-bufsize", fmt.Sprintf("%dk", e.config.Bitrate/2),
-		"-profile:v", "baseline",
-		"-level", "4.1",
+		"-profile:v", "baseline", // Mest kompatibel — ingen B-frames, simpel decoder
+		"-level", "4.1",          // Op til 1080p60 / 2K30
 		"-g", fmt.Sprintf("%d", e.config.KeyframeInterval),
 		"-bf", "0",               // No B-frames for low latency
+		"-forced-idr", "1",       // Tving IDR (ikke kun I-frame) ved keyframes
+		"-spatial_aq", "0",       // Slå adaptive quantization fra (encoder-bug i visse drivere)
 		"-flags", "+low_delay",
+		// Repeat SPS+PPS før hver IDR-frame — KRÆVET for WebRTC join-late
+		// så browser-decoder kan re-initialiseres når en ny keyframe kommer.
+		"-bsf:v", "dump_extra=freq=keyframe",
 		"-f", "h264",
 		"pipe:1",
 	}
