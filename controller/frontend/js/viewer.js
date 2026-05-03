@@ -1566,19 +1566,28 @@ class ViewerSession {
     if (this.inputSetup) return;
     this.inputSetup = true;
 
+    // VIGTIGT: input-listeners attached til viewer-screen wrapperen, IKKE
+    // canvas. I H.264-mode skjules canvas (display: none) og video-element
+    // overtager — hvis listeners var på canvas ville mouse+keyboard stoppe
+    // når codec skiftes. Wrapperen er altid synlig og indeholder både canvas
+    // og video, så events fanges uanset hvilken child der vises.
+    const screen = this.wrapper.querySelector('.viewer-screen') || this.canvasEl;
     const canvas = this.canvasEl;
     canvas.focus();
 
     canvas.tabIndex = 0;
     canvas.style.outline = 'none';
-    canvas.addEventListener('click', () => canvas.focus());
-    canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); });
-    canvas.addEventListener('mousemove', (e) => this.sendMouseEvent('mousemove', e));
-    canvas.addEventListener('mousedown', (e) => { e.preventDefault(); this.sendMouseEvent('mousedown', e); });
-    canvas.addEventListener('mouseup', (e) => { e.preventDefault(); this.sendMouseEvent('mouseup', e); });
-    canvas.addEventListener('wheel', (e) => { e.preventDefault(); this.sendWheelEvent(e); }, { passive: false });
-    canvas.addEventListener('keydown', (e) => this.sendKeyEvent('keydown', e));
-    canvas.addEventListener('keyup', (e) => { e.preventDefault(); this.sendKeyEvent('keyup', e); });
+    // Wrapper håndterer alle pointer/keyboard events
+    screen.tabIndex = 0;
+    screen.style.outline = 'none';
+    screen.addEventListener('click', () => screen.focus());
+    screen.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); });
+    screen.addEventListener('mousemove', (e) => this.sendMouseEvent('mousemove', e));
+    screen.addEventListener('mousedown', (e) => { e.preventDefault(); this.sendMouseEvent('mousedown', e); });
+    screen.addEventListener('mouseup', (e) => { e.preventDefault(); this.sendMouseEvent('mouseup', e); });
+    screen.addEventListener('wheel', (e) => { e.preventDefault(); this.sendWheelEvent(e); }, { passive: false });
+    screen.addEventListener('keydown', (e) => this.sendKeyEvent('keydown', e));
+    screen.addEventListener('keyup', (e) => { e.preventDefault(); this.sendKeyEvent('keyup', e); });
 
     this.wrapper.querySelector('.session-disconnect-btn').addEventListener('click', () => { this.manualDisconnect = true; this.disconnect(); });
     this.wrapper.querySelector('.session-fullscreen-btn').addEventListener('click', () => this.toggleFullscreen());
@@ -1626,6 +1635,22 @@ class ViewerSession {
       dc.send(JSON.stringify({ type: 'set_mode', mode: newMode, bitrate: bitrate }));
       showToast(`Skifter til ${newMode === 'h264' ? 'H.264' : 'JPEG'}-mode...`, 'info');
       console.log(`[${this.deviceName}] Requested codec: ${newMode}`);
+
+      // Optimistisk skift display straks så input ikke "låses". Hvis agent
+      // alligevel ikke kunne skifte (fx encoder fejlede), vil updateStats
+      // detection-logic rette det indenfor 1-2s.
+      this.usingH264 = (newMode === 'h264');
+      if (this.canvasEl) this.canvasEl.style.display = this.usingH264 ? 'none' : '';
+      if (this.videoEl) this.videoEl.style.display = this.usingH264 ? '' : 'none';
+      // Hvis vi skifter væk fra H.264, reset video så videoWidth=0
+      // (browser holder ellers fast på sidste size, og auto-detection fejler)
+      if (newMode === 'tiles' && this.videoEl) {
+        const sObj = this.videoEl.srcObject;
+        this.videoEl.srcObject = null;
+        // Re-attach efter 100ms så ny H.264 strøm kan fanges hvis brugeren skifter tilbage
+        setTimeout(() => { if (this.videoEl && sObj) this.videoEl.srcObject = sObj; }, 100);
+      }
+      this._updateCodecBtn();
     } catch (e) {
       showToast(`Kunne ikke skifte codec: ${e.message}`, 'error');
     }
@@ -1814,18 +1839,37 @@ class ViewerSession {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
 
     // Calculate coordinates accounting for object-fit: contain (black bars)
-    const target = this.canvasEl;
+    // Brug det SYNLIGE element (canvas i JPEG-mode, video i H.264-mode).
+    // Hvis vi bruger canvas mens den er display:none returnerer
+    // getBoundingClientRect() {0,0,0,0} → coords = NaN → no-op.
+    let target;
+    if (this.usingH264 && this.videoEl && this.videoEl.style.display !== 'none') {
+      target = this.videoEl;
+    } else {
+      target = this.canvasEl;
+    }
     const rect = target.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      // Fallback: brug viewer-screen wrapperen
+      const screen = this.wrapper.querySelector('.viewer-screen');
+      if (screen) {
+        const sr = screen.getBoundingClientRect();
+        if (sr.width > 0 && sr.height > 0) {
+          rect.x = sr.x; rect.y = sr.y; rect.width = sr.width; rect.height = sr.height;
+          rect.left = sr.left; rect.top = sr.top;
+        }
+      }
+    }
     const displayW = rect.width;
     const displayH = rect.height;
 
     // Get actual image/canvas resolution
-    let actualW = target.width || displayW;
-    let actualH = target.height || displayH;
+    let actualW = this.canvasEl.width || displayW;
+    let actualH = this.canvasEl.height || displayH;
     // For H.264 video mode, use video element dimensions
-    if (this.usingH264 && this.videoEl) {
-      actualW = this.videoEl.videoWidth || actualW;
-      actualH = this.videoEl.videoHeight || actualH;
+    if (this.usingH264 && this.videoEl && this.videoEl.videoWidth > 0) {
+      actualW = this.videoEl.videoWidth;
+      actualH = this.videoEl.videoHeight;
     }
     if (actualW === 0) actualW = displayW;
     if (actualH === 0) actualH = displayH;
