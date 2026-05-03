@@ -169,9 +169,33 @@ func (d *Device) handlePendingCommand(config RegistrationConfig, result *Heartbe
 }
 
 // executeForceUpdate downloads and installs agent update.
+//
+// Foretrækker den injected forceUpdateHandler (sat fra main.go) som bruger
+// rename-trick — virker pålideligt under Windows Service. Falder tilbage
+// til den brudte --update-from-pattern hvis ingen handler er sat (fx i
+// macOS-mode eller standalone tray uden service).
 func (d *Device) executeForceUpdate() {
 	log.Println("🔄 Force update triggered via dashboard command")
 
+	if d.forceUpdateHandler != nil {
+		log.Println("📦 Using service-side update handler (rename-trick)")
+		updated := d.forceUpdateHandler()
+		if updated {
+			log.Println("✅ Force update: installed via service handler, agent will restart")
+			go func() {
+				time.Sleep(1 * time.Second)
+				log.Println("🔄 Exiting for SCM restart...")
+				os.Exit(0)
+			}()
+		} else {
+			log.Println("ℹ️ Force update: ingen ny version eller fejl (se ovenstående)")
+		}
+		return
+	}
+
+	// Fallback: --update-from-pattern. Bemærk at denne flow er ustabil
+	// på Windows fordi SCM restarter servicen før helper-process kan
+	// kopiere filen. Kun brugt hvis ingen forceUpdateHandler er injected.
 	u, err := updater.NewUpdater(version.Version)
 	if err != nil {
 		log.Printf("❌ Force update: could not create updater: %v", err)

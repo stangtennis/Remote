@@ -1483,6 +1483,13 @@ func startAgent() error {
 	// Wire connection info: heartbeat reports TURN usage
 	dev.SetConnInfoProvider(rtc.GetConnectionInfo)
 
+	// Wire force-update handler — bruger rename-trick som virker pålideligt
+	// på Windows. Den default --update-from-flow fejler fordi SCM restarter
+	// servicen før helper-process kan kopiere filen.
+	dev.SetForceUpdateHandler(func() bool {
+		return serviceCheckAndApplyUpdate(true)
+	})
+
 	// Start presence heartbeat (now health-aware)
 	go dev.StartPresence()
 

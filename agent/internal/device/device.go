@@ -30,6 +30,12 @@ type Device struct {
 	healthCheck   HealthChecker
 	connInfoFunc  ConnInfoProvider
 
+	// Force-update-handler injected af main.go. Hvis sat, kaldes denne
+	// i stedet for den brudte --update-from-flow når dashboard sender
+	// pending_command=force_update. Service-mode bruger rename-trick
+	// som virker pålideligt på Windows.
+	forceUpdateHandler func() bool
+
 	// Heartbeat health telemetry (atomic for lock-free reads from any goroutine)
 	consecutiveHeartbeatFailures int32 // updated by StartPresence
 	lastHeartbeatSuccess         int64 // unix timestamp; updated by StartPresence
@@ -45,6 +51,13 @@ func (d *Device) SetConnInfoProvider(fn ConnInfoProvider) {
 // If the health check returns false, the heartbeat will report is_online=false.
 func (d *Device) SetHealthCheck(fn HealthChecker) {
 	d.healthCheck = fn
+}
+
+// SetForceUpdateHandler sets the function that gets called when dashboard
+// sends pending_command=force_update. Returns true if update was applied
+// and service is exiting for restart.
+func (d *Device) SetForceUpdateHandler(fn func() bool) {
+	d.forceUpdateHandler = fn
 }
 
 type RegisterResponse struct {
