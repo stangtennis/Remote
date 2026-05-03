@@ -7,10 +7,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -1948,11 +1951,73 @@ func serviceCheckAndApplyUpdate(forceCheck bool) bool {
 		return false
 	}
 
+	// Opdater også GUI tray-binær'en (remote-agent.exe). Servicen kører
+	// remote-agent-console.exe, men tray-app'en der vises i user-session
+	// er en separat fil. Hvis vi kun opdaterer console-binær'en, viser
+	// brugerens tray-vindue stadig den gamle version.
+	//
+	// Service-bygget GUI-binær er den downloade fil med GUI-flag — men
+	// vi har downloaded den FRA samme path som console (begge bygges
+	// fra samme kode med forskellige ldflags). Vi peger på den anden
+	// binær i samme mappe og kopierer den om muligt.
+	if runtime.GOOS == "windows" {
+		guiExe := filepath.Join(filepath.Dir(currentExe), "remote-agent.exe")
+		if guiExe != currentExe { // service kører console.exe, GUI ligger ved siden
+			// Rename old GUI til .old så Windows lader os skrive ny (selv hvis
+			// tray-app'en kører — den har file-handle på .exe i bruger-session)
+			oldGUI := guiExe + ".old"
+			os.Remove(oldGUI)
+			renamed := os.Rename(guiExe, oldGUI) == nil
+			// Find downloaded GUI-binær. Service downloader bygges med både
+			// console + gui ldflags — versionedURL har samme version, men vi
+			// downloader kun console-binæren ad denne sti. GUI-binæren skal
+			// hentes separat fra version.json's agent_url. Bruger samme
+			// updater-instans og henter remote-agent (uden -console).
+			guiURL := "https://updates.hawkeye123.dk/remote-agent-" + info.TagName + ".exe"
+			tmpGUI := guiExe + ".new"
+			if dlErr := downloadHTTP(guiURL, tmpGUI); dlErr == nil {
+				if cpErr := os.Rename(tmpGUI, guiExe); cpErr == nil {
+					log.Printf("✅ GUI tray-binær også opdateret: %s", guiExe)
+				} else {
+					log.Printf("⚠️ GUI tray-binær kopi fejlede: %v", cpErr)
+					if renamed {
+						os.Rename(oldGUI, guiExe) // rollback
+					}
+				}
+			} else {
+				log.Printf("⚠️ GUI tray-binær download fejlede: %v (service-binær opdateret OK)", dlErr)
+				if renamed {
+					os.Rename(oldGUI, guiExe) // rollback
+				}
+			}
+		}
+	}
+
 	// Opryd gamle downloads (behold kun den nye version)
 	u.CleanOldDownloads(info.TagName)
 
 	log.Printf("✅ Service update: %s installeret — SCM genstarter service", info.TagName)
 	return true
+}
+
+// downloadHTTP henter en fil til disk. Bruges af service-update til at
+// hente GUI-binær separat (remote-agent.exe vs remote-agent-console.exe).
+func downloadHTTP(url, dest string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	out, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, resp.Body)
+	return err
 }
 
 // runUpdateMode runs when started with --update-from flag

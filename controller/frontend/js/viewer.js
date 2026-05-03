@@ -1630,7 +1630,7 @@ class ViewerSession {
     }
     // Hvis vi er i H.264 nu, skift til tiles. Ellers prøv H.264.
     const newMode = this.usingH264 ? 'tiles' : 'h264';
-    const bitrate = newMode === 'h264' ? 16000 : 0;
+    const bitrate = newMode === 'h264' ? 32000 : 0;
     try {
       dc.send(JSON.stringify({ type: 'set_mode', mode: newMode, bitrate: bitrate }));
       showToast(`Skifter til ${newMode === 'h264' ? 'H.264' : 'JPEG'}-mode...`, 'info');
@@ -1781,8 +1781,8 @@ class ViewerSession {
 
     const send = () => {
       if (dc.readyState === 'open') {
-        dc.send(JSON.stringify({ type: 'set_mode', mode: 'h264', bitrate: 16000 }));
-        console.log(`[${this.deviceName}] Requested H.264 mode (8 Mbps)`);
+        dc.send(JSON.stringify({ type: 'set_mode', mode: 'h264', bitrate: 32000 }));
+        console.log(`[${this.deviceName}] Requested H.264 mode (32 Mbps)`);
       }
     };
 

@@ -49,14 +49,27 @@ func NewManager() *Manager {
 	return &Manager{}
 }
 
-// Init initializes the encoder with hardware-first, software fallback
+// Init initializes the encoder with hardware-first, software fallback.
+//
+// Priority order:
+//   1. VideoToolbox (macOS HW) — Apple Silicon eller Intel m/ HW H.264-blok
+//   2. NVENC (Windows/Linux NVIDIA HW) — GTX/RTX-kort
+//   3. OpenH264 (cross-platform software) — fallback hvis ingen HW
+//   4. Software JPEG-placeholder — sidste mulighed
 func (m *Manager) Init(cfg Config) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.config = cfg
 
-	// Try NVENC first (hardware H.264 encoding via FFmpeg)
+	// Try VideoToolbox first on macOS (build tag isolates this)
+	if vt := tryVideoToolbox(cfg); vt != nil {
+		m.encoder = vt
+		log.Printf("✅ Using VideoToolbox hardware encoder (Apple HW)")
+		return nil
+	}
+
+	// Try NVENC (hardware H.264 encoding via FFmpeg)
 	if IsNVENCAvailable() {
 		nvencEnc := NewNVENCEncoder()
 		if err := nvencEnc.Init(cfg); err == nil {
