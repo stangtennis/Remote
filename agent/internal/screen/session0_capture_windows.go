@@ -381,6 +381,7 @@ func (c *Session0PipeCapturer) launchHelper() error {
 	// Method 2: Duplicate our SYSTEM token with the session ID changed (works at login screen)
 	var dupToken windows.Token
 	var tokenMethod string
+	helperDesktop := "winsta0\\default"
 
 	// Always prefer SYSTEM token — it provides SYSTEM integrity which:
 	// 1. Bypasses UIPI for ALL windows (admin, elevated, Winlogon/lock screen)
@@ -445,6 +446,7 @@ func (c *Session0PipeCapturer) launchHelper() error {
 		// No user logged in (login screen) — use SYSTEM token with session ID changed
 		log.Printf("⚠️ WTSQueryUserToken failed: %v — using SYSTEM token fallback", wtsErr)
 		tokenMethod = "system"
+		helperDesktop = "winsta0\\Winlogon"
 
 		// Get our own process token (we run as SYSTEM)
 		var processToken windows.Token
@@ -498,40 +500,47 @@ func (c *Session0PipeCapturer) launchHelper() error {
 		return fmt.Errorf("os.Executable: %w", err2)
 	}
 	cmdLine := fmt.Sprintf(`"%s" --capture-helper "%s"`, exePath, c.pipeName)
-	log.Printf("🚀 Launching capture helper (token: %s): %s", tokenMethod, cmdLine)
-
 	cmdLineUTF16, _ := windows.UTF16PtrFromString(cmdLine)
-	desktopUTF16, _ := windows.UTF16PtrFromString("winsta0\\default")
-
-	si := windows.StartupInfo{
-		Cb:      uint32(unsafe.Sizeof(windows.StartupInfo{})),
-		Desktop: desktopUTF16,
-	}
-	var pi windows.ProcessInformation
 
 	createFlags := uint32(windows.CREATE_NO_WINDOW)
 	if envBlock != 0 {
 		createFlags |= windows.CREATE_UNICODE_ENVIRONMENT
 	}
 
-	if err := windows.CreateProcessAsUser(
-		dupToken,
-		nil, cmdLineUTF16,
-		nil, nil,
-		false,
-		createFlags,
-		(*uint16)(unsafe.Pointer(envBlock)),
-		nil,
-		&si, &pi,
-	); err != nil {
-		return fmt.Errorf("CreateProcessAsUser (token: %s): %w", tokenMethod, err)
+	desktops := []string{helperDesktop}
+	if helperDesktop != "winsta0\\default" {
+		desktops = append(desktops, "winsta0\\default")
 	}
+	var lastErr error
+	for _, desktopName := range desktops {
+		log.Printf("🚀 Launching capture helper (token: %s, desktop: %s): %s", tokenMethod, desktopName, cmdLine)
+		desktopUTF16, _ := windows.UTF16PtrFromString(desktopName)
+		si := windows.StartupInfo{
+			Cb:      uint32(unsafe.Sizeof(windows.StartupInfo{})),
+			Desktop: desktopUTF16,
+		}
+		var pi windows.ProcessInformation
+		if err := windows.CreateProcessAsUser(
+			dupToken,
+			nil, cmdLineUTF16,
+			nil, nil,
+			false,
+			createFlags,
+			(*uint16)(unsafe.Pointer(envBlock)),
+			nil,
+			&si, &pi,
+		); err != nil {
+			lastErr = err
+			log.Printf("⚠️ CreateProcessAsUser failed on desktop %s: %v", desktopName, err)
+			continue
+		}
 
-	windows.CloseHandle(pi.Thread)
-	c.helperProc = pi.Process
-
-	log.Printf("✅ Capture helper launched (PID: %d, session: %d, token: %s)", pi.ProcessId, sessionID, tokenMethod)
-	return nil
+		windows.CloseHandle(pi.Thread)
+		c.helperProc = pi.Process
+		log.Printf("✅ Capture helper launched (PID: %d, session: %d, token: %s, desktop: %s)", pi.ProcessId, sessionID, tokenMethod, desktopName)
+		return nil
+	}
+	return fmt.Errorf("CreateProcessAsUser (token: %s): %w", tokenMethod, lastErr)
 }
 
 // CaptureRGBA sends a capture request to the helper and returns the frame as RGBA.
