@@ -20,12 +20,12 @@ import (
 
 const (
 	// Windows API constants
-	_MAXIMUM_ALLOWED        = 0x02000000
-	_WAIT_TIMEOUT           = 0x00000102
-	_SE_PRIVILEGE_ENABLED   = 0x00000002
+	_MAXIMUM_ALLOWED         = 0x02000000
+	_WAIT_TIMEOUT            = 0x00000102
+	_SE_PRIVILEGE_ENABLED    = 0x00000002
 	_TOKEN_ADJUST_PRIVILEGES = 0x0020
-	_TOKEN_QUERY            = 0x0008
-	_ERROR_NOT_ALL_ASSIGNED = 1300
+	_TOKEN_QUERY             = 0x0008
+	_ERROR_NOT_ALL_ASSIGNED  = 1300
 
 	// Pipe command bytes (service → helper)
 	cmdCapture    = 0x01
@@ -74,10 +74,10 @@ type wtsSessionInfo struct {
 }
 
 // findBestUserSession returnerer den bedste session at capture'r fra:
-//   1. ACTIVE user session (uanset om det er physical console eller RDP)
-//   2. WTSGetActiveConsoleSessionId fallback (legacy)
-//   3. 0xFFFFFFFF hvis ingenting er logget ind (kalder skal håndtere
-//      pre-login-capture via Winlogon-desktop)
+//  1. ACTIVE user session (uanset om det er physical console eller RDP)
+//  2. CONNECTED session (typisk login-skærm / pre-login, før en bruger er ACTIVE)
+//  3. WTSGetActiveConsoleSessionId fallback (legacy)
+//  4. 0xFFFFFFFF hvis ingenting kan bruges
 //
 // Tidligere brugte vi kun WTSGetActiveConsoleSessionId. Den returnerer
 // PHYSICAL console-session — fungerer ikke pålideligt på server-installs
@@ -88,6 +88,7 @@ type wtsSessionInfo struct {
 func findBestUserSession() uint32 {
 	// Default: WTSGetActiveConsoleSessionId
 	consoleSession, _, _ := procWTSGetActiveConsoleSessionId.Call()
+	consoleSessionID := uint32(consoleSession)
 
 	// Enumerér alle sessions og find ACTIVE (en bruger er logget ind)
 	var pInfo uintptr
@@ -100,7 +101,7 @@ func findBestUserSession() uint32 {
 		uintptr(unsafe.Pointer(&count)),
 	)
 	if ret == 0 || pInfo == 0 {
-		return uint32(consoleSession) // fallback
+		return consoleSessionID // fallback
 	}
 	defer procWTSFreeMemory.Call(pInfo)
 
@@ -109,21 +110,39 @@ func findBestUserSession() uint32 {
 	// På 64-bit: 4 + 4 padding + 8 + 4 + 4 padding = 24 bytes
 	const entrySize = 24
 	var bestActive uint32 = 0xFFFFFFFF
+	var bestConnected uint32 = 0xFFFFFFFF
 	for i := uint32(0); i < count; i++ {
 		entry := unsafe.Pointer(pInfo + uintptr(i)*entrySize)
 		sessionID := *(*uint32)(entry)
 		state := *(*int32)(unsafe.Pointer(uintptr(entry) + 16))
-		if state == wtsActive && sessionID != 0 {
+		if sessionID == 0 {
+			continue
+		}
+		switch state {
+		case wtsActive:
 			// Foretrukket: en active user session (ikke session 0 = service-session)
 			bestActive = sessionID
-			break
+			if sessionID == consoleSessionID {
+				return sessionID
+			}
+		case wtsConnected:
+			// Pre-login / Winlogon kan stå som CONNECTED i stedet for ACTIVE.
+			// Foretræk console-session hvis den findes, ellers første CONNECTED.
+			if sessionID == consoleSessionID {
+				bestConnected = sessionID
+			} else if bestConnected == 0xFFFFFFFF {
+				bestConnected = sessionID
+			}
 		}
 	}
 
 	if bestActive != 0xFFFFFFFF {
 		return bestActive
 	}
-	return uint32(consoleSession)
+	if bestConnected != 0xFFFFFFFF {
+		return bestConnected
+	}
+	return consoleSessionID
 }
 
 // pipeRW wraps a Windows named pipe handle as io.ReadWriter.
@@ -180,9 +199,9 @@ func enablePrivilege(name string) error {
 
 	// TOKEN_PRIVILEGES struct: Count(4) + LUID(8) + Attributes(4) = 16 bytes
 	var tp [16]byte
-	binary.LittleEndian.PutUint32(tp[0:4], 1)                    // PrivilegeCount
-	binary.LittleEndian.PutUint32(tp[4:8], luid[0])              // LUID.LowPart
-	binary.LittleEndian.PutUint32(tp[8:12], luid[1])             // LUID.HighPart
+	binary.LittleEndian.PutUint32(tp[0:4], 1)                       // PrivilegeCount
+	binary.LittleEndian.PutUint32(tp[4:8], luid[0])                 // LUID.LowPart
+	binary.LittleEndian.PutUint32(tp[8:12], luid[1])                // LUID.HighPart
 	binary.LittleEndian.PutUint32(tp[12:16], _SE_PRIVILEGE_ENABLED) // Attributes
 
 	var lastErr error
