@@ -146,6 +146,7 @@ class ViewerSession {
     this.connected = false;
     this.iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
     this.frameChunks = {};
+    this.legacyFrameChunks = {};
     this.screenWidth = 0;
     this.screenHeight = 0;
     this.usingH264 = false;
@@ -583,8 +584,11 @@ class ViewerSession {
         return;
       }
 
-      if (data.length > 3 && data[0] === 0x01) {
-        this.renderFrame(data.slice(3).buffer);
+      // Full frame: [type(1), reserved(3), ...jpeg]
+      // Must strip all 4 header bytes. Using 3 leaves a stray 0x00 before
+      // JPEG SOI and can make small full-frame login-screen images render black.
+      if (data.length > 4 && data[0] === 0x01) {
+        this.renderFrame(data.slice(4).buffer);
         return;
       }
 
@@ -623,6 +627,44 @@ class ViewerSession {
           for (const id of Object.keys(this.frameChunks)) {
             if (Number(id) < frameId - 5) delete this.frameChunks[id];
           }
+          this.renderFrame(assembled.buffer);
+        }
+        return;
+      }
+
+      // Raw JPEG single-message frame.
+      if (data.length > 2 && data[0] === 0xFF && data[1] === 0xD8) {
+        this.renderFrame(event.data);
+        return;
+      }
+
+      // Legacy chunk format: [magic=0xFF, chunk_index, total_chunks, ...jpeg]
+      // Older agents may still use this format. Reassemble before render.
+      if (data.length > 3 && data[0] === 0xFF) {
+        const chunkIndex = data[1];
+        const totalChunks = data[2];
+        const chunkData = data.slice(3);
+        const frameKey = `legacy-${totalChunks}`;
+
+        if (!this.legacyFrameChunks[frameKey]) {
+          this.legacyFrameChunks[frameKey] = { chunks: new Array(totalChunks), received: 0, total: totalChunks };
+        }
+
+        const frame = this.legacyFrameChunks[frameKey];
+        if (!frame.chunks[chunkIndex]) {
+          frame.chunks[chunkIndex] = chunkData;
+          frame.received++;
+        }
+
+        if (frame.received === frame.total) {
+          const totalSize = frame.chunks.reduce((s, c) => s + c.length, 0);
+          const assembled = new Uint8Array(totalSize);
+          let offset = 0;
+          for (const chunk of frame.chunks) {
+            assembled.set(chunk, offset);
+            offset += chunk.length;
+          }
+          delete this.legacyFrameChunks[frameKey];
           this.renderFrame(assembled.buffer);
         }
         return;
@@ -1426,6 +1468,7 @@ class ViewerSession {
     this.fileChannel = null;
     this.videoChannel = null;
     this.frameChunks = {};
+    this.legacyFrameChunks = {};
     this.usingH264 = false;
     this.processedSignalIds.clear();
     this.pendingIceCandidates = [];
