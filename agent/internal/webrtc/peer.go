@@ -19,7 +19,6 @@ import (
 	pionwebrtc "github.com/pion/webrtc/v3"
 	"github.com/stangtennis/remote-agent/internal/audio"
 	"github.com/stangtennis/remote-agent/internal/auth"
-	"github.com/stangtennis/remote-agent/internal/terminal"
 	"github.com/stangtennis/remote-agent/internal/clipboard"
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/desktop"
@@ -29,6 +28,7 @@ import (
 	"github.com/stangtennis/remote-agent/internal/metrics"
 	"github.com/stangtennis/remote-agent/internal/monitor"
 	"github.com/stangtennis/remote-agent/internal/screen"
+	"github.com/stangtennis/remote-agent/internal/terminal"
 	"github.com/stangtennis/remote-agent/internal/updater"
 	"github.com/stangtennis/remote-agent/internal/version"
 	"github.com/stangtennis/remote-agent/internal/video"
@@ -36,39 +36,41 @@ import (
 )
 
 type Manager struct {
-	cfg                 *config.Config
-	device              *device.Device
-	tokenProvider       *auth.TokenProvider
-	peerConnection      *pionwebrtc.PeerConnection
-	dataChannel         *pionwebrtc.DataChannel
-	controlChannel      *pionwebrtc.DataChannel // Separate channel for input (low latency)
-	videoChannel        *pionwebrtc.DataChannel // Unreliable channel for video (less latency)
-	fileChannel         *pionwebrtc.DataChannel // Reliable channel for file transfer
-	terminalChannel     *pionwebrtc.DataChannel // Data channel for remote terminal
-	terminal            *terminal.Terminal
-	screenCapturer      *screen.Capturer
-	dirtyDetector       *screen.DirtyRegionDetector // For bandwidth optimization
-	mouseController     *input.MouseController
-	keyController       *input.KeyboardController
-	fileTransferHandler *filetransfer.Handler
+	cfg                    *config.Config
+	device                 *device.Device
+	tokenProvider          *auth.TokenProvider
+	peerConnection         *pionwebrtc.PeerConnection
+	dataChannel            *pionwebrtc.DataChannel
+	controlChannel         *pionwebrtc.DataChannel // Separate channel for input (low latency)
+	videoChannel           *pionwebrtc.DataChannel // Unreliable channel for video (less latency)
+	fileChannel            *pionwebrtc.DataChannel // Reliable channel for file transfer
+	terminalChannel        *pionwebrtc.DataChannel // Data channel for remote terminal
+	terminal               *terminal.Terminal
+	screenCapturer         *screen.Capturer
+	dirtyDetector          *screen.DirtyRegionDetector // For bandwidth optimization
+	mouseController        *input.MouseController
+	keyController          *input.KeyboardController
+	fileTransferHandler    *filetransfer.Handler
 	clipboardMonitor       *clipboard.Monitor
 	clipboardReceiver      *clipboard.Receiver
 	clipboardSessionHelper *clipboard.SessionHelper // Set when running as Session 0 service on Windows
 
-	sessionID           string
-	isStreaming         atomic.Bool
-	isSession0          bool // Running in Session 0 (before user login)
-	startedInSession0   bool // Process was started in Session 0 (never changes)
+	sessionID         string
+	isStreaming       atomic.Bool
+	isSession0        bool // Running in Session 0 (before user login)
+	startedInSession0 bool // Process was started in Session 0 (never changes)
 
 	// Concurrency control
-	mu         sync.Mutex             // Protects peerConnection, dataChannel, controlChannel
-	statsMu    sync.RWMutex           // Protects stats fields (lastRTT, lossPct, modeState, etc.)
-	connCtx    context.Context        // Lifecycle context for current connection (streaming + grace period)
-	connCancel context.CancelFunc     // Cancel function for connCtx
-	currentDesktop      desktop.DesktopType
-	pendingCandidates   []*pionwebrtc.ICECandidate // Buffer ICE candidates until answer is sent
-	answerSent          bool                       // Flag to track if answer has been sent
-	iceStopCh           chan struct{}               // Closed to stop ICE polling goroutine
+	mu                sync.Mutex         // Protects peerConnection, dataChannel, controlChannel
+	clipboardMu       sync.Mutex         // Protects clipboard monitor/helper startup and teardown
+	clipboardStarting bool               // Prevents duplicate helper spawns when data+control channels open together
+	statsMu           sync.RWMutex       // Protects stats fields (lastRTT, lossPct, modeState, etc.)
+	connCtx           context.Context    // Lifecycle context for current connection (streaming + grace period)
+	connCancel        context.CancelFunc // Cancel function for connCtx
+	currentDesktop    desktop.DesktopType
+	pendingCandidates []*pionwebrtc.ICECandidate // Buffer ICE candidates until answer is sent
+	answerSent        bool                       // Flag to track if answer has been sent
+	iceStopCh         chan struct{}              // Closed to stop ICE polling goroutine
 
 	// RTT measurement (protected by statsMu)
 	lastRTT       time.Duration // Last measured round-trip time
@@ -253,8 +255,8 @@ func New(cfg *config.Config, dev *device.Device, tokenProvider *auth.TokenProvid
 		currentDesktop:      currentDesktopType,
 		videoEncoder:        videoEncoder,
 		// useH264 defaults to false (atomic.Bool zero value) — starts with JPEG tiles
-		cpuMonitor:          cpuMon,
-		inputFrameTrigger:   make(chan struct{}, 1), // Buffered to avoid blocking
+		cpuMonitor:        cpuMon,
+		inputFrameTrigger: make(chan struct{}, 1), // Buffered to avoid blocking
 		modeState: &ModeState{
 			current:    ModeIdleTiles,
 			lastSwitch: time.Now(),
@@ -635,11 +637,7 @@ func (m *Manager) setupDataChannelHandlers(dc *pionwebrtc.DataChannel) {
 
 	dc.OnClose(func() {
 		log.Println("❌ DATA CHANNEL CLOSED")
-
-		// Stop clipboard monitoring
-		if m.clipboardMonitor != nil {
-			m.clipboardMonitor.Stop()
-		}
+		m.stopClipboardMonitoring()
 	})
 
 	dc.OnMessage(func(msg pionwebrtc.DataChannelMessage) {
@@ -754,22 +752,13 @@ func (m *Manager) setupControlChannelHandlers(dc *pionwebrtc.DataChannel) {
 		// this the agent would never push clipboard updates to the
 		// dashboard. setupDataChannelHandlers also calls this, but only
 		// if a separate "data" channel is opened (controller path).
-		if m.clipboardMonitor == nil {
-			log.Println("📋 Starting clipboard monitoring (via control channel)...")
-			m.startClipboardMonitoring()
-		}
+		log.Println("📋 Starting clipboard monitoring (via control channel)...")
+		m.startClipboardMonitoring()
 	})
 
 	dc.OnClose(func() {
 		log.Println("🎮 Control channel closed")
-		if m.clipboardMonitor != nil {
-			m.clipboardMonitor.Stop()
-			m.clipboardMonitor = nil
-		}
-		if m.clipboardSessionHelper != nil {
-			m.clipboardSessionHelper.Stop()
-			m.clipboardSessionHelper = nil
-		}
+		m.stopClipboardMonitoring()
 	})
 
 	dc.OnMessage(func(msg pionwebrtc.DataChannelMessage) {
