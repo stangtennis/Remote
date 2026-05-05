@@ -71,6 +71,20 @@ func (m *Manager) handleClipboardImage(contentB64 string) {
 // helper polls GetClipboardSequenceNumber + raw OpenClipboard and
 // forwards events back over a named pipe.
 func (m *Manager) startClipboardMonitoring() {
+	m.clipboardMu.Lock()
+	if m.clipboardStarting || m.clipboardMonitor != nil || m.clipboardSessionHelper != nil {
+		m.clipboardMu.Unlock()
+		return
+	}
+	m.clipboardStarting = true
+	m.clipboardMu.Unlock()
+
+	defer func() {
+		m.clipboardMu.Lock()
+		m.clipboardStarting = false
+		m.clipboardMu.Unlock()
+	}()
+
 	send := func(msg map[string]interface{}) {
 		if m.dataChannel == nil || m.dataChannel.ReadyState() != pionwebrtc.DataChannelStateOpen {
 			return
@@ -97,17 +111,19 @@ func (m *Manager) startClipboardMonitoring() {
 		if err := helper.Start(); err != nil {
 			log.Printf("⚠️  Clipboard session helper failed to start: %v — falling back to in-process monitor", err)
 		} else {
+			m.clipboardMu.Lock()
 			m.clipboardSessionHelper = helper
+			m.clipboardMu.Unlock()
 			return
 		}
 	}
 
 	// In-process monitor (used when agent runs in user session: console
 	// mode, --as-user, macOS).
-	m.clipboardMonitor = clipboard.NewMonitor()
+	monitor := clipboard.NewMonitor()
 
 	// Set up text clipboard callback
-	m.clipboardMonitor.SetOnTextChange(func(text string) {
+	monitor.SetOnTextChange(func(text string) {
 		if m.dataChannel == nil || m.dataChannel.ReadyState() != pionwebrtc.DataChannelStateOpen {
 			return
 		}
@@ -130,7 +146,7 @@ func (m *Manager) startClipboardMonitoring() {
 	})
 
 	// Set up image clipboard callback
-	m.clipboardMonitor.SetOnImageChange(func(imageData []byte) {
+	monitor.SetOnImageChange(func(imageData []byte) {
 		if m.dataChannel == nil || m.dataChannel.ReadyState() != pionwebrtc.DataChannelStateOpen {
 			return
 		}
@@ -156,7 +172,29 @@ func (m *Manager) startClipboardMonitoring() {
 	})
 
 	// Start monitoring
-	if err := m.clipboardMonitor.Start(); err != nil {
+	if err := monitor.Start(); err != nil {
 		log.Printf("❌ Failed to start clipboard monitor: %v", err)
+		return
+	}
+
+	m.clipboardMu.Lock()
+	m.clipboardMonitor = monitor
+	m.clipboardMu.Unlock()
+}
+
+func (m *Manager) stopClipboardMonitoring() {
+	m.clipboardMu.Lock()
+	monitor := m.clipboardMonitor
+	helper := m.clipboardSessionHelper
+	m.clipboardMonitor = nil
+	m.clipboardSessionHelper = nil
+	m.clipboardStarting = false
+	m.clipboardMu.Unlock()
+
+	if monitor != nil {
+		monitor.Stop()
+	}
+	if helper != nil {
+		helper.Stop()
 	}
 }

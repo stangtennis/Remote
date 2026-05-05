@@ -20,11 +20,11 @@ import (
 	"unsafe"
 
 	"github.com/stangtennis/remote-agent/internal/auth"
+	"github.com/stangtennis/remote-agent/internal/clipboard"
 	"github.com/stangtennis/remote-agent/internal/config"
 	"github.com/stangtennis/remote-agent/internal/desktop"
 	"github.com/stangtennis/remote-agent/internal/device"
 	"github.com/stangtennis/remote-agent/internal/metrics"
-	"github.com/stangtennis/remote-agent/internal/clipboard"
 	"github.com/stangtennis/remote-agent/internal/screen"
 	"github.com/stangtennis/remote-agent/internal/tray"
 	"github.com/stangtennis/remote-agent/internal/updater"
@@ -78,7 +78,7 @@ func setupLogging() error {
 
 	cfg := logging.DefaultConfig()
 	cfg.Console = !isService // Only log to console if not running as service
-	cfg.Level = "info"        // Can be changed to "debug" for troubleshooting
+	cfg.Level = "info"       // Can be changed to "debug" for troubleshooting
 
 	if err := logging.Init(cfg); err != nil {
 		return fmt.Errorf("failed to initialize logging: %w", err)
@@ -211,7 +211,7 @@ func setupFirewallRules() {
 	// If not admin, we can't add rules (but we should be admin due to self-elevation)
 	if !isAdmin() {
 		log.Println("⚠️ Kører ikke som admin - kan ikke tilføje firewall regler")
-		
+
 		// Run netsh as admin using PowerShell
 		// This will show a UAC prompt
 		psScript := fmt.Sprintf(`
@@ -220,12 +220,12 @@ func setupFirewallRules() {
 			netsh advfirewall firewall add rule name="Remote Desktop Agent" dir=in action=allow program="$exePath" enable=yes profile=any
 			netsh advfirewall firewall add rule name="Remote Desktop Agent" dir=out action=allow program="$exePath" enable=yes profile=any
 		`, exePath)
-		
-		cmd := exec.Command("powershell", "-Command", 
-			"Start-Process", "powershell", 
+
+		cmd := exec.Command("powershell", "-Command",
+			"Start-Process", "powershell",
 			"-ArgumentList", fmt.Sprintf(`'-Command', '%s'`, strings.ReplaceAll(psScript, "'", "''")),
 			"-Verb", "RunAs", "-Wait")
-		
+
 		if err := cmd.Run(); err != nil {
 			log.Printf("⚠️ Kunne ikke opsætte firewall (UAC afvist?): %v", err)
 		} else {
@@ -449,7 +449,7 @@ func main() {
 		runConsoleMode()
 		return
 	}
-	
+
 	log.Println("🔧 Kører i interaktiv tilstand")
 	runInteractive()
 }
@@ -1298,6 +1298,8 @@ func runService() {
 
 type windowsService struct{}
 
+const serviceAutoUpdateInterval = 30 * time.Minute
+
 func (s *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<- svc.Status) (ssec bool, errno uint32) {
 	// Recover from panics to log them before crashing
 	defer func() {
@@ -1329,8 +1331,8 @@ func (s *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, chan
 	// Sikr SCM recovery er korrekt konfigureret (auto-fix eksisterende installationer)
 	ensureRecoveryConfig()
 
-	// Auto-update timers (6h interval — force update from dashboard for urgent patches)
-	updateTicker := time.NewTicker(6 * time.Hour)
+	// Auto-update timers (30m interval; startup check still runs after 2m)
+	updateTicker := time.NewTicker(serviceAutoUpdateInterval)
 	defer updateTicker.Stop()
 	startupUpdateTimer := time.NewTimer(2 * time.Minute)
 	defer startupUpdateTimer.Stop()
@@ -1505,10 +1507,10 @@ func startAgent() error {
 
 // Program installation paths
 const (
-	programInstallDir  = `C:\Program Files\RemoteDesktopAgent`
-	programExeName     = "remote-agent.exe"
-	registryRunKey     = `SOFTWARE\Microsoft\Windows\CurrentVersion\Run`
-	registryValueName  = "RemoteDesktopAgent"
+	programInstallDir = `C:\Program Files\RemoteDesktopAgent`
+	programExeName    = "remote-agent.exe"
+	registryRunKey    = `SOFTWARE\Microsoft\Windows\CurrentVersion\Run`
+	registryValueName = "RemoteDesktopAgent"
 )
 
 // isProgramInstalled checks if the agent is installed as a program
@@ -1881,7 +1883,7 @@ func serviceCheckAndApplyUpdate(forceCheck bool) bool {
 		return false
 	}
 
-	if !forceCheck && !u.ShouldAutoCheck(6 * time.Hour) {
+	if !forceCheck && !u.ShouldAutoCheck(serviceAutoUpdateInterval) {
 		log.Println("⏭️  Service update: for tidligt at checke igen")
 		return false
 	}
@@ -1923,6 +1925,13 @@ func serviceCheckAndApplyUpdate(forceCheck bool) bool {
 	}
 
 	oldExe := currentExe + ".old"
+
+	// Lingering capture/clipboard helpers from previous sessions keep the
+	// service binary open and make the in-place rename/copy fail. We already
+	// skip updates during active streaming, so it's safe to reap helper
+	// processes right before swapping the executable.
+	screen.CleanupOrphanedHelpers()
+	time.Sleep(750 * time.Millisecond)
 
 	// Rename current exe to .old (Windows allows rename of running exe)
 	// Retry op til 3 gange — Windows Defender kan låse filen midlertidigt
@@ -2040,7 +2049,7 @@ func runUpdateMode(oldExePath string) {
 
 	logMsg("Update mode started")
 	logMsg(fmt.Sprintf("Old exe: %s", oldExePath))
-	
+
 	// Check if old exe is running from Program Files install directory
 	// If yes, also update the installed exe so updates persist across reboots
 	installedExe := filepath.Join(programInstallDir, programExeName)
@@ -2113,11 +2122,11 @@ func runUpdateMode(oldExePath string) {
 	// If agent is installed in Program Files, also update that copy
 	if updateInstalledCopy {
 		logMsg("Updating installed copy in Program Files...")
-		
+
 		// Stop any running instance from Program Files first
 		stopRunningAgent()
 		time.Sleep(500 * time.Millisecond)
-		
+
 		// Copy new exe to Program Files
 		srcFile2, err := os.Open(currentExe)
 		if err != nil {
@@ -2131,7 +2140,7 @@ func runUpdateMode(oldExePath string) {
 				_, err = dstFile2.ReadFrom(srcFile2)
 				srcFile2.Close()
 				dstFile2.Close()
-				
+
 				if err != nil {
 					logMsg(fmt.Sprintf("WARNING: Failed to copy to installed location: %v", err))
 				} else {
