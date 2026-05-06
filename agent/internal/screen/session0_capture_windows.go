@@ -73,18 +73,32 @@ type wtsSessionInfo struct {
 	State          int32 // WTS_CONNECTSTATE_CLASS
 }
 
+func sessionHasUserToken(sessionID uint32) bool {
+	if sessionID == 0 || sessionID == 0xFFFFFFFF {
+		return false
+	}
+
+	var token windows.Token
+	ret, _, _ := procWTSQueryUserToken.Call(uintptr(sessionID), uintptr(unsafe.Pointer(&token)))
+	if ret == 0 {
+		return false
+	}
+	token.Close()
+	return true
+}
+
 // findBestUserSession returnerer den bedste session at capture'r fra:
-//  1. ACTIVE user session (uanset om det er physical console eller RDP)
-//  2. CONNECTED session (typisk login-skærm / pre-login, før en bruger er ACTIVE)
-//  3. WTSGetActiveConsoleSessionId fallback (legacy)
-//  4. 0xFFFFFFFF hvis ingenting kan bruges
+//  1. ACTIVE user session med token (console eller RDP)
+//  2. CONNECTED user session med token
+//  3. DISCONNECTED user session med token (typisk efter RDP-disconnect)
+//  4. CONNECTED console/login-session uden bruger-token (Winlogon/pre-login)
+//  5. WTSGetActiveConsoleSessionId fallback (legacy)
 //
-// Tidligere brugte vi kun WTSGetActiveConsoleSessionId. Den returnerer
-// PHYSICAL console-session — fungerer ikke pålideligt på server-installs
-// hvor brugeren primært tilgår via RDP. Eks: efter en RDP-disconnect kan
-// API'en returnere en stale session-ID (4) selv om aktiv session nu er en
-// ny RDP-session (3) → capture-helper spawn'es i forkert session → no
-// frames.
+// Det vigtige edge-case er en Windows host efter RDP-disconnect:
+// brugersessionen kan stå som DISCONNECTED, mens physical console står som
+// CONNECTED på Winlogon. Hvis vi vælger console-sessionen her, får vi ofte
+// sort skærm. Vi skal derfor foretrække den rigtige brugersession så længe
+// den stadig har et gyldigt user token.
 func findBestUserSession() uint32 {
 	// Default: WTSGetActiveConsoleSessionId
 	consoleSession, _, _ := procWTSGetActiveConsoleSessionId.Call()
@@ -111,6 +125,8 @@ func findBestUserSession() uint32 {
 	const entrySize = 24
 	var bestActive uint32 = 0xFFFFFFFF
 	var bestConnected uint32 = 0xFFFFFFFF
+	var bestDisconnected uint32 = 0xFFFFFFFF
+	var bestLoginScreen uint32 = 0xFFFFFFFF
 	for i := uint32(0); i < count; i++ {
 		entry := unsafe.Pointer(pInfo + uintptr(i)*entrySize)
 		sessionID := *(*uint32)(entry)
@@ -118,20 +134,43 @@ func findBestUserSession() uint32 {
 		if sessionID == 0 {
 			continue
 		}
+
+		hasUserToken := sessionHasUserToken(sessionID)
 		switch state {
 		case wtsActive:
-			// Foretrukket: en active user session (ikke session 0 = service-session)
-			bestActive = sessionID
-			if sessionID == consoleSessionID {
-				return sessionID
+			// Foretrukket: en aktiv brugersession, også når den er via RDP.
+			if hasUserToken {
+				bestActive = sessionID
+				if sessionID == consoleSessionID {
+					return sessionID
+				}
 			}
 		case wtsConnected:
-			// Pre-login / Winlogon kan stå som CONNECTED i stedet for ACTIVE.
-			// Foretræk console-session hvis den findes, ellers første CONNECTED.
-			if sessionID == consoleSessionID {
-				bestConnected = sessionID
-			} else if bestConnected == 0xFFFFFFFF {
-				bestConnected = sessionID
+			if hasUserToken {
+				// Brugersession findes, men er ikke helt ACTIVE endnu.
+				if sessionID == consoleSessionID {
+					bestConnected = sessionID
+				} else if bestConnected == 0xFFFFFFFF {
+					bestConnected = sessionID
+				}
+			} else {
+				// Pre-login / Winlogon uden bruger-token.
+				if sessionID == consoleSessionID {
+					bestLoginScreen = sessionID
+				} else if bestLoginScreen == 0xFFFFFFFF {
+					bestLoginScreen = sessionID
+				}
+			}
+		case wtsDisconnected:
+			// RDP-brugersession efter disconnect. Hvis user token stadig findes,
+			// er det som regel den session vi skal overtage i stedet for den
+			// tomme Winlogon console-session.
+			if hasUserToken {
+				if sessionID == consoleSessionID {
+					bestDisconnected = sessionID
+				} else if bestDisconnected == 0xFFFFFFFF {
+					bestDisconnected = sessionID
+				}
 			}
 		}
 	}
@@ -141,6 +180,12 @@ func findBestUserSession() uint32 {
 	}
 	if bestConnected != 0xFFFFFFFF {
 		return bestConnected
+	}
+	if bestDisconnected != 0xFFFFFFFF {
+		return bestDisconnected
+	}
+	if bestLoginScreen != 0xFFFFFFFF {
+		return bestLoginScreen
 	}
 	return consoleSessionID
 }
