@@ -136,6 +136,16 @@ func findBestUserSessionState() (uint32, int32) {
 	return sessionID, getSessionState(sessionID)
 }
 
+func preferredDesktopForSessionState(sessionState int32, hasUserToken bool) string {
+	if !hasUserToken {
+		return "winsta0\\Winlogon"
+	}
+	if sessionState == wtsDisconnected || sessionState == wtsConnected {
+		return "winsta0\\Winlogon"
+	}
+	return "winsta0\\default"
+}
+
 // findBestUserSession returnerer den bedste session at capture'r fra:
 //  1. ACTIVE user session med token (console eller RDP)
 //  2. CONNECTED user session med token
@@ -310,15 +320,16 @@ func enablePrivilege(name string) error {
 // This capturer launches a helper process in the user's session via CreateProcessAsUser,
 // which captures the screen via GDI and sends raw BGRA frames back through a named pipe.
 type Session0PipeCapturer struct {
-	pipeName   string
-	pipeHandle windows.Handle
-	pipe       *pipeRW
-	helperProc windows.Handle
-	width      int
-	height     int
-	sessionID  uintptr // Current console session ID
-	mu         sync.Mutex
-	stopCh     chan struct{} // For graceful shutdown of session monitor
+	pipeName     string
+	pipeHandle   windows.Handle
+	pipe         *pipeRW
+	helperProc   windows.Handle
+	width        int
+	height       int
+	sessionID    uintptr // Current target session ID
+	sessionState int32
+	mu           sync.Mutex
+	stopCh       chan struct{} // For graceful shutdown of session monitor
 }
 
 // NewSession0PipeCapturer creates a pipe-based capturer for Session 0.
@@ -423,9 +434,6 @@ func NewSession0PipeCapturer() (*Session0PipeCapturer, error) {
 	c.width = w
 	c.height = h
 
-	// Remember current session ID for session monitor (enum-based, fanger RDP)
-	c.sessionID = uintptr(findBestUserSession())
-
 	log.Printf("✅ Session 0 pipe capturer ready: %dx%d (helper in user session %d)", c.width, c.height, c.sessionID)
 
 	// Start session monitor goroutine (also monitors helper process health)
@@ -462,12 +470,6 @@ func (c *Session0PipeCapturer) launchHelper() error {
 	var dupToken windows.Token
 	var tokenMethod string
 	helperDesktop := "winsta0\\default"
-	if sessionState == wtsDisconnected || sessionState == wtsConnected {
-		// Locked/disconnected sessions often expose the visible desktop as
-		// Winlogon even though the user token still exists. Starting on
-		// Default gives repeated black captures on the Hyper-V host.
-		helperDesktop = "winsta0\\Winlogon"
-	}
 
 	// Always prefer SYSTEM token — it provides SYSTEM integrity which:
 	// 1. Bypasses UIPI for ALL windows (admin, elevated, Winlogon/lock screen)
@@ -481,6 +483,7 @@ func (c *Session0PipeCapturer) launchHelper() error {
 	if ret != 0 {
 		defer userToken.Close()
 		log.Printf("📋 User is logged in (session %d, state=%d)", sessionID, sessionState)
+		helperDesktop = preferredDesktopForSessionState(sessionState, true)
 
 		// Always use SYSTEM token with session ID — highest privilege level
 		log.Printf("🛡️ Using SYSTEM token for session %d (UIPI bypass + Winlogon desktop access)", sessionID)
@@ -532,7 +535,7 @@ func (c *Session0PipeCapturer) launchHelper() error {
 		// No user logged in (login screen) — use SYSTEM token with session ID changed
 		log.Printf("⚠️ WTSQueryUserToken failed: %v — using SYSTEM token fallback", wtsErr)
 		tokenMethod = "system"
-		helperDesktop = "winsta0\\Winlogon"
+		helperDesktop = preferredDesktopForSessionState(sessionState, false)
 
 		// Get our own process token (we run as SYSTEM)
 		var processToken windows.Token
@@ -623,6 +626,8 @@ func (c *Session0PipeCapturer) launchHelper() error {
 
 		windows.CloseHandle(pi.Thread)
 		c.helperProc = pi.Process
+		c.sessionID = sessionID
+		c.sessionState = sessionState
 		log.Printf("✅ Capture helper launched (PID: %d, session: %d, token: %s, desktop: %s)", pi.ProcessId, sessionID, tokenMethod, desktopName)
 		return nil
 	}
@@ -846,14 +851,19 @@ func (c *Session0PipeCapturer) monitorSession() {
 			return
 		case <-ticker.C:
 			// Brug enum-based detection — fanger RDP-skifter
-			newSessionU := findBestUserSession()
+			newSessionU, newSessionState := findBestUserSessionState()
 			newSession := uintptr(newSessionU)
 			if newSessionU == 0xFFFFFFFF {
 				continue // No session available
 			}
-			if newSession != c.sessionID {
-				log.Printf("🔄 Console session changed: %d → %d, relaunching helper...", c.sessionID, newSession)
-				c.relaunchHelper(newSession)
+			c.mu.Lock()
+			currentSession := c.sessionID
+			currentState := c.sessionState
+			c.mu.Unlock()
+
+			if newSession != currentSession || newSessionState != currentState {
+				log.Printf("🔄 Target session changed: %d/%d → %d/%d, relaunching helper...", currentSession, currentState, newSession, newSessionState)
+				c.relaunchHelper(newSession, newSessionState)
 				continue
 			}
 
@@ -867,7 +877,7 @@ func (c *Session0PipeCapturer) monitorSession() {
 					var exitCode uint32
 					windows.GetExitCodeProcess(helperProc, &exitCode)
 					log.Printf("⚠️ Capture helper crashed (exit code %d), auto-restarting...", exitCode)
-					c.relaunchHelper(c.sessionID)
+					c.relaunchHelper(currentSession, currentState)
 				}
 			}
 		}
@@ -875,7 +885,7 @@ func (c *Session0PipeCapturer) monitorSession() {
 }
 
 // relaunchHelper kills the current helper and launches a new one in the given session.
-func (c *Session0PipeCapturer) relaunchHelper(newSession uintptr) {
+func (c *Session0PipeCapturer) relaunchHelper(newSession uintptr, newSessionState int32) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -924,6 +934,7 @@ func (c *Session0PipeCapturer) relaunchHelper(newSession uintptr) {
 	c.pipeName = pipeName
 	c.pipeHandle = pipeHandle
 	c.sessionID = newSession
+	c.sessionState = newSessionState
 
 	// Launch helper in new session
 	if err := c.launchHelper(); err != nil {
