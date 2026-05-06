@@ -136,6 +136,24 @@ func findBestUserSessionState() (uint32, int32) {
 	return sessionID, getSessionState(sessionID)
 }
 
+func resolveCaptureSessionTarget() (uint32, int32, uint32, int32) {
+	rawSessionID, rawState := findBestUserSessionState()
+	if rawSessionID == 0xFFFFFFFF {
+		return rawSessionID, rawState, rawSessionID, rawState
+	}
+
+	targetSessionID := rawSessionID
+	targetState := rawState
+	if rawState == wtsDisconnected {
+		if consoleSessionID, consoleState, ok := findConsoleLoginSession(); ok && consoleSessionID != rawSessionID {
+			targetSessionID = consoleSessionID
+			targetState = consoleState
+		}
+	}
+
+	return rawSessionID, rawState, targetSessionID, targetState
+}
+
 func preferredDesktopForSessionState(sessionState int32, hasUserToken bool) string {
 	if !hasUserToken {
 		return "winsta0\\Winlogon"
@@ -470,16 +488,12 @@ func (c *Session0PipeCapturer) launchHelper() error {
 	// derefter physical console fallback. Tidligere brugte vi kun
 	// WTSGetActiveConsoleSessionId men den fanger kun physical display
 	// og kan returnere stale session-IDs efter RDP-disconnects.
-	sessionIDu, sessionState := findBestUserSessionState()
+	rawSessionIDu, rawSessionState, sessionIDu, sessionState := resolveCaptureSessionTarget()
 	if sessionIDu == 0xFFFFFFFF {
 		return fmt.Errorf("no active user session (nobody is logged in)")
 	}
-	if sessionState == wtsDisconnected {
-		if consoleSessionID, consoleState, ok := findConsoleLoginSession(); ok && consoleSessionID != sessionIDu {
-			log.Printf("🔁 Disconnected user session %d detected; preferring console login session %d (state=%d)", sessionIDu, consoleSessionID, consoleState)
-			sessionIDu = consoleSessionID
-			sessionState = consoleState
-		}
+	if sessionIDu != rawSessionIDu || sessionState != rawSessionState {
+		log.Printf("🔁 Disconnected user session %d detected; preferring console login session %d (state=%d)", rawSessionIDu, sessionIDu, sessionState)
 	}
 	sessionID := uintptr(sessionIDu)
 	log.Printf("📋 Active session: %d (via session enum, state=%d)", sessionID, sessionState)
@@ -870,8 +884,9 @@ func (c *Session0PipeCapturer) monitorSession() {
 		case <-c.stopCh:
 			return
 		case <-ticker.C:
-			// Brug enum-based detection — fanger RDP-skifter
-			newSessionU, newSessionState := findBestUserSessionState()
+			// Brug samme target-resolution som launchHelper(), ellers kan vi flappe
+			// mellem disconnected user session og console login session efter RDP-disconnect.
+			_, _, newSessionU, newSessionState := resolveCaptureSessionTarget()
 			newSession := uintptr(newSessionU)
 			if newSessionU == 0xFFFFFFFF {
 				continue // No session available
@@ -1007,7 +1022,7 @@ func (c *Session0PipeCapturer) relaunchHelper(newSession uintptr, newSessionStat
 	c.width = w
 	c.height = h
 
-	log.Printf("✅ Helper relaunched in session %d: %dx%d", newSession, c.width, c.height)
+	log.Printf("✅ Helper relaunched in session %d (state=%d): %dx%d", c.sessionID, c.sessionState, c.width, c.height)
 }
 
 func (c *Session0PipeCapturer) Close() error {
