@@ -73,6 +73,34 @@ type wtsSessionInfo struct {
 	State          int32 // WTS_CONNECTSTATE_CLASS
 }
 
+func enumerateWTSSessions() ([]wtsSessionInfo, error) {
+	var pInfo uintptr
+	var count uint32
+	const wtsCurrentServer = 0
+	ret, _, _ := procWTSEnumerateSessionsW.Call(
+		uintptr(wtsCurrentServer),
+		0, 1,
+		uintptr(unsafe.Pointer(&pInfo)),
+		uintptr(unsafe.Pointer(&count)),
+	)
+	if ret == 0 || pInfo == 0 {
+		return nil, fmt.Errorf("WTSEnumerateSessionsW failed")
+	}
+	defer procWTSFreeMemory.Call(pInfo)
+
+	const entrySize = 24
+	sessions := make([]wtsSessionInfo, 0, count)
+	for i := uint32(0); i < count; i++ {
+		entry := unsafe.Pointer(pInfo + uintptr(i)*entrySize)
+		sessions = append(sessions, wtsSessionInfo{
+			SessionID:      *(*uint32)(entry),
+			WinStationName: *(**uint16)(unsafe.Pointer(uintptr(entry) + 8)),
+			State:          *(*int32)(unsafe.Pointer(uintptr(entry) + 16)),
+		})
+	}
+	return sessions, nil
+}
+
 func sessionHasUserToken(sessionID uint32) bool {
 	if sessionID == 0 || sessionID == 0xFFFFFFFF {
 		return false
@@ -85,6 +113,27 @@ func sessionHasUserToken(sessionID uint32) bool {
 	}
 	token.Close()
 	return true
+}
+
+func getSessionState(sessionID uint32) int32 {
+	sessions, err := enumerateWTSSessions()
+	if err != nil {
+		return wtsInit
+	}
+	for _, session := range sessions {
+		if session.SessionID == sessionID {
+			return session.State
+		}
+	}
+	return wtsInit
+}
+
+func findBestUserSessionState() (uint32, int32) {
+	sessionID := findBestUserSession()
+	if sessionID == 0xFFFFFFFF {
+		return sessionID, wtsInit
+	}
+	return sessionID, getSessionState(sessionID)
 }
 
 // findBestUserSession returnerer den bedste session at capture'r fra:
@@ -105,32 +154,18 @@ func findBestUserSession() uint32 {
 	consoleSessionID := uint32(consoleSession)
 
 	// Enumerér alle sessions og find ACTIVE (en bruger er logget ind)
-	var pInfo uintptr
-	var count uint32
-	const wtsCurrentServer = 0
-	ret, _, _ := procWTSEnumerateSessionsW.Call(
-		uintptr(wtsCurrentServer),
-		0, 1,
-		uintptr(unsafe.Pointer(&pInfo)),
-		uintptr(unsafe.Pointer(&count)),
-	)
-	if ret == 0 || pInfo == 0 {
+	sessions, err := enumerateWTSSessions()
+	if err != nil {
 		return consoleSessionID // fallback
 	}
-	defer procWTSFreeMemory.Call(pInfo)
 
-	// pInfo peger på en array af WTS_SESSION_INFO-strukturer.
-	// Hver entry er sizeof(uint32 sessionID) + sizeof(*uint16 winstationName) + sizeof(int32 state)
-	// På 64-bit: 4 + 4 padding + 8 + 4 + 4 padding = 24 bytes
-	const entrySize = 24
 	var bestActive uint32 = 0xFFFFFFFF
 	var bestConnected uint32 = 0xFFFFFFFF
 	var bestDisconnected uint32 = 0xFFFFFFFF
 	var bestLoginScreen uint32 = 0xFFFFFFFF
-	for i := uint32(0); i < count; i++ {
-		entry := unsafe.Pointer(pInfo + uintptr(i)*entrySize)
-		sessionID := *(*uint32)(entry)
-		state := *(*int32)(unsafe.Pointer(uintptr(entry) + 16))
+	for _, session := range sessions {
+		sessionID := session.SessionID
+		state := session.State
 		if sessionID == 0 {
 			continue
 		}
@@ -414,12 +449,12 @@ func (c *Session0PipeCapturer) launchHelper() error {
 	// derefter physical console fallback. Tidligere brugte vi kun
 	// WTSGetActiveConsoleSessionId men den fanger kun physical display
 	// og kan returnere stale session-IDs efter RDP-disconnects.
-	sessionIDu := findBestUserSession()
+	sessionIDu, sessionState := findBestUserSessionState()
 	if sessionIDu == 0xFFFFFFFF {
 		return fmt.Errorf("no active user session (nobody is logged in)")
 	}
 	sessionID := uintptr(sessionIDu)
-	log.Printf("📋 Active session: %d (via session enum)", sessionID)
+	log.Printf("📋 Active session: %d (via session enum, state=%d)", sessionID, sessionState)
 
 	// Try to get a token for the console session.
 	// Method 1: WTSQueryUserToken (works when a user is logged in)
@@ -427,6 +462,12 @@ func (c *Session0PipeCapturer) launchHelper() error {
 	var dupToken windows.Token
 	var tokenMethod string
 	helperDesktop := "winsta0\\default"
+	if sessionState == wtsDisconnected || sessionState == wtsConnected {
+		// Locked/disconnected sessions often expose the visible desktop as
+		// Winlogon even though the user token still exists. Starting on
+		// Default gives repeated black captures on the Hyper-V host.
+		helperDesktop = "winsta0\\Winlogon"
+	}
 
 	// Always prefer SYSTEM token — it provides SYSTEM integrity which:
 	// 1. Bypasses UIPI for ALL windows (admin, elevated, Winlogon/lock screen)
@@ -439,7 +480,7 @@ func (c *Session0PipeCapturer) launchHelper() error {
 	ret, _, wtsErr := procWTSQueryUserToken.Call(sessionID, uintptr(unsafe.Pointer(&userToken)))
 	if ret != 0 {
 		defer userToken.Close()
-		log.Printf("📋 User is logged in (session %d)", sessionID)
+		log.Printf("📋 User is logged in (session %d, state=%d)", sessionID, sessionState)
 
 		// Always use SYSTEM token with session ID — highest privilege level
 		log.Printf("🛡️ Using SYSTEM token for session %d (UIPI bypass + Winlogon desktop access)", sessionID)
