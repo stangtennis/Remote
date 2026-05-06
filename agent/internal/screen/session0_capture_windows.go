@@ -146,6 +146,19 @@ func preferredDesktopForSessionState(sessionState int32, hasUserToken bool) stri
 	return "winsta0\\default"
 }
 
+func findConsoleLoginSession() (uint32, int32, bool) {
+	consoleSession, _, _ := procWTSGetActiveConsoleSessionId.Call()
+	consoleSessionID := uint32(consoleSession)
+	if consoleSessionID == 0 || consoleSessionID == 0xFFFFFFFF {
+		return 0xFFFFFFFF, wtsInit, false
+	}
+	state := getSessionState(consoleSessionID)
+	if state == wtsConnected && !sessionHasUserToken(consoleSessionID) {
+		return consoleSessionID, state, true
+	}
+	return consoleSessionID, state, false
+}
+
 // findBestUserSession returnerer den bedste session at capture'r fra:
 //  1. ACTIVE user session med token (console eller RDP)
 //  2. CONNECTED user session med token
@@ -460,6 +473,13 @@ func (c *Session0PipeCapturer) launchHelper() error {
 	sessionIDu, sessionState := findBestUserSessionState()
 	if sessionIDu == 0xFFFFFFFF {
 		return fmt.Errorf("no active user session (nobody is logged in)")
+	}
+	if sessionState == wtsDisconnected {
+		if consoleSessionID, consoleState, ok := findConsoleLoginSession(); ok && consoleSessionID != sessionIDu {
+			log.Printf("🔁 Disconnected user session %d detected; preferring console login session %d (state=%d)", sessionIDu, consoleSessionID, consoleState)
+			sessionIDu = consoleSessionID
+			sessionState = consoleState
+		}
 	}
 	sessionID := uintptr(sessionIDu)
 	log.Printf("📋 Active session: %d (via session enum, state=%d)", sessionID, sessionState)

@@ -34,8 +34,8 @@ const (
 	_MOUSEEVENTF_ABSOLUTE   = 0x8000
 
 	_KEYEVENTF_EXTENDEDKEY = 0x0001
-	_KEYEVENTF_KEYUP      = 0x0002
-	_KEYEVENTF_UNICODE    = 0x0004
+	_KEYEVENTF_KEYUP       = 0x0002
+	_KEYEVENTF_UNICODE     = 0x0004
 
 	_WHEEL_DELTA = 120
 
@@ -43,16 +43,16 @@ const (
 )
 
 var (
-	helperUser32           = syscall.NewLazyDLL("user32.dll")
-	procSetCursorPosH      = helperUser32.NewProc("SetCursorPos")
-	procSendInputH         = helperUser32.NewProc("SendInput")
-	procVkKeyScanW         = helperUser32.NewProc("VkKeyScanW")
-	procOpenInputDesktop   = helperUser32.NewProc("OpenInputDesktop")
-	procSetThreadDesktop   = helperUser32.NewProc("SetThreadDesktop")
-	procCloseDesktop       = helperUser32.NewProc("CloseDesktop")
-	procGetSystemMetrics   = helperUser32.NewProc("GetSystemMetrics")
-	procGetForegroundWnd   = helperUser32.NewProc("GetForegroundWindow")
-	procGetClassNameW      = helperUser32.NewProc("GetClassNameW")
+	helperUser32         = syscall.NewLazyDLL("user32.dll")
+	procSetCursorPosH    = helperUser32.NewProc("SetCursorPos")
+	procSendInputH       = helperUser32.NewProc("SendInput")
+	procVkKeyScanW       = helperUser32.NewProc("VkKeyScanW")
+	procOpenInputDesktop = helperUser32.NewProc("OpenInputDesktop")
+	procSetThreadDesktop = helperUser32.NewProc("SetThreadDesktop")
+	procCloseDesktop     = helperUser32.NewProc("CloseDesktop")
+	procGetSystemMetrics = helperUser32.NewProc("GetSystemMetrics")
+	procGetForegroundWnd = helperUser32.NewProc("GetForegroundWindow")
+	procGetClassNameW    = helperUser32.NewProc("GetClassNameW")
 )
 
 // isForegroundConsole returns true if the foreground window is a console window.
@@ -114,10 +114,10 @@ func makeMouseInput(dx, dy int32, mouseData uint32, flags uint32) [_cbSizeInput]
 	var buf [_cbSizeInput]byte
 	binary.LittleEndian.PutUint32(buf[0:4], _INPUT_MOUSE) // type = INPUT_MOUSE
 	// MOUSEINPUT starts at offset 8 (after 4 bytes padding)
-	binary.LittleEndian.PutUint32(buf[8:12], uint32(dx))        // dx
-	binary.LittleEndian.PutUint32(buf[12:16], uint32(dy))       // dy
-	binary.LittleEndian.PutUint32(buf[16:20], mouseData)        // mouseData
-	binary.LittleEndian.PutUint32(buf[20:24], flags)            // dwFlags
+	binary.LittleEndian.PutUint32(buf[8:12], uint32(dx))  // dx
+	binary.LittleEndian.PutUint32(buf[12:16], uint32(dy)) // dy
+	binary.LittleEndian.PutUint32(buf[16:20], mouseData)  // mouseData
+	binary.LittleEndian.PutUint32(buf[20:24], flags)      // dwFlags
 	return buf
 }
 
@@ -477,16 +477,26 @@ func RunCaptureHelper(pipeName string) error {
 	// klipper bunden af skærmen). Idempotent, gør ingen skade hvis allerede sat.
 	EnableDPIAwareness()
 
-	// Set up logging to temp file
-	logDir := filepath.Join(os.TempDir(), "RemoteDesktopAgent")
-	os.MkdirAll(logDir, 0755)
-	logFile, err := os.OpenFile(
-		filepath.Join(logDir, "capture-helper.log"),
-		os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
-		0644,
-	)
-	if err == nil {
-		log.SetOutput(logFile)
+	// Prefer a fixed ProgramData log path so service-side debugging survives
+	// session switches and doesn't depend on the helper's temp directory.
+	logPaths := []string{
+		`C:\ProgramData\RemoteDesktopAgent\capture-helper.log`,
+		filepath.Join(os.TempDir(), "RemoteDesktopAgent", "capture-helper.log"),
+	}
+	var logFile *os.File
+	for _, logPath := range logPaths {
+		if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+			continue
+		}
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err == nil {
+			logFile = f
+			log.SetOutput(logFile)
+			log.Printf("Capture helper logging to: %s", logPath)
+			break
+		}
+	}
+	if logFile != nil {
 		defer logFile.Close()
 	}
 
@@ -502,6 +512,7 @@ func RunCaptureHelper(pipeName string) error {
 	// Connect to the named pipe (retry for up to 30 seconds)
 	pipeNameUTF16, _ := windows.UTF16PtrFromString(pipeName)
 	var pipeHandle windows.Handle
+	var err error
 	for i := 0; i < 30; i++ {
 		pipeHandle, err = windows.CreateFile(
 			pipeNameUTF16,
@@ -559,7 +570,7 @@ func RunCaptureHelper(pipeName string) error {
 			bgra, w, h, err := gdi.CaptureBGRA()
 			if err != nil {
 				errorCount++
-				if errorCount%100 == 1 {
+				if errorCount <= 10 || errorCount%100 == 0 {
 					log.Printf("Capture error #%d: %v", errorCount, err)
 				}
 				// Send error response (0x0 dimensions = error)
