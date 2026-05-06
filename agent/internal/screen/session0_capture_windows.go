@@ -141,24 +141,19 @@ func resolveCaptureSessionTarget() (uint32, int32, uint32, int32) {
 	if rawSessionID == 0xFFFFFFFF {
 		return rawSessionID, rawState, rawSessionID, rawState
 	}
-
-	targetSessionID := rawSessionID
-	targetState := rawState
 	if rawState == wtsDisconnected {
-		if consoleSessionID, consoleState, ok := findConsoleLoginSession(); ok && consoleSessionID != rawSessionID {
-			targetSessionID = consoleSessionID
-			targetState = consoleState
+		if consoleSessionID, consoleState, ok := findConsoleLoginSession(); ok {
+			return rawSessionID, rawState, consoleSessionID, consoleState
 		}
 	}
-
-	return rawSessionID, rawState, targetSessionID, targetState
+	return rawSessionID, rawState, rawSessionID, rawState
 }
 
 func preferredDesktopForSessionState(sessionState int32, hasUserToken bool) string {
 	if !hasUserToken {
 		return "winsta0\\Winlogon"
 	}
-	if sessionState == wtsDisconnected || sessionState == wtsConnected {
+	if sessionState == wtsConnected {
 		return "winsta0\\Winlogon"
 	}
 	return "winsta0\\default"
@@ -492,11 +487,15 @@ func (c *Session0PipeCapturer) launchHelper() error {
 	if sessionIDu == 0xFFFFFFFF {
 		return fmt.Errorf("no active user session (nobody is logged in)")
 	}
-	if sessionIDu != rawSessionIDu || sessionState != rawSessionState {
-		log.Printf("🔁 Disconnected user session %d detected; preferring console login session %d (state=%d)", rawSessionIDu, sessionIDu, sessionState)
+	if rawSessionState == wtsDisconnected {
+		if sessionIDu != rawSessionIDu {
+			log.Printf("🔁 Disconnected user session %d detected; preferring console login session %d (state=%d)", rawSessionIDu, sessionIDu, sessionState)
+		} else {
+			log.Printf("🔒 Disconnected user session %d selected directly", rawSessionIDu)
+		}
 	}
 	sessionID := uintptr(sessionIDu)
-	log.Printf("📋 Active session: %d (via session enum, state=%d)", sessionID, sessionState)
+	log.Printf("📋 Capture target session: %d (via session enum, state=%d)", sessionID, sessionState)
 
 	// Try to get a token for the console session.
 	// Method 1: WTSQueryUserToken (works when a user is logged in)
@@ -504,6 +503,7 @@ func (c *Session0PipeCapturer) launchHelper() error {
 	var dupToken windows.Token
 	var tokenMethod string
 	helperDesktop := "winsta0\\default"
+	captureMode := "follow-input"
 
 	// Always prefer SYSTEM token — it provides SYSTEM integrity which:
 	// 1. Bypasses UIPI for ALL windows (admin, elevated, Winlogon/lock screen)
@@ -518,6 +518,9 @@ func (c *Session0PipeCapturer) launchHelper() error {
 		defer userToken.Close()
 		log.Printf("📋 User is logged in (session %d, state=%d)", sessionID, sessionState)
 		helperDesktop = preferredDesktopForSessionState(sessionState, true)
+		if sessionState != wtsActive {
+			captureMode = "fixed"
+		}
 
 		// Always use SYSTEM token with session ID — highest privilege level
 		log.Printf("🛡️ Using SYSTEM token for session %d (UIPI bypass + Winlogon desktop access)", sessionID)
@@ -570,6 +573,7 @@ func (c *Session0PipeCapturer) launchHelper() error {
 		log.Printf("⚠️ WTSQueryUserToken failed: %v — using SYSTEM token fallback", wtsErr)
 		tokenMethod = "system"
 		helperDesktop = preferredDesktopForSessionState(sessionState, false)
+		captureMode = "fixed"
 
 		// Get our own process token (we run as SYSTEM)
 		var processToken windows.Token
@@ -622,7 +626,7 @@ func (c *Session0PipeCapturer) launchHelper() error {
 	if err2 != nil {
 		return fmt.Errorf("os.Executable: %w", err2)
 	}
-	cmdLine := fmt.Sprintf(`"%s" --capture-helper "%s"`, exePath, c.pipeName)
+	cmdLine := fmt.Sprintf(`"%s" --capture-helper "%s" "%s"`, exePath, c.pipeName, captureMode)
 	cmdLineUTF16, _ := windows.UTF16PtrFromString(cmdLine)
 
 	createFlags := uint32(windows.CREATE_NO_WINDOW)
@@ -636,7 +640,7 @@ func (c *Session0PipeCapturer) launchHelper() error {
 	}
 	var lastErr error
 	for _, desktopName := range desktops {
-		log.Printf("🚀 Launching capture helper (token: %s, desktop: %s): %s", tokenMethod, desktopName, cmdLine)
+		log.Printf("🚀 Launching capture helper (token: %s, desktop: %s, mode: %s): %s", tokenMethod, desktopName, captureMode, cmdLine)
 		desktopUTF16, _ := windows.UTF16PtrFromString(desktopName)
 		si := windows.StartupInfo{
 			Cb:      uint32(unsafe.Sizeof(windows.StartupInfo{})),
@@ -662,7 +666,7 @@ func (c *Session0PipeCapturer) launchHelper() error {
 		c.helperProc = pi.Process
 		c.sessionID = sessionID
 		c.sessionState = sessionState
-		log.Printf("✅ Capture helper launched (PID: %d, session: %d, token: %s, desktop: %s)", pi.ProcessId, sessionID, tokenMethod, desktopName)
+		log.Printf("✅ Capture helper launched (PID: %d, session: %d, token: %s, desktop: %s, mode: %s)", pi.ProcessId, sessionID, tokenMethod, desktopName, captureMode)
 		return nil
 	}
 	return fmt.Errorf("CreateProcessAsUser (token: %s): %w", tokenMethod, lastErr)

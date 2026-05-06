@@ -463,7 +463,7 @@ func mapCodeToVK(code string) uint16 {
 // It connects to the named pipe created by the service, captures the screen
 // via GDI (which works in the user session), and sends frames on demand.
 // It also handles input events forwarded from the service.
-func RunCaptureHelper(pipeName string) error {
+func RunCaptureHelper(pipeName string, captureMode string) error {
 	// Lock this goroutine to a single OS thread. Both GDI capture (C code) and
 	// input injection call SetThreadDesktop which is per-OS-thread. Without this,
 	// Go's scheduler could move the goroutine to a different thread, losing the
@@ -477,6 +477,9 @@ func RunCaptureHelper(pipeName string) error {
 	// klipper bunden af skærmen). Idempotent, gør ingen skade hvis allerede sat.
 	EnableDPIAwareness()
 
+	followInputDesktop := captureMode != "fixed"
+	SetCaptureFollowInputDesktop(followInputDesktop)
+
 	// Prefer a fixed ProgramData log path so service-side debugging survives
 	// session switches and doesn't depend on the helper's temp directory.
 	logPaths := []string{
@@ -488,7 +491,7 @@ func RunCaptureHelper(pipeName string) error {
 		if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
 			continue
 		}
-		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err == nil {
 			logFile = f
 			log.SetOutput(logFile)
@@ -502,6 +505,7 @@ func RunCaptureHelper(pipeName string) error {
 
 	log.Printf("Capture helper starting, pipe: %s", pipeName)
 	log.Printf("   PID: %d, Session: user session", os.Getpid())
+	log.Printf("   Capture desktop mode: %s (follow_input=%v)", captureMode, followInputDesktop)
 
 	// Enable SeTcbPrivilege — required for SendInput on the Winlogon (secure) desktop.
 	// The helper is launched with SYSTEM token which has this privilege available.

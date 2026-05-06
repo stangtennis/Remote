@@ -306,7 +306,11 @@ func main() {
 
 	// Check for capture helper mode (launched by service in user session for Session 0 capture)
 	if len(os.Args) >= 3 && os.Args[1] == "--capture-helper" {
-		if err := screen.RunCaptureHelper(os.Args[2]); err != nil {
+		captureMode := "follow-input"
+		if len(os.Args) >= 4 && os.Args[3] != "" {
+			captureMode = os.Args[3]
+		}
+		if err := screen.RunCaptureHelper(os.Args[2], captureMode); err != nil {
 			log.Printf("Capture helper error: %v", err)
 			os.Exit(1)
 		}
