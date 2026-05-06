@@ -16,7 +16,57 @@ typedef struct {
     HDC memDC;
     HBITMAP bitmap;
     BITMAPINFO bmi;
+    DWORD lastError;
+    int lastStage;
 } GDICapture;
+
+static int g_followInputDesktop = 1;
+
+enum {
+    GDI_STAGE_NONE = 0,
+    GDI_STAGE_INIT_CREATE_DC = 1,
+    GDI_STAGE_INIT_CREATE_MEMDC = 2,
+    GDI_STAGE_INIT_CREATE_BITMAP = 3,
+    GDI_STAGE_CAPTURE_CREATE_DC = 4,
+    GDI_STAGE_CAPTURE_RECREATE_MEMDC = 5,
+    GDI_STAGE_CAPTURE_RECREATE_BITMAP = 6,
+    GDI_STAGE_CAPTURE_BITBLT = 7,
+    GDI_STAGE_CAPTURE_GETDIBITS = 8,
+};
+
+static void ClearLastCaptureError(GDICapture* cap) {
+    if (!cap) {
+        return;
+    }
+    cap->lastError = 0;
+    cap->lastStage = GDI_STAGE_NONE;
+}
+
+static void SetLastCaptureError(GDICapture* cap, int stage) {
+    if (!cap) {
+        return;
+    }
+    cap->lastStage = stage;
+    cap->lastError = GetLastError();
+}
+
+void SetCaptureFollowInputDesktop(int enabled) {
+    g_followInputDesktop = enabled ? 1 : 0;
+}
+
+DWORD GetLastCaptureErrorCode(GDICapture* cap) {
+    if (!cap) {
+        return 0;
+    }
+    return cap->lastError;
+}
+
+int GetLastCaptureErrorStage(GDICapture* cap) {
+    if (!cap) {
+        return GDI_STAGE_NONE;
+    }
+    return cap->lastStage;
+}
 
 // Switch to input desktop before capture (for Session 0 support)
 int SwitchToInputDesktopGDI() {
@@ -35,7 +85,9 @@ int SwitchToInputDesktopGDI() {
 
 GDICapture* InitGDI() {
     // Switch to input desktop first (required for Session 0 / login screen)
-    SwitchToInputDesktopGDI();
+    if (g_followInputDesktop) {
+        SwitchToInputDesktopGDI();
+    }
 
     // Get screen dimensions
     int width = GetSystemMetrics(SM_CXSCREEN);
@@ -58,6 +110,8 @@ GDICapture* InitGDI() {
     // Create compatible DC
     HDC memDC = CreateCompatibleDC(screenDC);
     if (!memDC) {
+        SetLastError(0);
+        // CreateCompatibleDC may not always set last-error, so preserve best effort.
         DeleteDC(screenDC);  // Use DeleteDC instead of ReleaseDC for CreateDC
         return NULL;
     }
@@ -80,6 +134,8 @@ GDICapture* InitGDI() {
     cap->screenDC = screenDC;
     cap->memDC = memDC;
     cap->bitmap = bitmap;
+    cap->lastError = 0;
+    cap->lastStage = GDI_STAGE_NONE;
 
     // Setup BITMAPINFO for GetDIBits
     ZeroMemory(&cap->bmi, sizeof(BITMAPINFO));
@@ -97,9 +153,12 @@ int CaptureGDI(GDICapture* cap, unsigned char* buffer, int bufferSize) {
     if (!cap || !buffer) {
         return -1;
     }
+    ClearLastCaptureError(cap);
 
     // Switch to input desktop before each capture (handles desktop switches)
-    SwitchToInputDesktopGDI();
+    if (g_followInputDesktop) {
+        SwitchToInputDesktopGDI();
+    }
 
     // Always recreate screen DC after desktop switch.
     // In Session 0, the old DC points to the empty Session 0 desktop.
@@ -112,6 +171,7 @@ int CaptureGDI(GDICapture* cap, unsigned char* buffer, int bufferSize) {
     if (!cap->screenDC) {
         cap->screenDC = GetDC(NULL);
         if (!cap->screenDC) {
+            SetLastCaptureError(cap, GDI_STAGE_CAPTURE_CREATE_DC);
             return -3;
         }
     }
@@ -128,10 +188,16 @@ int CaptureGDI(GDICapture* cap, unsigned char* buffer, int bufferSize) {
         cap->height = height;
 
         cap->memDC = CreateCompatibleDC(cap->screenDC);
-        if (!cap->memDC) return -3;
+        if (!cap->memDC) {
+            SetLastCaptureError(cap, GDI_STAGE_CAPTURE_RECREATE_MEMDC);
+            return -3;
+        }
 
         cap->bitmap = CreateCompatibleBitmap(cap->screenDC, width, height);
-        if (!cap->bitmap) return -3;
+        if (!cap->bitmap) {
+            SetLastCaptureError(cap, GDI_STAGE_CAPTURE_RECREATE_BITMAP);
+            return -3;
+        }
 
         SelectObject(cap->memDC, cap->bitmap);
 
@@ -148,12 +214,14 @@ int CaptureGDI(GDICapture* cap, unsigned char* buffer, int bufferSize) {
     // SRCCOPY | CAPTUREBLT ensures we capture layered windows
     if (!BitBlt(cap->memDC, 0, 0, cap->width, cap->height,
                 cap->screenDC, 0, 0, SRCCOPY | CAPTUREBLT)) {
+        SetLastCaptureError(cap, GDI_STAGE_CAPTURE_BITBLT);
         return -3;
     }
 
     // Get bitmap bits
     if (!GetDIBits(cap->memDC, cap->bitmap, 0, cap->height,
                    buffer, &cap->bmi, DIB_RGB_COLORS)) {
+        SetLastCaptureError(cap, GDI_STAGE_CAPTURE_GETDIBITS);
         return -4;
     }
 
@@ -174,6 +242,7 @@ import "C"
 import (
 	"fmt"
 	"image"
+	"syscall"
 	"unsafe"
 )
 
@@ -196,6 +265,68 @@ func NewGDICapturer() (*GDICapturer, error) {
 		width:  int(cap.width),
 		height: int(cap.height),
 	}, nil
+}
+
+func SetCaptureFollowInputDesktop(enabled bool) {
+	follow := 0
+	if enabled {
+		follow = 1
+	}
+	C.SetCaptureFollowInputDesktop(C.int(follow))
+}
+
+func gdiCaptureStageName(stage int) string {
+	switch stage {
+	case 1:
+		return "init-create-dc"
+	case 2:
+		return "init-create-memdc"
+	case 3:
+		return "init-create-bitmap"
+	case 4:
+		return "capture-create-dc"
+	case 5:
+		return "capture-recreate-memdc"
+	case 6:
+		return "capture-recreate-bitmap"
+	case 7:
+		return "capture-bitblt"
+	case 8:
+		return "capture-getdibits"
+	default:
+		return "unknown"
+	}
+}
+
+func (c *GDICapturer) captureError(result C.int) error {
+	errMsg := fmt.Sprintf("error %d", int(result))
+	switch result {
+	case -1:
+		errMsg = "invalid parameters"
+	case -2:
+		errMsg = "buffer too small"
+	case -3:
+		errMsg = "BitBlt failed"
+	case -4:
+		errMsg = "GetDIBits failed"
+	case -5:
+		errMsg = "GetDesktopWindow failed"
+	}
+
+	if c != nil && c.handle != nil {
+		cap := (*C.GDICapture)(c.handle)
+		stage := int(C.GetLastCaptureErrorStage(cap))
+		winErr := uint32(C.GetLastCaptureErrorCode(cap))
+		if stage != 0 || winErr != 0 {
+			errMsg = fmt.Sprintf("%s (stage=%s", errMsg, gdiCaptureStageName(stage))
+			if winErr != 0 {
+				errMsg = fmt.Sprintf("%s, winerr=%d: %v", errMsg, winErr, syscall.Errno(winErr))
+			}
+			errMsg += ")"
+		}
+	}
+
+	return fmt.Errorf("GDI capture failed: %s", errMsg)
 }
 
 func (c *GDICapturer) refreshDimensions() {
@@ -229,22 +360,7 @@ func (c *GDICapturer) CaptureJPEG(quality int) ([]byte, error) {
 	}
 
 	if result != 0 {
-		var errMsg string
-		switch result {
-		case -1:
-			errMsg = "invalid parameters"
-		case -2:
-			errMsg = "buffer too small"
-		case -3:
-			errMsg = "BitBlt failed - screen may be locked or inaccessible"
-		case -4:
-			errMsg = "GetDIBits failed"
-		case -5:
-			errMsg = "GetDesktopWindow failed"
-		default:
-			errMsg = fmt.Sprintf("unknown error %d", result)
-		}
-		return nil, fmt.Errorf("GDI capture failed: %s (try running as Administrator/SYSTEM)", errMsg)
+		return nil, c.captureError(result)
 	}
 
 	// Encode BGRA directly to JPEG — no pixel swap needed!
@@ -280,7 +396,7 @@ func (c *GDICapturer) CaptureRGBA() (*image.RGBA, error) {
 	}
 
 	if result != 0 {
-		return nil, fmt.Errorf("GDI capture failed: error %d", result)
+		return nil, c.captureError(result)
 	}
 
 	// Convert BGRA to RGBA
@@ -316,7 +432,7 @@ func (c *GDICapturer) CaptureBGRA() ([]byte, int, int, error) {
 	}
 
 	if result != 0 {
-		return nil, 0, 0, fmt.Errorf("GDI capture failed: error %d", result)
+		return nil, 0, 0, c.captureError(result)
 	}
 
 	return buffer[:c.width*c.height*4], c.width, c.height, nil
