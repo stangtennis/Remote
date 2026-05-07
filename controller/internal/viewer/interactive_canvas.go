@@ -25,6 +25,7 @@ type InteractiveCanvas struct {
 	onKeyPress    func(key *fyne.KeyEvent)
 	onKeyDown     func(key *fyne.KeyEvent, modifier desktop.Modifier)
 	onKeyUp       func(key *fyne.KeyEvent, modifier desktop.Modifier)
+	onTypedRune   func(r rune)
 
 	// Throttling for mouse move
 	lastMoveTime  time.Time
@@ -130,7 +131,11 @@ func (ic *InteractiveCanvas) Scrolled(event *fyne.ScrollEvent) {
 }
 
 // Keyboard events
-func (ic *InteractiveCanvas) TypedRune(rune) {}
+func (ic *InteractiveCanvas) TypedRune(r rune) {
+	if ic.onTypedRune != nil {
+		ic.onTypedRune(r)
+	}
+}
 
 func (ic *InteractiveCanvas) TypedKey(event *fyne.KeyEvent) {
 	// Only use TypedKey as fallback if KeyDown/KeyUp not set
@@ -183,6 +188,10 @@ func (ic *InteractiveCanvas) SetOnKeyDown(callback func(key *fyne.KeyEvent, modi
 
 func (ic *InteractiveCanvas) SetOnKeyUp(callback func(key *fyne.KeyEvent, modifier desktop.Modifier)) {
 	ic.onKeyUp = callback
+}
+
+func (ic *InteractiveCanvas) SetOnTypedRune(callback func(r rune)) {
+	ic.onTypedRune = callback
 }
 
 // Renderer

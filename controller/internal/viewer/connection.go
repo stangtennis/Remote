@@ -342,6 +342,15 @@ func (v *Viewer) setupInputForwarding() {
 		v.SendMouseScroll(deltaX, deltaY)
 	})
 
+	// Fyne's TypedRune is the layout-correct text event. Without forwarding it,
+	// Danish characters and AltGr symbols are lost before they reach the agent.
+	v.interactiveCanvas.SetOnTypedRune(func(r rune) {
+		if !v.shouldForwardTypedRune(r) {
+			return
+		}
+		v.SendTextInput(string(r))
+	})
+
 	// Hook up keyboard with modifier support (separate down/up events)
 	v.interactiveCanvas.SetOnKeyDown(func(key *fyne.KeyEvent, modifier desktop.Modifier) {
 		// Double-ESC for local fullscreen exit, single-ESC forwarded to remote
@@ -369,6 +378,16 @@ func (v *Viewer) setupInputForwarding() {
 			return // Don't send to remote
 		}
 
+		// Treat RightAlt as AltGr for text entry. Forwarding it as normal Alt
+		// breaks Danish layout symbols like @, {}, [] and \.
+		if key.Name == desktop.KeyAltRight {
+			v.rightAltDown = true
+			return
+		}
+		if v.rightAltDown && isPotentialAltGrTextKey(key.Name) {
+			return
+		}
+
 		// Map Fyne key names to JavaScript KeyboardEvent.code format
 		jsCode := mapFyneKeyToJSCode(key.Name)
 		if jsCode != "" {
@@ -380,6 +399,14 @@ func (v *Viewer) setupInputForwarding() {
 	})
 
 	v.interactiveCanvas.SetOnKeyUp(func(key *fyne.KeyEvent, modifier desktop.Modifier) {
+		if key.Name == desktop.KeyAltRight {
+			v.rightAltDown = false
+			return
+		}
+		if v.rightAltDown && isPotentialAltGrTextKey(key.Name) {
+			return
+		}
+
 		jsCode := mapFyneKeyToJSCode(key.Name)
 		if jsCode != "" {
 			ctrl := modifier&desktop.ControlModifier != 0
@@ -575,6 +602,46 @@ func (v *Viewer) SendMouseScroll(deltaX, deltaY float32) {
 	if client, ok := v.webrtcClient.(*rtc.Client); ok {
 		client.SendInput(string(eventJSON))
 	}
+}
+
+// SendTextInput sends layout-correct text to the agent. The agent injects this
+// through its Unicode path, which bypasses mismatched keyboard layouts.
+func (v *Viewer) SendTextInput(text string) {
+	if v.webrtcClient == nil || text == "" {
+		return
+	}
+
+	event := map[string]interface{}{
+		"t":    "key",
+		"code": "",
+		"down": true,
+		"char": text,
+	}
+
+	eventJSON, _ := json.Marshal(event)
+
+	if client, ok := v.webrtcClient.(*rtc.Client); ok {
+		client.SendInput(string(eventJSON))
+	}
+}
+
+func (v *Viewer) shouldForwardTypedRune(r rune) bool {
+	if r < 0x20 || r == 0x7f {
+		return false
+	}
+	if r > 0x7f {
+		return true
+	}
+	return v.rightAltDown
+}
+
+func isPotentialAltGrTextKey(keyName fyne.KeyName) bool {
+	switch mapFyneKeyToJSCode(keyName) {
+	case "Digit0", "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "Digit9",
+		"KeyE", "Minus", "Equal", "BracketLeft", "BracketRight", "Backslash", "IntlBackslash", "Quote", "Semicolon", "Slash":
+		return true
+	}
+	return false
 }
 
 // SendKeyPress sends a keyboard event to the agent with modifier state
@@ -893,12 +960,12 @@ func (v *Viewer) OpenFileBrowser() {
 
 	// Create file transfer manager
 	ftManager := filetransfer.NewManager()
-	
+
 	// Set send function to use file channel
 	ftManager.SetSendFunc(func(data []byte) error {
 		return client.SendFileData(data)
 	})
-	
+
 	// Set up file channel message handler
 	client.SetOnFileMessage(func(data []byte) {
 		ftManager.HandleMessage(data)
@@ -906,12 +973,12 @@ func (v *Viewer) OpenFileBrowser() {
 
 	// Get app from window
 	app := fyne.CurrentApp()
-	
+
 	// Create new TotalCMD-style file browser
 	fb := filetransfer.NewFileBrowser(app, ftManager, func() {
 		log.Println("📁 File browser closed")
 	})
-	
+
 	if fb == nil {
 		log.Println("❌ Failed to create file browser")
 		dialog.ShowError(fmt.Errorf("Failed to create file browser"), v.window)
