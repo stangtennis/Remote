@@ -150,6 +150,7 @@ class ViewerSession {
     this.screenWidth = 0;
     this.screenHeight = 0;
     this.usingH264 = false;
+    this.requestedCodec = 'jpeg';
     this.isFullscreen = false;
     this.inputSetup = false;
 
@@ -487,7 +488,7 @@ class ViewerSession {
         // sends frames when H.264 mode is active. Detect actual H.264 usage
         // by checking if video element receives frames (videoWidth > 0).
         this.videoEl.srcObject = event.streams[0];
-        this.videoEl.style.display = '';
+        this.videoEl.style.display = this.requestedCodec === 'h264' ? '' : 'none';
         this.canvasEl.style.pointerEvents = 'auto';
         this.canvasEl.style.background = 'transparent';
       } else if (event.track.kind === 'audio') {
@@ -1026,7 +1027,7 @@ class ViewerSession {
     this.setupInput();
     this.startStats();
     this.sendSettingsToAgent();
-    this.enableH264Mode();
+    this.requestJpegMode();
 
     // Wire file channel to FileTransfer module
     if (this.fileChannel && window.FileTransfer) {
@@ -1671,27 +1672,31 @@ class ViewerSession {
       showToast('Ikke forbundet til agent', 'error');
       return;
     }
-    // Hvis vi er i H.264 nu, skift til tiles. Ellers prøv H.264.
-    const newMode = this.usingH264 ? 'tiles' : 'h264';
+    const h264ActiveOrRequested = this.requestedCodec === 'h264' || this.usingH264;
+    const newMode = h264ActiveOrRequested ? 'tiles' : 'h264';
     const bitrate = newMode === 'h264' ? 32000 : 0;
     try {
       dc.send(JSON.stringify({ type: 'set_mode', mode: newMode, bitrate: bitrate }));
       showToast(`Skifter til ${newMode === 'h264' ? 'H.264' : 'JPEG'}-mode...`, 'info');
       console.log(`[${this.deviceName}] Requested codec: ${newMode}`);
 
-      // Optimistisk skift display straks så input ikke "låses". Hvis agent
-      // alligevel ikke kunne skifte (fx encoder fejlede), vil updateStats
-      // detection-logic rette det indenfor 1-2s.
-      this.usingH264 = (newMode === 'h264');
-      if (this.canvasEl) this.canvasEl.style.display = this.usingH264 ? 'none' : '';
-      if (this.videoEl) this.videoEl.style.display = this.usingH264 ? '' : 'none';
+      this.requestedCodec = newMode === 'h264' ? 'h264' : 'jpeg';
       // Hvis vi skifter væk fra H.264, reset video så videoWidth=0
       // (browser holder ellers fast på sidste size, og auto-detection fejler)
       if (newMode === 'tiles' && this.videoEl) {
+        this.usingH264 = false;
+        if (this.canvasEl) this.canvasEl.style.display = '';
+        if (this.videoEl) this.videoEl.style.display = 'none';
         const sObj = this.videoEl.srcObject;
         this.videoEl.srcObject = null;
         // Re-attach efter 100ms så ny H.264 strøm kan fanges hvis brugeren skifter tilbage
         setTimeout(() => { if (this.videoEl && sObj) this.videoEl.srcObject = sObj; }, 100);
+      } else {
+        // Keep the last JPEG canvas visible until the H.264 video element
+        // actually decodes a frame. Otherwise failed/slow video decode looks
+        // like a black screen and the user cannot switch back reliably.
+        if (this.canvasEl) this.canvasEl.style.display = '';
+        if (this.videoEl) this.videoEl.style.display = '';
       }
       this._updateCodecBtn();
     } catch (e) {
@@ -1702,8 +1707,9 @@ class ViewerSession {
   _updateCodecBtn() {
     const btn = this.wrapper && this.wrapper.querySelector('.session-codec-btn');
     if (!btn) return;
-    if (this.usingH264) {
-      btn.title = 'Skift til JPEG (nu: H.264)';
+    const h264Requested = this.requestedCodec === 'h264';
+    if (h264Requested) {
+      btn.title = this.usingH264 ? 'Skift til JPEG (nu: H.264)' : 'Skift til JPEG (H.264 anmodet)';
       btn.innerHTML = '<i class="fas fa-film"></i>';
       btn.classList.add('codec-active-h264');
       btn.classList.remove('codec-active-jpeg');
@@ -1825,7 +1831,32 @@ class ViewerSession {
     const send = () => {
       if (dc.readyState === 'open') {
         dc.send(JSON.stringify({ type: 'set_mode', mode: 'h264', bitrate: 32000 }));
+        this.requestedCodec = 'h264';
+        this._updateCodecBtn();
         console.log(`[${this.deviceName}] Requested H.264 mode (32 Mbps)`);
+      }
+    };
+
+    if (dc.readyState === 'open') {
+      send();
+    } else {
+      dc.addEventListener('open', send, { once: true });
+    }
+  }
+
+  requestJpegMode() {
+    const dc = this.dataChannel;
+    if (!dc) return;
+
+    const send = () => {
+      if (dc.readyState === 'open') {
+        dc.send(JSON.stringify({ type: 'set_mode', mode: 'tiles', bitrate: 0 }));
+        this.requestedCodec = 'jpeg';
+        this.usingH264 = false;
+        if (this.canvasEl) this.canvasEl.style.display = '';
+        if (this.videoEl) this.videoEl.style.display = 'none';
+        this._updateCodecBtn();
+        console.log(`[${this.deviceName}] Requested JPEG mode on connect`);
       }
     };
 
