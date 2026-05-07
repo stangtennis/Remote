@@ -1288,6 +1288,7 @@ func runService() {
 	// detached fordi vi spawn'er via CreateProcessAsUser. Uden cleanup
 	// akkumulerer de — set 9 zombier på én VM efter mange connect/disconnect.
 	screen.CleanupOrphanedHelpers()
+	cleanupLegacyAgentAutostarts()
 
 	// Setup firewall rules (service runs as SYSTEM, has admin rights)
 	setupFirewallRules()
@@ -1812,6 +1813,62 @@ func cleanupOldBinaries() {
 			log.Printf("⚠️ Kunne ikke slette %s: %v", filepath.Base(f), err)
 		} else {
 			log.Printf("🧹 Slettet gammel fil: %s", filepath.Base(f))
+		}
+	}
+}
+
+// cleanupLegacyAgentAutostarts removes old process-mode autostarts that
+// conflict with the LocalSystem service. The GUI agent is a full runtime, not
+// just a tray, so service + Run/Startup/task entries create duplicate devices.
+func cleanupLegacyAgentAutostarts() {
+	deleteRunValue := func(root string) {
+		cmd := exec.Command("reg", "delete",
+			root+`\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
+			"/v", registryValueName,
+			"/f")
+		if err := cmd.Run(); err == nil {
+			log.Printf("🧹 Removed legacy autostart: %s Run\\%s", root, registryValueName)
+		}
+	}
+	deleteRunValue("HKLM")
+	deleteRunValue("HKCU")
+	if output, err := exec.Command("reg", "query", "HKU").CombinedOutput(); err == nil {
+		for _, line := range strings.Split(string(output), "\n") {
+			hive := strings.TrimSpace(line)
+			if !strings.HasPrefix(strings.ToUpper(hive), `HKEY_USERS\`) || strings.HasSuffix(strings.ToUpper(hive), `_CLASSES`) {
+				continue
+			}
+			sid := strings.TrimPrefix(hive, `HKEY_USERS\`)
+			cmd := exec.Command("reg", "delete",
+				`HKU\`+sid+`\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
+				"/v", registryValueName,
+				"/f")
+			if err := cmd.Run(); err == nil {
+				log.Printf("🧹 Removed legacy autostart: HKU\\%s Run\\%s", sid, registryValueName)
+			}
+		}
+	}
+
+	cmd := exec.Command("schtasks", "/delete", "/tn", registryValueName, "/f")
+	if err := cmd.Run(); err == nil {
+		log.Printf("🧹 Removed legacy scheduled task: %s", registryValueName)
+	}
+
+	startupLinks := []string{
+		filepath.Join(os.Getenv("ProgramData"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup", "Remote Desktop Agent.lnk"),
+		filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup", "Remote Desktop Agent.lnk"),
+	}
+	if profileLinks, err := filepath.Glob(`C:\Users\*\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Remote Desktop Agent.lnk`); err == nil {
+		startupLinks = append(startupLinks, profileLinks...)
+	}
+	for _, link := range startupLinks {
+		if link == "" {
+			continue
+		}
+		if err := os.Remove(link); err == nil {
+			log.Printf("🧹 Removed legacy Startup shortcut: %s", link)
+		} else if !os.IsNotExist(err) {
+			log.Printf("⚠️ Could not remove Startup shortcut %s: %v", link, err)
 		}
 	}
 }
