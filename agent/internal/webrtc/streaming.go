@@ -251,12 +251,12 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	frameInterval := time.Duration(1000/fps) * time.Millisecond
 
 	// Thresholds for adaptation (use controller caps if set)
-	bufferHigh := uint64(2 * 1024 * 1024)    // 2MB - reduce quality
-	bufferMedium := uint64(1 * 1024 * 1024)   // 1MB - skip every 2nd frame
-	bufferLow := uint64(512 * 1024)           // 512KB - can increase quality
+	bufferHigh := uint64(2 * 1024 * 1024)   // 2MB - reduce quality
+	bufferMedium := uint64(1 * 1024 * 1024) // 1MB - skip every 2nd frame
+	bufferLow := uint64(512 * 1024)         // 512KB - can increase quality
 	minFPS := 10
-	minQuality := 50  // Below 50% introduces visible JPEG artifacts on text
-	minScale := 0.65  // Below 65% makes small text unreadable
+	minQuality := 50      // Below 50% introduces visible JPEG artifacts on text
+	minScale := 0.65      // Below 65% makes small text unreadable
 	frameSkipCounter := 0 // Counter for frame skipping under buffer pressure
 
 	// Apply controller caps if set
@@ -382,7 +382,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			desktop.SwitchToInputDesktop()
 		}
 
-		bufferedAmount := dc.BufferedAmount()
+		bufferedAmount := m.videoBufferedAmount()
 
 		// Capture RGBA for motion detection (also used for JPEG encoding - single capture)
 		rgbaFrame, err := sc.CaptureRGBA()
@@ -554,32 +554,44 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 					// LAN: fast ramp (2-3 ticks to max, avoids buffer spikes)
 					if quality < maxQuality {
 						quality += 20
-						if quality > maxQuality { quality = maxQuality }
+						if quality > maxQuality {
+							quality = maxQuality
+						}
 						changed = true
 					}
 					if scale < maxScale {
 						scale += 0.2
-						if scale > maxScale { scale = maxScale }
+						if scale > maxScale {
+							scale = maxScale
+						}
 						changed = true
 					}
 					if fps < maxFPS {
 						fps += 10
-						if fps > maxFPS { fps = maxFPS }
+						if fps > maxFPS {
+							fps = maxFPS
+						}
 						changed = true
 					}
 				} else if curLossPct < 1 && curRTT < 120*time.Millisecond {
 					// WAN: fast recovery
 					if quality < maxQuality {
 						quality += 15
-						if quality > maxQuality { quality = maxQuality }
+						if quality > maxQuality {
+							quality = maxQuality
+						}
 						changed = true
 					} else if scale < maxScale {
 						scale += 0.2
-						if scale > maxScale { scale = maxScale }
+						if scale > maxScale {
+							scale = maxScale
+						}
 						changed = true
 					} else if fps < maxFPS {
 						fps += 5
-						if fps > maxFPS { fps = maxFPS }
+						if fps > maxFPS {
+							fps = maxFPS
+						}
 						changed = true
 					}
 				}
@@ -689,10 +701,8 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			continue
 		}
 
-
-
 		// POST-ENCODE buffer check: if buffer grew during encoding, drop the frame
-		postEncodeBuffer := dc.BufferedAmount()
+		postEncodeBuffer := m.videoBufferedAmount()
 		if postEncodeBuffer > bufferHigh {
 			droppedFrames++
 			if droppedFrames%10 == 1 {
@@ -815,7 +825,7 @@ func (m *Manager) sendDirtyRegion(region screen.DirtyRegion) error {
 
 func (m *Manager) sendFrameChunked(data []byte) error {
 	const maxChunkSize = 60000 // 60KB chunks (safely under 64KB limit)
-	const chunkMagic = 0xFE   // Magic byte for chunked frames with frame ID (new format)
+	const chunkMagic = 0xFE    // Magic byte for chunked frames with frame ID (new format)
 
 	// Increment frame ID for each new frame (atomic for thread safety)
 	frameID := uint16(m.frameID.Add(1))
@@ -825,25 +835,23 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 	metrics.AddBytesSent("video", len(data))
 
 	// Channel selection strategy:
-	// - Single-message frames (< 60KB): use video channel (unreliable = lower latency)
-	// - Chunked frames (>= 60KB): use data channel (reliable) because lost chunks
-	//   on unreliable channels cause entire frames to be dropped (especially over WiFi)
-	reliableChannel := m.dataChannel
-	if reliableChannel == nil || reliableChannel.ReadyState() != pionwebrtc.DataChannelStateOpen {
+	// - Prefer the dedicated unreliable/unordered video channel for every
+	//   video frame, including chunked JPEG frames.
+	// - Fall back to the control/data channel only for older clients.
+	//
+	// Large reliable JPEG chunks can build SCTP head-of-line backlog and then
+	// input, ping and codec-switch commands stop reacting. Dropping an
+	// incomplete video frame is better than blocking control.
+	sendChannel := m.videoSendChannel()
+	if sendChannel == nil {
 		return fmt.Errorf("no channel available for sending")
 	}
 
 	// If data fits in one message, send directly (no chunking needed)
 	if len(data) <= maxChunkSize {
-		// Prefer unreliable video channel for single messages (lower latency)
-		sendChannel := reliableChannel
-		if m.videoChannel != nil && m.videoChannel.ReadyState() == pionwebrtc.DataChannelStateOpen {
-			sendChannel = m.videoChannel
-		}
 		return sendChannel.Send(data)
 	}
 
-	// Chunked frames MUST use reliable channel to ensure all chunks arrive
 	totalChunks := (len(data) + maxChunkSize - 1) / maxChunkSize
 
 	for i := 0; i < totalChunks; i++ {
@@ -863,12 +871,29 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 		chunk[4] = byte(totalChunks)    // Total chunks
 		copy(chunk[5:], data[start:end])
 
-		if err := reliableChannel.Send(chunk); err != nil {
+		if err := sendChannel.Send(chunk); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func (m *Manager) videoSendChannel() *pionwebrtc.DataChannel {
+	if m.videoChannel != nil && m.videoChannel.ReadyState() == pionwebrtc.DataChannelStateOpen {
+		return m.videoChannel
+	}
+	if m.dataChannel != nil && m.dataChannel.ReadyState() == pionwebrtc.DataChannelStateOpen {
+		return m.dataChannel
+	}
+	return nil
+}
+
+func (m *Manager) videoBufferedAmount() uint64 {
+	if ch := m.videoSendChannel(); ch != nil {
+		return ch.BufferedAmount()
+	}
+	return 0
 }
 
 // sendMonitorList sends the list of connected monitors to the dashboard

@@ -35,9 +35,9 @@ type Client struct {
 	connected            bool
 
 	// Frame reassembly with timeout tracking and backlog limit
-	frameChunks    map[int][][]byte  // frameID -> chunk data
-	frameFirstSeen map[int]time.Time // frameID -> first chunk arrival time
-	frameChunksMu  sync.Mutex
+	frameChunks      map[int][][]byte  // frameID -> chunk data
+	frameFirstSeen   map[int]time.Time // frameID -> first chunk arrival time
+	frameChunksMu    sync.Mutex
 	maxPendingFrames int // max incomplete frames before dropping oldest
 
 	// RTT measurement
@@ -407,7 +407,7 @@ func (c *Client) SendData(data []byte) error {
 // bitrate: target bitrate in kbps (0 = use default)
 func (c *Client) SetStreamingMode(mode string, bitrate int) error {
 	log.Printf("🎬 SetStreamingMode called: mode=%s, bitrate=%d", mode, bitrate)
-	
+
 	msg := map[string]interface{}{
 		"type": "set_mode",
 		"mode": mode,
@@ -422,7 +422,7 @@ func (c *Client) SetStreamingMode(mode string, bitrate int) error {
 	}
 
 	log.Printf("🎬 Sending set_mode message to agent: %s", string(data))
-	err = c.SendData(data)
+	err = c.SendInput(string(data))
 	if err != nil {
 		log.Printf("❌ Failed to send set_mode: %v", err)
 	} else {
