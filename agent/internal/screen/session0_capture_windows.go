@@ -150,13 +150,10 @@ func resolveCaptureSessionTarget() (uint32, int32, uint32, int32) {
 }
 
 func preferredDesktopForSessionState(sessionState int32, hasUserToken bool) string {
-	if !hasUserToken {
-		return "winsta0\\Winlogon"
+	if hasUserToken {
+		return "winsta0\\default"
 	}
-	if sessionState == wtsConnected {
-		return "winsta0\\Winlogon"
-	}
-	return "winsta0\\default"
+	return "winsta0\\Winlogon"
 }
 
 func findConsoleLoginSession() (uint32, int32, bool) {
@@ -259,6 +256,22 @@ func findBestUserSession() uint32 {
 		return bestLoginScreen
 	}
 	return consoleSessionID
+}
+
+func shouldDebounceSessionSwitch(currentSession uintptr, currentState int32, newSession uintptr, newState int32) bool {
+	if currentSession == 0 || currentSession == newSession {
+		return false
+	}
+	if currentState != wtsActive {
+		return false
+	}
+	if newState == wtsConnected && !sessionHasUserToken(uint32(newSession)) {
+		return true
+	}
+	if newState == wtsDisconnected {
+		return true
+	}
+	return false
 }
 
 // pipeRW wraps a Windows named pipe handle as io.ReadWriter.
@@ -518,7 +531,7 @@ func (c *Session0PipeCapturer) launchHelper() error {
 		defer userToken.Close()
 		log.Printf("📋 User is logged in (session %d, state=%d)", sessionID, sessionState)
 		helperDesktop = preferredDesktopForSessionState(sessionState, true)
-		if sessionState != wtsActive {
+		if sessionState == wtsDisconnected {
 			captureMode = "fixed"
 		}
 
@@ -883,6 +896,10 @@ func (c *Session0PipeCapturer) monitorSession() {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
+	var pendingSession uintptr
+	var pendingState int32
+	var pendingCount int
+
 	for {
 		select {
 		case <-c.stopCh:
@@ -901,10 +918,29 @@ func (c *Session0PipeCapturer) monitorSession() {
 			c.mu.Unlock()
 
 			if newSession != currentSession || newSessionState != currentState {
+				if shouldDebounceSessionSwitch(currentSession, currentState, newSession, newSessionState) {
+					if pendingSession != newSession || pendingState != newSessionState {
+						pendingSession = newSession
+						pendingState = newSessionState
+						pendingCount = 1
+						log.Printf("⏳ Session switch candidate %d/%d → %d/%d; waiting for confirmation...", currentSession, currentState, newSession, newSessionState)
+						continue
+					}
+					pendingCount++
+					if pendingCount < 2 {
+						continue
+					}
+				}
+				pendingSession = 0
+				pendingState = 0
+				pendingCount = 0
 				log.Printf("🔄 Target session changed: %d/%d → %d/%d, relaunching helper...", currentSession, currentState, newSession, newSessionState)
 				c.relaunchHelper(newSession, newSessionState)
 				continue
 			}
+			pendingSession = 0
+			pendingState = 0
+			pendingCount = 0
 
 			// Check if helper process is still alive
 			c.mu.Lock()
