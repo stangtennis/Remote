@@ -58,10 +58,10 @@ type Viewer struct {
 	fullscreenBtn *widget.Button
 
 	// Fullscreen overlay toolbar
-	overlayToolbar     *fyne.Container
-	overlayVisible     bool
-	overlayHideTimer   *time.Timer
-	fullscreenContent  *fyne.Container
+	overlayToolbar    *fyne.Container
+	overlayVisible    bool
+	overlayHideTimer  *time.Timer
+	fullscreenContent *fyne.Container
 
 	// WebRTC and Input
 	webrtcClient      interface{} // Will be *webrtc.Client
@@ -83,7 +83,8 @@ type Viewer struct {
 	maxBitrateKbps int
 
 	// ESC double-tap tracking
-	lastEscTime time.Time
+	lastEscTime  time.Time
+	rightAltDown bool
 
 	// Multi-monitor
 	monitorSelect *widget.Select
@@ -631,33 +632,33 @@ func (v *Viewer) exitFullscreenMode() {
 func (v *Viewer) createOverlayToolbar() {
 	// Semi-transparent background
 	bg := canvas.NewRectangle(color.NRGBA{R: 30, G: 30, B: 30, A: 230})
-	
+
 	// Exit fullscreen button
 	exitBtn := widget.NewButtonWithIcon("Exit Fullscreen (ESC)", theme.ViewFullScreenIcon(), func() {
 		v.toggleFullscreen()
 	})
 	exitBtn.Importance = widget.HighImportance
-	
+
 	// File browser button
 	fileBtn := widget.NewButtonWithIcon("Files", theme.FolderOpenIcon(), func() {
 		v.OpenFileBrowser()
 	})
-	
+
 	// Clipboard button
 	clipboardBtn := widget.NewButtonWithIcon("Clipboard", theme.ContentCopyIcon(), func() {
 		v.handleClipboardSync()
 	})
-	
+
 	// Disconnect button
 	disconnectBtn := widget.NewButton("Disconnect", func() {
 		v.handleDisconnect()
 	})
 	disconnectBtn.Importance = widget.DangerImportance
-	
+
 	// Status info
 	statusInfo := widget.NewLabel("Move mouse to top to show toolbar")
 	statusInfo.TextStyle = fyne.TextStyle{Italic: true}
-	
+
 	// Layout
 	buttons := container.NewHBox(
 		exitBtn,
@@ -669,10 +670,10 @@ func (v *Viewer) createOverlayToolbar() {
 		layout.NewSpacer(),
 		statusInfo,
 	)
-	
+
 	// Wrap with padding
 	padded := container.NewPadded(buttons)
-	
+
 	v.overlayToolbar = container.NewStack(bg, padded)
 }
 
@@ -717,7 +718,7 @@ func (v *Viewer) scheduleOverlayHide(delay time.Duration) {
 	if v.overlayHideTimer != nil {
 		v.overlayHideTimer.Stop()
 	}
-	
+
 	v.overlayHideTimer = time.AfterFunc(delay, func() {
 		v.hideOverlayToolbar()
 	})
@@ -728,7 +729,7 @@ func (v *Viewer) CheckMousePosition(y float32) {
 	if !v.fullscreen {
 		return
 	}
-	
+
 	// Show toolbar when mouse is in top 50 pixels
 	if y < 50 {
 		v.showOverlayToolbar()
@@ -759,7 +760,7 @@ func (v *Viewer) toggleToolbarVisibility() {
 
 func (v *Viewer) handleFileTransfer() {
 	log.Println("Opening file transfer dialog...")
-	
+
 	// Open file browser if we have a webrtc client
 	if v.webrtcClient != nil {
 		v.openFileBrowser()
@@ -981,7 +982,7 @@ func (v *Viewer) startCanvasRefreshLoop() {
 // openFileBrowser opens the TotalCMD-style file browser
 func (v *Viewer) openFileBrowser() {
 	log.Println("📁 Opening file browser...")
-	
+
 	// Use the OpenFileBrowser from connection.go which has full implementation
 	v.OpenFileBrowser()
 }
