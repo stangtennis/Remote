@@ -1047,6 +1047,15 @@ function setupInputCapture() {
 
   const pressedKeys = new Set();
 
+  const shouldForwardUnicodeChar = (e) => {
+    if (!e || typeof e.key !== 'string') return false;
+    if (e.key.length !== 1) return false;
+    if (e.key === ' ') return false;
+    if (e.metaKey) return false;
+    if (e.ctrlKey && !e.altKey) return false;
+    return true;
+  };
+
   const keyDownHandler = async (e) => {
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
@@ -1072,9 +1081,10 @@ function setupInputCapture() {
       shift: e.shiftKey,
       alt: e.altKey
     };
-    // AltGr on Windows sends ctrlKey+altKey — include the resolved char
-    // so agent uses ForwardUnicodeChar (hybrid AltGr handler) instead of ForwardKeyEvent
-    if (e.ctrlKey && e.altKey && !e.metaKey && e.key.length === 1) {
+    // Forward printable characters as Unicode so dashboard input follows the
+    // local keyboard layout (e.g. Danish aa/ae/oe/aa and AltGr symbols)
+    // instead of the browser's physical US-style KeyboardEvent.code mapping.
+    if (shouldForwardUnicodeChar(e)) {
       evt.char = e.key;
     }
     sendControlEvent(evt);

@@ -51,3 +51,20 @@ func TestIsPotentialAltGrTextKey(t *testing.T) {
 		}
 	}
 }
+
+func TestMapFyneKeyToJSCode(t *testing.T) {
+	tests := []struct {
+		key  fyne.KeyName
+		want string
+	}{
+		{key: fyne.KeyName("NumLock"), want: "NumLock"},
+		{key: fyne.KeyName("ScrollLock"), want: "ScrollLock"},
+		{key: fyne.KeyName("CapsLock"), want: "CapsLock"},
+	}
+
+	for _, tt := range tests {
+		if got := mapFyneKeyToJSCode(tt.key); got != tt.want {
+			t.Fatalf("mapFyneKeyToJSCode(%q) = %q, want %q", tt.key, got, tt.want)
+		}
+	}
+}
