@@ -729,18 +729,21 @@ func jsCodeToChar(code string, shift bool) string {
 func mapFyneKeyToJSCode(keyName fyne.KeyName) string {
 	keyMap := map[fyne.KeyName]string{
 		// Special keys
-		fyne.KeyTab:       "Tab",
-		fyne.KeyReturn:    "Enter",
-		fyne.KeyEnter:     "Enter",
-		fyne.KeySpace:     "Space",
-		fyne.KeyBackspace: "Backspace",
-		fyne.KeyDelete:    "Delete",
-		fyne.KeyInsert:    "Insert",
-		fyne.KeyHome:      "Home",
-		fyne.KeyEnd:       "End",
-		fyne.KeyPageUp:    "PageUp",
-		fyne.KeyPageDown:  "PageDown",
-		fyne.KeyEscape:    "Escape",
+		fyne.KeyTab:                "Tab",
+		fyne.KeyReturn:             "Enter",
+		fyne.KeyEnter:              "Enter",
+		fyne.KeySpace:              "Space",
+		fyne.KeyBackspace:          "Backspace",
+		fyne.KeyDelete:             "Delete",
+		fyne.KeyInsert:             "Insert",
+		fyne.KeyHome:               "Home",
+		fyne.KeyEnd:                "End",
+		fyne.KeyPageUp:             "PageUp",
+		fyne.KeyPageDown:           "PageDown",
+		fyne.KeyEscape:             "Escape",
+		fyne.KeyName("NumLock"):    "NumLock",
+		fyne.KeyName("ScrollLock"): "ScrollLock",
+		fyne.KeyName("CapsLock"):   "CapsLock",
 
 		// Arrow keys
 		fyne.KeyUp:    "ArrowUp",

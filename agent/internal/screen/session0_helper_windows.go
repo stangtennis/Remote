@@ -435,6 +435,7 @@ func mapCodeToVK(code string) uint16 {
 		"Enter": 0x0D, "Space": 0x20, "Backspace": 0x08, "Tab": 0x09,
 		"Escape": 0x1B, "Delete": 0x2E, "Insert": 0x2D,
 		"Home": 0x24, "End": 0x23, "PageUp": 0x21, "PageDown": 0x22,
+		"NumLock": 0x90, "ScrollLock": 0x91, "CapsLock": 0x14,
 
 		// Arrow keys
 		"ArrowUp": 0x26, "ArrowDown": 0x28, "ArrowLeft": 0x25, "ArrowRight": 0x27,
@@ -450,7 +451,13 @@ func mapCodeToVK(code string) uint16 {
 		"Semicolon": 0xBA, "Quote": 0xDE,
 		"BracketLeft": 0xDB, "BracketRight": 0xDD,
 		"Backslash": 0xDC, "Minus": 0xBD, "Equal": 0xBB,
-		"Backquote": 0xC0,
+		"Backquote": 0xC0, "IntlBackslash": 0xE2,
+
+		// Numpad
+		"Numpad0": 0x60, "Numpad1": 0x61, "Numpad2": 0x62, "Numpad3": 0x63, "Numpad4": 0x64,
+		"Numpad5": 0x65, "Numpad6": 0x66, "Numpad7": 0x67, "Numpad8": 0x68, "Numpad9": 0x69,
+		"NumpadMultiply": 0x6A, "NumpadAdd": 0x6B, "NumpadSubtract": 0x6D, "NumpadDecimal": 0x6E,
+		"NumpadDivide": 0x6F, "NumpadEnter": 0x0D,
 	}
 
 	if vk, ok := vkMap[code]; ok {

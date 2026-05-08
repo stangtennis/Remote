@@ -2011,9 +2011,19 @@ class ViewerSession {
       alt: e.altKey
     };
 
-    // AltGr on Windows sends ctrlKey+altKey — include the resolved char
-    // so agent uses ForwardUnicodeChar (hybrid AltGr handler)
-    if (e.ctrlKey && e.altKey && !e.metaKey && e.key.length === 1) {
+    const shouldForwardUnicodeChar = () => {
+      if (type !== 'keydown') return false;
+      if (typeof e.key !== 'string') return false;
+      if (e.key.length !== 1) return false;
+      if (e.key === ' ') return false;
+      if (e.metaKey) return false;
+      if (e.ctrlKey && !e.altKey) return false;
+      return true;
+    };
+
+    // Forward printable characters as Unicode so controller input follows the
+    // local keyboard layout instead of the browser's physical US-style code map.
+    if (shouldForwardUnicodeChar()) {
       evt.char = e.key;
     }
 
