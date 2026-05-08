@@ -355,7 +355,57 @@
         </div>
       </div>
     `;
+    overlay.style.cssText = [
+      'position:fixed',
+      'inset:0',
+      'z-index:10000',
+      'display:none',
+      'align-items:center',
+      'justify-content:center',
+      'padding:24px',
+      'background:rgba(5,10,20,0.82)',
+      'backdrop-filter:blur(8px)'
+    ].join(';');
     document.body.appendChild(overlay);
+
+    const panel = overlay.querySelector('.shortcuts-panel');
+    if (panel) {
+      panel.style.cssText = [
+        'width:min(680px, 100%)',
+        'max-height:min(80vh, 760px)',
+        'display:flex',
+        'flex-direction:column',
+        'overflow:hidden',
+        'border:1px solid rgba(255,255,255,0.08)',
+        'border-radius:18px',
+        'background:linear-gradient(180deg, rgba(20,29,44,0.98), rgba(11,17,27,0.98))',
+        'box-shadow:0 24px 80px rgba(0,0,0,0.45)',
+        'color:#e8edf7'
+      ].join(';');
+    }
+
+    const header = overlay.querySelector('.shortcuts-panel-header');
+    if (header) {
+      header.style.cssText = [
+        'display:flex',
+        'align-items:center',
+        'justify-content:space-between',
+        'gap:16px',
+        'padding:18px 20px',
+        'border-bottom:1px solid rgba(255,255,255,0.08)'
+      ].join(';');
+    }
+
+    const body = overlay.querySelector('.shortcuts-panel-body');
+    if (body) {
+      body.style.cssText = [
+        'display:flex',
+        'flex-direction:column',
+        'gap:14px',
+        'padding:18px 20px 20px',
+        'overflow:auto'
+      ].join(';');
+    }
 
     const onLoginPage = !!document.getElementById('loginForm');
     const list = onLoginPage ? SHORTCUTS_LOGIN : SHORTCUTS_APP;
@@ -363,13 +413,46 @@
     const searchEl = overlay.querySelector('.shortcuts-search-input');
     const closeBtn = overlay.querySelector('.shortcuts-close');
 
+    if (searchEl) {
+      searchEl.style.cssText = [
+        'width:100%',
+        'padding:12px 14px',
+        'border-radius:12px',
+        'border:1px solid rgba(255,255,255,0.12)',
+        'background:rgba(255,255,255,0.04)',
+        'color:#f8fbff',
+        'font-size:14px',
+        'outline:none'
+      ].join(';');
+    }
+
+    if (listEl) {
+      listEl.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+    }
+
+    if (closeBtn) {
+      closeBtn.style.cssText = [
+        'border:none',
+        'background:transparent',
+        'color:#c7d2e5',
+        'font-size:28px',
+        'line-height:1',
+        'cursor:pointer',
+        'padding:0 4px'
+      ].join(';');
+    }
+
     const open = () => {
       searchEl.value = '';
       renderShortcuts('', list, listEl);
       overlay.classList.add('visible');
+      overlay.style.display = 'flex';
       setTimeout(() => searchEl.focus(), 30);
     };
-    const close = () => overlay.classList.remove('visible');
+    const close = () => {
+      overlay.classList.remove('visible');
+      overlay.style.display = 'none';
+    };
 
     closeBtn.addEventListener('click', close);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
@@ -391,6 +474,20 @@
       btn.title = 'Tastaturgenveje (Ctrl+/)';
       btn.setAttribute('aria-label', 'Vis tastaturgenveje');
       btn.innerHTML = '<i class="fas fa-keyboard"></i>';
+      btn.style.cssText = [
+        'position:fixed',
+        'right:18px',
+        'bottom:18px',
+        'z-index:9998',
+        'width:48px',
+        'height:48px',
+        'border:none',
+        'border-radius:9999px',
+        'background:linear-gradient(135deg, #2f6fed, #153a8a)',
+        'color:#fff',
+        'box-shadow:0 14px 30px rgba(17,24,39,0.35)',
+        'cursor:pointer'
+      ].join(';');
       btn.addEventListener('click', open);
       document.body.appendChild(btn);
     }
