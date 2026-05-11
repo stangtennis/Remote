@@ -17,6 +17,28 @@ type TokenProvider struct {
 	refreshBackoff  time.Duration
 }
 
+func (tp *TokenProvider) markRefreshFailedLocked() {
+	tp.lastRefreshFail = time.Now()
+	if tp.refreshBackoff == 0 {
+		tp.refreshBackoff = 5 * time.Second
+	} else if tp.refreshBackoff < 60*time.Second {
+		tp.refreshBackoff *= 2
+		if tp.refreshBackoff > 60*time.Second {
+			tp.refreshBackoff = 60 * time.Second
+		}
+	}
+}
+
+func refreshErrorMessage(result *AuthResult, err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	if result != nil && result.Message != "" {
+		return result.Message
+	}
+	return "unknown refresh error"
+}
+
 // NewTokenProvider creates a TokenProvider from existing credentials.
 func NewTokenProvider(config AuthConfig, creds *Credentials) *TokenProvider {
 	return &TokenProvider{
@@ -57,16 +79,7 @@ func (tp *TokenProvider) GetToken() (string, error) {
 
 	result, err := RefreshToken(tp.config, tp.creds.RefreshToken)
 	if err != nil || !result.Success {
-		tp.lastRefreshFail = time.Now()
-		// Exponential backoff: 5s → 10s → 20s → ... → 60s cap
-		if tp.refreshBackoff == 0 {
-			tp.refreshBackoff = 5 * time.Second
-		} else if tp.refreshBackoff < 60*time.Second {
-			tp.refreshBackoff *= 2
-			if tp.refreshBackoff > 60*time.Second {
-				tp.refreshBackoff = 60 * time.Second
-			}
-		}
+		tp.markRefreshFailedLocked()
 		if err != nil {
 			return "", fmt.Errorf("token refresh failed: %w", err)
 		}
@@ -113,7 +126,16 @@ func (tp *TokenProvider) StartBackgroundRefresh() {
 			tp.mu.Lock()
 			result, err := RefreshToken(tp.config, tp.creds.RefreshToken)
 			if err != nil || !result.Success {
-				log.Printf("⚠️  Background token refresh failed: %v", err)
+				msg := refreshErrorMessage(result, err)
+				hasAPIKey := tp.creds != nil && tp.creds.APIKey != ""
+				tp.markRefreshFailedLocked()
+				if hasAPIKey {
+					log.Printf("⚠️  Background token refresh failed: %s; api_key present, retrying later", msg)
+					tp.mu.Unlock()
+					time.Sleep(30 * time.Minute)
+					continue
+				}
+				log.Printf("⚠️  Background token refresh failed: %s", msg)
 				tp.mu.Unlock()
 				continue
 			}

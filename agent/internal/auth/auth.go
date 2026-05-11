@@ -124,10 +124,10 @@ func Login(config AuthConfig, email, password string) (*AuthResult, error) {
 		UserID:       authResp.User.ID,
 		ExpiresAt:    time.Now().Add(time.Duration(authResp.ExpiresIn) * time.Second).Unix(),
 	}
-	
+
 	credPath := GetCredentialsPath()
 	fmt.Printf("📁 Saving credentials to: %s\n", credPath)
-	
+
 	if err := SaveCredentials(creds); err != nil {
 		fmt.Printf("❌ Failed to save credentials: %v\n", err)
 		return &AuthResult{
@@ -315,19 +315,19 @@ func LoadCredentials() (*Credentials, error) {
 	if programData != "" {
 		paths = append(paths, filepath.Join(programData, "RemoteDesktopAgent", ".credentials"))
 	}
-	
+
 	// 2. User's AppData
 	appData := os.Getenv("APPDATA")
 	if appData != "" {
 		paths = append(paths, filepath.Join(appData, "RemoteDesktopAgent", ".credentials"))
 	}
-	
+
 	// 3. Exe directory
 	exePath, _ := os.Executable()
 	if exePath != "" {
 		paths = append(paths, filepath.Join(filepath.Dir(exePath), ".credentials"))
 	}
-	
+
 	// Try each path
 	var lastErr error
 	for _, path := range paths {
@@ -336,17 +336,17 @@ func LoadCredentials() (*Credentials, error) {
 			lastErr = err
 			continue
 		}
-		
+
 		var creds Credentials
 		if err := json.Unmarshal(data, &creds); err != nil {
 			lastErr = err
 			continue
 		}
-		
+
 		log.Printf("📁 Loaded credentials from: %s", path)
 		return &creds, nil
 	}
-	
+
 	if lastErr != nil {
 		return nil, lastErr
 	}
@@ -426,13 +426,19 @@ func RefreshToken(config AuthConfig, refreshToken string) (*AuthResult, error) {
 		return nil, err
 	}
 
-	// Save new credentials
+	apiKey := ""
+	if existingCreds, err := LoadCredentials(); err == nil && existingCreds != nil {
+		apiKey = existingCreds.APIKey
+	}
+
+	// Save new credentials while preserving the stable per-device api_key.
 	creds := &Credentials{
 		Email:        authResp.User.Email,
 		AccessToken:  authResp.AccessToken,
 		RefreshToken: authResp.RefreshToken,
 		UserID:       authResp.User.ID,
 		ExpiresAt:    time.Now().Add(time.Duration(authResp.ExpiresIn) * time.Second).Unix(),
+		APIKey:       apiKey,
 	}
 	SaveCredentials(creds)
 
