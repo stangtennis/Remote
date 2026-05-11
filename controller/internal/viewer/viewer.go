@@ -501,10 +501,11 @@ func (v *Viewer) toggleH264Mode() {
 	if client, ok := v.webrtcClient.(interface {
 		SetStreamingMode(mode string, bitrate int) error
 	}); ok {
-		// Send appropriate bitrate for H.264 mode (8 Mbps for sharp screen content)
+		// Match dashboard default bitrate so H.264 quality is comparable
+		// across controller clients (text/UI clarity on high-resolution hosts).
 		h264Bitrate := 0
 		if newMode == "h264" || newMode == "hybrid" {
-			h264Bitrate = 8000
+			h264Bitrate = 32000
 		}
 		if err := client.SetStreamingMode(newMode, h264Bitrate); err != nil {
 			log.Printf("❌ Failed to set streaming mode: %v", err)
