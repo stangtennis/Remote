@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/color"
 	"log"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -251,6 +252,11 @@ func (v *Viewer) createToolbar() *fyne.Container {
 		v.handleClipboardSync()
 	})
 
+	// Remote login helper button
+	loginBtn := widget.NewButtonWithIcon("Login", theme.AccountIcon(), func() {
+		v.showRemoteLoginDialog()
+	})
+
 	// H.264 mode toggle button
 	h264Btn := widget.NewButtonWithIcon("H.264", theme.MediaVideoIcon(), func() {
 		v.toggleH264Mode()
@@ -288,6 +294,7 @@ func (v *Viewer) createToolbar() *fyne.Container {
 		v.fullscreenBtn,
 		fileTransferBtn,
 		clipboardBtn,
+		loginBtn,
 		h264Btn,
 		v.monitorSelect,
 	)
@@ -650,6 +657,11 @@ func (v *Viewer) createOverlayToolbar() {
 		v.handleClipboardSync()
 	})
 
+	// Login button
+	loginBtn := widget.NewButtonWithIcon("Login", theme.AccountIcon(), func() {
+		v.showRemoteLoginDialog()
+	})
+
 	// Disconnect button
 	disconnectBtn := widget.NewButton("Disconnect", func() {
 		v.handleDisconnect()
@@ -666,6 +678,7 @@ func (v *Viewer) createOverlayToolbar() {
 		widget.NewSeparator(),
 		fileBtn,
 		clipboardBtn,
+		loginBtn,
 		widget.NewSeparator(),
 		disconnectBtn,
 		layout.NewSpacer(),
@@ -773,6 +786,88 @@ func (v *Viewer) handleFileTransfer() {
 func (v *Viewer) handleClipboardSync() {
 	log.Println("Syncing clipboard...")
 	v.sendClipboardNow()
+}
+
+func (v *Viewer) showRemoteLoginDialog() {
+	if !v.connected || v.webrtcClient == nil {
+		dialog.ShowInformation("Not connected", "Connect to the device before sending login credentials.", v.window)
+		return
+	}
+
+	usernameEntry := widget.NewEntry()
+	usernameEntry.SetPlaceHolder("brugernavn eller email")
+
+	domainEntry := widget.NewEntry()
+	domainEntry.SetPlaceHolder("valgfri: DOMAIN")
+
+	passwordEntry := widget.NewPasswordEntry()
+	passwordEntry.SetPlaceHolder("password")
+
+	sendUsernameCheck := widget.NewCheck("Send username field first", nil)
+	sendUsernameCheck.SetChecked(true)
+
+	items := []*widget.FormItem{
+		widget.NewFormItem("Username", usernameEntry),
+		widget.NewFormItem("Domain", domainEntry),
+		widget.NewFormItem("Password", passwordEntry),
+		widget.NewFormItem("Options", sendUsernameCheck),
+	}
+
+	dialog.ShowForm("Remote Login", "Send", "Cancel", items, func(submitted bool) {
+		if !submitted {
+			return
+		}
+
+		username := strings.TrimSpace(usernameEntry.Text)
+		domain := strings.TrimSpace(domainEntry.Text)
+		password := passwordEntry.Text
+		sendUsername := sendUsernameCheck.Checked
+
+		if username == "" && password == "" {
+			dialog.ShowInformation("Missing input", "Enter username and/or password.", v.window)
+			return
+		}
+
+		if err := v.sendRemoteLogin(username, password, domain, sendUsername); err != nil {
+			dialog.ShowError(err, v.window)
+			return
+		}
+
+		dialog.ShowInformation("Sent", "Login credentials sent to remote login screen.", v.window)
+	}, v.window)
+}
+
+func (v *Viewer) sendRemoteLogin(username, password, domain string, sendUsername bool) error {
+	msg := map[string]interface{}{
+		"type":          "remote_login",
+		"username":      username,
+		"password":      password,
+		"domain":        domain,
+		"send_username": sendUsername,
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal remote login message: %w", err)
+	}
+
+	if client, ok := v.webrtcClient.(interface{ SendInput(string) error }); ok {
+		if err := client.SendInput(string(data)); err != nil {
+			return fmt.Errorf("failed to send remote login message: %w", err)
+		}
+		log.Printf("🔐 Sent remote_login command (username=%t, domain=%t, password=%t)", username != "", domain != "", password != "")
+		return nil
+	}
+
+	if client, ok := v.webrtcClient.(interface{ SendData([]byte) error }); ok {
+		if err := client.SendData(data); err != nil {
+			return fmt.Errorf("failed to send remote login via data channel: %w", err)
+		}
+		log.Printf("🔐 Sent remote_login command over data channel (username=%t, domain=%t, password=%t)", username != "", domain != "", password != "")
+		return nil
+	}
+
+	return fmt.Errorf("no channel available to send remote login")
 }
 
 func (v *Viewer) handleQualityChange(value float64) {
