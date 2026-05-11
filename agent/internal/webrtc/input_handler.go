@@ -179,8 +179,18 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 
 // handleControlEvent handles control events from the dashboard data channel
 func (m *Manager) handleControlEvent(event map[string]interface{}) {
+	getMsgType := func(ev map[string]interface{}) string {
+		if v, ok := ev["type"].(string); ok && v != "" {
+			return v
+		}
+		if v, ok := ev["t"].(string); ok && v != "" {
+			return v
+		}
+		return ""
+	}
+
 	// Handle streaming mode changes
-	if msgType, ok := event["type"].(string); ok && msgType == "set_mode" {
+	if msgType := getMsgType(event); msgType == "set_mode" {
 		if mode, ok := event["mode"].(string); ok {
 			switch mode {
 			case "h264":
@@ -205,13 +215,13 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 	}
 
 	// Handle switch_monitor
-	if msgType, ok := event["type"].(string); ok && msgType == "switch_monitor" {
+	if msgType := getMsgType(event); msgType == "switch_monitor" {
 		m.handleSwitchMonitor(event)
 		return
 	}
 
 	// Clipboard messages (controller -> agent)
-	if msgType, ok := event["type"].(string); ok {
+	if msgType := getMsgType(event); msgType != "" {
 		switch msgType {
 		case "clipboard_text":
 			if content, ok := event["content"].(string); ok {

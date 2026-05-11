@@ -768,8 +768,15 @@ func (m *Manager) setupControlChannelHandlers(dc *pionwebrtc.DataChannel) {
 			return
 		}
 
+		msgType := ""
+		if v, ok := event["type"].(string); ok && v != "" {
+			msgType = v
+		} else if v, ok := event["t"].(string); ok && v != "" {
+			msgType = v
+		}
+
 		// Check for control messages from controller
-		if msgType, ok := event["type"].(string); ok {
+		if msgType != "" {
 			switch msgType {
 			case "clipboard_text":
 				if content, ok := event["content"].(string); ok {

@@ -753,7 +753,7 @@ class ViewerSession {
 
   switchMonitor(index) {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
-    this.dataChannel.send(JSON.stringify({ type: 'switch_monitor', index: parseInt(index) }));
+    this.dataChannel.send(JSON.stringify({ type: 'switch_monitor', t: 'switch_monitor', index: parseInt(index) }));
   }
 
   renderFrame(data) {
@@ -1684,7 +1684,7 @@ class ViewerSession {
     const newMode = h264ActiveOrRequested ? 'tiles' : 'h264';
     const bitrate = newMode === 'h264' ? 32000 : 0;
     try {
-      dc.send(JSON.stringify({ type: 'set_mode', mode: newMode, bitrate: bitrate }));
+      dc.send(JSON.stringify({ type: 'set_mode', t: 'set_mode', mode: newMode, bitrate: bitrate }));
       showToast(`Skifter til ${newMode === 'h264' ? 'H.264' : 'JPEG'}-mode...`, 'info');
       console.log(`[${this.deviceName}] Requested codec: ${newMode}`);
 
@@ -1840,7 +1840,7 @@ class ViewerSession {
 
     const send = () => {
       if (dc.readyState === 'open') {
-        dc.send(JSON.stringify({ type: 'set_mode', mode: 'h264', bitrate: 32000 }));
+        dc.send(JSON.stringify({ type: 'set_mode', t: 'set_mode', mode: 'h264', bitrate: 32000 }));
         this.requestedCodec = 'h264';
         this._updateCodecBtn();
         console.log(`[${this.deviceName}] Requested H.264 mode (32 Mbps)`);
@@ -1860,7 +1860,7 @@ class ViewerSession {
 
     const send = () => {
       if (dc.readyState === 'open') {
-        dc.send(JSON.stringify({ type: 'set_mode', mode: 'tiles', bitrate: 0 }));
+        dc.send(JSON.stringify({ type: 'set_mode', t: 'set_mode', mode: 'tiles', bitrate: 0 }));
         this.requestedCodec = 'jpeg';
         this.usingH264 = false;
         if (this.canvasEl) this.canvasEl.style.display = '';
@@ -1883,7 +1883,7 @@ class ViewerSession {
       return;
     }
     showToast('Sender opdateringskommando til agent...', 'info');
-    this.dataChannel.send(JSON.stringify({ type: 'force_update' }));
+    this.dataChannel.send(JSON.stringify({ type: 'force_update', t: 'force_update' }));
   }
 
   async toggleFullscreen() {
