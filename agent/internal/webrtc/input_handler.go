@@ -2,7 +2,9 @@ package webrtc
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	pionwebrtc "github.com/pion/webrtc/v3"
@@ -239,6 +241,9 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 				}
 			}
 			return
+		case "remote_login":
+			m.handleRemoteLogin(event)
+			return
 		}
 	}
 
@@ -380,6 +385,107 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 			}
 		}
 	}
+}
+
+func (m *Manager) handleRemoteLogin(event map[string]interface{}) {
+	username, _ := event["username"].(string)
+	password, _ := event["password"].(string)
+	domain, _ := event["domain"].(string)
+	sendUsername := true
+	if v, ok := event["send_username"].(bool); ok {
+		sendUsername = v
+	}
+
+	username = strings.TrimSpace(username)
+	domain = strings.TrimSpace(domain)
+
+	if username == "" && password == "" {
+		log.Println("⚠️ remote_login ignored: no username/password provided")
+		return
+	}
+
+	hasForwarder := m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder()
+	log.Printf("🔐 Remote login requested (username=%t, domain=%t, password=%t, session0=%t, forwarder=%t)", username != "", domain != "", password != "", m.isSession0, hasForwarder)
+
+	if m.isSession0 && !hasForwarder {
+		if err := desktop.SwitchToInputDesktop(); err != nil {
+			log.Printf("⚠️ remote_login: failed to switch to input desktop: %v", err)
+		}
+	}
+
+	loginUser := username
+	if username != "" && domain != "" {
+		loginUser = domain + `\` + username
+	}
+
+	if sendUsername && loginUser != "" {
+		if err := m.remoteTypeText(loginUser); err != nil {
+			log.Printf("⚠️ remote_login username typing failed: %v", err)
+		}
+		if err := m.remoteTapKey("Tab"); err != nil {
+			log.Printf("⚠️ remote_login tab key failed: %v", err)
+		}
+	}
+
+	if password != "" {
+		if err := m.remoteTypeText(password); err != nil {
+			log.Printf("⚠️ remote_login password typing failed: %v", err)
+		}
+	}
+
+	if err := m.remoteTapKey("Enter"); err != nil {
+		log.Printf("⚠️ remote_login enter key failed: %v", err)
+	}
+
+	select {
+	case m.inputFrameTrigger <- struct{}{}:
+	default:
+	}
+}
+
+func (m *Manager) remoteTypeText(text string) error {
+	if text == "" {
+		return nil
+	}
+
+	hasForwarder := m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder()
+	for _, ch := range text {
+		if hasForwarder {
+			if err := m.screenCapturer.ForwardUnicodeChar(ch); err != nil {
+				return fmt.Errorf("forward unicode char failed: %w", err)
+			}
+		} else {
+			if m.keyController == nil {
+				return fmt.Errorf("keyboard controller unavailable")
+			}
+			if err := m.keyController.SendUnicodeChar(ch); err != nil {
+				return fmt.Errorf("send unicode char failed: %w", err)
+			}
+		}
+		time.Sleep(8 * time.Millisecond)
+	}
+	return nil
+}
+
+func (m *Manager) remoteTapKey(code string) error {
+	hasForwarder := m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder()
+	if hasForwarder {
+		if err := m.screenCapturer.ForwardKeyEvent(code, true, false, false, false, false); err != nil {
+			return fmt.Errorf("forward key event failed: %w", err)
+		}
+		return nil
+	}
+
+	if m.keyController == nil {
+		return fmt.Errorf("keyboard controller unavailable")
+	}
+	if err := m.keyController.SendKeyWithModifiers(code, true, false, false, false, false); err != nil {
+		return fmt.Errorf("key down failed: %w", err)
+	}
+	if err := m.keyController.SendKeyWithModifiers(code, false, false, false, false, false); err != nil {
+		return fmt.Errorf("key up failed: %w", err)
+	}
+	return nil
 }
 
 // handleSwitchMonitor handles monitor switching requests
