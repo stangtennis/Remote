@@ -1135,6 +1135,7 @@ class ViewerSession {
         if (this.videoEl) this.videoEl.style.display = this.usingH264 ? '' : 'none';
         console.log(`[${this.deviceName}] Codec switch → ${this.usingH264 ? 'H.264 (canvas hidden)' : 'JPEG (canvas shown)'}`);
         if (this._updateCodecBtn) this._updateCodecBtn();
+        this.focusInputSurface();
       }
 
       const statsEl = this.wrapper.querySelector('.viewer-stats');
@@ -1616,6 +1617,7 @@ class ViewerSession {
     // når codec skiftes. Wrapperen er altid synlig og indeholder både canvas
     // og video, så events fanges uanset hvilken child der vises.
     const screen = this.wrapper.querySelector('.viewer-screen') || this.canvasEl;
+    this.inputSurface = screen;
     const canvas = this.canvasEl;
     canvas.focus();
 
@@ -1664,6 +1666,12 @@ class ViewerSession {
     this._updateCodecBtn();
   }
 
+  focusInputSurface() {
+    const screen = this.inputSurface || this.wrapper?.querySelector('.viewer-screen');
+    if (!screen) return;
+    try { screen.focus(); } catch (_) {}
+  }
+
   // Skift mellem H.264 og JPEG-tile-mode. Sender set_mode-message til agent
   // via control-channel. Agenten skifter encoder + opdaterer streaming-loop.
   toggleCodec() {
@@ -1699,6 +1707,8 @@ class ViewerSession {
         if (this.videoEl) this.videoEl.style.display = '';
       }
       this._updateCodecBtn();
+      // Toolbar click can steal focus; re-focus viewer so keyboard/mouse keep working.
+      setTimeout(() => this.focusInputSurface(), 0);
     } catch (e) {
       showToast(`Kunne ikke skifte codec: ${e.message}`, 'error');
     }
