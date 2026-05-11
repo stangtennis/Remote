@@ -127,7 +127,9 @@ func (d *H264Decoder) start() error {
 	// -probesize 32: minimal probing for faster start
 	// -analyzeduration 0: skip analysis for faster start
 	// -vsync 0: no frame sync, output as fast as possible
-	// -q:v 3: MJPEG quality (2-5, lower=better)
+	// -vf ...: force consistent bt709 + full-range expansion + 4:4:4 output
+	//   before MJPEG encode to reduce color shift and chroma blur vs JPEG mode.
+	// -q:v 1: highest MJPEG quality (lower=better) to preserve H.264 detail.
 	d.cmd = exec.Command(ffmpegPath,
 		"-hide_banner",
 		"-loglevel", "info",
@@ -138,7 +140,14 @@ func (d *H264Decoder) start() error {
 		"-f", "h264",
 		"-i", "pipe:0",
 		"-vsync", "0",
-		"-q:v", "3",
+		"-sws_flags", "bicubic+accurate_rnd+full_chroma_int+full_chroma_inp",
+		"-vf", "scale=in_color_matrix=bt709:out_color_matrix=bt709:in_range=tv:out_range=pc,format=yuvj444p",
+		"-pix_fmt", "yuvj444p",
+		"-color_range", "pc",
+		"-colorspace", "bt709",
+		"-color_primaries", "bt709",
+		"-color_trc", "bt709",
+		"-q:v", "1",
 		"-f", "mjpeg",
 		"pipe:1",
 	)
