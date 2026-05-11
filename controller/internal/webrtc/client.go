@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/interceptor"
@@ -794,16 +795,27 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 		track.Codec().MimeType, track.SSRC(), track.Codec().ClockRate)
 
 	// Create sample builder for H.264 depacketization
-	// MaxLate is packet buffer size. Keyframes for screen content can easily exceed 50 RTP packets,
-	// which would prevent SampleBuilder from ever outputting a complete access unit (freeze).
-	sb := samplebuilder.New(2000, &codecs.H264Packet{}, track.Codec().ClockRate)
+	// MaxLate is measured in RTP sequence numbers. Too large values can cause
+	// multi-second delay when packets are missing/out-of-order, which feels like
+	// "frozen while input still works". Keep it high enough for large keyframes,
+	// but low enough to avoid long wait before releasing/skip.
+	const h264SampleBuilderMaxLate = 400
+	sb := samplebuilder.New(h264SampleBuilderMaxLate, &codecs.H264Packet{}, track.Codec().ClockRate)
 
-	// Start FFmpeg decoder if not already running
-	if c.h264Decoder == nil {
+	var lastDecodedAtNS atomic.Int64
+	lastDecodedAtNS.Store(time.Now().UnixNano())
+
+	startDecoder := func(reason string) bool {
+		if c.h264Decoder != nil {
+			c.h264Decoder.Stop()
+			c.h264Decoder = nil
+		}
+
 		var err error
 		frameCount := 0
 		c.h264Decoder, err = NewH264Decoder(func(jpegData []byte) {
 			frameCount++
+			lastDecodedAtNS.Store(time.Now().UnixNano())
 			if frameCount%30 == 1 {
 				log.Printf("🎬 H.264 decoded frame #%d (%d bytes)", frameCount, len(jpegData))
 			}
@@ -813,12 +825,20 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 			}
 		})
 		if err != nil {
-			log.Printf("❌ Failed to start H.264 decoder: %v", err)
+			log.Printf("❌ Failed to start H.264 decoder (%s): %v", reason, err)
 			log.Println("⚠️ Falling back to JPEG datachannel mode")
 			// Ask agent to switch back to tiles so the user isn't left with a frozen view.
 			if switchErr := c.SetStreamingMode("tiles", 0); switchErr != nil {
 				log.Printf("⚠️ Failed to request tiles fallback: %v", switchErr)
 			}
+			return false
+		}
+		return true
+	}
+
+	// Start FFmpeg decoder if not already running
+	if c.h264Decoder == nil {
+		if !startDecoder("initial start") {
 			return
 		}
 	}
@@ -862,19 +882,7 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 			// Restart decoder if it was stopped (e.g. after switching back from tiles)
 			if c.h264Decoder == nil {
 				log.Println("🎬 H.264 decoder was stopped - restarting for new data...")
-				var decErr error
-				decFrameCount := 0
-				c.h264Decoder, decErr = NewH264Decoder(func(jpegData []byte) {
-					decFrameCount++
-					if decFrameCount%30 == 1 {
-						log.Printf("🎬 H.264 decoded frame #%d (%d bytes)", decFrameCount, len(jpegData))
-					}
-					if c.onFrame != nil {
-						c.onFrame(jpegData)
-					}
-				})
-				if decErr != nil {
-					log.Printf("❌ Failed to restart H.264 decoder: %v", decErr)
+				if !startDecoder("decoder nil during stream") {
 					continue
 				}
 				log.Println("✅ H.264 decoder restarted successfully")
@@ -884,6 +892,18 @@ func (c *Client) receiveH264Track(track *webrtc.TrackRemote) {
 			annexB := EnsureAnnexB(sample.Data)
 			if err := c.h264Decoder.DecodeAnnexB(annexB); err != nil {
 				log.Printf("⚠️ Decode error: %v", err)
+			}
+		}
+
+		// Watchdog: if RTP keeps arriving but decoder hasn't produced frames for a while,
+		// restart FFmpeg decoder to recover without requiring manual reconnect.
+		if rtpCount%120 == 0 {
+			lastNS := lastDecodedAtNS.Load()
+			if lastNS > 0 && time.Since(time.Unix(0, lastNS)) > 3*time.Second {
+				log.Printf("⚠️ H.264 decode watchdog: no decoded frame for >3s (rtp=%d, samples=%d) - restarting decoder", rtpCount, sampleCount)
+				if !startDecoder("decode watchdog timeout") {
+					return
+				}
 			}
 		}
 	}
