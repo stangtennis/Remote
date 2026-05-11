@@ -1027,6 +1027,10 @@ class ViewerSession {
     this.setupInput();
     this.startStats();
     this.sendSettingsToAgent();
+    // Always reset requested codec on fresh connect to avoid stale toggle
+    // direction after reconnect/takeover.
+    this.requestedCodec = 'jpeg';
+    this._updateCodecBtn();
     this.requestJpegMode();
 
     // Wire file channel to FileTransfer module
@@ -1472,6 +1476,7 @@ class ViewerSession {
     this.frameChunks = {};
     this.legacyFrameChunks = {};
     this.usingH264 = false;
+    this.requestedCodec = 'jpeg';
     this.processedSignalIds.clear();
     this.pendingIceCandidates = [];
     this.stopTerminal();
