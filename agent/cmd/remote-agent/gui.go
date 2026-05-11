@@ -428,7 +428,7 @@ func (g *AgentGUI) showLoginDialog() {
 			if !result.Success {
 				log.Printf("❌ Login failed: %s", result.Message)
 				fyne.Do(func() {
-					dialog.ShowError(fmt.Errorf(result.Message), g.window)
+					dialog.ShowError(fmt.Errorf("%s", result.Message), g.window)
 				})
 				return
 			}

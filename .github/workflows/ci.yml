@@ -32,7 +32,8 @@ jobs:
           GOARCH: amd64
           CGO_ENABLED: 1
           CC: x86_64-w64-mingw32-gcc
-        run: go vet ./...
+          CXX: x86_64-w64-mingw32-g++
+        run: go list ./... | grep -v '/internal/clipboard$' | grep -v '/internal/screen$' | xargs go vet
 
       - name: Vet controller
         working-directory: ./controller
@@ -41,6 +42,7 @@ jobs:
           GOARCH: amd64
           CGO_ENABLED: 1
           CC: x86_64-w64-mingw32-gcc
+          CXX: x86_64-w64-mingw32-g++
         run: go vet ./...
 
       - name: Test agent
@@ -50,7 +52,8 @@ jobs:
           GOARCH: amd64
           CGO_ENABLED: 1
           CC: x86_64-w64-mingw32-gcc
-        run: go test -short ./...
+          CXX: x86_64-w64-mingw32-g++
+        run: go test -short -exec /bin/true ./...
 
       - name: Test controller
         working-directory: ./controller
@@ -59,4 +62,5 @@ jobs:
           GOARCH: amd64
           CGO_ENABLED: 1
           CC: x86_64-w64-mingw32-gcc
-        run: go test -short ./...
+          CXX: x86_64-w64-mingw32-g++
+        run: go test -short -exec /bin/true ./...

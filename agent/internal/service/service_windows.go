@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package service
@@ -5,11 +6,11 @@ package service
 import (
 	"fmt"
 	"log"
-	"time"
 
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/debug"
 	"golang.org/x/sys/windows/svc/eventlog"
+	"golang.org/x/sys/windows/svc/mgr"
 )
 
 const serviceName = "RemoteDesktopAgent"
@@ -31,13 +32,13 @@ func NewService(onStart, onStop func() error) *Service {
 func (s *Service) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<- svc.Status) (ssec bool, errno uint32) {
 	const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown
 	changes <- svc.Status{State: svc.StartPending}
-	
+
 	// Start the service
 	if err := s.onStart(); err != nil {
 		log.Printf("Service start failed: %v", err)
 		return true, 1
 	}
-	
+
 	changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 	log.Println("Service started successfully")
 
@@ -58,12 +59,12 @@ loop:
 	}
 
 	changes <- svc.Status{State: svc.StopPending}
-	
+
 	// Stop the service
 	if err := s.onStop(); err != nil {
 		log.Printf("Service stop failed: %v", err)
 	}
-	
+
 	return
 }
 
@@ -99,7 +100,7 @@ func runService(isDebug bool) {
 	if isDebug {
 		run = debug.Run
 	}
-	
+
 	// This will be called from main.go with actual start/stop functions
 	err = run(serviceName, &Service{})
 	if err != nil {
@@ -123,9 +124,34 @@ func UninstallService() error {
 }
 
 func StartService() error {
-	return svc.Control(serviceName, svc.Start)
+	m, err := mgr.Connect()
+	if err != nil {
+		return err
+	}
+	defer m.Disconnect()
+
+	s, err := m.OpenService(serviceName)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	return s.Start()
 }
 
 func StopService() error {
-	return svc.Control(serviceName, svc.Stop)
+	m, err := mgr.Connect()
+	if err != nil {
+		return err
+	}
+	defer m.Disconnect()
+
+	s, err := m.OpenService(serviceName)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	_, err = s.Control(svc.Stop)
+	return err
 }
