@@ -192,6 +192,7 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 	// Handle streaming mode changes
 	if msgType := getMsgType(event); msgType == "set_mode" {
 		if mode, ok := event["mode"].(string); ok {
+			log.Printf("🎛️ Received set_mode request: mode=%s bitrate=%v", mode, event["bitrate"])
 			switch mode {
 			case "h264":
 				m.SetH264Mode(true)
