@@ -262,16 +262,27 @@ func shouldDebounceSessionSwitch(currentSession uintptr, currentState int32, new
 	if currentSession == 0 || currentSession == newSession {
 		return false
 	}
-	if currentState != wtsActive {
-		return false
+	if newState == wtsDisconnected {
+		// A downgrade to a disconnected session is often transient after
+		// RDP/input-desktop transitions; require confirmation before relaunch.
+		return currentState == wtsActive || currentState == wtsConnected
 	}
 	if newState == wtsConnected && !sessionHasUserToken(uint32(newSession)) {
-		return true
-	}
-	if newState == wtsDisconnected {
-		return true
+		// Connected-without-token is typically Winlogon/login; don't immediately
+		// abandon an active/connected user session without seeing it persist.
+		return currentState == wtsActive || currentState == wtsConnected
 	}
 	return false
+}
+
+func requiredSessionSwitchConfirmations(currentState int32, newState int32) int {
+	if newState == wtsDisconnected && (currentState == wtsActive || currentState == wtsConnected) {
+		return 4 // 4 polls * 3s = ~12s stable before helper relaunch
+	}
+	if newState == wtsConnected && (currentState == wtsActive || currentState == wtsConnected) {
+		return 3 // ~9s for potential Winlogon fallback targets
+	}
+	return 2
 }
 
 // pipeRW wraps a Windows named pipe handle as io.ReadWriter.
@@ -919,15 +930,17 @@ func (c *Session0PipeCapturer) monitorSession() {
 
 			if newSession != currentSession || newSessionState != currentState {
 				if shouldDebounceSessionSwitch(currentSession, currentState, newSession, newSessionState) {
+					minConfirmations := requiredSessionSwitchConfirmations(currentState, newSessionState)
 					if pendingSession != newSession || pendingState != newSessionState {
 						pendingSession = newSession
 						pendingState = newSessionState
 						pendingCount = 1
-						log.Printf("⏳ Session switch candidate %d/%d → %d/%d; waiting for confirmation...", currentSession, currentState, newSession, newSessionState)
+						log.Printf("⏳ Session switch candidate %d/%d → %d/%d; waiting for confirmation (1/%d)...", currentSession, currentState, newSession, newSessionState, minConfirmations)
 						continue
 					}
 					pendingCount++
-					if pendingCount < 2 {
+					if pendingCount < minConfirmations {
+						log.Printf("⏳ Session switch candidate still pending (%d/%d): %d/%d → %d/%d", pendingCount, minConfirmations, currentSession, currentState, newSession, newSessionState)
 						continue
 					}
 				}
