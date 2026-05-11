@@ -1677,11 +1677,33 @@ class ViewerSession {
     try { screen.focus(); } catch (_) {}
   }
 
+  // Send control payload on the current control/data channel.
+  // Retries are useful around reconnect/takeover races where the first send
+  // can hit a channel that just closed.
+  sendControlJSON(payload, retries = 0, retryDelayMs = 300) {
+    const sendOnce = () => {
+      const dc = this.dataChannel;
+      if (!dc || dc.readyState !== 'open') return false;
+      dc.send(JSON.stringify(payload));
+      return true;
+    };
+
+    const sent = sendOnce();
+    if (!sent) return false;
+
+    for (let i = 1; i <= retries; i++) {
+      setTimeout(() => {
+        if (!this.connected) return;
+        sendOnce();
+      }, retryDelayMs * i);
+    }
+    return true;
+  }
+
   // Skift mellem H.264 og JPEG-tile-mode. Sender set_mode-message til agent
   // via control-channel. Agenten skifter encoder + opdaterer streaming-loop.
   toggleCodec() {
-    const dc = this.dataChannel;
-    if (!dc || dc.readyState !== 'open') {
+    if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
       showToast('Ikke forbundet til agent', 'error');
       return;
     }
@@ -1689,7 +1711,8 @@ class ViewerSession {
     const newMode = h264ActiveOrRequested ? 'tiles' : 'h264';
     const bitrate = newMode === 'h264' ? 32000 : 0;
     try {
-      dc.send(JSON.stringify({ type: 'set_mode', t: 'set_mode', mode: newMode, bitrate: bitrate }));
+      const ok = this.sendControlJSON({ type: 'set_mode', t: 'set_mode', mode: newMode, bitrate: bitrate }, 2, 350);
+      if (!ok) throw new Error('control channel not open');
       showToast(`Skifter til ${newMode === 'h264' ? 'H.264' : 'JPEG'}-mode...`, 'info');
       console.log(`[${this.deviceName}] Requested codec: ${newMode}`);
 
@@ -1840,46 +1863,26 @@ class ViewerSession {
 
   enableH264Mode() {
     // Request H.264 streaming mode for better performance on large screen changes
-    const dc = this.dataChannel;
-    if (!dc) return;
-
-    const send = () => {
-      if (dc.readyState === 'open') {
-        dc.send(JSON.stringify({ type: 'set_mode', t: 'set_mode', mode: 'h264', bitrate: 32000 }));
-        this.requestedCodec = 'h264';
-        this._updateCodecBtn();
-        console.log(`[${this.deviceName}] Requested H.264 mode (32 Mbps)`);
-      }
-    };
-
-    if (dc.readyState === 'open') {
-      send();
-    } else {
-      dc.addEventListener('open', send, { once: true });
+    if (!this.dataChannel) return;
+    if (!this.sendControlJSON({ type: 'set_mode', t: 'set_mode', mode: 'h264', bitrate: 32000 }, 2, 350)) {
+      return;
     }
+    this.requestedCodec = 'h264';
+    this._updateCodecBtn();
+    console.log(`[${this.deviceName}] Requested H.264 mode (32 Mbps)`);
   }
 
   requestJpegMode() {
-    const dc = this.dataChannel;
-    if (!dc) return;
-
-    const send = () => {
-      if (dc.readyState === 'open') {
-        dc.send(JSON.stringify({ type: 'set_mode', t: 'set_mode', mode: 'tiles', bitrate: 0 }));
-        this.requestedCodec = 'jpeg';
-        this.usingH264 = false;
-        if (this.canvasEl) this.canvasEl.style.display = '';
-        if (this.videoEl) this.videoEl.style.display = 'none';
-        this._updateCodecBtn();
-        console.log(`[${this.deviceName}] Requested JPEG mode on connect`);
-      }
-    };
-
-    if (dc.readyState === 'open') {
-      send();
-    } else {
-      dc.addEventListener('open', send, { once: true });
+    if (!this.dataChannel) return;
+    if (!this.sendControlJSON({ type: 'set_mode', t: 'set_mode', mode: 'tiles', bitrate: 0 }, 1, 300)) {
+      return;
     }
+    this.requestedCodec = 'jpeg';
+    this.usingH264 = false;
+    if (this.canvasEl) this.canvasEl.style.display = '';
+    if (this.videoEl) this.videoEl.style.display = 'none';
+    this._updateCodecBtn();
+    console.log(`[${this.deviceName}] Requested JPEG mode on connect`);
   }
 
   forceUpdateAgent() {
