@@ -141,7 +141,10 @@ func resolveCaptureSessionTarget() (uint32, int32, uint32, int32) {
 	if rawSessionID == 0xFFFFFFFF {
 		return rawSessionID, rawState, rawSessionID, rawState
 	}
-	if rawState == wtsDisconnected {
+	// Only prefer console-login fallback when the disconnected session no longer
+	// has a user token. If token is still present, staying on the user session
+	// avoids black-screen captures observed on some hosts after RDP disconnect.
+	if rawState == wtsDisconnected && !sessionHasUserToken(rawSessionID) {
 		if consoleSessionID, consoleState, ok := findConsoleLoginSession(); ok {
 			return rawSessionID, rawState, consoleSessionID, consoleState
 		}
