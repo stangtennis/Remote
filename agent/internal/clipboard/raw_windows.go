@@ -28,19 +28,19 @@ const (
 )
 
 var (
-	user32                   = windows.NewLazySystemDLL("user32.dll")
-	kernel32                 = windows.NewLazySystemDLL("kernel32.dll")
-	procOpenClipboard        = user32.NewProc("OpenClipboard")
-	procCloseClipboard       = user32.NewProc("CloseClipboard")
-	procEmptyClipboard       = user32.NewProc("EmptyClipboard")
-	procGetClipboardData     = user32.NewProc("GetClipboardData")
-	procSetClipboardData     = user32.NewProc("SetClipboardData")
+	user32                         = windows.NewLazySystemDLL("user32.dll")
+	kernel32                       = windows.NewLazySystemDLL("kernel32.dll")
+	procOpenClipboard              = user32.NewProc("OpenClipboard")
+	procCloseClipboard             = user32.NewProc("CloseClipboard")
+	procEmptyClipboard             = user32.NewProc("EmptyClipboard")
+	procGetClipboardData           = user32.NewProc("GetClipboardData")
+	procSetClipboardData           = user32.NewProc("SetClipboardData")
 	procIsClipboardFormatAvailable = user32.NewProc("IsClipboardFormatAvailable")
 	procGetClipboardSequenceNumber = user32.NewProc("GetClipboardSequenceNumber")
-	procGlobalAlloc          = kernel32.NewProc("GlobalAlloc")
-	procGlobalLock           = kernel32.NewProc("GlobalLock")
-	procGlobalUnlock         = kernel32.NewProc("GlobalUnlock")
-	procGlobalSize           = kernel32.NewProc("GlobalSize")
+	procGlobalAlloc                = kernel32.NewProc("GlobalAlloc")
+	procGlobalLock                 = kernel32.NewProc("GlobalLock")
+	procGlobalUnlock               = kernel32.NewProc("GlobalUnlock")
+	procGlobalSize                 = kernel32.NewProc("GlobalSize")
 
 	clipboardWriteMu sync.Mutex
 )
@@ -96,8 +96,9 @@ func rawReadText() (string, bool) {
 
 	// Read NUL-terminated wchar
 	var u16 []uint16
+	basePtr := unsafe.Pointer(ptr)
 	for i := 0; ; i++ {
-		c := *(*uint16)(unsafe.Pointer(ptr + uintptr(i*2)))
+		c := *(*uint16)(unsafe.Add(basePtr, i*2))
 		if c == 0 {
 			break
 		}
@@ -132,8 +133,9 @@ func rawWriteText(text string) error {
 	if ptr == 0 {
 		return fmt.Errorf("GlobalLock failed")
 	}
+	basePtr := unsafe.Pointer(ptr)
 	for i, c := range utf16Text {
-		*(*uint16)(unsafe.Pointer(ptr + uintptr(i*2))) = c
+		*(*uint16)(unsafe.Add(basePtr, i*2)) = c
 	}
 	procGlobalUnlock.Call(hMem)
 

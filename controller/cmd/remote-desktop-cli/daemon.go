@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/stangtennis/Remote/controller/internal/config"
@@ -72,8 +71,8 @@ func startDaemon(cfg *config.Config, auth *authInfo, deviceID, deviceName string
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 
-	// Detach from parent process
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	// Detach from parent process (platform-specific).
+	configureDaemonChild(cmd)
 
 	if err := cmd.Start(); err != nil {
 		logFile.Close()
@@ -119,10 +118,7 @@ func stopExistingDaemon() {
 	if err != nil {
 		return
 	}
-	proc.Signal(syscall.SIGTERM)
-	// Wait briefly for cleanup
-	time.Sleep(200 * time.Millisecond)
-	proc.Signal(syscall.SIGKILL)
+	terminateDaemonProcess(proc)
 	os.Remove(getSocketPath())
 	os.Remove(getPIDPath())
 }
