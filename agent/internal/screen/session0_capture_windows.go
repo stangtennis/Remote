@@ -141,10 +141,11 @@ func resolveCaptureSessionTarget() (uint32, int32, uint32, int32) {
 	if rawSessionID == 0xFFFFFFFF {
 		return rawSessionID, rawState, rawSessionID, rawState
 	}
-	// Only prefer console-login fallback when the disconnected session no longer
-	// has a user token. If token is still present, staying on the user session
-	// avoids black-screen captures observed on some hosts after RDP disconnect.
-	if rawState == wtsDisconnected && !sessionHasUserToken(rawSessionID) {
+	// A disconnected RDP desktop can still have a user token, but GDI/SendInput
+	// may return Access Denied because the desktop is frozen/inaccessible.
+	// Prefer the physical console/login target when it exists so the viewer gets
+	// the Windows login screen instead of a black 0-frame stream.
+	if rawState == wtsDisconnected {
 		if consoleSessionID, consoleState, ok := findConsoleLoginSession(); ok {
 			return rawSessionID, rawState, consoleSessionID, consoleState
 		}
@@ -181,9 +182,9 @@ func findConsoleLoginSession() (uint32, int32, bool) {
 //
 // Det vigtige edge-case er en Windows host efter RDP-disconnect:
 // brugersessionen kan stå som DISCONNECTED, mens physical console står som
-// CONNECTED på Winlogon. Hvis vi vælger console-sessionen her, får vi ofte
-// sort skærm. Vi skal derfor foretrække den rigtige brugersession så længe
-// den stadig har et gyldigt user token.
+// CONNECTED på Winlogon. resolveCaptureSessionTarget() mapper derfor den
+// disconnected brugersession til console/login-target når det findes, fordi
+// selve disconnected desktop kan afvise både BitBlt og SendInput.
 func findBestUserSession() uint32 {
 	// Default: WTSGetActiveConsoleSessionId
 	consoleSession, _, _ := procWTSGetActiveConsoleSessionId.Call()
@@ -545,9 +546,6 @@ func (c *Session0PipeCapturer) launchHelper() error {
 		defer userToken.Close()
 		log.Printf("📋 User is logged in (session %d, state=%d)", sessionID, sessionState)
 		helperDesktop = preferredDesktopForSessionState(sessionState, true)
-		// Keep follow-input for disconnected user sessions that still have a
-		// token. On some hosts, fixed capture against the disconnected desktop
-		// opens at 1920x1200 but BitBlt/SendInput return Access Denied.
 
 		// Always use SYSTEM token with session ID — highest privilege level
 		log.Printf("🛡️ Using SYSTEM token for session %d (UIPI bypass + Winlogon desktop access)", sessionID)
