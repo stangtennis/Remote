@@ -545,9 +545,9 @@ func (c *Session0PipeCapturer) launchHelper() error {
 		defer userToken.Close()
 		log.Printf("📋 User is logged in (session %d, state=%d)", sessionID, sessionState)
 		helperDesktop = preferredDesktopForSessionState(sessionState, true)
-		if sessionState == wtsDisconnected {
-			captureMode = "fixed"
-		}
+		// Keep follow-input for disconnected user sessions that still have a
+		// token. On some hosts, fixed capture against the disconnected desktop
+		// opens at 1920x1200 but BitBlt/SendInput return Access Denied.
 
 		// Always use SYSTEM token with session ID — highest privilege level
 		log.Printf("🛡️ Using SYSTEM token for session %d (UIPI bypass + Winlogon desktop access)", sessionID)
