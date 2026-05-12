@@ -2,7 +2,7 @@
 
 A **professional remote desktop solution** built with **Supabase**, **WebRTC**, and **Go** — like TeamViewer, but self-hosted and open-source.
 
-**Current version: v3.1.8** | [Download](https://github.com/stangtennis/Remote/releases/latest) | [Dashboard](https://dashboard.hawkeye123.dk)
+**Current version: v3.1.58** | [Download](https://github.com/stangtennis/Remote/releases/latest) | [Dashboard](https://dashboard.hawkeye123.dk)
 
 ## Features
 
@@ -128,11 +128,11 @@ cd agent && CGO_ENABLED=1 go build -tags turbo -o remote-agent ./cmd/remote-agen
 
 ## Build
 
-**Prerequisites:** Go 1.25+, MinGW cross-compiler (`x86_64-w64-mingw32-gcc`)
+**Prerequisites:** Go 1.24+, MinGW cross-compiler (`x86_64-w64-mingw32-gcc`)
 
 ```bash
 # Full build (all platforms + installers)
-./build-local.sh v3.1.8
+./build-local.sh v3.1.58
 
 # Manual Windows agent (with turbo JPEG)
 cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
