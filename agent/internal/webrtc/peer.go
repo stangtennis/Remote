@@ -876,6 +876,10 @@ func (m *Manager) cleanupConnection(reason string) {
 
 	// Stop streaming
 	m.isStreaming.Store(false)
+	m.useH264.Store(false)
+	if m.videoTrack != nil {
+		m.videoTrack.Stop()
+	}
 
 	// Update session status to ended
 	if m.sessionID != "" {
