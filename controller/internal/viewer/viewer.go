@@ -585,11 +585,9 @@ func (v *Viewer) toggleFullscreen() {
 
 	fyne.Do(func() {
 		if v.fullscreen {
-			// In fullscreen, use overlay toolbar that auto-hides
 			v.fullscreenBtn.SetText("Exit Fullscreen")
 			v.enterFullscreenMode()
 		} else {
-			// Windowed mode, show toolbars
 			v.fullscreenBtn.SetText("Fullscreen")
 			v.exitFullscreenMode()
 		}
@@ -600,12 +598,6 @@ func (v *Viewer) enterFullscreenMode() {
 	v.toolbarVisible = false
 	v.overlayVisible = false
 
-	// Create overlay toolbar if not exists
-	if v.overlayToolbar == nil {
-		v.createOverlayToolbar()
-	}
-
-	// Create fullscreen content with overlay
 	v.fullscreenContent = container.NewStack(
 		v.videoContainer,
 	)
@@ -614,10 +606,6 @@ func (v *Viewer) enterFullscreenMode() {
 
 	// Re-focus interactive canvas after SetContent (prevents keyboard focus loss)
 	v.window.Canvas().Focus(v.interactiveCanvas)
-
-	// Show hint briefly
-	v.showOverlayToolbar()
-	v.scheduleOverlayHide(3 * time.Second)
 }
 
 func (v *Viewer) exitFullscreenMode() {
@@ -740,16 +728,8 @@ func (v *Viewer) scheduleOverlayHide(delay time.Duration) {
 
 // CheckMousePosition should be called on mouse move to show/hide overlay
 func (v *Viewer) CheckMousePosition(y float32) {
-	if !v.fullscreen {
-		return
-	}
-
-	// Show toolbar when mouse is in top 50 pixels
-	if y < 50 {
-		v.showOverlayToolbar()
-		// Reset hide timer
-		v.scheduleOverlayHide(2 * time.Second)
-	}
+	// Fullscreen intentionally has no hover toolbar. Any top-edge overlay steals
+	// clicks from browser tabs, window chrome, and menu bars on the remote PC.
 }
 
 func (v *Viewer) hideToolbars() {
