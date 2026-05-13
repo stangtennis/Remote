@@ -201,6 +201,7 @@ class ViewerSession {
           <button class="btn btn-sm btn-icon session-update-btn" title="Opdater agent"><i class="fas fa-sync-alt"></i></button>
           <button class="btn btn-sm btn-icon session-screenshot-btn" title="Tag screenshot"><i class="fas fa-camera"></i></button>
           <button class="btn btn-sm btn-icon session-terminal-btn" title="Terminal"><i class="fas fa-terminal"></i></button>
+          <button class="btn btn-sm btn-icon session-login-btn" title="Login som RDP"><i class="fas fa-right-to-bracket"></i></button>
           <button class="btn btn-sm btn-icon session-codec-btn" title="Skift codec (H.264 ⇄ JPEG)"><i class="fas fa-film"></i></button>
           <button class="btn btn-sm btn-icon session-log-btn" title="Vis session-log"><i class="fas fa-file-alt"></i></button>
           <button class="btn btn-sm btn-icon session-chat-btn" title="Chat"><i class="fas fa-comment"></i></button>
@@ -1707,6 +1708,8 @@ class ViewerSession {
     if (logBtn) logBtn.addEventListener('click', () => this.showSessionLog());
     const codecBtn = this.wrapper.querySelector('.session-codec-btn');
     if (codecBtn) codecBtn.addEventListener('click', () => this.toggleCodec());
+    const loginBtn = this.wrapper.querySelector('.session-login-btn');
+    if (loginBtn) loginBtn.addEventListener('click', () => this.showRemoteLoginDialog());
     this.wrapper.querySelectorAll('.quality-preset-btn').forEach(btn => {
       btn.addEventListener('click', () => this.applyQualityPreset(btn.dataset.preset));
     });
@@ -1740,6 +1743,142 @@ class ViewerSession {
         sendOnce();
       }, retryDelayMs * i);
     }
+    return true;
+  }
+
+  showRemoteLoginDialog() {
+    if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+      showToast('Ikke forbundet til agent', 'error');
+      return;
+    }
+
+    const esc = (value) => String(value || '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[c]));
+
+    const modal = document.createElement('div');
+    modal.className = 'modal remote-login-modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+      <div class="modal-content glass" style="max-width:520px;">
+        <div class="modal-header">
+          <h2><i class="fas fa-right-to-bracket"></i> Login som RDP: ${esc(this.deviceName)}</h2>
+          <button class="modal-close" type="button" aria-label="Luk">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Login mode</label>
+            <select class="remote-login-mode">
+              <option value="full">Brugernavn + adgangskode</option>
+              <option value="password">Kun adgangskode</option>
+            </select>
+          </div>
+          <div class="remote-login-identity">
+            <div class="form-group">
+              <label>Brugernavn eller email</label>
+              <input class="remote-login-username" type="text" autocomplete="username" placeholder="fx hansemand@gmail.com eller Administrator">
+            </div>
+            <div class="form-group">
+              <label>Domæne eller PC-navn (valgfri)</label>
+              <input class="remote-login-domain" type="text" autocomplete="off" placeholder="fx SERVER eller DOMAIN">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Adgangskode</label>
+            <input class="remote-login-password" type="password" autocomplete="current-password" placeholder="Windows adgangskode">
+          </div>
+          <p style="font-size:0.78rem;color:var(--text-muted);line-height:1.45;margin:0 0 1rem;">
+            Brug <strong>Kun adgangskode</strong>, hvis Windows allerede viser den rigtige bruger og kun mangler password.
+            Brug <strong>Brugernavn + adgangskode</strong> ved “Other user” eller tom login-skærm.
+          </p>
+          <div style="display:flex;justify-content:flex-end;gap:0.5rem;">
+            <button class="btn btn-sm btn-secondary remote-login-cancel" type="button">Annuller</button>
+            <button class="btn btn-sm btn-primary remote-login-send" type="button">Send login</button>
+          </div>
+        </div>
+      </div>`;
+
+    document.body.appendChild(modal);
+
+    const modeEl = modal.querySelector('.remote-login-mode');
+    const identityEl = modal.querySelector('.remote-login-identity');
+    const usernameEl = modal.querySelector('.remote-login-username');
+    const domainEl = modal.querySelector('.remote-login-domain');
+    const passwordEl = modal.querySelector('.remote-login-password');
+    const close = () => {
+      if (passwordEl) passwordEl.value = '';
+      modal.remove();
+      setTimeout(() => this.focusInputSurface(), 0);
+    };
+    const updateMode = () => {
+      const passwordOnly = modeEl.value === 'password';
+      identityEl.style.display = passwordOnly ? 'none' : '';
+      usernameEl.disabled = passwordOnly;
+      domainEl.disabled = passwordOnly;
+      if (passwordOnly) {
+        usernameEl.value = '';
+        domainEl.value = '';
+      }
+    };
+    const send = () => {
+      const sendUsername = modeEl.value !== 'password';
+      const username = sendUsername ? usernameEl.value.trim() : '';
+      const domain = sendUsername ? domainEl.value.trim() : '';
+      const password = passwordEl.value;
+
+      if (sendUsername && !username) {
+        showToast('Indtast brugernavn, eller vælg Kun adgangskode', 'warning');
+        usernameEl.focus();
+        return;
+      }
+      if (!password) {
+        showToast('Indtast adgangskode', 'warning');
+        passwordEl.focus();
+        return;
+      }
+
+      const ok = this.sendRemoteLogin(username, password, domain, sendUsername);
+      if (ok) {
+        showToast('Login sendt til Windows login-skærmen', 'success');
+        close();
+      }
+    };
+
+    modeEl.addEventListener('change', updateMode);
+    modal.querySelector('.modal-close').addEventListener('click', close);
+    modal.querySelector('.remote-login-cancel').addEventListener('click', close);
+    modal.querySelector('.remote-login-send').addEventListener('click', send);
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    modal.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') close();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        send();
+      }
+    });
+
+    updateMode();
+    setTimeout(() => usernameEl.focus(), 0);
+  }
+
+  sendRemoteLogin(username, password, domain, sendUsername) {
+    const ok = this.sendControlJSON({
+      type: 'remote_login',
+      t: 'remote_login',
+      username,
+      password,
+      domain,
+      send_username: !!sendUsername
+    }, 2, 350);
+    if (!ok) {
+      showToast('Kunne ikke sende login: data channel er lukket', 'error');
+      return false;
+    }
+    console.log(`[${this.deviceName}] Sent remote_login (username=${!!username}, domain=${!!domain}, password=${!!password})`);
     return true;
   }
 

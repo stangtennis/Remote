@@ -511,7 +511,11 @@ func (m *Manager) remoteTapKey(code string) error {
 	hasForwarder := m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder()
 	if hasForwarder {
 		if err := m.screenCapturer.ForwardKeyEvent(code, true, false, false, false, false); err != nil {
-			return fmt.Errorf("forward key event failed: %w", err)
+			return fmt.Errorf("forward key down failed: %w", err)
+		}
+		time.Sleep(20 * time.Millisecond)
+		if err := m.screenCapturer.ForwardKeyEvent(code, false, false, false, false, false); err != nil {
+			return fmt.Errorf("forward key up failed: %w", err)
 		}
 		return nil
 	}
@@ -522,6 +526,7 @@ func (m *Manager) remoteTapKey(code string) error {
 	if err := m.keyController.SendKeyWithModifiers(code, true, false, false, false, false); err != nil {
 		return fmt.Errorf("key down failed: %w", err)
 	}
+	time.Sleep(20 * time.Millisecond)
 	if err := m.keyController.SendKeyWithModifiers(code, false, false, false, false, false); err != nil {
 		return fmt.Errorf("key up failed: %w", err)
 	}
