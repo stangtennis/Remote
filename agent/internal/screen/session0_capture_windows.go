@@ -382,6 +382,7 @@ type Session0PipeCapturer struct {
 	height       int
 	sessionID    uintptr // Current target session ID
 	sessionState int32
+	captureMode  string
 	mu           sync.Mutex
 	stopCh       chan struct{} // For graceful shutdown of session monitor
 }
@@ -691,6 +692,7 @@ func (c *Session0PipeCapturer) launchHelper() error {
 		c.helperProc = pi.Process
 		c.sessionID = sessionID
 		c.sessionState = sessionState
+		c.captureMode = captureMode
 		log.Printf("✅ Capture helper launched (PID: %d, session: %d, token: %s, desktop: %s, mode: %s)", pi.ProcessId, sessionID, tokenMethod, desktopName, captureMode)
 		return nil
 	}
@@ -800,6 +802,15 @@ func (c *Session0PipeCapturer) GetBounds() image.Rectangle {
 
 func (c *Session0PipeCapturer) GetResolution() (int, int) {
 	return c.width, c.height
+}
+
+// AllowsH264 returns true when the helper is attached to a real active user
+// desktop. Login/Winlogon, disconnected RDP desktops, and fixed-mode helpers
+// stay on JPEG because those secure/frozen desktops are not stable with H.264.
+func (c *Session0PipeCapturer) AllowsH264() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.sessionState == wtsActive && c.captureMode == "follow-input"
 }
 
 // --- Input forwarding methods (service → helper via pipe) ---

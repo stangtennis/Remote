@@ -17,12 +17,12 @@ import (
 type Capturer struct {
 	displayIndex     int
 	bounds           image.Rectangle
-	lastHash         []byte              // Hash of last frame for change detection
-	dxgiCapturer     *DXGICapturer       // DXGI capturer if available (works better with RDP)
-	gdiCapturer      *GDICapturer        // GDI capturer for Session 0 / login screen
+	lastHash         []byte                // Hash of last frame for change detection
+	dxgiCapturer     *DXGICapturer         // DXGI capturer if available (works better with RDP)
+	gdiCapturer      *GDICapturer          // GDI capturer for Session 0 / login screen
 	session0Capturer *Session0PipeCapturer // Pipe-based capturer for Session 0 (helper in user session)
-	useGDI           bool                // Force GDI mode (for Session 0)
-	mu               sync.Mutex          // Protect capturer switching
+	useGDI           bool                  // Force GDI mode (for Session 0)
+	mu               sync.Mutex            // Protect capturer switching
 }
 
 func NewCapturer() (*Capturer, error) {
@@ -98,7 +98,7 @@ func NewCapturerWithMode(forceGDI bool) (*Capturer, error) {
 		}, nil
 	}
 	log.Printf("⚠️  GDI not available: %v, trying screenshot library...", err)
-	
+
 	// Fallback to screenshot library (GDI-based)
 	n := screenshot.NumActiveDisplays()
 	if n == 0 {
@@ -144,7 +144,7 @@ func (c *Capturer) CaptureJPEG(quality int) ([]byte, error) {
 	if c.dxgiCapturer != nil {
 		return c.dxgiCapturer.CaptureJPEG(quality)
 	}
-	
+
 	// Fallback to screenshot library
 	img, err := screenshot.CaptureRect(c.bounds)
 	if err != nil {
@@ -178,7 +178,7 @@ func (c *Capturer) CaptureJPEGIfChanged(quality int) ([]byte, error) {
 		// For DXGI, just capture every time (it's fast enough)
 		return c.dxgiCapturer.CaptureJPEG(quality)
 	}
-	
+
 	// Fallback to screenshot library with change detection
 	img, err := screenshot.CaptureRect(c.bounds)
 	if err != nil {
@@ -319,6 +319,18 @@ func (c *Capturer) IsGDIMode() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.useGDI
+}
+
+// AllowsH264 returns true when the active capture backend is safe to feed into
+// the H.264 path. Session0 pipe capture is allowed only after it has moved to
+// an active logged-in user desktop; login/Winlogon targets remain JPEG-only.
+func (c *Capturer) AllowsH264() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.session0Capturer != nil {
+		return c.session0Capturer.AllowsH264()
+	}
+	return !c.useGDI
 }
 
 // SwitchDisplay switches to a different monitor for capture
