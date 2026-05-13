@@ -868,6 +868,22 @@ class ViewerSession {
     }
   }
 
+  _refitViewerSoon() {
+    const fit = () => {
+      if (this.canvasEl && this.canvasEl.style.display !== 'none') {
+        this._fitCanvasToContainer(this.canvasEl);
+      }
+      if (this.videoEl) {
+        this.videoEl.style.width = '100%';
+        this.videoEl.style.height = '100%';
+      }
+      this.focusInputSurface();
+    };
+    requestAnimationFrame(fit);
+    setTimeout(fit, 80);
+    setTimeout(fit, 300);
+  }
+
   renderRegion(data, x, y, w, h) {
     const canvas = this.canvasEl;
     if (canvas.width === 0 || canvas.height === 0) return;
@@ -1944,6 +1960,7 @@ class ViewerSession {
       } else {
         if (hint) hint.classList.add('hidden');
       }
+      this._refitViewerSoon();
     } catch (e) {
       console.error('Fullscreen toggle failed:', e);
     }

@@ -606,6 +606,7 @@ func (v *Viewer) enterFullscreenMode() {
 
 	// Re-focus interactive canvas after SetContent (prevents keyboard focus loss)
 	v.window.Canvas().Focus(v.interactiveCanvas)
+	v.refreshViewerLayout()
 }
 
 func (v *Viewer) exitFullscreenMode() {
@@ -623,6 +624,36 @@ func (v *Viewer) exitFullscreenMode() {
 
 	// Re-focus interactive canvas after SetContent
 	v.window.Canvas().Focus(v.interactiveCanvas)
+	v.refreshViewerLayout()
+}
+
+func (v *Viewer) refreshViewerLayout() {
+	fyne.Do(func() {
+		if v.videoCanvas != nil {
+			v.videoCanvas.Refresh()
+		}
+		if v.interactiveCanvas != nil {
+			v.interactiveCanvas.Refresh()
+		}
+		if v.videoContainer != nil {
+			v.videoContainer.Refresh()
+		}
+		v.window.Canvas().Refresh(v.window.Content())
+	})
+	time.AfterFunc(150*time.Millisecond, func() {
+		fyne.Do(func() {
+			if v.videoCanvas != nil {
+				v.videoCanvas.Refresh()
+			}
+			if v.interactiveCanvas != nil {
+				v.interactiveCanvas.Refresh()
+			}
+			if v.videoContainer != nil {
+				v.videoContainer.Refresh()
+			}
+			v.window.Canvas().Refresh(v.window.Content())
+		})
+	})
 }
 
 func (v *Viewer) createOverlayToolbar() {
