@@ -48,13 +48,10 @@ type ModeState struct {
 }
 
 func (m *Manager) canUseH264Mode() bool {
-	if m.isSession0 {
-		return false
+	if m.screenCapturer == nil {
+		return true
 	}
-	if m.screenCapturer != nil && (m.screenCapturer.IsGDIMode() || m.screenCapturer.HasInputForwarder()) {
-		return false
-	}
-	return true
+	return m.screenCapturer.AllowsH264()
 }
 
 // SetH264Mode enables or disables H.264 video track mode.
