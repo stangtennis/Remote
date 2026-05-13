@@ -1967,17 +1967,21 @@ class ViewerSession {
 
   async saveDeviceLoginIfRequested(shouldSave, autoLogin, username, password, domain, sendUsername) {
     if (!shouldSave) return;
+    const payload = {
+      device_id: this.deviceId,
+      device_name: this.deviceName,
+      username,
+      domain,
+      password,
+      send_username: !!sendUsername,
+      auto_login: !!autoLogin
+    };
+    console.log('[saveDeviceLogin] payload:', JSON.stringify({...payload, password: '***'}));
     try {
-      await window.go?.main?.App?.SaveDeviceLogin?.({
-        device_id: this.deviceId,
-        device_name: this.deviceName,
-        username,
-        domain,
-        password,
-        send_username: !!sendUsername,
-        auto_login: !!autoLogin
-      });
+      await window.go?.main?.App?.SaveDeviceLogin?.(payload);
+      console.log('[saveDeviceLogin] saved OK');
     } catch (e) {
+      console.error('[saveDeviceLogin] error:', e);
       showToast(`Login blev sendt, men kunne ikke gemmes: ${e?.message || e}`, 'warning');
     }
   }
