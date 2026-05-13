@@ -172,6 +172,7 @@ type DeviceLoginInfo struct {
 	Domain       string `json:"domain,omitempty"`
 	Password     string `json:"password"`
 	SendUsername bool   `json:"send_username"`
+	AutoLogin    bool   `json:"auto_login"`
 	UpdatedAt    string `json:"updated_at,omitempty"`
 }
 
@@ -188,6 +189,7 @@ func (a *App) LoadDeviceLogin(deviceID string) (*DeviceLoginInfo, error) {
 		Domain:       login.Domain,
 		Password:     login.Password,
 		SendUsername: login.SendUsername,
+		AutoLogin:    login.AutoLogin,
 		UpdatedAt:    login.UpdatedAt,
 	}, nil
 }
@@ -207,6 +209,7 @@ func (a *App) SaveDeviceLogin(login DeviceLoginInfo) error {
 		Domain:       login.Domain,
 		Password:     login.Password,
 		SendUsername: login.SendUsername,
+		AutoLogin:    login.AutoLogin,
 	})
 }
 

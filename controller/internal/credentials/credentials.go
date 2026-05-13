@@ -27,6 +27,7 @@ type DeviceLogin struct {
 	Domain       string `json:"domain,omitempty"`
 	Password     string `json:"password"`
 	SendUsername bool   `json:"send_username"`
+	AutoLogin    bool   `json:"auto_login"`
 	UpdatedAt    string `json:"updated_at"`
 }
 

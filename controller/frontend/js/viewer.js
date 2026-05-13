@@ -1086,6 +1086,54 @@ class ViewerSession {
     if (window.SessionManager) {
       window.SessionManager.onSessionConnected(this.id);
     }
+
+    // Auto-login: if a saved profile with auto_login is present, send it
+    // after a short delay so the agent data channel is fully ready.
+    this.tryAutoLogin();
+  }
+
+  async tryAutoLogin() {
+    try {
+      const saved = await window.go?.main?.App?.LoadDeviceLogin?.(this.deviceId);
+      if (!saved) return;
+      const autoLogin = !!(saved.auto_login ?? saved.AutoLogin);
+      if (!autoLogin || !saved.password) return;
+
+      const sendUsername = !!(saved.send_username ?? saved.SendUsername);
+      const username = sendUsername ? (saved.username || saved.Username || '') : '';
+      const domain = sendUsername ? (saved.domain || saved.Domain || '') : '';
+      const password = saved.password || saved.Password || '';
+
+      // Wait for the data channel to be open
+      const waitForChannel = () => new Promise((resolve) => {
+        let attempts = 0;
+        const check = () => {
+          if (this.dataChannel && this.dataChannel.readyState === 'open') {
+            resolve(true);
+          } else if (++attempts > 30) {
+            resolve(false);
+          } else {
+            setTimeout(check, 200);
+          }
+        };
+        check();
+      });
+
+      const ready = await waitForChannel();
+      if (!ready || !this.connected) return;
+
+      // Small extra delay so Windows login screen is ready for input
+      await new Promise(r => setTimeout(r, 1500));
+      if (!this.connected) return;
+
+      const ok = this.sendRemoteLogin(username, password, domain, sendUsername);
+      if (ok) {
+        console.log(`[${this.deviceName}] Auto-login sendt (RDP-stil)`);
+        showToast(`Auto-login sendt til ${this.deviceName}`, 'success');
+      }
+    } catch (e) {
+      console.warn(`[${this.deviceName}] Auto-login fejl:`, e);
+    }
   }
 
   // Connection statistics — polls getStats() every second
@@ -1802,9 +1850,13 @@ class ViewerSession {
             Brug <strong>Kun adgangskode</strong>, hvis Windows allerede viser den rigtige bruger og kun mangler password.
             Brug <strong>Brugernavn + adgangskode</strong> ved “Other user” eller tom login-skærm.
           </p>
-          <label class="checkbox-label" style="margin-bottom:1rem;">
+          <label class="checkbox-label" style="margin-bottom:0.5rem;">
             <input class="remote-login-save" type="checkbox">
             <span>Gem login til denne client lokalt på controlleren</span>
+          </label>
+          <label class="checkbox-label" style="margin-bottom:1rem;">
+            <input class="remote-login-auto" type="checkbox">
+            <span>Auto-login ved forbindelse (ligesom RDP)</span>
           </label>
           <div style="display:flex;justify-content:flex-end;gap:0.5rem;">
             <button class="btn btn-sm btn-secondary remote-login-delete" type="button" style="margin-right:auto;display:none;">Slet gemt</button>
@@ -1822,7 +1874,11 @@ class ViewerSession {
     const domainEl = modal.querySelector('.remote-login-domain');
     const passwordEl = modal.querySelector('.remote-login-password');
     const saveEl = modal.querySelector('.remote-login-save');
+    const autoEl = modal.querySelector('.remote-login-auto');
     const deleteBtn = modal.querySelector('.remote-login-delete');
+    // Auto-login implies save — check save when auto is toggled on
+    autoEl.addEventListener('change', () => { if (autoEl.checked) saveEl.checked = true; });
+    saveEl.addEventListener('change', () => { if (!saveEl.checked) autoEl.checked = false; });
     const close = () => {
       if (passwordEl) passwordEl.value = '';
       modal.remove();
@@ -1857,7 +1913,7 @@ class ViewerSession {
 
       const ok = this.sendRemoteLogin(username, password, domain, sendUsername);
       if (ok) {
-        this.saveDeviceLoginIfRequested(saveEl.checked, username, password, domain, sendUsername);
+        this.saveDeviceLoginIfRequested(saveEl.checked, autoEl.checked, username, password, domain, sendUsername);
         showToast('Login sendt til Windows login-skærmen', 'success');
         close();
       }
@@ -1867,6 +1923,7 @@ class ViewerSession {
         await window.go?.main?.App?.DeleteDeviceLogin?.(this.deviceId);
         showToast('Gemt login slettet for denne client', 'success');
         saveEl.checked = false;
+        autoEl.checked = false;
         deleteBtn.style.display = 'none';
         usernameEl.value = '';
         domainEl.value = '';
@@ -1883,6 +1940,7 @@ class ViewerSession {
       domainEl.value = savedLogin.domain || savedLogin.Domain || '';
       passwordEl.value = savedLogin.password || savedLogin.Password || '';
       saveEl.checked = true;
+      autoEl.checked = !!(savedLogin.auto_login ?? savedLogin.AutoLogin);
       deleteBtn.style.display = '';
     }
 
@@ -1907,7 +1965,7 @@ class ViewerSession {
     }, 0);
   }
 
-  async saveDeviceLoginIfRequested(shouldSave, username, password, domain, sendUsername) {
+  async saveDeviceLoginIfRequested(shouldSave, autoLogin, username, password, domain, sendUsername) {
     if (!shouldSave) return;
     try {
       await window.go?.main?.App?.SaveDeviceLogin?.({
@@ -1916,7 +1974,8 @@ class ViewerSession {
         username,
         domain,
         password,
-        send_username: !!sendUsername
+        send_username: !!sendUsername,
+        auto_login: !!autoLogin
       });
     } catch (e) {
       showToast(`Login blev sendt, men kunne ikke gemmes: ${e?.message || e}`, 'warning');
