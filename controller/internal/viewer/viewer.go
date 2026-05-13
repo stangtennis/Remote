@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/stangtennis/Remote/controller/internal/credentials"
 )
 
 // Viewer represents the remote desktop viewer window
@@ -817,11 +818,22 @@ func (v *Viewer) showRemoteLoginDialog() {
 	sendUsernameCheck := widget.NewCheck("Send brugernavn først (slå fra hvis Windows kun mangler adgangskode)", nil)
 	sendUsernameCheck.SetChecked(true)
 
+	saveLoginCheck := widget.NewCheck("Gem login til denne client lokalt", nil)
+
+	if saved, err := credentials.LoadDeviceLogin(v.deviceID); err == nil && saved != nil {
+		usernameEntry.SetText(saved.Username)
+		domainEntry.SetText(saved.Domain)
+		passwordEntry.SetText(saved.Password)
+		sendUsernameCheck.SetChecked(saved.SendUsername)
+		saveLoginCheck.SetChecked(true)
+	}
+
 	items := []*widget.FormItem{
 		widget.NewFormItem("Brugernavn", usernameEntry),
 		widget.NewFormItem("Domæne", domainEntry),
 		widget.NewFormItem("Adgangskode", passwordEntry),
 		widget.NewFormItem("Mode", sendUsernameCheck),
+		widget.NewFormItem("Gem", saveLoginCheck),
 	}
 
 	dialog.ShowForm("Login som RDP", "Send login", "Annuller", items, func(submitted bool) {
@@ -842,6 +854,20 @@ func (v *Viewer) showRemoteLoginDialog() {
 		if err := v.sendRemoteLogin(username, password, domain, sendUsername); err != nil {
 			dialog.ShowError(err, v.window)
 			return
+		}
+
+		if saveLoginCheck.Checked {
+			if err := credentials.SaveDeviceLogin(&credentials.DeviceLogin{
+				DeviceID:     v.deviceID,
+				DeviceName:   v.deviceName,
+				Username:     username,
+				Domain:       domain,
+				Password:     password,
+				SendUsername: sendUsername,
+			}); err != nil {
+				dialog.ShowError(fmt.Errorf("login blev sendt, men kunne ikke gemmes: %w", err), v.window)
+				return
+			}
 		}
 
 		dialog.ShowInformation("Sendt", "Login er sendt til Windows login-skærmen.", v.window)

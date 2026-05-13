@@ -61,12 +61,13 @@ cd controller && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-g
 ```
 
 ## Current version
-- **Agent:** v3.1.67 (injected via `build-local.sh` ldflags)
-- **Controller:** v3.1.67 (injected via `build-local.sh` ldflags)
+- **Agent:** v3.1.68 (injected via `build-local.sh` ldflags)
+- **Controller:** v3.1.68 (injected via `build-local.sh` ldflags)
 - **Update server:** `https://updates.hawkeye123.dk/version.json`
 - **Downloads:** `https://downloads.hawkeye123.dk/`
 
 ## Recent changes (v3.1.x)
+- **v3.1.68:** Save RDP-like Windows login profiles per remote client locally in the controller.
 - **v3.1.67:** Route `remote_login` messages from the control channel to the agent control handler so Wails/controller RDP-like login is not ignored.
 - **v3.1.66:** Add RDP-like remote login in the Wails/web controller and fix agent helper key taps to send key-up for Tab/Enter.
 - **v3.1.65:** Refit viewer layout after leaving fullscreen so the bottom/status area is visible again.

@@ -164,6 +164,57 @@ func (a *App) SaveCredentials(email, password string, remember bool) error {
 	})
 }
 
+// DeviceLoginInfo holds a saved Windows login for one remote client.
+type DeviceLoginInfo struct {
+	DeviceID     string `json:"device_id"`
+	DeviceName   string `json:"device_name,omitempty"`
+	Username     string `json:"username,omitempty"`
+	Domain       string `json:"domain,omitempty"`
+	Password     string `json:"password"`
+	SendUsername bool   `json:"send_username"`
+	UpdatedAt    string `json:"updated_at,omitempty"`
+}
+
+// LoadDeviceLogin loads a saved Windows login for a remote client.
+func (a *App) LoadDeviceLogin(deviceID string) (*DeviceLoginInfo, error) {
+	login, err := credentials.LoadDeviceLogin(deviceID)
+	if err != nil || login == nil {
+		return nil, err
+	}
+	return &DeviceLoginInfo{
+		DeviceID:     login.DeviceID,
+		DeviceName:   login.DeviceName,
+		Username:     login.Username,
+		Domain:       login.Domain,
+		Password:     login.Password,
+		SendUsername: login.SendUsername,
+		UpdatedAt:    login.UpdatedAt,
+	}, nil
+}
+
+// SaveDeviceLogin saves a Windows login for a remote client.
+func (a *App) SaveDeviceLogin(login DeviceLoginInfo) error {
+	if login.DeviceID == "" {
+		return fmt.Errorf("device_id mangler")
+	}
+	if login.Password == "" {
+		return fmt.Errorf("adgangskode mangler")
+	}
+	return credentials.SaveDeviceLogin(&credentials.DeviceLogin{
+		DeviceID:     login.DeviceID,
+		DeviceName:   login.DeviceName,
+		Username:     login.Username,
+		Domain:       login.Domain,
+		Password:     login.Password,
+		SendUsername: login.SendUsername,
+	})
+}
+
+// DeleteDeviceLogin deletes a saved Windows login for a remote client.
+func (a *App) DeleteDeviceLogin(deviceID string) error {
+	return credentials.DeleteDeviceLogin(deviceID)
+}
+
 // ==================== DEVICES ====================
 
 // DeviceInfo is a frontend-friendly device representation
@@ -358,10 +409,10 @@ func (a *App) GetVersion() string {
 
 // UpdateInfo holds update information
 type UpdateInfo struct {
-	Available          bool   `json:"available"`
-	ControllerVersion  string `json:"controller_version"`
-	AgentVersion       string `json:"agent_version"`
-	CurrentVersion     string `json:"current_version"`
+	Available         bool   `json:"available"`
+	ControllerVersion string `json:"controller_version"`
+	AgentVersion      string `json:"agent_version"`
+	CurrentVersion    string `json:"current_version"`
 }
 
 // CheckForUpdate checks for available updates
