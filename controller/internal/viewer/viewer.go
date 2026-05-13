@@ -390,6 +390,7 @@ func (v *Viewer) UpdateFrame(img image.Image) {
 
 // UpdateStatus updates connection status
 func (v *Viewer) UpdateStatus(connected bool) {
+	wasConnected := v.connected
 	v.connected = connected
 	fyne.Do(func() {
 		if connected {
@@ -398,6 +399,10 @@ func (v *Viewer) UpdateStatus(connected bool) {
 			v.statusLabel.SetText("Disconnected")
 		}
 	})
+	// Trigger auto-login on fresh connect (not reconnect status updates)
+	if connected && !wasConnected {
+		v.TryAutoLogin()
+	}
 }
 
 // UpdateStats updates performance statistics
@@ -819,6 +824,7 @@ func (v *Viewer) showRemoteLoginDialog() {
 	sendUsernameCheck.SetChecked(true)
 
 	saveLoginCheck := widget.NewCheck("Gem login til denne client lokalt", nil)
+	autoLoginCheck := widget.NewCheck("Auto-login ved forbindelse (ligesom RDP)", nil)
 
 	if saved, err := credentials.LoadDeviceLogin(v.deviceID); err == nil && saved != nil {
 		usernameEntry.SetText(saved.Username)
@@ -826,6 +832,7 @@ func (v *Viewer) showRemoteLoginDialog() {
 		passwordEntry.SetText(saved.Password)
 		sendUsernameCheck.SetChecked(saved.SendUsername)
 		saveLoginCheck.SetChecked(true)
+		autoLoginCheck.SetChecked(saved.AutoLogin)
 	}
 
 	items := []*widget.FormItem{
@@ -834,6 +841,7 @@ func (v *Viewer) showRemoteLoginDialog() {
 		widget.NewFormItem("Adgangskode", passwordEntry),
 		widget.NewFormItem("Mode", sendUsernameCheck),
 		widget.NewFormItem("Gem", saveLoginCheck),
+		widget.NewFormItem("Auto", autoLoginCheck),
 	}
 
 	dialog.ShowForm("Login som RDP", "Send login", "Annuller", items, func(submitted bool) {
@@ -856,7 +864,7 @@ func (v *Viewer) showRemoteLoginDialog() {
 			return
 		}
 
-		if saveLoginCheck.Checked {
+		if saveLoginCheck.Checked || autoLoginCheck.Checked {
 			if err := credentials.SaveDeviceLogin(&credentials.DeviceLogin{
 				DeviceID:     v.deviceID,
 				DeviceName:   v.deviceName,
@@ -864,6 +872,7 @@ func (v *Viewer) showRemoteLoginDialog() {
 				Domain:       domain,
 				Password:     password,
 				SendUsername: sendUsername,
+				AutoLogin:    autoLoginCheck.Checked,
 			}); err != nil {
 				dialog.ShowError(fmt.Errorf("login blev sendt, men kunne ikke gemmes: %w", err), v.window)
 				return
@@ -872,6 +881,28 @@ func (v *Viewer) showRemoteLoginDialog() {
 
 		dialog.ShowInformation("Sendt", "Login er sendt til Windows login-skærmen.", v.window)
 	}, v.window)
+}
+
+// TryAutoLogin checks for a saved auto-login profile and sends credentials automatically.
+// Called by the session manager after WebRTC connection is established.
+func (v *Viewer) TryAutoLogin() {
+	saved, err := credentials.LoadDeviceLogin(v.deviceID)
+	if err != nil || saved == nil || !saved.AutoLogin || saved.Password == "" {
+		return
+	}
+
+	// Small delay so agent data channel is ready and login screen can receive input
+	go func() {
+		time.Sleep(1500 * time.Millisecond)
+		if !v.connected || v.webrtcClient == nil {
+			return
+		}
+		if err := v.sendRemoteLogin(saved.Username, saved.Password, saved.Domain, saved.SendUsername); err != nil {
+			log.Printf("⚠️ Auto-login fejl for %s: %v", v.deviceName, err)
+			return
+		}
+		log.Printf("🔐 Auto-login sendt til %s (RDP-stil)", v.deviceName)
+	}()
 }
 
 func (v *Viewer) sendRemoteLogin(username, password, domain string, sendUsername bool) error {
