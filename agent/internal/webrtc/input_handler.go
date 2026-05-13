@@ -459,12 +459,23 @@ func (m *Manager) handleRemoteLogin(event map[string]interface{}) {
 	}
 
 	if sendUsername && loginUser != "" {
+		// Press Escape first to reset Windows login screen to a clean state.
+		// This dismisses any pre-selected user and ensures cursor starts in
+		// the username field. Without this, if Windows already shows a user
+		// with cursor in the password field, the username would be typed into
+		// the password field instead.
+		if err := m.remoteTapKey("Escape"); err != nil {
+			log.Printf("⚠️ remote_login escape key failed: %v", err)
+		}
+		time.Sleep(500 * time.Millisecond)
+
 		if err := m.remoteTypeText(loginUser); err != nil {
 			log.Printf("⚠️ remote_login username typing failed: %v", err)
 		}
 		if err := m.remoteTapKey("Tab"); err != nil {
 			log.Printf("⚠️ remote_login tab key failed: %v", err)
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	if password != "" {
