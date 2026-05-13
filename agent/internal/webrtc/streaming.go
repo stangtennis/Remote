@@ -47,17 +47,40 @@ type ModeState struct {
 	switchHistory []time.Time   // Recent switches for flapping detection
 }
 
-// SetH264Mode enables or disables H.264 video track mode
-func (m *Manager) SetH264Mode(enabled bool) {
+func (m *Manager) canUseH264Mode() bool {
+	if m.isSession0 {
+		return false
+	}
+	if m.screenCapturer != nil && (m.screenCapturer.IsGDIMode() || m.screenCapturer.HasInputForwarder()) {
+		return false
+	}
+	return true
+}
+
+// SetH264Mode enables or disables H.264 video track mode.
+// It returns true when the requested state was applied.
+func (m *Manager) SetH264Mode(enabled bool) bool {
 	if enabled {
+		if !m.canUseH264Mode() {
+			m.useH264.Store(false)
+			if m.videoTrack != nil {
+				m.videoTrack.Stop()
+			}
+			log.Printf("⚠️ H.264 ignored for Session0/GDI capture (session0=%v, gdi=%v, forwarder=%v) - staying on JPEG tiles",
+				m.isSession0,
+				m.screenCapturer != nil && m.screenCapturer.IsGDIMode(),
+				m.screenCapturer != nil && m.screenCapturer.HasInputForwarder())
+			return false
+		}
+
 		// Check prerequisites
 		if m.videoTrack == nil {
 			log.Println("⚠️ Kan ikke aktivere H.264 - video track ikke oprettet")
-			return
+			return false
 		}
 		if m.videoEncoder == nil {
 			log.Println("⚠️ Kan ikke aktivere H.264 - video encoder ikke initialiseret")
-			return
+			return false
 		}
 		encName := m.videoEncoder.GetEncoderName()
 		// Whitelist alle encodere der outputter H.264. NVENC (Nvidia HW),
@@ -69,7 +92,7 @@ func (m *Manager) SetH264Mode(enabled bool) {
 			// OK — er en H.264-encoder
 		default:
 			log.Printf("⚠️ Kan ikke aktivere H.264 - encoder understøtter ikke H.264 (encoder: %s)", encName)
-			return
+			return false
 		}
 
 		// Start video track
@@ -77,6 +100,7 @@ func (m *Manager) SetH264Mode(enabled bool) {
 		m.useH264.Store(true)
 		m.videoEncoder.ForceKeyframe()
 		log.Printf("🎬 H.264 tilstand aktiveret (encoder: %s)", encName)
+		return true
 	} else {
 		m.useH264.Store(false)
 		// Stop video track
@@ -84,6 +108,7 @@ func (m *Manager) SetH264Mode(enabled bool) {
 			m.videoTrack.Stop()
 		}
 		log.Println("🎬 H.264 tilstand deaktiveret (bruger JPEG tiles)")
+		return true
 	}
 }
 
@@ -133,6 +158,10 @@ func (m *Manager) determineMode(motionPct float64, timeSinceInput time.Duration,
 	// When H.264 is active, stay in H.264 mode (encoder handles static screens with tiny P-frames)
 	// Only fall back if conditions are bad (high CPU/RTT/loss)
 	if m.useH264.Load() {
+		if !m.canUseH264Mode() {
+			m.useH264.Store(false)
+			return ModeActiveTiles
+		}
 		if avgCPU < 75 && avgRTT < 200*time.Millisecond && lossPct < 3 {
 			return ModeActiveH264
 		}

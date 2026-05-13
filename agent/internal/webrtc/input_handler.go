@@ -188,6 +188,24 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 		}
 		return ""
 	}
+	sendCodecStatus := func(requested string, active string, accepted bool, reason string) {
+		status := map[string]interface{}{
+			"type":      "codec_status",
+			"requested": requested,
+			"active":    active,
+			"accepted":  accepted,
+			"reason":    reason,
+		}
+		if data, err := json.Marshal(status); err == nil {
+			if m.controlChannel != nil && m.controlChannel.ReadyState() == pionwebrtc.DataChannelStateOpen {
+				_ = m.controlChannel.Send(data)
+				return
+			}
+			if m.dataChannel != nil && m.dataChannel.ReadyState() == pionwebrtc.DataChannelStateOpen {
+				_ = m.dataChannel.Send(data)
+			}
+		}
+	}
 
 	// Handle streaming mode changes
 	if msgType := getMsgType(event); msgType == "set_mode" {
@@ -195,14 +213,25 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 			log.Printf("🎛️ Received set_mode request: mode=%s bitrate=%v", mode, event["bitrate"])
 			switch mode {
 			case "h264":
-				m.SetH264Mode(true)
-				log.Println("🎬 Switched to H.264 mode")
+				if m.SetH264Mode(true) {
+					log.Println("🎬 Switched to H.264 mode")
+					sendCodecStatus("h264", "h264", true, "")
+				} else {
+					log.Println("🎬 H.264 request ignored; staying on JPEG tiles")
+					sendCodecStatus("h264", "jpeg", false, "h264_unavailable_for_session0_gdi")
+				}
 			case "tiles":
 				m.SetH264Mode(false)
 				log.Println("🎬 Switched to tiles-only mode")
+				sendCodecStatus("tiles", "jpeg", true, "")
 			case "hybrid":
-				m.SetH264Mode(true)
-				log.Println("🎬 Switched to hybrid mode (H.264 + tiles)")
+				if m.SetH264Mode(true) {
+					log.Println("🎬 Switched to hybrid mode (H.264 + tiles)")
+					sendCodecStatus("hybrid", "h264", true, "")
+				} else {
+					log.Println("🎬 Hybrid/H.264 request ignored; staying on JPEG tiles")
+					sendCodecStatus("hybrid", "jpeg", false, "h264_unavailable_for_session0_gdi")
+				}
 			}
 		}
 		if bitrate, ok := event["bitrate"].(float64); ok && bitrate > 0 {

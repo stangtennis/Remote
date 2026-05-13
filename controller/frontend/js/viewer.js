@@ -685,6 +685,8 @@ class ViewerSession {
         } else if (msg.type === 'update_status') {
           const type = msg.status === 'error' ? 'error' : msg.status === 'up_to_date' ? 'success' : 'info';
           showToast(msg.message || msg.status, type);
+        } else if (msg.type === 'codec_status') {
+          this.handleCodecStatus(msg);
         } else if (msg.type === 'chat') {
           this.addChatMessage('Agent', msg.text || msg.message || '');
         } else if (msg.type === 'clipboard_text') {
@@ -704,6 +706,31 @@ class ViewerSession {
         }
       } catch (e) { /* not JSON */ }
     }
+  }
+
+  handleCodecStatus(msg) {
+    const active = msg.active === 'h264' ? 'h264' : 'jpeg';
+    this.requestedCodec = active;
+    this.usingH264 = active === 'h264' && !!(this.videoEl && this.videoEl.videoWidth > 0 && this.videoEl.videoHeight > 0);
+
+    if (active === 'jpeg') {
+      this.usingH264 = false;
+      if (this.canvasEl) this.canvasEl.style.display = '';
+      if (this.videoEl) this.videoEl.style.display = 'none';
+    } else {
+      if (this.videoEl) this.videoEl.style.display = '';
+    }
+
+    if (msg.accepted === false) {
+      const reason = msg.reason === 'h264_unavailable_for_session0_gdi'
+        ? 'H.264 er slået fra på login/Session0 for denne maskine; JPEG bruges for stabil input.'
+        : 'Agenten afviste H.264; JPEG bruges.';
+      showToast(reason, 'warning');
+      console.warn(`[${this.deviceName}] Codec request rejected:`, msg);
+    }
+
+    this._updateCodecBtn();
+    this.focusInputSurface();
   }
 
   // sendClipboardToAgent reads the controller's local OS clipboard and
