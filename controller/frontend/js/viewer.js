@@ -1746,10 +1746,17 @@ class ViewerSession {
     return true;
   }
 
-  showRemoteLoginDialog() {
+  async showRemoteLoginDialog() {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
       showToast('Ikke forbundet til agent', 'error');
       return;
+    }
+
+    let savedLogin = null;
+    try {
+      savedLogin = await window.go?.main?.App?.LoadDeviceLogin?.(this.deviceId);
+    } catch (e) {
+      console.warn('Failed to load saved device login:', e);
     }
 
     const esc = (value) => String(value || '').replace(/[&<>"']/g, c => ({
@@ -1795,7 +1802,12 @@ class ViewerSession {
             Brug <strong>Kun adgangskode</strong>, hvis Windows allerede viser den rigtige bruger og kun mangler password.
             Brug <strong>Brugernavn + adgangskode</strong> ved “Other user” eller tom login-skærm.
           </p>
+          <label class="checkbox-label" style="margin-bottom:1rem;">
+            <input class="remote-login-save" type="checkbox">
+            <span>Gem login til denne client lokalt på controlleren</span>
+          </label>
           <div style="display:flex;justify-content:flex-end;gap:0.5rem;">
+            <button class="btn btn-sm btn-secondary remote-login-delete" type="button" style="margin-right:auto;display:none;">Slet gemt</button>
             <button class="btn btn-sm btn-secondary remote-login-cancel" type="button">Annuller</button>
             <button class="btn btn-sm btn-primary remote-login-send" type="button">Send login</button>
           </div>
@@ -1809,6 +1821,8 @@ class ViewerSession {
     const usernameEl = modal.querySelector('.remote-login-username');
     const domainEl = modal.querySelector('.remote-login-domain');
     const passwordEl = modal.querySelector('.remote-login-password');
+    const saveEl = modal.querySelector('.remote-login-save');
+    const deleteBtn = modal.querySelector('.remote-login-delete');
     const close = () => {
       if (passwordEl) passwordEl.value = '';
       modal.remove();
@@ -1843,15 +1857,40 @@ class ViewerSession {
 
       const ok = this.sendRemoteLogin(username, password, domain, sendUsername);
       if (ok) {
+        this.saveDeviceLoginIfRequested(saveEl.checked, username, password, domain, sendUsername);
         showToast('Login sendt til Windows login-skærmen', 'success');
         close();
       }
     };
+    const deleteSaved = async () => {
+      try {
+        await window.go?.main?.App?.DeleteDeviceLogin?.(this.deviceId);
+        showToast('Gemt login slettet for denne client', 'success');
+        saveEl.checked = false;
+        deleteBtn.style.display = 'none';
+        usernameEl.value = '';
+        domainEl.value = '';
+        passwordEl.value = '';
+      } catch (e) {
+        showToast(`Kunne ikke slette gemt login: ${e?.message || e}`, 'error');
+      }
+    };
+
+    if (savedLogin && savedLogin.password) {
+      const sendUsername = savedLogin.send_username ?? savedLogin.SendUsername ?? true;
+      modeEl.value = sendUsername ? 'full' : 'password';
+      usernameEl.value = savedLogin.username || savedLogin.Username || '';
+      domainEl.value = savedLogin.domain || savedLogin.Domain || '';
+      passwordEl.value = savedLogin.password || savedLogin.Password || '';
+      saveEl.checked = true;
+      deleteBtn.style.display = '';
+    }
 
     modeEl.addEventListener('change', updateMode);
     modal.querySelector('.modal-close').addEventListener('click', close);
     modal.querySelector('.remote-login-cancel').addEventListener('click', close);
     modal.querySelector('.remote-login-send').addEventListener('click', send);
+    deleteBtn.addEventListener('click', deleteSaved);
     modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
     modal.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') close();
@@ -1862,7 +1901,26 @@ class ViewerSession {
     });
 
     updateMode();
-    setTimeout(() => usernameEl.focus(), 0);
+    setTimeout(() => {
+      if (modeEl.value === 'password') passwordEl.focus();
+      else usernameEl.focus();
+    }, 0);
+  }
+
+  async saveDeviceLoginIfRequested(shouldSave, username, password, domain, sendUsername) {
+    if (!shouldSave) return;
+    try {
+      await window.go?.main?.App?.SaveDeviceLogin?.({
+        device_id: this.deviceId,
+        device_name: this.deviceName,
+        username,
+        domain,
+        password,
+        send_username: !!sendUsername
+      });
+    } catch (e) {
+      showToast(`Login blev sendt, men kunne ikke gemmes: ${e?.message || e}`, 'warning');
+    }
   }
 
   sendRemoteLogin(username, password, domain, sendUsername) {
