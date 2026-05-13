@@ -61,18 +61,17 @@ cd controller && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-g
 ```
 
 ## Current version
-- **Agent:** v2.68.7 (`agent/internal/tray/tray.go`)
-- **Controller:** v2.68.7 (`controller/main.go`)
+- **Agent:** v3.1.66 (injected via `build-local.sh` ldflags)
+- **Controller:** v3.1.66 (injected via `build-local.sh` ldflags)
 - **Update server:** `https://updates.hawkeye123.dk/version.json`
 - **Downloads:** `https://downloads.hawkeye123.dk/`
 
-## Recent changes (v2.68.x)
-- **v2.68.7:** Fix H264 controller decode: FFmpeg NV12→MJPEG output + decoder restart + remove DXVA2.
-- **v2.68.6:** Fix H264 mode dropping to idle tiles (2 FPS freeze on button clicks).
-- **v2.68.5:** Start Menu + Desktop shortcuts for controller and agent install.
-- **v2.68.4:** Fix taskkill killing own process during install/uninstall.
-- **v2.68.3:** Add "Install as Program" to controller (Program Files, autostart, shortcuts).
-- **v2.68.2:** Auto-stop tray before install/uninstall + dashboard black screen fix (0xFE chunk format).
+## Recent changes (v3.1.x)
+- **v3.1.66:** Add RDP-like remote login in the Wails/web controller and fix agent helper key taps to send key-up for Tab/Enter.
+- **v3.1.65:** Refit viewer layout after leaving fullscreen so the bottom/status area is visible again.
+- **v3.1.64:** Remove fullscreen top-edge overlay toolbar because it steals remote top-bar/browser-tab clicks.
+- **v3.1.63:** Reset H.264 state on disconnect and keep Session0/GDI/helper capture on JPEG.
+- **v3.1.60:** Prefer console login session after RDP disconnect to avoid black screen on the physical server host.
 
 ## Deployment workflow
 After building, deploy to the Ubuntu server:

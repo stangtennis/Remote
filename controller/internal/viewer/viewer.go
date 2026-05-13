@@ -812,19 +812,19 @@ func (v *Viewer) showRemoteLoginDialog() {
 	domainEntry.SetPlaceHolder("valgfri: DOMAIN")
 
 	passwordEntry := widget.NewPasswordEntry()
-	passwordEntry.SetPlaceHolder("password")
+	passwordEntry.SetPlaceHolder("adgangskode")
 
-	sendUsernameCheck := widget.NewCheck("Send username field first", nil)
+	sendUsernameCheck := widget.NewCheck("Send brugernavn først (slå fra hvis Windows kun mangler adgangskode)", nil)
 	sendUsernameCheck.SetChecked(true)
 
 	items := []*widget.FormItem{
-		widget.NewFormItem("Username", usernameEntry),
-		widget.NewFormItem("Domain", domainEntry),
-		widget.NewFormItem("Password", passwordEntry),
-		widget.NewFormItem("Options", sendUsernameCheck),
+		widget.NewFormItem("Brugernavn", usernameEntry),
+		widget.NewFormItem("Domæne", domainEntry),
+		widget.NewFormItem("Adgangskode", passwordEntry),
+		widget.NewFormItem("Mode", sendUsernameCheck),
 	}
 
-	dialog.ShowForm("Remote Login", "Send", "Cancel", items, func(submitted bool) {
+	dialog.ShowForm("Login som RDP", "Send login", "Annuller", items, func(submitted bool) {
 		if !submitted {
 			return
 		}
@@ -835,7 +835,7 @@ func (v *Viewer) showRemoteLoginDialog() {
 		sendUsername := sendUsernameCheck.Checked
 
 		if username == "" && password == "" {
-			dialog.ShowInformation("Missing input", "Enter username and/or password.", v.window)
+			dialog.ShowInformation("Mangler input", "Indtast brugernavn/adgangskode, eller slå brugernavn fra og indtast kun adgangskode.", v.window)
 			return
 		}
 
@@ -844,7 +844,7 @@ func (v *Viewer) showRemoteLoginDialog() {
 			return
 		}
 
-		dialog.ShowInformation("Sent", "Login credentials sent to remote login screen.", v.window)
+		dialog.ShowInformation("Sendt", "Login er sendt til Windows login-skærmen.", v.window)
 	}, v.window)
 }
 
