@@ -355,14 +355,6 @@ html, body {
 }
 .viewer-screen canvas { z-index: 1; cursor: default; background: transparent; }
 
-/* Fullscreen auto-hide toolbar */
-.viewer-toolbar.fullscreen-autohide {
-  position: absolute; top: 0; left: 0; right: 0; z-index: 10;
-  opacity: 0; transition: opacity 0.3s ease;
-  background: rgba(3, 7, 18, 0.95); backdrop-filter: blur(8px);
-}
-.viewer-toolbar.fullscreen-autohide:hover { opacity: 1; }
-
 /* True fullscreen — hide all chrome */
 body.viewer-fullscreen .app-header,
 body.viewer-fullscreen .tab-nav,
@@ -373,6 +365,7 @@ body.viewer-fullscreen .tab-nav { display: none !important; }
 body.viewer-fullscreen #viewerTab { padding: 0; }
 body.viewer-fullscreen .viewer-container { border-radius: 0; border: none; }
 body.viewer-fullscreen .session-tab-bar { display: none !important; }
+body.viewer-fullscreen .viewer-toolbar { display: none !important; }
 
 /* Fullscreen exit hint */
 .fullscreen-exit-hint {

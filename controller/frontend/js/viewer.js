@@ -1926,11 +1926,6 @@ class ViewerSession {
       await window.go.main.App.ToggleFullscreen();
       this.isFullscreen = !this.isFullscreen;
 
-      const toolbar = this.wrapper.querySelector('.viewer-toolbar');
-      if (toolbar) {
-        toolbar.classList.toggle('fullscreen-autohide', this.isFullscreen);
-      }
-
       // Toggle true fullscreen — hide all controller chrome
       document.body.classList.toggle('viewer-fullscreen', this.isFullscreen);
 
