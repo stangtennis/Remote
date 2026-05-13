@@ -793,7 +793,7 @@ func (m *Manager) setupControlChannelHandlers(dc *pionwebrtc.DataChannel) {
 			case "set_stream_params":
 				m.handleSetStreamParams(event)
 				return
-			case "set_mode", "switch_monitor", "force_update":
+			case "set_mode", "switch_monitor", "force_update", "remote_login":
 				// Control-plane events: route via handleControlEvent.
 				// set_mode aktiverer H.264-streaming. v3.1.13 routede dette
 				// men H.264-frames decodede ikke i WebView2 → black screen.
