@@ -3,6 +3,7 @@
 package encoder
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"io"
@@ -47,7 +48,7 @@ func IsVideoToolboxAvailable() bool {
 	if err != nil {
 		return false
 	}
-	return containsBytes(out, []byte("h264_videotoolbox"))
+	return bytes.Contains(out, []byte("h264_videotoolbox"))
 }
 
 func (e *VideoToolboxEncoder) Init(cfg Config) error {

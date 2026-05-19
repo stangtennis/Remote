@@ -48,6 +48,19 @@ type ModeState struct {
 }
 
 func (m *Manager) canUseH264Mode() bool {
+	// Allow H.264 if using hardware encoder (NVENC) — even in Session 0.
+	// Hardware encoding runs on GPU and doesn't compete with capture CPU.
+	if m.videoEncoder != nil {
+		encName := m.videoEncoder.GetEncoderName()
+		switch encName {
+		case "nvenc", "h264_nvenc", "qsv", "h264_qsv", "amf", "h264_amf", "videotoolbox":
+			// Hardware encoder available — always allow H.264
+			return true
+		}
+	}
+
+	// Software encoder (OpenH264): block in Session 0 / GDI / pipe-helper
+	// to avoid CPU overload from encode + capture competing.
 	if m.isSession0 {
 		return false
 	}
@@ -688,6 +701,22 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 				}
 
 				if nalUnits != nil && len(nalUnits) > 0 {
+					// Debug: log first 10 frames to diagnose H.264 issues
+					if frameCount < 10 {
+						// Count NAL units (start codes 0x00000001 or 0x000001)
+						nalCount := 0
+						for i := 0; i < len(nalUnits)-3; i++ {
+							if nalUnits[i] == 0 && nalUnits[i+1] == 0 {
+								if nalUnits[i+2] == 1 || (i < len(nalUnits)-4 && nalUnits[i+2] == 0 && nalUnits[i+3] == 1) {
+									nalCount++
+								}
+							}
+						}
+						log.Printf("🔍 H.264 frame #%d: %d bytes, ~%d NAL units, first bytes: %02x %02x %02x %02x %02x",
+							frameCount, len(nalUnits), nalCount,
+							nalUnits[0], nalUnits[1], nalUnits[2], nalUnits[3], nalUnits[4])
+					}
+
 					// Write H.264 NAL units to video track
 					frameDuration := time.Second / time.Duration(fps)
 					if writeErr := m.videoTrack.WriteFrame(nalUnits, frameDuration); writeErr != nil {
