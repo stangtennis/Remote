@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	// Use Caddy updates server (no auth required for auto-update)
-	UpdatesBaseURL  = "https://updates.hawkeye123.dk"
-	VersionCheckURL = "https://updates.hawkeye123.dk/version.json"
+	// Use Caddy downloads server (no auth required for auto-update)
+	UpdatesBaseURL  = "https://downloads.hawkeye123.dk"
+	VersionCheckURL = "https://downloads.hawkeye123.dk/version.json"
 
 	// GitHub API (used for beta/prerelease channel)
 	GitHubAPIBase = "https://api.github.com"
