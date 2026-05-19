@@ -1,6 +1,7 @@
 package encoder
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"io"
@@ -8,17 +9,25 @@ import (
 	"os/exec"
 	"runtime"
 	"sync"
+	"time"
 )
 
-// NVENCEncoder implements H.264 encoding using FFmpeg's NVENC backend
+// NVENCEncoder implements H.264 encoding using FFmpeg's NVENC backend.
+// It uses a background goroutine to read FFmpeg stdout continuously,
+// preventing the Encode() call from blocking on pipe reads.
 type NVENCEncoder struct {
 	config  Config
 	mu      sync.Mutex
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
 	stdout  io.ReadCloser
-	buf     []byte
+	stderr  *bytes.Buffer
 	started bool
+
+	// Background reader goroutine sends encoded chunks here
+	outCh   chan []byte
+	errCh   chan error
+	stopCh  chan struct{}
 }
 
 // NewNVENCEncoder creates a new NVENC encoder
@@ -44,23 +53,7 @@ func IsNVENCAvailable() bool {
 		return false
 	}
 
-	return containsBytes(out, []byte("h264_nvenc"))
-}
-
-func containsBytes(haystack, needle []byte) bool {
-	for i := 0; i <= len(haystack)-len(needle); i++ {
-		match := true
-		for j := range needle {
-			if haystack[i+j] != needle[j] {
-				match = false
-				break
-			}
-		}
-		if match {
-			return true
-		}
-	}
-	return false
+	return bytes.Contains(out, []byte("h264_nvenc"))
 }
 
 // Init initializes the NVENC encoder via FFmpeg subprocess
@@ -73,14 +66,34 @@ func (e *NVENCEncoder) Init(cfg Config) error {
 	}
 
 	e.config = cfg
+	// Cap bitrate at 4 Mbps for testing - high bitrates cause packetization issues
+	// CBR mode instead of VBR to prevent bitrate spikes
+	if e.config.Bitrate > 4000 {
+		log.Printf("NVENC: capping bitrate %d -> 4000 kbps CBR for stable H.264 streaming", e.config.Bitrate)
+		e.config.Bitrate = 4000
+	}
 	return e.startFFmpeg()
 }
 
-func (e *NVENCEncoder) startFFmpeg() error {
-	if e.cmd != nil {
+func (e *NVENCEncoder) stopProcess() {
+	if e.stopCh != nil {
+		close(e.stopCh)
+		e.stopCh = nil
+	}
+	if e.stdin != nil {
+		e.stdin.Close()
+		e.stdin = nil
+	}
+	if e.cmd != nil && e.cmd.Process != nil {
 		e.cmd.Process.Kill()
 		e.cmd.Wait()
+		e.cmd = nil
 	}
+}
+
+func (e *NVENCEncoder) startFFmpeg() error {
+	// Clean up previous instance
+	e.stopProcess()
 
 	// FFmpeg command: read raw RGBA from stdin, encode to H.264 NVENC, output raw H.264 to stdout
 	//
@@ -113,13 +126,11 @@ func (e *NVENCEncoder) startFFmpeg() error {
 		"-c:v", "h264_nvenc",
 		"-preset", "p4",          // Medium kvalitet (var p1=fastest); ~1ms ekstra
 		"-tune", "ull",           // Ultra-low latency (no lookahead/reorder)
-		"-rc", "vbr",             // Variable bitrate med headroom for hurtige scener
-		"-cq", "21",              // Target quality 21 (lav = høj kvalitet, 0-51 range)
+		"-rc", "cbr",             // Constant bitrate - NO spikes, stable packet size
 		"-b:v", fmt.Sprintf("%dk", e.config.Bitrate),
-		"-maxrate", fmt.Sprintf("%dk", e.config.Bitrate*2), // 2x headroom for spikes
-		"-bufsize", fmt.Sprintf("%dk", e.config.Bitrate),
+		"-maxrate", fmt.Sprintf("%dk", e.config.Bitrate), // Same as bitrate for true CBR
+		"-bufsize", fmt.Sprintf("%dk", e.config.Bitrate*2), // Larger buffer for smoothness
 		"-profile:v", "high",     // High profile (4:2:0 men fuld H.264 feature set)
-		"-level", "4.1",
 		"-g", fmt.Sprintf("%d", e.config.KeyframeInterval),
 		"-bf", "0",               // No B-frames for low latency
 		"-forced-idr", "1",
@@ -131,6 +142,7 @@ func (e *NVENCEncoder) startFFmpeg() error {
 		"-color_primaries", "bt709",
 		"-color_trc", "bt709",
 		"-flags", "+low_delay",
+		"-flush_packets", "1",    // Flush stdout efter HVER frame (forhindrer partial reads)
 		"-bsf:v", "dump_extra=freq=keyframe",
 		"-f", "h264",
 		"pipe:1",
@@ -149,15 +161,51 @@ func (e *NVENCEncoder) startFFmpeg() error {
 		return fmt.Errorf("stdout pipe: %w", err)
 	}
 
+	// Capture stderr for diagnostics
+	e.stderr = &bytes.Buffer{}
+	e.cmd.Stderr = e.stderr
+
 	if err := e.cmd.Start(); err != nil {
 		return fmt.Errorf("ffmpeg start: %w", err)
 	}
 
+	// Start background reader goroutine
+	e.outCh = make(chan []byte, 4)   // Small buffer so reader doesn't block
+	e.errCh = make(chan error, 1)
+	e.stopCh = make(chan struct{})
+	go e.readLoop()
+
 	e.started = true
-	log.Printf("NVENC encoder started (FFmpeg PID: %d, %dx%d @ %d kbps)",
+	log.Printf("✅ NVENC encoder started (FFmpeg PID: %d, %dx%d @ %d kbps)",
 		e.cmd.Process.Pid, e.config.Width, e.config.Height, e.config.Bitrate)
 
 	return nil
+}
+
+// readLoop continuously reads from FFmpeg stdout in a background goroutine.
+// Each Read() may return partial data; we send whatever we get to outCh.
+// With tune=ull and no B-frames, FFmpeg outputs one access unit per input frame.
+func (e *NVENCEncoder) readLoop() {
+	buf := make([]byte, 512*1024) // 512KB read buffer
+	for {
+		n, err := e.stdout.Read(buf)
+		if n > 0 {
+			data := make([]byte, n)
+			copy(data, buf[:n])
+			select {
+			case e.outCh <- data:
+			case <-e.stopCh:
+				return
+			}
+		}
+		if err != nil {
+			select {
+			case e.errCh <- err:
+			default:
+			}
+			return
+		}
+	}
 }
 
 // Encode encodes an RGBA frame to H.264 NAL units via NVENC
@@ -183,22 +231,43 @@ func (e *NVENCEncoder) Encode(frame *image.RGBA, forceKeyframe bool) ([]byte, er
 	// Write raw RGBA frame to FFmpeg stdin
 	_, err := e.stdin.Write(frame.Pix)
 	if err != nil {
-		return nil, fmt.Errorf("write frame: %w", err)
+		stderrMsg := ""
+		if e.stderr != nil && e.stderr.Len() > 0 {
+			stderrMsg = e.stderr.String()
+			log.Printf("NVENC FFmpeg stderr: %s", stderrMsg)
+		}
+		return nil, fmt.Errorf("write frame: %w (stderr: %s)", err, stderrMsg)
 	}
 
-	// Read encoded output (non-blocking with buffer)
-	if e.buf == nil {
-		e.buf = make([]byte, 256*1024) // 256KB read buffer
+	// Wait for encoded output from the background reader.
+	// With tune=ull, FFmpeg should produce output within a few ms after receiving a frame.
+	// We collect all available chunks within the timeout window.
+	var result []byte
+	timeout := time.After(100 * time.Millisecond)
+
+	// Wait for first chunk (blocking with timeout)
+	select {
+	case data := <-e.outCh:
+		result = data
+	case err := <-e.errCh:
+		return nil, fmt.Errorf("ffmpeg read error: %w", err)
+	case <-timeout:
+		return nil, nil // No output yet (first few frames may buffer)
 	}
 
-	n, err := e.stdout.Read(e.buf)
-	if err != nil {
-		return nil, fmt.Errorf("read output: %w", err)
-	}
+	// Give a short pause for any remaining data to arrive (FFmpeg may write
+	// a frame in multiple pipe writes even with flush_packets=1)
+	time.Sleep(2 * time.Millisecond)
 
-	result := make([]byte, n)
-	copy(result, e.buf[:n])
-	return result, nil
+	// Drain any additional chunks that are already available (non-blocking)
+	for {
+		select {
+		case data := <-e.outCh:
+			result = append(result, data...)
+		default:
+			return result, nil
+		}
+	}
 }
 
 // SetBitrate adjusts the encoding bitrate (requires FFmpeg restart)
@@ -206,10 +275,14 @@ func (e *NVENCEncoder) SetBitrate(kbps int) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	oldBitrate := e.config.Bitrate
 	e.config.Bitrate = kbps
-	// FFmpeg doesn't support dynamic bitrate change, would need restart
-	// For now just update config — restart on next resolution change
-	log.Printf("NVENC: bitrate updated to %d kbps (effective on next restart)", kbps)
+
+	// Restart FFmpeg with new bitrate for immediate effect
+	if e.started && oldBitrate != kbps {
+		log.Printf("NVENC: bitrate changed %d -> %d kbps, restarting encoder", oldBitrate, kbps)
+		return e.startFFmpeg()
+	}
 	return nil
 }
 
@@ -219,13 +292,7 @@ func (e *NVENCEncoder) Close() error {
 	defer e.mu.Unlock()
 
 	e.started = false
-	if e.stdin != nil {
-		e.stdin.Close()
-	}
-	if e.cmd != nil && e.cmd.Process != nil {
-		e.cmd.Process.Kill()
-		e.cmd.Wait()
-	}
+	e.stopProcess()
 	log.Println("NVENC encoder closed")
 	return nil
 }

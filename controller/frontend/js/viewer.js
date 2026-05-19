@@ -1089,11 +1089,18 @@ class ViewerSession {
 
     // Auto-login: if a saved profile with auto_login is present, send it
     // after a short delay so the agent data channel is fully ready.
+    // Only try once per session to prevent password spam.
+    this.autoLoginSent = false;
     this.tryAutoLogin();
   }
 
   async tryAutoLogin() {
     try {
+      // Prevent duplicate auto-login attempts
+      if (this.autoLoginSent) {
+        console.log(`[${this.deviceName}] Auto-login already sent, skipping`);
+        return;
+      }
       const saved = await window.go?.main?.App?.LoadDeviceLogin?.(this.deviceId);
       if (!saved) return;
       const autoLogin = !!(saved.auto_login ?? saved.AutoLogin);
@@ -1126,6 +1133,7 @@ class ViewerSession {
       await new Promise(r => setTimeout(r, 1500));
       if (!this.connected) return;
 
+      this.autoLoginSent = true;
       const ok = this.sendRemoteLogin(username, password, domain, sendUsername);
       if (ok) {
         console.log(`[${this.deviceName}] Auto-login sendt (RDP-stil)`);

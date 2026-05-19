@@ -359,7 +359,7 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 		RTPCodecCapability: pionwebrtc.RTPCodecCapability{
 			MimeType:    pionwebrtc.MimeTypeH264,
 			ClockRate:   90000,
-			SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
+			SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=640033",
 		},
 		PayloadType: 96,
 	}, pionwebrtc.RTPCodecTypeVideo)
