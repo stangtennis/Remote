@@ -25,9 +25,9 @@ type NVENCEncoder struct {
 	started bool
 
 	// Background reader goroutine sends encoded chunks here
-	outCh   chan []byte
-	errCh   chan error
-	stopCh  chan struct{}
+	outCh  chan []byte
+	errCh  chan error
+	stopCh chan struct{}
 }
 
 // NewNVENCEncoder creates a new NVENC encoder
@@ -66,11 +66,9 @@ func (e *NVENCEncoder) Init(cfg Config) error {
 	}
 
 	e.config = cfg
-	// Cap bitrate at 4 Mbps for testing - high bitrates cause packetization issues
-	// CBR mode instead of VBR to prevent bitrate spikes
-	if e.config.Bitrate > 4000 {
-		log.Printf("NVENC: capping bitrate %d -> 4000 kbps CBR for stable H.264 streaming", e.config.Bitrate)
-		e.config.Bitrate = 4000
+	if e.config.Bitrate > 50000 {
+		log.Printf("NVENC: capping bitrate %d -> 50000 kbps", e.config.Bitrate)
+		e.config.Bitrate = 50000
 	}
 	return e.startFFmpeg()
 }
@@ -102,9 +100,9 @@ func (e *NVENCEncoder) startFFmpeg() error {
 	//     ved samme bitrate; alle moderne browsere understøtter High.
 	//   - preset p4 (medium) — endnu lav-latency på GPU men højere kvalitet
 	//     end p1 (fastest); kun ~1ms ekstra encode-tid på GTX 1060.
-	//   - VBR-rate control med 2x maxrate-headroom — lader bitrate stige
-	//     midlertidigt under hurtige scene-changes (mindre kompressions-
-	//     artefakter ved bevægelse), falder igen ved statisk indhold.
+	//   - VBR-rate control med maxrate-headroom — lader bitrate stige
+	//     midlertidigt under hurtige scene-changes. 4 Mbps CBR var stabilt,
+	//     men gjorde desktop-tekst og UI markant udtværet ved 1080p+.
 	//   - color_range tv + colorspace bt709 — eksplicit BT.709 (sRGB-mapped)
 	//     i stedet for FFmpeg default BT.601. Fjerner farve-shift hvor
 	//     rød/grøn blev "lidt off" på tekst og UI-elementer.
@@ -124,25 +122,25 @@ func (e *NVENCEncoder) startFFmpeg() error {
 		"-r", fmt.Sprintf("%d", e.config.Framerate),
 		"-i", "pipe:0",
 		"-c:v", "h264_nvenc",
-		"-preset", "p4",          // Medium kvalitet (var p1=fastest); ~1ms ekstra
-		"-tune", "ull",           // Ultra-low latency (no lookahead/reorder)
-		"-rc", "cbr",             // Constant bitrate - NO spikes, stable packet size
+		"-preset", "p4", // Medium kvalitet (var p1=fastest); ~1ms ekstra
+		"-tune", "ull", // Ultra-low latency (no lookahead/reorder)
+		"-rc", "vbr", // Better desktop quality than low CBR
 		"-b:v", fmt.Sprintf("%dk", e.config.Bitrate),
-		"-maxrate", fmt.Sprintf("%dk", e.config.Bitrate), // Same as bitrate for true CBR
-		"-bufsize", fmt.Sprintf("%dk", e.config.Bitrate*2), // Larger buffer for smoothness
-		"-profile:v", "high",     // High profile (4:2:0 men fuld H.264 feature set)
+		"-maxrate", fmt.Sprintf("%dk", e.config.Bitrate*2),
+		"-bufsize", fmt.Sprintf("%dk", e.config.Bitrate*2),
+		"-profile:v", "high", // High profile (4:2:0 men fuld H.264 feature set)
 		"-g", fmt.Sprintf("%d", e.config.KeyframeInterval),
-		"-bf", "0",               // No B-frames for low latency
+		"-bf", "0", // No B-frames for low latency
 		"-forced-idr", "1",
-		"-spatial_aq", "1",       // Adaptive quantization PÅ — bedre kvalitet på flade områder
-		"-temporal_aq", "1",      // Temporal AQ — bedre kvalitet ved bevægelse
-		"-rc-lookahead", "0",     // No lookahead = no latency tradeoff
+		"-spatial_aq", "1", // Adaptive quantization PÅ — bedre kvalitet på flade områder
+		"-temporal_aq", "1", // Temporal AQ — bedre kvalitet ved bevægelse
+		"-rc-lookahead", "0", // No lookahead = no latency tradeoff
 		"-color_range", "tv",
-		"-colorspace", "bt709",   // BT.709 (sRGB-mapped) i stedet for FFmpeg default BT.601
+		"-colorspace", "bt709", // BT.709 (sRGB-mapped) i stedet for FFmpeg default BT.601
 		"-color_primaries", "bt709",
 		"-color_trc", "bt709",
 		"-flags", "+low_delay",
-		"-flush_packets", "1",    // Flush stdout efter HVER frame (forhindrer partial reads)
+		"-flush_packets", "1", // Flush stdout efter HVER frame (forhindrer partial reads)
 		"-bsf:v", "dump_extra=freq=keyframe",
 		"-f", "h264",
 		"pipe:1",
@@ -170,7 +168,7 @@ func (e *NVENCEncoder) startFFmpeg() error {
 	}
 
 	// Start background reader goroutine
-	e.outCh = make(chan []byte, 4)   // Small buffer so reader doesn't block
+	e.outCh = make(chan []byte, 4) // Small buffer so reader doesn't block
 	e.errCh = make(chan error, 1)
 	e.stopCh = make(chan struct{})
 	go e.readLoop()

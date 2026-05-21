@@ -150,7 +150,8 @@ type VersionInfo struct {
 func (c *GitHubClient) CheckForUpdate(currentVersion string, channel string) (*UpdateInfo, error) {
 	current, err := ParseVersion(currentVersion)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse current version: %w", err)
+		// A dev/unknown build should still be able to move onto the release channel.
+		current = Version{Major: 0, Minor: 0, Patch: 0, Raw: currentVersion}
 	}
 
 	// Fetch version info from Caddy downloads server

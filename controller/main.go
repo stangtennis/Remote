@@ -2,8 +2,8 @@ package main
 
 import (
 	"embed"
-	"io/fs"
 	"fmt"
+	"io/fs"
 	"os"
 
 	"runtime"
@@ -20,8 +20,8 @@ var assets embed.FS
 
 // Version information - injected at build time via -ldflags -X
 var (
-	Version     = "dev"
-	BuildDate   = "unknown"
+	Version     = "v3.1.78"
+	BuildDate   = "2026-05-21"
 	VersionInfo = ""
 )
 
@@ -85,8 +85,8 @@ func main() {
 			app,
 		},
 		Mac: &mac.Options{
-			TitleBar: mac.TitleBarHiddenInset(),
-			Appearance: mac.NSAppearanceNameDarkAqua,
+			TitleBar:             mac.TitleBarHiddenInset(),
+			Appearance:           mac.NSAppearanceNameDarkAqua,
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  false,
 			About: &mac.AboutInfo{

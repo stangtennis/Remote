@@ -75,10 +75,12 @@ type Viewer struct {
 	fileBrowser       interface{} // Will be *filebrowser.FileBrowser
 
 	// Connection state
-	supabaseURL string
-	anonKey     string
-	authToken   string
-	userID      string
+	supabaseURL        string
+	anonKey            string
+	authToken          string
+	userID             string
+	autoLoginAttempted bool
+	autoLoginInFlight  bool
 
 	// Streaming settings
 	targetFPS      int
@@ -886,13 +888,22 @@ func (v *Viewer) showRemoteLoginDialog() {
 // TryAutoLogin checks for a saved auto-login profile and sends credentials automatically.
 // Called by the session manager after WebRTC connection is established.
 func (v *Viewer) TryAutoLogin() {
+	if v.autoLoginAttempted || v.autoLoginInFlight {
+		log.Printf("🔐 Auto-login already attempted for %s, skipping", v.deviceName)
+		return
+	}
+	v.autoLoginAttempted = true
+	v.autoLoginInFlight = true
+
 	saved, err := credentials.LoadDeviceLogin(v.deviceID)
 	if err != nil || saved == nil || !saved.AutoLogin || saved.Password == "" {
+		v.autoLoginInFlight = false
 		return
 	}
 
 	// Small delay so agent data channel is ready and login screen can receive input
 	go func() {
+		defer func() { v.autoLoginInFlight = false }()
 		time.Sleep(1500 * time.Millisecond)
 		if !v.connected || v.webrtcClient == nil {
 			return

@@ -30,21 +30,21 @@ type ReleaseAsset struct {
 
 // Release represents a GitHub release
 type Release struct {
-	TagName    string         `json:"tag_name"`
-	Name       string         `json:"name"`
-	Prerelease bool           `json:"prerelease"`
-	Draft      bool           `json:"draft"`
-	Assets     []ReleaseAsset `json:"assets"`
-	PublishedAt string        `json:"published_at"`
+	TagName     string         `json:"tag_name"`
+	Name        string         `json:"name"`
+	Prerelease  bool           `json:"prerelease"`
+	Draft       bool           `json:"draft"`
+	Assets      []ReleaseAsset `json:"assets"`
+	PublishedAt string         `json:"published_at"`
 }
 
 // UpdateInfo contains information about an available update
 type UpdateInfo struct {
-	Version     Version
-	TagName     string
-	ExeURL      string
-	ExeSize     int64
-	SHA256URL   string
+	Version      Version
+	TagName      string
+	ExeURL       string
+	ExeSize      int64
+	SHA256URL    string
 	IsPrerelease bool
 }
 
@@ -73,7 +73,7 @@ func (c *GitHubClient) GetLatestRelease() (*Release, error) {
 // GetLatestBetaRelease fetches the latest prerelease
 func (c *GitHubClient) GetLatestBetaRelease() (*Release, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=20", GitHubAPIBase, RepoOwner, RepoName)
-	
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -143,9 +143,9 @@ type VersionInfo struct {
 	AgentVersion      string `json:"agent_version,omitempty"`
 	ControllerVersion string `json:"controller_version,omitempty"`
 	// Download URLs
-	DownloadURL      string `json:"download_url"`
-	AgentURL         string `json:"agent_url,omitempty"`
-	ControllerURL    string `json:"controller_url"`
+	DownloadURL        string `json:"download_url"`
+	AgentURL           string `json:"agent_url,omitempty"`
+	ControllerURL      string `json:"controller_url"`
 	ControllerURLMacOS string `json:"controller_url_macos,omitempty"`
 }
 
@@ -171,7 +171,8 @@ func (v *VersionInfo) GetAgentVersion() string {
 func (c *GitHubClient) CheckForUpdate(currentVersion string, appType string, channel string) (*UpdateInfo, error) {
 	current, err := ParseVersion(currentVersion)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse current version: %w", err)
+		// A dev build should still be able to move onto the release channel.
+		current = Version{Major: 0, Minor: 0, Patch: 0, Raw: currentVersion}
 	}
 
 	// Fetch version info from Caddy downloads server
