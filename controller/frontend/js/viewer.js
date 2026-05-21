@@ -153,6 +153,8 @@ class ViewerSession {
     this.requestedCodec = 'jpeg';
     this.isFullscreen = false;
     this.inputSetup = false;
+    this.autoLoginAttempted = false;
+    this.autoLoginInFlight = false;
 
     // Auto-reconnect state
     this.reconnectState = 'idle';       // 'idle' | 'reconnecting' | 'gave_up'
@@ -1087,20 +1089,20 @@ class ViewerSession {
       window.SessionManager.onSessionConnected(this.id);
     }
 
-    // Auto-login: if a saved profile with auto_login is present, send it
-    // after a short delay so the agent data channel is fully ready.
-    // Only try once per session to prevent password spam.
-    this.autoLoginSent = false;
+    // Auto-login: only try once for the whole ViewerSession. Reconnects can
+    // call onConnected() again, but must not resend the saved password.
     this.tryAutoLogin();
   }
 
   async tryAutoLogin() {
     try {
-      // Prevent duplicate auto-login attempts
-      if (this.autoLoginSent) {
-        console.log(`[${this.deviceName}] Auto-login already sent, skipping`);
+      if (this.autoLoginAttempted || this.autoLoginInFlight) {
+        console.log(`[${this.deviceName}] Auto-login already attempted, skipping`);
         return;
       }
+      this.autoLoginInFlight = true;
+      this.autoLoginAttempted = true;
+
       const saved = await window.go?.main?.App?.LoadDeviceLogin?.(this.deviceId);
       if (!saved) return;
       const autoLogin = !!(saved.auto_login ?? saved.AutoLogin);
@@ -1133,7 +1135,6 @@ class ViewerSession {
       await new Promise(r => setTimeout(r, 1500));
       if (!this.connected) return;
 
-      this.autoLoginSent = true;
       const ok = this.sendRemoteLogin(username, password, domain, sendUsername);
       if (ok) {
         console.log(`[${this.deviceName}] Auto-login sendt (RDP-stil)`);
@@ -1141,6 +1142,8 @@ class ViewerSession {
       }
     } catch (e) {
       console.warn(`[${this.deviceName}] Auto-login fejl:`, e);
+    } finally {
+      this.autoLoginInFlight = false;
     }
   }
 
