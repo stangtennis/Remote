@@ -1,7 +1,7 @@
 # ULTIMATE COMPLETE GUIDE
 **Everything About Your Ubuntu + Archon + Windsurf Setup in ONE Document**
 
-Last Updated: 2026-01-30 | Server: 192.168.1.92 | User: dennis
+Last Updated: 2026-05-24 | Server: 192.168.1.92 | User: dennis
 
 ---
 
@@ -247,8 +247,8 @@ Build Script: ./build-local.sh v2.XX.X (builds all 3 exe + NSIS installers)
 ```yaml
 Releases: https://github.com/stangtennis/Remote/releases
 Agent Installer: https://updates.hawkeye123.dk/RemoteDesktopAgent-Setup.exe
-Agent Console Installer: https://updates.hawkeye123.dk/RemoteDesktopAgentConsole-Setup.exe
-Controller Installer: https://updates.hawkeye123.dk/RemoteDesktopController-Setup.exe
+Agent Console Installer: https://updates.hawkeye123.dk/RemoteDesktopAgentConsole-v3.1.81-Setup.exe
+Controller Installer: https://updates.hawkeye123.dk/RemoteDesktopController-v3.1.81-Setup.exe
 ```
 
 ### Auto-Update (Agent + Controller)
@@ -303,7 +303,7 @@ https://downloads.hawkeye123.dk
 ```bash
 # Byg alle 3 exe + NSIS installere:
 cd ~/projekter/Remote\ Desktop
-./build-local.sh v2.73.5
+./build-local.sh v3.1.81
 
 # Deploy til Caddy:
 cp builds/*.exe ~/caddy/downloads/
@@ -2995,7 +2995,7 @@ Builds: ~/projekter/Remote Desktop/builds/
 ```bash
 # Byg alle 3 exe + NSIS installere (fra Ubuntu):
 cd ~/projekter/Remote\ Desktop
-./build-local.sh v2.73.5
+./build-local.sh v3.1.81
 
 # Deploy:
 cp builds/*.exe ~/caddy/downloads/
@@ -3462,12 +3462,12 @@ cp builds/*.exe ~/caddy/downloads/
 cd "/home/dennis/projekter/Remote Desktop"
 git add -A
 git commit -m "Description of changes"
-git push && git tag v2.73.5 && git push origin v2.73.5
+git push && git tag v3.1.81 && git push origin v3.1.81
 
 # Deploy to Caddy (auto-update)
-cp builds/remote-agent-v2.73.5.exe ~/caddy/downloads/remote-agent.exe
-cp builds/remote-agent-console-v2.73.5.exe ~/caddy/downloads/remote-agent-console.exe
-cp builds/controller-v2.73.5.exe ~/caddy/downloads/controller.exe
+cp builds/remote-agent-v3.1.81.exe ~/caddy/downloads/remote-agent.exe
+cp builds/remote-agent-console-v3.1.81.exe ~/caddy/downloads/remote-agent-console.exe
+cp builds/controller-v3.1.81.exe ~/caddy/downloads/controller.exe
 # Update version.json med ny version
 ```
 

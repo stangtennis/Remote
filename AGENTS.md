@@ -61,12 +61,16 @@ cd controller && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-g
 ```
 
 ## Current version
-- **Agent:** v3.1.70 (injected via `build-local.sh` ldflags)
-- **Controller:** v3.1.70 (injected via `build-local.sh` ldflags)
+- **Agent:** v3.1.81 (injected via `build-local.sh` ldflags)
+- **Controller:** v3.1.81 (injected via `build-local.sh` ldflags)
 - **Update server:** `https://updates.hawkeye123.dk/version.json`
 - **Downloads:** `https://downloads.hawkeye123.dk/`
+- **Latest GitHub Release:** `https://github.com/stangtennis/Remote/releases/tag/v3.1.81`
 
 ## Recent changes (v3.1.x)
+- **v3.1.81:** Align agent/controller versions, rebuild installers, and publish matching GitHub release + update-server artifacts.
+- **v3.1.80:** Rebuild controller with `desktop,production` tags after broken startup build.
+- **v3.1.79:** Use configured H.264 bitrate on controller mode toggle instead of a hardcoded 32 Mbps spike.
 - **v3.1.70:** Reset login screen with Escape before typing full username and add saved-login debug logging.
 - **v3.1.69:** Add RDP-style auto-login on connect when a saved per-device profile has `auto_login=true`.
 - **v3.1.68:** Save RDP-like Windows login profiles per remote client locally in the controller.
@@ -83,14 +87,19 @@ After building, deploy to the Ubuntu server:
 # Copy to Caddy downloads
 cp builds/remote-agent-vX.XX.X.exe ~/caddy/downloads/remote-agent.exe
 cp builds/controller-vX.XX.X.exe ~/caddy/downloads/controller.exe
+cp builds/RemoteDesktopAgent-vX.XX.X-Setup.exe ~/caddy/downloads/
+cp builds/RemoteDesktopController-vX.XX.X-Setup.exe ~/caddy/downloads/
 
 # Update version.json
 cat > ~/caddy/downloads/version.json << 'EOF'
 {
+  "version": "vX.XX.X",
   "agent_version": "vX.XX.X",
   "controller_version": "vX.XX.X",
-  "agent_url": "https://updates.hawkeye123.dk/remote-agent.exe",
-  "controller_url": "https://updates.hawkeye123.dk/controller.exe"
+  "agent_url": "https://updates.hawkeye123.dk/remote-agent-vX.XX.X.exe",
+  "controller_url": "https://updates.hawkeye123.dk/controller-vX.XX.X.exe",
+  "agent_setup_url": "https://updates.hawkeye123.dk/RemoteDesktopAgent-vX.XX.X-Setup.exe",
+  "controller_setup_url": "https://updates.hawkeye123.dk/RemoteDesktopController-vX.XX.X-Setup.exe"
 }
 EOF
 ```
