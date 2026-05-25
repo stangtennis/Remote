@@ -2907,10 +2907,10 @@ cd f:\#Remote\controller && .\build.bat
 ```powershell
 # 1. Tag ny version
 cd f:\#Remote
-git tag v2.5.0
+git tag vX.XX.X
 
 # 2. Push tag til GitHub
-git push origin v2.5.0
+git push origin vX.XX.X
 
 # 3. GitHub Actions bygger automatisk og laver release
 ```
@@ -2957,7 +2957,7 @@ https://github.com/stangtennis/Remote/releases
 |----------|----------|
 | **Build agent lokalt** | `cd f:\#Remote\agent && .\build.bat` |
 | **Build controller lokalt** | `cd f:\#Remote\controller && .\build.bat` |
-| **Release via GitHub** | `git tag v2.5.0 && git push origin v2.5.0` |
+| **Release via GitHub** | `git tag vX.XX.X && git push origin vX.XX.X` |
 | **Se releases** | https://github.com/stangtennis/Remote/releases |
 
 ---
@@ -3095,7 +3095,7 @@ cp builds/*.exe ~/caddy/downloads/
 ### Troubleshooting
 
 #### Mouse Not Working Correctly
-1. Check agent version (must be v2.6.8+)
+1. Check agent version (use a recent `v3.x` release, ideally `v3.1.81+`)
 2. Check DPI scaling on agent machine
 3. Verify `rel: true` flag in mouse events (dashboard)
 4. Check agent logs for coordinate values
