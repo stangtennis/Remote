@@ -220,13 +220,13 @@
               // Agent installer
               var agentBtn = document.getElementById('agentDownloadBtn');
               if (agentBtn) {
-                agentBtn.onclick = function() { signedDownload(isMac ? 'remote-agent-macos' : 'RemoteDesktopAgent-Setup.exe'); return false; };
+                agentBtn.onclick = function() { signedDownload(isMac ? 'remote-agent-macos-v3.1.81' : 'RemoteDesktopAgent-v3.1.81-Setup.exe'); return false; };
                 if (isMac) agentBtn.innerHTML = '<i class="fas fa-apple-alt"></i> Agent (macOS)';
               }
               // Quick Connect (run once)
               var runOnceBtn = document.getElementById('agentRunOnceBtn');
               if (runOnceBtn) {
-                runOnceBtn.onclick = function() { signedDownload(isMac ? 'remote-agent-macos' : 'RemoteDesktopAgent-RunOnce-Setup.exe'); return false; };
+                runOnceBtn.onclick = function() { signedDownload(isMac ? 'remote-agent-macos-v3.1.81' : 'RemoteDesktopAgent-RunOnce-v3.1.81-Setup.exe'); return false; };
                 if (isMac) runOnceBtn.innerHTML = '<i class="fas fa-play"></i> Quick Connect (macOS)';
               }
             })();
@@ -272,7 +272,7 @@
                   <div class="step-title">Hent og installér agenten</div>
                   <div class="step-desc">På den computer du vil styre — vælg din platform:</div>
                   <div class="quickstart-platforms" id="quickstartPlatforms">
-                    <a href="#" data-platform="windows" onclick="signedDownload('RemoteDesktopAgent-Setup.exe'); return false;"
+                    <a href="#" data-platform="windows" onclick="signedDownload('RemoteDesktopAgent-v3.1.81-Setup.exe'); return false;"
                        class="platform-btn" title="Windows installer"><i class="fab fa-windows"></i> Windows</a>
                     <a href="#" data-platform="macos" onclick="signedDownload('remote-agent-macos'); return false;"
                        class="platform-btn" title="macOS agent"><i class="fab fa-apple"></i> macOS</a>
