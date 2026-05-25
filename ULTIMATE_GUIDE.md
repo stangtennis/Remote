@@ -236,17 +236,17 @@ ssh ubuntu "docker stop caddy"
 ### Project Info
 ```yaml
 Repository: https://github.com/stangtennis/Remote
-Agent Version: v2.73.5
-Controller Version: v2.73.5
-Last Updated: 2026-02-19
+Agent Version: v3.1.81
+Controller Version: v3.1.81
+Last Updated: 2026-05-25
 Build Server: Ubuntu (192.168.1.92), cross-compile to Windows
-Build Script: ./build-local.sh v2.XX.X (builds all 3 exe + NSIS installers)
+Build Script: ./build-local.sh v3.1.81 (builds all 3 exe + NSIS installers)
 ```
 
 ### Downloads
 ```yaml
 Releases: https://github.com/stangtennis/Remote/releases
-Agent Installer: https://updates.hawkeye123.dk/RemoteDesktopAgent-Setup.exe
+Agent Installer: https://updates.hawkeye123.dk/RemoteDesktopAgent-v3.1.81-Setup.exe
 Agent Console Installer: https://updates.hawkeye123.dk/RemoteDesktopAgentConsole-v3.1.81-Setup.exe
 Controller Installer: https://updates.hawkeye123.dk/RemoteDesktopController-v3.1.81-Setup.exe
 ```
@@ -2972,7 +2972,7 @@ WebRTC-based remote desktop solution with three components:
 - **Controller** - Desktop app (Windows, Fyne UI) for controlling remote machines
 - **Dashboard** - Web interface for remote control and management
 
-### Current Version: v2.73.5 (2026-02-19)
+### Current Version: v3.1.81 (2026-05-21)
 
 ### Repository
 ```yaml
@@ -3145,7 +3145,7 @@ cp builds/*.exe ~/caddy/downloads/
 
 ## 🖥️ REMOTE DESKTOP APPLICATION - COMPLETE REFERENCE
 
-### Current Version: v2.73.5
+### Current Version: v3.1.81
 
 ### Repository & Downloads
 ```yaml
@@ -3157,9 +3157,9 @@ Downloads (Basic Auth): https://downloads.hawkeye123.dk
 
 ### NSIS Installere
 ```yaml
-Agent Setup: https://updates.hawkeye123.dk/RemoteDesktopAgent-Setup.exe
-Agent Console Setup: https://updates.hawkeye123.dk/RemoteDesktopAgentConsole-Setup.exe
-Controller Setup: https://updates.hawkeye123.dk/RemoteDesktopController-Setup.exe
+Agent Setup: https://updates.hawkeye123.dk/RemoteDesktopAgent-v3.1.81-Setup.exe
+Agent Console Setup: https://updates.hawkeye123.dk/RemoteDesktopAgentConsole-v3.1.81-Setup.exe
+Controller Setup: https://updates.hawkeye123.dk/RemoteDesktopController-v3.1.81-Setup.exe
 ```
 
 ### Components
@@ -3173,29 +3173,29 @@ Controller Setup: https://updates.hawkeye123.dk/RemoteDesktopController-Setup.ex
 ### Build Commands (Ubuntu cross-compile)
 ```bash
 # Build all 3 exe files (agent GUI, agent console, controller)
-./build-local.sh v2.73.5
+./build-local.sh v3.1.81
 
 # Or manually:
 # Agent GUI (no console window)
 cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
-go build -ldflags '-s -w -H windowsgui -X main.Version=v2.73.5' \
--o ../builds/remote-agent-v2.73.5.exe ./cmd/remote-agent
+go build -ldflags '-s -w -H windowsgui -X main.Version=v3.1.81' \
+-o ../builds/remote-agent-v3.1.81.exe ./cmd/remote-agent
 
 # Agent Console (with console window for debugging)
 cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
-go build -ldflags '-s -w -X main.Version=v2.73.5' \
--o ../builds/remote-agent-console-v2.73.5.exe ./cmd/remote-agent
+go build -ldflags '-s -w -X main.Version=v3.1.81' \
+-o ../builds/remote-agent-console-v3.1.81.exe ./cmd/remote-agent
 
 # Controller
 cd controller && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
 CC=x86_64-w64-mingw32-gcc \
-go build -ldflags '-s -w -H windowsgui -X main.version=v2.73.5' \
--o ../builds/controller-v2.73.5.exe .
+go build -ldflags '-s -w -H windowsgui -X main.version=v3.1.81' \
+-o ../builds/controller-v3.1.81.exe .
 ```
 
-### Agent Features (v2.73.5)
+### Agent Features (v3.1.81)
 - **Screen Capture**: DXGI (fast, hardware accelerated) or GDI (universal fallback)
 - **Session 0 Pipe Capturer**: Named pipe IPC for login screen capture (service mode)
 - **SYSTEM Token Fallback**: Capture works even when nobody is logged in
@@ -3210,7 +3210,7 @@ go build -ldflags '-s -w -H windowsgui -X main.version=v2.73.5' \
 - **Authenticated JWT**: Agent uses JWT tokens (not anon key) for API calls
 - **System Tray**: Icon with update check, install/uninstall options
 
-### Controller Features (v2.73.5)
+### Controller Features (v3.1.81)
 - **Fyne UI**: Native Windows desktop application
 - **Multi-device**: Connect to multiple agents
 - **H.264 Decoding**: FFmpeg subprocess (NV12→MJPEG output, self-framing)
@@ -3234,7 +3234,7 @@ go build -ldflags '-s -w -H windowsgui -X main.version=v2.73.5' \
 
 #### Via NSIS Installer (Anbefalet)
 ```
-Download: https://updates.hawkeye123.dk/RemoteDesktopAgent-Setup.exe
+Download: https://updates.hawkeye123.dk/RemoteDesktopAgent-v3.1.81-Setup.exe
 - Installerer til Program Files\RemoteDesktopAgent
 - Opretter Start Menu genvej
 - Registrerer autostart
@@ -3453,7 +3453,7 @@ Get-Content "$env:APPDATA\RemoteAgent\agent.log" -Tail 50
 # Edit code on Ubuntu build server
 
 # Build all 3 exe files
-./build-local.sh v2.73.5
+./build-local.sh v3.1.81
 
 # Deploy to Caddy
 cp builds/*.exe ~/caddy/downloads/
