@@ -45,6 +45,7 @@ type UpdateInfo struct {
 	ExeURL       string
 	ExeSize      int64
 	SHA256URL    string
+	SHA256Hash   string
 	IsPrerelease bool
 }
 
@@ -143,10 +144,12 @@ type VersionInfo struct {
 	AgentVersion      string `json:"agent_version,omitempty"`
 	ControllerVersion string `json:"controller_version,omitempty"`
 	// Download URLs
-	DownloadURL        string `json:"download_url"`
-	AgentURL           string `json:"agent_url,omitempty"`
-	ControllerURL      string `json:"controller_url"`
-	ControllerURLMacOS string `json:"controller_url_macos,omitempty"`
+	DownloadURL           string `json:"download_url"`
+	AgentURL              string `json:"agent_url,omitempty"`
+	ControllerURL         string `json:"controller_url"`
+	ControllerURLMacOS    string `json:"controller_url_macos,omitempty"`
+	ControllerSHA256      string `json:"controller_sha256,omitempty"`
+	ControllerSHA256MacOS string `json:"controller_sha256_macos,omitempty"`
 }
 
 // GetControllerVersion returns the controller version from the VersionInfo
@@ -198,13 +201,15 @@ func (c *GitHubClient) CheckForUpdate(currentVersion string, appType string, cha
 	}
 
 	// Get version and URL based on app type
-	var remoteVersionStr, downloadURL string
+	var remoteVersionStr, downloadURL, expectedHash string
 	if appType == "controller" {
 		remoteVersionStr = versionInfo.GetControllerVersion()
 		if runtime.GOOS == "darwin" && versionInfo.ControllerURLMacOS != "" {
 			downloadURL = versionInfo.ControllerURLMacOS
+			expectedHash = versionInfo.ControllerSHA256MacOS
 		} else {
 			downloadURL = versionInfo.ControllerURL
+			expectedHash = versionInfo.ControllerSHA256
 		}
 	} else {
 		remoteVersionStr = versionInfo.GetAgentVersion()
@@ -230,6 +235,7 @@ func (c *GitHubClient) CheckForUpdate(currentVersion string, appType string, cha
 		TagName:      remoteVersionStr,
 		ExeURL:       downloadURL,
 		ExeSize:      0, // Size will be determined during download
+		SHA256Hash:   expectedHash,
 		IsPrerelease: false,
 	}
 
