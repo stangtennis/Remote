@@ -96,8 +96,9 @@ func (e *NVENCEncoder) startFFmpeg() error {
 	// FFmpeg command: read raw RGBA from stdin, encode to H.264 NVENC, output raw H.264 to stdout
 	//
 	// QUALITY-TUNED for desktop content (tekst, skarpe kanter):
-	//   - profile high (i stedet for baseline) → bedre encoding-kvalitet
-	//     ved samme bitrate; alle moderne browsere understøtter High.
+	//   - profile baseline — lidt mindre effektiv kompression end High,
+	//     men langt mere robust i browser-dekodere ved mode-skift midt i
+	//     en eksisterende WebRTC-session.
 	//   - preset p4 (medium) — endnu lav-latency på GPU men højere kvalitet
 	//     end p1 (fastest); kun ~1ms ekstra encode-tid på GTX 1060.
 	//   - VBR-rate control med maxrate-headroom — lader bitrate stige
@@ -128,7 +129,7 @@ func (e *NVENCEncoder) startFFmpeg() error {
 		"-b:v", fmt.Sprintf("%dk", e.config.Bitrate),
 		"-maxrate", fmt.Sprintf("%dk", e.config.Bitrate*2),
 		"-bufsize", fmt.Sprintf("%dk", e.config.Bitrate*2),
-		"-profile:v", "high", // High profile (4:2:0 men fuld H.264 feature set)
+		"-profile:v", "baseline", // Browser-safe profile for dashboard H.264 decode
 		"-g", fmt.Sprintf("%d", e.config.KeyframeInterval),
 		"-bf", "0", // No B-frames for low latency
 		"-forced-idr", "1",

@@ -47,6 +47,13 @@ const SessionManager = {
       // WebRTC
       peerConnection: null,
       dataChannel: null,
+      videoChannel: null,
+      videoStream: null,
+      fileChannel: null,
+      videoElement: null,
+      videoRenderFrame: null,
+      streamMode: 'tiles',
+      qualityPreset: 'medium',
       // Session + signaling
       sessionData: null,           // fra session-token API
       signalingChannel: null,      // Supabase realtime channel
@@ -135,20 +142,12 @@ const SessionManager = {
     window.peerConnection = session.peerConnection;
     window.dataChannel = session.dataChannel;
 
-    // Handle display based on session type
-    const previewVideo = document.getElementById('previewVideo');
-    const previewCanvas = document.getElementById('previewCanvas');
-
-    if (deviceId === 'quick-support') {
-      if (previewVideo) previewVideo.style.display = 'block';
-      if (previewCanvas) previewCanvas.style.display = 'none';
-    } else {
-      if (previewVideo) previewVideo.style.display = '';
-      if (previewCanvas) previewCanvas.style.display = '';
-      // Restore last frame for this session
-      if (session.lastFrame) {
-        this.displayFrame(session.lastFrame);
-      }
+    // Handle display based on session type / selected stream mode.
+    if (typeof window.refreshPreviewSurface === 'function') {
+      window.refreshPreviewSurface(session);
+    }
+    if (session.lastFrame) {
+      this.displayFrame(session.lastFrame);
     }
 
     // Update toolbar with session info
@@ -170,6 +169,10 @@ const SessionManager = {
     // Show/hide idle state
     if (this.previewIdle) {
       this.previewIdle.style.display = session.status === 'connected' ? 'none' : 'flex';
+    }
+
+    if (typeof window.refreshStreamingControls === 'function') {
+      window.refreshStreamingControls(session);
     }
 
     debug(`📑 Switched to session: ${session.deviceName}`);
