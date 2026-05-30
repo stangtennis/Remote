@@ -165,11 +165,30 @@ function cleanupSessionWebRTC(ctx) {
     ctx.dataChannel = null;
   }
 
+  // Close low-latency video channel
+  if (ctx.videoChannel) {
+    try { ctx.videoChannel.close(); } catch (e) {}
+    ctx.videoChannel = null;
+  }
+
   // Close file channel
   if (ctx.fileChannel) {
     try { ctx.fileChannel.close(); } catch (e) {}
     ctx.fileChannel = null;
   }
+
+  // Stop per-session video track rendering
+  if (ctx.videoRenderFrame) {
+    cancelAnimationFrame(ctx.videoRenderFrame);
+    ctx.videoRenderFrame = null;
+  }
+  if (ctx.videoElement) {
+    try { ctx.videoElement.pause(); } catch (e) {}
+    try { ctx.videoElement.srcObject = null; } catch (e) {}
+    try { ctx.videoElement.remove(); } catch (e) {}
+    ctx.videoElement = null;
+  }
+  ctx.videoStream = null;
 
   // Close peer connection
   if (ctx.peerConnection) {
@@ -186,6 +205,7 @@ function cleanupSessionWebRTC(ctx) {
   if (window.SessionManager && window.SessionManager.activeSessionId === ctx.id) {
     window.peerConnection = null;
     window.dataChannel = null;
+    refreshPreviewSurface(null);
   }
 
   debug('✅ WebRTC cleanup complete for session:', ctx.id);
@@ -280,6 +300,17 @@ async function initWebRTC(sessionData, ctx) {
     });
     setupFileChannelHandlers(ctx);
     debug('✅ File data channel created');
+
+    // Create low-latency video channel for JPEG frame transport.
+    // This avoids head-of-line blocking on the reliable control channel.
+    const ordered = false;
+    const maxRetransmits = 0;
+    ctx.videoChannel = ctx.peerConnection.createDataChannel('video', {
+      ordered,
+      maxRetransmits
+    });
+    setupVideoChannelHandlers(ctx);
+    debug('✅ Video data channel created');
 
     // Create offer
     debug('📝 Creating offer...');
@@ -447,12 +478,8 @@ function setupPeerConnectionHandlers(ctx) {
   pc.ontrack = (event) => {
     debug('Remote track received:', event.track.kind, 'for device:', ctx.id);
     if (event.track.kind === 'video') {
-      // Only set video srcObject if this is the active session
-      if (window.SessionManager?.activeSessionId === ctx.id) {
-        const remoteVideo = document.getElementById('remoteVideo');
-        if (remoteVideo && event.streams[0]) {
-          remoteVideo.srcObject = event.streams[0];
-        }
+      if (event.streams[0]) {
+        attachSessionVideoTrack(ctx, event.streams[0]);
       }
     } else if (event.track.kind === 'audio') {
       debug('Audio track received — playing');
@@ -479,11 +506,10 @@ function setupDataChannelHandlers(ctx) {
     debug('Data channel opened for', ctx.id);
     // Enable mouse/keyboard input (only once, shared across sessions)
     setupInputCapture();
-    // Send medium preset (matches controller's medium)
+    // Re-apply the current session's preferred stream settings on connect/reconnect.
     try {
-      currentQualityPreset = 'medium';
-      dc.send(JSON.stringify({ type: 'set_stream_params', max_quality: 70, max_fps: 25, max_scale: 0.75 }));
-      debug('📊 Sent quality preset: medium (Q70 FPS25 Scale75%)');
+      applyStreamingPreferences(ctx);
+      debug(`📊 Applied stream settings: mode=${ctx.streamMode} quality=${ctx.qualityPreset}`);
     } catch (e) {}
   };
 
@@ -500,185 +526,7 @@ function setupDataChannelHandlers(ctx) {
   };
 
   dc.onmessage = async (event) => {
-    // Track bandwidth per-session
-    let dataSize = 0;
-    if (event.data instanceof ArrayBuffer) {
-      dataSize = event.data.byteLength;
-    } else if (event.data instanceof Blob) {
-      dataSize = event.data.size;
-    } else if (typeof event.data === 'string') {
-      dataSize = event.data.length;
-    }
-    ctx.bytesReceived += dataSize;
-
-    // Receive JPEG frame from agent (possibly chunked)
-    if (event.data instanceof ArrayBuffer) {
-      const data = new Uint8Array(event.data);
-
-      // Check if this is JSON (starts with '{' = 0x7B)
-      if (data.length > 0 && data[0] === 0x7B) {
-        try {
-          const text = new TextDecoder().decode(data);
-          const msg = JSON.parse(text);
-          handleAgentMessage(msg);
-        } catch (e) {
-          console.warn('Failed to parse JSON message from ArrayBuffer:', e);
-        }
-        return;
-      }
-
-      // Frame type detection
-      const FRAME_TYPE_REGION = 0x02;
-      const CHUNK_MAGIC_OLD = 0xFF;
-      const CHUNK_MAGIC_NEW = 0xFE;
-
-      // Check for dirty region (type 0x02)
-      if (data.length > 9 && data[0] === FRAME_TYPE_REGION) {
-        const x = data[1] | (data[2] << 8);
-        const y = data[3] | (data[4] << 8);
-        const w = data[5] | (data[6] << 8);
-        const h = data[7] | (data[8] << 8);
-        const jpegData = data.slice(9);
-        // Only display if active session
-        if (window.SessionManager?.activeSessionId === ctx.id) {
-          displayDirtyRegion(jpegData.buffer, x, y, w, h);
-        }
-        ctx.framesReceived++;
-      }
-      // Check for NEW chunked frame format
-      else if (data.length > 5 && data[0] === CHUNK_MAGIC_NEW) {
-        const frameId = (data[1] << 8) | data[2];
-        const chunkIndex = data[3];
-        const totalChunks = data[4];
-        const chunkData = data.slice(5);
-
-        // If frame ID changed, start a new frame
-        if (ctx.currentFrameId !== frameId) {
-          if (ctx.frameChunks.length > 0 && ctx.expectedChunks > 0) {
-            ctx.framesDropped++;
-          }
-          ctx.frameChunks = new Array(totalChunks);
-          ctx.expectedChunks = totalChunks;
-          ctx.currentFrameId = frameId;
-
-          if (ctx.frameTimeout) clearTimeout(ctx.frameTimeout);
-          ctx.frameTimeout = setTimeout(() => {
-            if (ctx.expectedChunks > 0 && ctx.currentFrameId === frameId) {
-              ctx.framesDropped++;
-              ctx.frameChunks = [];
-              ctx.expectedChunks = 0;
-            }
-          }, 500);
-        }
-
-        // Store this chunk
-        if (ctx.expectedChunks > 0 && chunkIndex < ctx.expectedChunks) {
-          ctx.frameChunks[chunkIndex] = chunkData;
-
-          const receivedCount = ctx.frameChunks.filter(c => c).length;
-          if (receivedCount === ctx.expectedChunks) {
-            if (ctx.frameTimeout) {
-              clearTimeout(ctx.frameTimeout);
-              ctx.frameTimeout = null;
-            }
-
-            // Reassemble frame
-            const totalLength = ctx.frameChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-            const completeFrame = new Uint8Array(totalLength);
-            let offset = 0;
-            for (const chunk of ctx.frameChunks) {
-              completeFrame.set(chunk, offset);
-              offset += chunk.length;
-            }
-
-            // Only display if active session
-            if (window.SessionManager?.activeSessionId === ctx.id) {
-              displayVideoFrame(completeFrame.buffer, ctx);
-            } else {
-              // Store frame for tab switching even when not active
-              storeFrameForSession(completeFrame.buffer, ctx);
-            }
-            ctx.framesReceived++;
-
-            ctx.frameChunks = [];
-            ctx.expectedChunks = 0;
-          }
-        }
-      }
-      // Check for OLD chunked frame format
-      else if (data.length > 3 && data[0] === CHUNK_MAGIC_OLD && data[1] !== 0xD8) {
-        const chunkIndex = data[1];
-        const totalChunks = data[2];
-        const chunkData = data.slice(3);
-
-        if (chunkIndex === 0) {
-          if (ctx.frameChunks.length > 0 && ctx.expectedChunks > 0) {
-            ctx.framesDropped++;
-          }
-          ctx.frameChunks = new Array(totalChunks);
-          ctx.expectedChunks = totalChunks;
-
-          if (ctx.frameTimeout) clearTimeout(ctx.frameTimeout);
-          ctx.frameTimeout = setTimeout(() => {
-            if (ctx.expectedChunks > 0) {
-              ctx.framesDropped++;
-              ctx.frameChunks = [];
-              ctx.expectedChunks = 0;
-            }
-          }, 500);
-        }
-
-        if (ctx.expectedChunks > 0 && chunkIndex < ctx.expectedChunks) {
-          ctx.frameChunks[chunkIndex] = chunkData;
-
-          const receivedCount = ctx.frameChunks.filter(c => c).length;
-          if (receivedCount === ctx.expectedChunks) {
-            if (ctx.frameTimeout) {
-              clearTimeout(ctx.frameTimeout);
-              ctx.frameTimeout = null;
-            }
-
-            const totalLength = ctx.frameChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-            const completeFrame = new Uint8Array(totalLength);
-            let offset = 0;
-            for (const chunk of ctx.frameChunks) {
-              completeFrame.set(chunk, offset);
-              offset += chunk.length;
-            }
-
-            if (window.SessionManager?.activeSessionId === ctx.id) {
-              displayVideoFrame(completeFrame.buffer, ctx);
-            } else {
-              storeFrameForSession(completeFrame.buffer, ctx);
-            }
-            ctx.framesReceived++;
-
-            ctx.frameChunks = [];
-            ctx.expectedChunks = 0;
-          }
-        }
-      } else {
-        // Single-packet frame (raw JPEG starting with FF D8)
-        if (window.SessionManager?.activeSessionId === ctx.id) {
-          displayVideoFrame(event.data, ctx);
-        } else {
-          storeFrameForSession(event.data, ctx);
-        }
-        ctx.framesReceived++;
-      }
-    } else if (event.data instanceof Blob) {
-      if (window.SessionManager?.activeSessionId === ctx.id) {
-        displayVideoFrame(event.data, ctx);
-      }
-      ctx.framesReceived++;
-    } else if (typeof event.data === 'string') {
-      try {
-        const msg = JSON.parse(event.data);
-        handleAgentMessage(msg);
-      } catch (e) {
-        console.warn('Failed to parse message:', e);
-      }
-    }
+    handleIncomingMediaMessage(event, ctx);
   };
 
   // Per-session bandwidth interval
@@ -712,6 +560,261 @@ function setupDataChannelHandlers(ctx) {
       }
     }
   }, 2000);
+}
+
+function setupVideoChannelHandlers(ctx) {
+  const dc = ctx.videoChannel;
+  if (!dc) return;
+
+  dc.onopen = () => {
+    debug('🎬 Video channel opened for', ctx.id);
+  };
+
+  dc.onclose = () => {
+    debug('🎬 Video channel closed for', ctx.id);
+  };
+
+  dc.onerror = (error) => {
+    console.error('Video channel error for', ctx.id, ':', error);
+  };
+
+  dc.onmessage = async (event) => {
+    handleIncomingMediaMessage(event, ctx);
+  };
+}
+
+function handleIncomingMediaMessage(event, ctx) {
+  let dataSize = 0;
+  if (event.data instanceof ArrayBuffer) {
+    dataSize = event.data.byteLength;
+  } else if (event.data instanceof Blob) {
+    dataSize = event.data.size;
+  } else if (typeof event.data === 'string') {
+    dataSize = event.data.length;
+  }
+  ctx.bytesReceived += dataSize;
+
+  if (event.data instanceof ArrayBuffer) {
+    const data = new Uint8Array(event.data);
+
+    if (data.length > 0 && data[0] === 0x7B) {
+      try {
+        const text = new TextDecoder().decode(data);
+        const msg = JSON.parse(text);
+        handleAgentMessage(msg);
+      } catch (e) {
+        console.warn('Failed to parse JSON message from ArrayBuffer:', e);
+      }
+      return;
+    }
+
+    const FRAME_TYPE_REGION = 0x02;
+    const CHUNK_MAGIC_OLD = 0xFF;
+    const CHUNK_MAGIC_NEW = 0xFE;
+
+    if (data.length > 9 && data[0] === FRAME_TYPE_REGION) {
+      const x = data[1] | (data[2] << 8);
+      const y = data[3] | (data[4] << 8);
+      const w = data[5] | (data[6] << 8);
+      const h = data[7] | (data[8] << 8);
+      const jpegData = data.slice(9);
+      if (window.SessionManager?.activeSessionId === ctx.id) {
+        displayDirtyRegion(jpegData.buffer, x, y, w, h);
+      }
+      ctx.framesReceived++;
+    } else if (data.length > 5 && data[0] === CHUNK_MAGIC_NEW) {
+      const frameId = (data[1] << 8) | data[2];
+      const chunkIndex = data[3];
+      const totalChunks = data[4];
+      const chunkData = data.slice(5);
+
+      if (ctx.currentFrameId !== frameId) {
+        if (ctx.frameChunks.length > 0 && ctx.expectedChunks > 0) {
+          ctx.framesDropped++;
+        }
+        ctx.frameChunks = new Array(totalChunks);
+        ctx.expectedChunks = totalChunks;
+        ctx.currentFrameId = frameId;
+
+        if (ctx.frameTimeout) clearTimeout(ctx.frameTimeout);
+        ctx.frameTimeout = setTimeout(() => {
+          if (ctx.expectedChunks > 0 && ctx.currentFrameId === frameId) {
+            ctx.framesDropped++;
+            ctx.frameChunks = [];
+            ctx.expectedChunks = 0;
+          }
+        }, 500);
+      }
+
+      if (ctx.expectedChunks > 0 && chunkIndex < ctx.expectedChunks) {
+        ctx.frameChunks[chunkIndex] = chunkData;
+
+        const receivedCount = ctx.frameChunks.filter(c => c).length;
+        if (receivedCount === ctx.expectedChunks) {
+          if (ctx.frameTimeout) {
+            clearTimeout(ctx.frameTimeout);
+            ctx.frameTimeout = null;
+          }
+
+          const totalLength = ctx.frameChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+          const completeFrame = new Uint8Array(totalLength);
+          let offset = 0;
+          for (const chunk of ctx.frameChunks) {
+            completeFrame.set(chunk, offset);
+            offset += chunk.length;
+          }
+
+          if (window.SessionManager?.activeSessionId === ctx.id) {
+            displayVideoFrame(completeFrame.buffer, ctx);
+          } else {
+            storeFrameForSession(completeFrame.buffer, ctx);
+          }
+          ctx.framesReceived++;
+
+          ctx.frameChunks = [];
+          ctx.expectedChunks = 0;
+        }
+      }
+    } else if (data.length > 3 && data[0] === CHUNK_MAGIC_OLD && data[1] !== 0xD8) {
+      const chunkIndex = data[1];
+      const totalChunks = data[2];
+      const chunkData = data.slice(3);
+
+      if (chunkIndex === 0) {
+        if (ctx.frameChunks.length > 0 && ctx.expectedChunks > 0) {
+          ctx.framesDropped++;
+        }
+        ctx.frameChunks = new Array(totalChunks);
+        ctx.expectedChunks = totalChunks;
+
+        if (ctx.frameTimeout) clearTimeout(ctx.frameTimeout);
+        ctx.frameTimeout = setTimeout(() => {
+          if (ctx.expectedChunks > 0) {
+            ctx.framesDropped++;
+            ctx.frameChunks = [];
+            ctx.expectedChunks = 0;
+          }
+        }, 500);
+      }
+
+      if (ctx.expectedChunks > 0 && chunkIndex < ctx.expectedChunks) {
+        ctx.frameChunks[chunkIndex] = chunkData;
+
+        const receivedCount = ctx.frameChunks.filter(c => c).length;
+        if (receivedCount === ctx.expectedChunks) {
+          if (ctx.frameTimeout) {
+            clearTimeout(ctx.frameTimeout);
+            ctx.frameTimeout = null;
+          }
+
+          const totalLength = ctx.frameChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+          const completeFrame = new Uint8Array(totalLength);
+          let offset = 0;
+          for (const chunk of ctx.frameChunks) {
+            completeFrame.set(chunk, offset);
+            offset += chunk.length;
+          }
+
+          if (window.SessionManager?.activeSessionId === ctx.id) {
+            displayVideoFrame(completeFrame.buffer, ctx);
+          } else {
+            storeFrameForSession(completeFrame.buffer, ctx);
+          }
+          ctx.framesReceived++;
+
+          ctx.frameChunks = [];
+          ctx.expectedChunks = 0;
+        }
+      }
+    } else {
+      if (window.SessionManager?.activeSessionId === ctx.id) {
+        displayVideoFrame(event.data, ctx);
+      } else {
+        storeFrameForSession(event.data, ctx);
+      }
+      ctx.framesReceived++;
+    }
+  } else if (event.data instanceof Blob) {
+    if (window.SessionManager?.activeSessionId === ctx.id) {
+      displayVideoFrame(event.data, ctx);
+    } else {
+      storeFrameForSession(event.data, ctx);
+    }
+    ctx.framesReceived++;
+  } else if (typeof event.data === 'string') {
+    try {
+      const msg = JSON.parse(event.data);
+      handleAgentMessage(msg);
+    } catch (e) {
+      console.warn('Failed to parse message:', e);
+    }
+  }
+}
+
+function attachSessionVideoTrack(ctx, stream) {
+  if (!ctx || !stream) return;
+  ctx.videoStream = stream;
+
+  if (!ctx.videoElement) {
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.style.position = 'fixed';
+    video.style.left = '-9999px';
+    video.style.top = '-9999px';
+    video.style.width = '1px';
+    video.style.height = '1px';
+    document.body.appendChild(video);
+    ctx.videoElement = video;
+  }
+
+  ctx.videoElement.srcObject = stream;
+  ctx.videoElement.onloadedmetadata = () => {
+    ctx.screenWidth = ctx.videoElement.videoWidth || ctx.screenWidth;
+    ctx.screenHeight = ctx.videoElement.videoHeight || ctx.screenHeight;
+    refreshPreviewSurface(ctx);
+    startSessionVideoRendering(ctx);
+  };
+  ctx.videoElement.play().catch(e => debug('Video autoplay blocked:', e));
+  refreshPreviewSurface(ctx);
+}
+
+function startSessionVideoRendering(ctx) {
+  if (!ctx || !ctx.videoElement) return;
+  if (ctx.videoRenderFrame) return;
+
+  const render = () => {
+    ctx.videoRenderFrame = null;
+
+    if (window.SessionManager?.activeSessionId === ctx.id) {
+      const canvas = document.getElementById('previewCanvas') || document.getElementById('remoteCanvas');
+      const canvasCtx = canvas?.getContext('2d');
+      const video = ctx.videoElement;
+
+      if (canvas && canvasCtx && video && video.readyState >= video.HAVE_CURRENT_DATA) {
+        const width = video.videoWidth || ctx.screenWidth;
+        const height = video.videoHeight || ctx.screenHeight;
+        if (width > 0 && height > 0) {
+          ctx.screenWidth = width;
+          ctx.screenHeight = height;
+          if (canvas.width !== width || canvas.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+            ensureCanvasAutoFit(canvas);
+            fitCanvasToContainer(canvas);
+          }
+          canvasCtx.drawImage(video, 0, 0, width, height);
+        }
+      }
+    }
+
+    if (ctx.peerConnection && ctx.videoElement && ctx.videoElement.srcObject) {
+      ctx.videoRenderFrame = requestAnimationFrame(render);
+    }
+  };
+
+  ctx.videoRenderFrame = requestAnimationFrame(render);
 }
 
 // Store a frame as base64 for tab-switching (non-active sessions)
@@ -758,6 +861,60 @@ function getCurrentBandwidth() {
   return ctx ? ctx.currentBandwidthMbps : 0;
 }
 
+function isVideoMode(session) {
+  if (!session) return false;
+  if (session.id === 'quick-support') return true;
+  return session.streamMode === 'h264' || session.streamMode === 'hybrid';
+}
+
+function refreshPreviewSurface(session = getActiveSessionContext()) {
+  const previewVideo = document.getElementById('previewVideo');
+  const previewCanvas = document.getElementById('previewCanvas');
+  if (!previewVideo || !previewCanvas) return;
+
+  const useVideo = isVideoMode(session) && !!session?.videoStream;
+
+  if (session?.id === 'quick-support') {
+    previewVideo.style.display = 'block';
+    previewCanvas.style.display = 'none';
+    return;
+  }
+
+  if (useVideo) {
+    if (previewVideo.srcObject !== session.videoStream) {
+      previewVideo.srcObject = session.videoStream;
+    }
+    previewVideo.style.display = 'block';
+    previewCanvas.style.display = 'none';
+  } else {
+    previewCanvas.style.display = 'block';
+    previewVideo.style.display = 'none';
+    if (!isVideoMode(session)) {
+      previewVideo.srcObject = null;
+    }
+  }
+}
+
+function getInputCaptureTarget() {
+  return document.getElementById('previewScreen') ||
+    document.getElementById('previewCanvas') ||
+    document.getElementById('remoteCanvas') ||
+    document.getElementById('remoteVideo');
+}
+
+function getActiveMediaElement() {
+  const previewVideo = document.getElementById('previewVideo');
+  const previewCanvas = document.getElementById('previewCanvas');
+  const remoteCanvas = document.getElementById('remoteCanvas');
+  const remoteVideo = document.getElementById('remoteVideo');
+
+  if (previewVideo && getComputedStyle(previewVideo).display !== 'none') return previewVideo;
+  if (previewCanvas && getComputedStyle(previewCanvas).display !== 'none') return previewCanvas;
+  if (remoteCanvas && getComputedStyle(remoteCanvas).display !== 'none') return remoteCanvas;
+  if (remoteVideo && getComputedStyle(remoteVideo).display !== 'none') return remoteVideo;
+  return previewCanvas || remoteCanvas || previewVideo || remoteVideo || null;
+}
+
 // Helper function to calculate actual image area within canvas (accounting for object-fit: contain)
 function getImageCoordinates(element, clientX, clientY) {
   const rect = element.getBoundingClientRect();
@@ -765,13 +922,17 @@ function getImageCoordinates(element, clientX, clientY) {
   const displayWidth = rect.width;
   const displayHeight = rect.height;
 
+  const mediaElement = (element.tagName === 'CANVAS' || element.tagName === 'VIDEO')
+    ? element
+    : getActiveMediaElement();
+
   let actualWidth, actualHeight;
-  if (element.tagName === 'CANVAS') {
-    actualWidth = element.width;
-    actualHeight = element.height;
-  } else if (element.tagName === 'VIDEO') {
-    actualWidth = element.videoWidth || displayWidth;
-    actualHeight = element.videoHeight || displayHeight;
+  if (mediaElement?.tagName === 'CANVAS') {
+    actualWidth = mediaElement.width;
+    actualHeight = mediaElement.height;
+  } else if (mediaElement?.tagName === 'VIDEO') {
+    actualWidth = mediaElement.videoWidth || displayWidth;
+    actualHeight = mediaElement.videoHeight || displayHeight;
   } else {
     actualWidth = displayWidth;
     actualHeight = displayHeight;
@@ -806,11 +967,7 @@ let inputListenersAttached = false;
 let inputEventHandlers = {};
 
 function setupInputCapture() {
-  const remoteVideo = document.getElementById('remoteVideo');
-  // Prefer previewCanvas (dashboard main view) over remoteCanvas (legacy session view)
-  const previewCanvas = document.getElementById('previewCanvas');
-  const remoteCanvas = document.getElementById('remoteCanvas');
-  const target = previewCanvas || remoteCanvas || remoteVideo;
+  const target = getInputCaptureTarget();
 
   if (!target) return;
 
@@ -1117,11 +1274,7 @@ function setupInputCapture() {
 function cleanupInputCapture() {
   if (!inputListenersAttached) return;
 
-  // Must match setupInputCapture target selection (previewCanvas first)
-  const previewCanvas = document.getElementById('previewCanvas');
-  const remoteCanvas = document.getElementById('remoteCanvas');
-  const remoteVideo = document.getElementById('remoteVideo');
-  const target = previewCanvas || remoteCanvas || remoteVideo;
+  const target = getInputCaptureTarget();
 
   if (target && inputEventHandlers) {
     Object.entries(inputEventHandlers).forEach(([name, handler]) => {
@@ -1169,30 +1322,105 @@ function sendControlEvent(event) {
   }
 }
 
-// Quality toggle (cycles: Medium → High → Low → Medium)
+const STREAM_MODES = ['tiles', 'h264', 'hybrid'];
+const STREAM_MODE_LABELS = {
+  tiles: 'JPEG Tiles',
+  h264: 'H.264',
+  hybrid: 'Hybrid'
+};
+const STREAM_MODE_ICONS = {
+  tiles: 'fa-table-cells-large',
+  h264: 'fa-film',
+  hybrid: 'fa-layer-group'
+};
+const QUALITY_PRESETS = {
+  low:    { max_fps: 15, max_quality: 45, max_scale: 0.5,  label: 'Lav' },
+  medium: { max_fps: 25, max_quality: 70, max_scale: 0.75, label: 'Mellem' },
+  high:   { max_fps: 30, max_quality: 95, max_scale: 1.0,  label: 'Høj' }
+};
+const QUALITY_CYCLE = { medium: 'high', high: 'low', low: 'medium' };
 let currentQualityPreset = 'medium';
+
+function getActiveSessionContext() {
+  return window.SessionManager?.getActiveSession() || null;
+}
+
+function refreshStreamingControls(session = getActiveSessionContext()) {
+  const modeBtn = document.getElementById('streamModeBtn');
+  const qualityBtn = document.getElementById('qualityToggleBtn');
+  const mode = session?.streamMode || 'tiles';
+  const presetKey = session?.qualityPreset || currentQualityPreset;
+  const preset = QUALITY_PRESETS[presetKey] || QUALITY_PRESETS.medium;
+
+  if (modeBtn) {
+    const iconClass = STREAM_MODE_ICONS[mode] || STREAM_MODE_ICONS.tiles;
+    const label = STREAM_MODE_LABELS[mode] || STREAM_MODE_LABELS.tiles;
+    modeBtn.title = `Stream mode: ${label}`;
+    modeBtn.innerHTML = `<i class="fas ${iconClass}"></i>`;
+  }
+
+  if (qualityBtn) {
+    qualityBtn.title = `Kvalitet: ${preset.label}`;
+    qualityBtn.innerHTML = '<i class="fas fa-sliders"></i>';
+  }
+}
+
+function applyStreamingPreferences(session = getActiveSessionContext()) {
+  if (!session) return;
+
+  const presetKey = session.qualityPreset || currentQualityPreset || 'medium';
+  const preset = QUALITY_PRESETS[presetKey] || QUALITY_PRESETS.medium;
+  currentQualityPreset = presetKey;
+
+  sendControlEvent({ type: 'set_stream_params', ...preset });
+  sendControlEvent({ type: 'set_mode', mode: session.streamMode || 'tiles' });
+  refreshStreamingControls(session);
+  refreshPreviewSurface(session);
+}
+
+function toggleStreamMode() {
+  const session = getActiveSessionContext();
+  if (!session) return;
+
+  const currentIndex = STREAM_MODES.indexOf(session.streamMode || 'tiles');
+  session.streamMode = STREAM_MODES[(currentIndex + 1) % STREAM_MODES.length];
+  sendControlEvent({ type: 'set_mode', mode: session.streamMode });
+  refreshStreamingControls(session);
+  refreshPreviewSurface(session);
+
+  if (typeof showToast === 'function') {
+    showToast(`Stream mode: ${STREAM_MODE_LABELS[session.streamMode]}`, 'info');
+  }
+}
+
 function toggleQuality() {
-  const presets = {
-    low:    { max_fps: 15, max_quality: 45, max_scale: 0.5,  label: 'Lav' },
-    medium: { max_fps: 25, max_quality: 70, max_scale: 0.75, label: 'Mellem' },
-    high:   { max_fps: 30, max_quality: 95, max_scale: 1.0,  label: 'Høj' }
-  };
-  const cycle = { medium: 'high', high: 'low', low: 'medium' };
-  currentQualityPreset = cycle[currentQualityPreset] || 'medium';
-  const p = presets[currentQualityPreset];
+  const session = getActiveSessionContext();
+  if (!session) return;
+
+  const currentPreset = session.qualityPreset || currentQualityPreset || 'medium';
+  session.qualityPreset = QUALITY_CYCLE[currentPreset] || 'medium';
+  currentQualityPreset = session.qualityPreset;
+  const p = QUALITY_PRESETS[session.qualityPreset];
   sendControlEvent({ type: 'set_stream_params', ...p });
-  const btn = document.getElementById('qualityToggleBtn');
-  if (btn) btn.title = 'Kvalitet: ' + p.label;
+  refreshStreamingControls(session);
   if (typeof showToast === 'function') showToast('Kvalitet: ' + p.label + ' (' + p.max_fps + ' FPS, ' + p.max_quality + '%)', 'info');
 }
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => document.getElementById('qualityToggleBtn')?.addEventListener('click', toggleQuality));
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('qualityToggleBtn')?.addEventListener('click', toggleQuality);
+    document.getElementById('streamModeBtn')?.addEventListener('click', toggleStreamMode);
+    refreshStreamingControls();
+  });
 } else {
   document.getElementById('qualityToggleBtn')?.addEventListener('click', toggleQuality);
+  document.getElementById('streamModeBtn')?.addEventListener('click', toggleStreamMode);
+  refreshStreamingControls();
 }
 
 // Export for use in other modules
 window.sendControlEvent = sendControlEvent;
+window.refreshStreamingControls = refreshStreamingControls;
+window.refreshPreviewSurface = refreshPreviewSurface;
 
 async function updateConnectionStats(ctx) {
   const pc = ctx ? ctx.peerConnection : window.peerConnection;

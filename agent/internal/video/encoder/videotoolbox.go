@@ -72,7 +72,8 @@ func (e *VideoToolboxEncoder) startFFmpeg() error {
 	// VideoToolbox-specifikke flags:
 	//   - allow_sw 0 — kræv hardware accel (fail hvis ikke tilgængeligt)
 	//   - realtime 1 — reduceret latency (no lookahead)
-	//   - profile high — fuld H.264 feature set
+	//   - profile baseline — mere robust browser-kompatibilitet ved
+	//     mode-skift til H.264 midt i sessionen
 	//   - dump_extra=keyframe (KRITISK): repeat SPS+PPS før hver IDR
 	//     så browser-decoder kan altid initialisere
 	//   - bt709 colorspace eksplicit — undgår farve-shift
@@ -84,13 +85,13 @@ func (e *VideoToolboxEncoder) startFFmpeg() error {
 		"-r", fmt.Sprintf("%d", e.config.Framerate),
 		"-i", "pipe:0",
 		"-c:v", "h264_videotoolbox",
-		"-realtime", "1",            // Low latency mode
-		"-allow_sw", "0",            // Kræv HW accel
+		"-realtime", "1", // Low latency mode
+		"-allow_sw", "0", // Kræv HW accel
 		"-b:v", fmt.Sprintf("%dk", e.config.Bitrate),
-		"-profile:v", "high",
+		"-profile:v", "baseline",
 		"-level", "4.1",
 		"-g", fmt.Sprintf("%d", e.config.KeyframeInterval),
-		"-bf", "0",                  // No B-frames for low latency
+		"-bf", "0", // No B-frames for low latency
 		"-color_range", "tv",
 		"-colorspace", "bt709",
 		"-color_primaries", "bt709",

@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.1.82 - 2026-05-30
+- Fix dashboard H.264 playback by routing video over a dedicated data channel and rendering through a browser video element.
+- Reset H.264 encoder state when frame dimensions change to avoid frozen/stretched frames.
+- Use constrained-baseline H.264 settings for better browser compatibility.
+- Publish updated agent/controller builds and update-server artifacts.
+
 ## v3.1.81 - 2026-05-21
 - Align agent and controller on the same version.
 - Rebuild and publish matching Windows installers.

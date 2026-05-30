@@ -138,7 +138,8 @@
                 <button class="toolbar-btn" title="Synkroniser udklipsholder" onclick="sendClipboardToAgent()"><i class="fas fa-clipboard"></i></button>
                 <button class="toolbar-btn" title="Filøverførsel" onclick="FileTransfer.open()"><i class="fas fa-folder-open"></i></button>
                 <button class="toolbar-btn" title="Skærmbillede" onclick="saveScreenshot()"><i class="fas fa-camera"></i></button>
-                <button class="toolbar-btn" id="qualityToggleBtn" title="Skift H264/JPEG tilstand"><i class="fas fa-sliders"></i></button>
+                <button class="toolbar-btn" id="streamModeBtn" title="Stream mode: JPEG Tiles"><i class="fas fa-film"></i></button>
+                <button class="toolbar-btn" id="qualityToggleBtn" title="Kvalitet: Mellem"><i class="fas fa-sliders"></i></button>
                 <span id="monitorSelectContainer" style="display: none; align-items: center; gap: 4px;">
                   <label for="monitorSelect" style="font-size: 0.8rem; color: #aaa;"><i class="fas fa-desktop"></i></label>
                   <select id="monitorSelect" style="background: var(--surface, #1a1a2e); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: 4px; padding: 2px 6px; font-size: 0.8rem; cursor: pointer;"></select>
@@ -220,13 +221,13 @@
               // Agent installer
               var agentBtn = document.getElementById('agentDownloadBtn');
               if (agentBtn) {
-                agentBtn.onclick = function() { signedDownload(isMac ? 'remote-agent-macos-v3.1.81' : 'RemoteDesktopAgent-v3.1.81-Setup.exe'); return false; };
+                agentBtn.onclick = function() { signedDownload(isMac ? 'remote-agent-macos-v3.1.82' : 'RemoteDesktopAgent-v3.1.82-Setup.exe'); return false; };
                 if (isMac) agentBtn.innerHTML = '<i class="fas fa-apple-alt"></i> Agent (macOS)';
               }
               // Quick Connect (run once)
               var runOnceBtn = document.getElementById('agentRunOnceBtn');
               if (runOnceBtn) {
-                runOnceBtn.onclick = function() { signedDownload(isMac ? 'remote-agent-macos-v3.1.81' : 'RemoteDesktopAgent-RunOnce-v3.1.81-Setup.exe'); return false; };
+                runOnceBtn.onclick = function() { signedDownload(isMac ? 'remote-agent-macos-v3.1.82' : 'RemoteDesktopAgent-RunOnce-v3.1.82-Setup.exe'); return false; };
                 if (isMac) runOnceBtn.innerHTML = '<i class="fas fa-play"></i> Quick Connect (macOS)';
               }
             })();
@@ -272,7 +273,7 @@
                   <div class="step-title">Hent og installér agenten</div>
                   <div class="step-desc">På den computer du vil styre — vælg din platform:</div>
                   <div class="quickstart-platforms" id="quickstartPlatforms">
-                    <a href="#" data-platform="windows" onclick="signedDownload('RemoteDesktopAgent-v3.1.81-Setup.exe'); return false;"
+                    <a href="#" data-platform="windows" onclick="signedDownload('RemoteDesktopAgent-v3.1.82-Setup.exe'); return false;"
                        class="platform-btn" title="Windows installer"><i class="fab fa-windows"></i> Windows</a>
                     <a href="#" data-platform="macos" onclick="signedDownload('remote-agent-macos'); return false;"
                        class="platform-btn" title="macOS agent"><i class="fab fa-apple"></i> macOS</a>

@@ -357,9 +357,13 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 	me := &pionwebrtc.MediaEngine{}
 	_ = me.RegisterCodec(pionwebrtc.RTPCodecParameters{
 		RTPCodecCapability: pionwebrtc.RTPCodecCapability{
-			MimeType:    pionwebrtc.MimeTypeH264,
-			ClockRate:   90000,
-			SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=640033",
+			MimeType:  pionwebrtc.MimeTypeH264,
+			ClockRate: 90000,
+			// Use constrained baseline for maximum browser compatibility.
+			// The native controller decodes High profile fine via FFmpeg, but
+			// the web dashboard is more sensitive when switching into H.264
+			// mid-session.
+			SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
 		},
 		PayloadType: 96,
 	}, pionwebrtc.RTPCodecTypeVideo)

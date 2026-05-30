@@ -52,10 +52,10 @@ func NewManager() *Manager {
 // Init initializes the encoder with hardware-first, software fallback.
 //
 // Priority order:
-//   1. VideoToolbox (macOS HW) — Apple Silicon eller Intel m/ HW H.264-blok
-//   2. NVENC (Windows/Linux NVIDIA HW) — GTX/RTX-kort
-//   3. OpenH264 (cross-platform software) — fallback hvis ingen HW
-//   4. Software JPEG-placeholder — sidste mulighed
+//  1. VideoToolbox (macOS HW) — Apple Silicon eller Intel m/ HW H.264-blok
+//  2. NVENC (Windows/Linux NVIDIA HW) — GTX/RTX-kort
+//  3. OpenH264 (cross-platform software) — fallback hvis ingen HW
+//  4. Software JPEG-placeholder — sidste mulighed
 func (m *Manager) Init(cfg Config) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -109,6 +109,20 @@ func (m *Manager) Encode(frame *image.RGBA) ([]byte, error) {
 		return nil, fmt.Errorf("encoder not initialized")
 	}
 
+	bounds := frame.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	if width <= 0 || height <= 0 {
+		return nil, fmt.Errorf("invalid frame size: %dx%d", width, height)
+	}
+	if width != m.config.Width || height != m.config.Height {
+		log.Printf("🎬 Reinitializing video encoder for new frame size: %dx%d -> %dx%d",
+			m.config.Width, m.config.Height, width, height)
+		if err := m.reinitializeLocked(width, height); err != nil {
+			return nil, err
+		}
+	}
+
 	m.frameCount++
 	forceKeyframe := false
 	if m.forceNext {
@@ -119,6 +133,33 @@ func (m *Manager) Encode(frame *image.RGBA) ([]byte, error) {
 	}
 
 	return m.encoder.Encode(frame, forceKeyframe)
+}
+
+func (m *Manager) reinitializeLocked(width, height int) error {
+	cfg := m.config
+	cfg.Width = width
+	cfg.Height = height
+
+	if m.encoder != nil {
+		if err := m.encoder.Close(); err != nil {
+			log.Printf("⚠️ Failed to close video encoder during resize: %v", err)
+		}
+		m.encoder = nil
+	}
+
+	previousFrames := m.frameCount
+	m.frameCount = 0
+	m.forceNext = true
+
+	replacement := NewManager()
+	if err := replacement.Init(cfg); err != nil {
+		m.frameCount = previousFrames
+		return fmt.Errorf("failed to reinitialize encoder for %dx%d: %w", width, height, err)
+	}
+
+	m.encoder = replacement.encoder
+	m.config = replacement.config
+	return nil
 }
 
 // SetBitrate adjusts bitrate dynamically

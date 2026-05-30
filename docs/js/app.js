@@ -87,30 +87,6 @@ function setupEventListeners() {
     });
   }
 
-  // Quality toggle button (H264/JPEG mode)
-  const qualityToggleBtn = document.getElementById('qualityToggleBtn');
-  if (qualityToggleBtn) {
-    let currentMode = 'tiles';
-    qualityToggleBtn.addEventListener('click', () => {
-      const modes = ['tiles', 'h264', 'hybrid'];
-      const modeNames = { tiles: 'JPEG Tiles', h264: 'H.264', hybrid: 'Hybrid' };
-      const currentIndex = modes.indexOf(currentMode);
-      currentMode = modes[(currentIndex + 1) % modes.length];
-
-      if (typeof window.sendControlEvent === 'function') {
-        window.sendControlEvent({
-          type: 'set_mode',
-          mode: currentMode
-        });
-        debug(`🎬 Switched to ${modeNames[currentMode]} mode`);
-
-        qualityToggleBtn.title = `Mode: ${modeNames[currentMode]} (click to change)`;
-        qualityToggleBtn.textContent = currentMode === 'tiles' ? '🎚️' : (currentMode === 'h264' ? '🎬' : '🔄');
-      } else {
-        console.warn('sendControlEvent not available - not connected?');
-      }
-    });
-  }
 }
 
 function subscribeToRealtime() {
