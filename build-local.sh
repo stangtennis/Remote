@@ -104,6 +104,44 @@ if [ -n "$LIPO" ] && [ -f "builds/remote-agent-macos-arm64-$VERSION" ] && [ -f "
 fi
 
 # =============================================================================
+# macOS download archives (preserve executable bit for browser downloads)
+# =============================================================================
+echo ""
+echo "📦 Packaging macOS archives..."
+package_macos_binary() {
+    local SRC="$1"
+    local BIN_NAME="$2"
+    local ARCHIVE="$3"
+    local README_TEXT="$4"
+
+    if [ ! -f "$SRC" ]; then
+        echo "⏭️  Skipping ${ARCHIVE} (missing ${SRC})"
+        return 0
+    fi
+
+    local STAGING
+    STAGING=$(mktemp -d)
+    cp "$SRC" "$STAGING/$BIN_NAME"
+    chmod 0755 "$STAGING/$BIN_NAME"
+    printf "%s\n" "$README_TEXT" > "$STAGING/README.txt"
+    tar -C "$STAGING" -czf "builds/$ARCHIVE" "$BIN_NAME" README.txt
+    rm -rf "$STAGING"
+    echo "✅ ${ARCHIVE}"
+}
+
+package_macos_binary \
+    "builds/remote-agent-macos-universal-$VERSION" \
+    "remote-agent" \
+    "RemoteDesktopAgent-macOS-$VERSION.tar.gz" \
+    "Run ./remote-agent --console from Terminal. Grant Screen Recording and Accessibility in System Settings > Privacy & Security."
+
+package_macos_binary \
+    "builds/controller-macos-universal-$VERSION" \
+    "RemoteDesktopController" \
+    "RemoteDesktopController-macOS-$VERSION.tar.gz" \
+    "Run ./RemoteDesktopController from Terminal, or install from the controller settings after launch."
+
+# =============================================================================
 # NSIS Installers (Windows)
 # =============================================================================
 echo ""

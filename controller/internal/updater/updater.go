@@ -54,11 +54,11 @@ type Updater struct {
 	github         *GitHubClient
 	downloader     *Downloader
 	state          *StateManager
-	
-	status         UpdateStatus
+
+	status          UpdateStatus
 	availableUpdate *UpdateInfo
-	lastError      error
-	
+	lastError       error
+
 	onStatusChange func(UpdateStatus)
 	onProgress     func(DownloadProgress)
 }
@@ -207,13 +207,7 @@ func (u *Updater) DownloadUpdate() error {
 		return err
 	}
 
-	// Download file (platform-specific naming)
-	var exePath string
-	if runtime.GOOS == "darwin" {
-		exePath = filepath.Join(versionDir, fmt.Sprintf("%s-%s.tar.gz", u.appType, info.TagName))
-	} else {
-		exePath = filepath.Join(versionDir, fmt.Sprintf("%s-%s.exe", u.appType, info.TagName))
-	}
+	exePath := filepath.Join(versionDir, u.downloadFileName(info))
 	log.Printf("📥 Downloading %s to %s", info.ExeURL, exePath)
 
 	if err := u.downloader.DownloadFile(info.ExeURL, exePath, info.ExeSize); err != nil {
@@ -222,23 +216,32 @@ func (u *Updater) DownloadUpdate() error {
 		return err
 	}
 
-	// Verify SHA256 if available
-	if info.SHA256URL != "" {
-		log.Printf("🔐 Verifying SHA256...")
-		expectedHash, err := u.github.DownloadSHA256(info.SHA256URL)
+	expectedHash := info.SHA256Hash
+	if expectedHash == "" && info.SHA256URL != "" {
+		var err error
+		expectedHash, err = u.github.DownloadSHA256(info.SHA256URL)
 		if err != nil {
 			u.lastError = fmt.Errorf("failed to get SHA256: %w", err)
 			u.setStatus(StatusError)
 			os.Remove(exePath)
 			return u.lastError
 		}
+	}
 
+	if expectedHash != "" {
+		log.Printf("🔐 Verifying SHA256...")
 		if err := VerifySHA256(exePath, expectedHash); err != nil {
 			u.lastError = err
 			u.setStatus(StatusError)
 			os.Remove(exePath)
 			return err
 		}
+	} else {
+		err := fmt.Errorf("no SHA256 hash available — refusing to install unverified binary")
+		u.lastError = err
+		u.setStatus(StatusError)
+		os.Remove(exePath)
+		return err
 	}
 
 	// Save state
@@ -324,16 +327,26 @@ func (u *Updater) FetchVersionInfo() (*VersionInfo, error) {
 	return u.github.FetchVersionInfo()
 }
 
+func (u *Updater) downloadFileName(info *UpdateInfo) string {
+	if runtime.GOOS == "darwin" {
+		if strings.HasSuffix(strings.ToLower(info.ExeURL), ".tar.gz") {
+			return fmt.Sprintf("%s-%s.tar.gz", u.appType, info.TagName)
+		}
+		return fmt.Sprintf("%s-%s", u.appType, info.TagName)
+	}
+	return fmt.Sprintf("%s-%s.exe", u.appType, info.TagName)
+}
+
 // IgnoreUpdate ignores the current available update
 func (u *Updater) IgnoreUpdate() error {
 	if u.availableUpdate == nil {
 		return nil
 	}
-	
+
 	if err := u.state.SetIgnoredVersion(u.availableUpdate.TagName); err != nil {
 		return err
 	}
-	
+
 	u.availableUpdate = nil
 	u.setStatus(StatusUpToDate)
 	return nil

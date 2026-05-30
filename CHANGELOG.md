@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.1.83 - 2026-05-30
+- Fix macOS controller updater downloads when the update server provides raw universal binaries.
+- Verify controller updates with inline SHA256 hashes from `version.json`, including macOS hashes.
+- Preserve macOS update arguments containing spaces in `/Applications/... .app` paths.
+- Add macOS `.tar.gz` download archives for dashboard/manual installs while keeping raw binaries for auto-update.
+
 ## v3.1.82 - 2026-05-30
 - Fix dashboard H.264 playback by routing video over a dedicated data channel and rendering through a browser video element.
 - Reset H.264 encoder state when frame dimensions change to avoid frozen/stretched frames.
