@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.1.84 - 2026-05-31
+- Add optional controller relay-only mode with `RD_FORCE_RELAY=1` for VPN/CGNAT devices such as Mullvad.
+- Pass relay-only ICE policy through native viewer, CLI, and Wails controller connection paths.
+- Keep default ICE behavior unchanged unless relay-only mode is explicitly enabled.
+
 ## v3.1.83 - 2026-05-30
 - Fix macOS controller updater downloads when the update server provides raw universal binaries.
 - Verify controller updates with inline SHA256 hashes from `version.json`, including macOS hashes.
