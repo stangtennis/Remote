@@ -36,11 +36,11 @@
 **Download:**
 ```
 https://github.com/stangtennis/Remote/releases/latest
-→ RemoteDesktopAgent-v3.1.87-Setup.exe
+→ RemoteDesktopAgent-v3.1.88-Setup.exe
 ```
 
 **Flow:**
-1. Download og kør `RemoteDesktopAgent-v3.1.87-Setup.exe`
+1. Download og kør `RemoteDesktopAgent-v3.1.88-Setup.exe`
 2. Agent viser login vindue
 3. Indtast email/password → Klik "Login"
 4. **Første gang:** Venter på admin godkendelse
@@ -96,11 +96,11 @@ https://stangtennis.github.io/Remote/?mode=agent
 **Download:**
 ```
 https://github.com/stangtennis/Remote/releases/latest
-→ RemoteDesktopController-v3.1.87-Setup.exe
+→ RemoteDesktopController-v3.1.88-Setup.exe
 ```
 
 **Flow:**
-1. Download og kør `RemoteDesktopController-v3.1.87-Setup.exe`
+1. Download og kør `RemoteDesktopController-v3.1.88-Setup.exe`
 2. Login med email/password
 3. Se liste over tilgængelige devices (kun dine tildelte)
 4. Dobbeltklik på device eller klik "Connect"
@@ -176,7 +176,7 @@ https://stangtennis.github.io/Remote/
 **Download:**
 ```
 https://github.com/stangtennis/Remote/releases/latest
-→ RemoteDesktopController-v3.1.87-Setup.exe
+→ RemoteDesktopController-v3.1.88-Setup.exe
 ```
 
 **Flow:**
@@ -283,7 +283,7 @@ Bruger kan nu logge ind:
 1. Admin sender link: https://stangtennis.github.io/Remote/
 2. Medarbejder opretter konto
 3. Admin godkender konto
-4. Medarbejder downloader: RemoteDesktopAgent-v3.1.87-Setup.exe
+4. Medarbejder downloader: RemoteDesktopAgent-v3.1.88-Setup.exe
 5. Medarbejder kører agent og logger ind
 6. Agent starter og kører i baggrunden
 7. Admin kan nu forbinde til medarbejderens PC
@@ -342,14 +342,14 @@ Invitation:   https://stangtennis.github.io/Remote/?invite=TOKEN
 https://github.com/stangtennis/Remote/releases/latest
 ```
 
-**Seneste version:** v3.1.87
+**Seneste version:** v3.1.88
 
 **Tilgængelige downloads:**
-- `remote-agent-v3.1.87.exe` - Native Windows agent (GUI)
-- `remote-agent-console-v3.1.87.exe` - Console version (headless)
-- `controller-v3.1.87.exe` - Native Windows controller
-- `RemoteDesktopAgent-v3.1.87-Setup.exe` - Agent installer
-- `RemoteDesktopController-v3.1.87-Setup.exe` - Controller installer
+- `remote-agent-v3.1.88.exe` - Native Windows agent (GUI)
+- `remote-agent-console-v3.1.88.exe` - Console version (headless)
+- `controller-v3.1.88.exe` - Native Windows controller
+- `RemoteDesktopAgent-v3.1.88-Setup.exe` - Agent installer
+- `RemoteDesktopController-v3.1.88-Setup.exe` - Controller installer
 
 ---
 

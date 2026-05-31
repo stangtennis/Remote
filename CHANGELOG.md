@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.1.88 - 2026-05-31
+- Always include the coturn fallback in the agent ICE server list, even if Edge Function TURN credentials cannot be fetched.
+- Fix relay-only agents producing an SDP answer but no ICE candidates when their auth token is stale.
+
 ## v3.1.87 - 2026-05-31
 - Add the same `turn.hawkeye123.dk` coturn fallback to the agent ICE server list that the dashboard already uses.
 - Fix relay-only agents that returned an answer but did not generate ICE relay candidates.

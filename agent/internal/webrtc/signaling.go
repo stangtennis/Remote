@@ -111,7 +111,7 @@ func (m *Manager) getICEServers() []webrtc.ICEServer {
 		log.Printf("🔒 TURN server configured: %s", turnServer)
 	}
 
-	return iceServers
+	return appendCoturnFallback(iceServers)
 }
 
 func appendCoturnFallback(servers []webrtc.ICEServer) []webrtc.ICEServer {
