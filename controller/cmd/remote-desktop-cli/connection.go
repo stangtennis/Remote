@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -178,7 +179,12 @@ func (cm *ConnectionManager) Connect(deviceID, deviceName string) error {
 	token := cm.auth.GetToken()
 	iceServers := fetchICEServers(cm.cfg.SupabaseURL, cm.cfg.SupabaseAnonKey, token)
 
-	if err := client.CreatePeerConnection(iceServers); err != nil {
+	if forceRelayEnabled() {
+		log.Println("[cli] RD_FORCE_RELAY enabled — using TURN relay-only ICE policy")
+		if err := client.CreatePeerConnectionWithPolicy(iceServers, webrtc.ICETransportPolicyRelay); err != nil {
+			return fmt.Errorf("failed to create peer connection: %w", err)
+		}
+	} else if err := client.CreatePeerConnection(iceServers); err != nil {
 		return fmt.Errorf("failed to create peer connection: %w", err)
 	}
 
@@ -232,6 +238,15 @@ func (cm *ConnectionManager) Connect(deviceID, deviceName string) error {
 	cm.mu.Unlock()
 
 	return nil
+}
+
+func forceRelayEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("RD_FORCE_RELAY"))) {
+	case "1", "true", "yes", "y", "on", "relay":
+		return true
+	default:
+		return false
+	}
 }
 
 // Disconnect closes a WebRTC connection

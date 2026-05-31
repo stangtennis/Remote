@@ -334,6 +334,7 @@ class ViewerSession {
         auth_token: config.auth_token || config.AuthToken,
         user_id: config.user_id || config.UserID,
         refresh_token: config.refresh_token || config.RefreshToken,
+        force_relay: !!(config.force_relay ?? config.ForceRelay),
       };
 
       this.setConnectStatus(`Initialiserer Supabase...`);
@@ -437,9 +438,12 @@ class ViewerSession {
   }
 
   async setupPeerConnection() {
-    // Allow all ICE types — P2P preferred for speed, relay as fallback
+    // Allow all ICE types by default. RD_FORCE_RELAY=1 forces TURN-only for VPN/CGNAT cases.
     const config = { ...this.iceConfig };
-    this.setConnectStatus(`ICE servers: ${config.iceServers?.length || 0}, policy: all`);
+    if (this.config?.force_relay) {
+      config.iceTransportPolicy = 'relay';
+    }
+    this.setConnectStatus(`ICE servers: ${config.iceServers?.length || 0}, policy: ${config.iceTransportPolicy || 'all'}`);
     this.peerConnection = new RTCPeerConnection(config);
 
     this.peerConnection.onicecandidate = (event) => {
@@ -1484,6 +1488,7 @@ class ViewerSession {
         auth_token: config.auth_token || config.AuthToken,
         user_id: config.user_id || config.UserID,
         refresh_token: config.refresh_token || config.RefreshToken,
+        force_relay: !!(config.force_relay ?? config.ForceRelay),
       };
 
       this.supabase = window.supabase
@@ -2375,6 +2380,7 @@ class ViewerSession {
         auth_token: config.auth_token || config.AuthToken,
         user_id: config.user_id || config.UserID,
         refresh_token: config.refresh_token || config.RefreshToken,
+        force_relay: !!(config.force_relay ?? config.ForceRelay),
       };
 
       this.supabase = window.supabase
@@ -2468,6 +2474,9 @@ class ViewerSession {
 
     // Setup peer connection (receive video only, no data channels for input)
     const config = { ...this.iceConfig };
+    if (this.config?.force_relay) {
+      config.iceTransportPolicy = 'relay';
+    }
     this.peerConnection = new RTCPeerConnection(config);
 
     // Handle remote video track

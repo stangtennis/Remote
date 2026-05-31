@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -352,6 +353,7 @@ type ConnectionConfig struct {
 	AuthToken    string `json:"auth_token"`
 	UserID       string `json:"user_id"`
 	RefreshToken string `json:"refresh_token"`
+	ForceRelay   bool   `json:"force_relay"`
 }
 
 // GetConnectionConfig returns config for frontend WebRTC connections
@@ -365,7 +367,17 @@ func (a *App) GetConnectionConfig() (*ConnectionConfig, error) {
 		AuthToken:    a.supabase.AuthToken,
 		UserID:       a.currentUser.ID,
 		RefreshToken: a.supabase.RefreshTok,
+		ForceRelay:   forceRelayEnabled(),
 	}, nil
+}
+
+func forceRelayEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("RD_FORCE_RELAY"))) {
+	case "1", "true", "yes", "y", "on", "relay":
+		return true
+	default:
+		return false
+	}
 }
 
 // ==================== SETTINGS ====================

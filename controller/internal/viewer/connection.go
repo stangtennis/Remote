@@ -11,6 +11,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -202,8 +203,14 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 		}
 	})
 
-	// Create peer connection with STUN and TURN servers
-	if err := client.CreatePeerConnection(getICEServers(supabaseURL, anonKey, authToken)); err != nil {
+	// Create peer connection with STUN and TURN servers.
+	iceServers := getICEServers(supabaseURL, anonKey, authToken)
+	if forceRelayEnabled() {
+		log.Println("🔒 RD_FORCE_RELAY enabled — using TURN relay-only ICE policy")
+		if err := client.CreatePeerConnectionWithPolicy(iceServers, webrtc.ICETransportPolicyRelay); err != nil {
+			return fmt.Errorf("failed to create peer connection: %w", err)
+		}
+	} else if err := client.CreatePeerConnection(iceServers); err != nil {
 		return fmt.Errorf("failed to create peer connection: %w", err)
 	}
 
@@ -256,6 +263,15 @@ func (v *Viewer) ConnectWebRTC(supabaseURL, anonKey, authToken, userID string) e
 	}()
 
 	return nil
+}
+
+func forceRelayEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("RD_FORCE_RELAY"))) {
+	case "1", "true", "yes", "y", "on", "relay":
+		return true
+	default:
+		return false
+	}
 }
 
 // handleVideoFrame processes incoming video frames

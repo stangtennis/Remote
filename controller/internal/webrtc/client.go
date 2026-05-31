@@ -62,8 +62,13 @@ func NewClient() (*Client, error) {
 	}, nil
 }
 
-// CreatePeerConnection initializes the peer connection with H.264 video support
+// CreatePeerConnection initializes the peer connection with H.264 video support.
 func (c *Client) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
+	return c.CreatePeerConnectionWithPolicy(iceServers, webrtc.ICETransportPolicyAll)
+}
+
+// CreatePeerConnectionWithPolicy initializes the peer connection with an explicit ICE transport policy.
+func (c *Client) CreatePeerConnectionWithPolicy(iceServers []webrtc.ICEServer, iceTransportPolicy webrtc.ICETransportPolicy) error {
 	// Create MediaEngine with H.264 codec support
 	m := &webrtc.MediaEngine{}
 
@@ -99,7 +104,8 @@ func (c *Client) CreatePeerConnection(iceServers []webrtc.ICEServer) error {
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(i))
 
 	config := webrtc.Configuration{
-		ICEServers: iceServers,
+		ICEServers:         iceServers,
+		ICETransportPolicy: iceTransportPolicy,
 	}
 
 	// Use custom API to create peer connection
