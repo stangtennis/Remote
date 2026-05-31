@@ -754,6 +754,7 @@ function handleIncomingMediaMessage(event, ctx) {
 function attachSessionVideoTrack(ctx, stream) {
   if (!ctx || !stream) return;
   ctx.videoStream = stream;
+  ctx.h264FramesAvailable = false;
 
   if (!ctx.videoElement) {
     const video = document.createElement('video');
@@ -770,13 +771,18 @@ function attachSessionVideoTrack(ctx, stream) {
   }
 
   ctx.videoElement.srcObject = stream;
-  ctx.videoElement.onloadedmetadata = () => {
+  const markVideoReady = () => {
     ctx.screenWidth = ctx.videoElement.videoWidth || ctx.screenWidth;
     ctx.screenHeight = ctx.videoElement.videoHeight || ctx.screenHeight;
+    ctx.h264FramesAvailable = (ctx.videoElement.videoWidth > 0 && ctx.videoElement.videoHeight > 0);
     refreshPreviewSurface(ctx);
     startSessionVideoRendering(ctx);
   };
+  ctx.videoElement.onloadedmetadata = markVideoReady;
+  ctx.videoElement.onloadeddata = markVideoReady;
+  ctx.videoElement.onplaying = markVideoReady;
   ctx.videoElement.play().catch(e => debug('Video autoplay blocked:', e));
+  startSessionVideoRendering(ctx);
   refreshPreviewSurface(ctx);
 }
 
@@ -872,27 +878,47 @@ function refreshPreviewSurface(session = getActiveSessionContext()) {
   const previewCanvas = document.getElementById('previewCanvas');
   if (!previewVideo || !previewCanvas) return;
 
-  const useVideo = isVideoMode(session) && !!session?.videoStream;
-
   if (session?.id === 'quick-support') {
     previewVideo.style.display = 'block';
     previewCanvas.style.display = 'none';
     return;
   }
 
-  if (useVideo) {
-    if (previewVideo.srcObject !== session.videoStream) {
-      previewVideo.srcObject = session.videoStream;
-    }
-    previewVideo.style.display = 'block';
-    previewCanvas.style.display = 'none';
-  } else {
-    previewCanvas.style.display = 'block';
-    previewVideo.style.display = 'none';
-    if (!isVideoMode(session)) {
-      previewVideo.srcObject = null;
-    }
+  // Normal remote sessions render both JPEG and H.264 into the same canvas.
+  // Keeping the canvas visible avoids a frozen/blank view while a video track
+  // is negotiated or if H.264 decoding never starts.
+  previewCanvas.style.display = 'block';
+  previewVideo.style.display = 'none';
+  if (!isVideoMode(session)) {
+    previewVideo.srcObject = null;
   }
+}
+
+function scheduleH264Fallback(session = getActiveSessionContext()) {
+  if (!session || !isVideoMode(session)) return;
+  if (session.h264FallbackTimer) clearTimeout(session.h264FallbackTimer);
+
+  session.h264FallbackTimer = setTimeout(() => {
+    session.h264FallbackTimer = null;
+    if (!session || !isVideoMode(session)) return;
+
+    const video = session.videoElement;
+    const hasDecodedFrame = !!(video &&
+      video.readyState >= video.HAVE_CURRENT_DATA &&
+      video.videoWidth > 0 &&
+      video.videoHeight > 0);
+
+    if (hasDecodedFrame) return;
+
+    debug('⚠️ H.264 produced no decoded frame; falling back to JPEG tiles for', session.id);
+    session.streamMode = 'tiles';
+    sendControlEvent({ type: 'set_mode', mode: 'tiles' });
+    refreshStreamingControls(session);
+    refreshPreviewSurface(session);
+    if (typeof showToast === 'function') {
+      showToast('H.264 gav ingen video — skifter tilbage til JPEG', 'warning');
+    }
+  }, 3500);
 }
 
 function getInputCaptureTarget() {
@@ -1376,6 +1402,7 @@ function applyStreamingPreferences(session = getActiveSessionContext()) {
   sendControlEvent({ type: 'set_mode', mode: session.streamMode || 'tiles' });
   refreshStreamingControls(session);
   refreshPreviewSurface(session);
+  scheduleH264Fallback(session);
 }
 
 function toggleStreamMode() {
@@ -1387,6 +1414,7 @@ function toggleStreamMode() {
   sendControlEvent({ type: 'set_mode', mode: session.streamMode });
   refreshStreamingControls(session);
   refreshPreviewSurface(session);
+  scheduleH264Fallback(session);
 
   if (typeof showToast === 'function') {
     showToast(`Stream mode: ${STREAM_MODE_LABELS[session.streamMode]}`, 'info');
