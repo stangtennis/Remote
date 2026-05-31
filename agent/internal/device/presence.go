@@ -157,6 +157,10 @@ func (d *Device) handlePendingCommand(config RegistrationConfig, result *Heartbe
 	switch result.PendingCommand {
 	case "force_update":
 		go d.executeForceUpdate()
+	case "enable_relay":
+		go d.executeRelayMode(true)
+	case "disable_relay":
+		go d.executeRelayMode(false)
 	case "restart":
 		go d.executeRestart()
 	case "lock":
@@ -166,6 +170,39 @@ func (d *Device) handlePendingCommand(config RegistrationConfig, result *Heartbe
 	default:
 		log.Printf("⚠️  Unknown pending command: %s", result.PendingCommand)
 	}
+}
+
+func (d *Device) executeRelayMode(enabled bool) {
+	value := ""
+	if enabled {
+		value = "1"
+	}
+
+	if err := os.Setenv("RD_FORCE_RELAY", value); err != nil {
+		log.Printf("❌ Relay mode: failed to update current process env: %v", err)
+		return
+	}
+
+	if enabled {
+		log.Println("🔒 Relay mode enabled for current agent process")
+	} else {
+		log.Println("🔓 Relay mode disabled for current agent process")
+	}
+
+	if runtime.GOOS != "windows" {
+		return
+	}
+
+	if enabled {
+		if err := exec.Command("setx", "RD_FORCE_RELAY", "1", "/M").Run(); err != nil {
+			log.Printf("⚠️ Relay mode: machine env persist failed: %v", err)
+		}
+		return
+	}
+
+	// Remove persisted values best-effort. The current process env was already updated above.
+	_ = exec.Command("reg", "delete", `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment`, "/v", "RD_FORCE_RELAY", "/f").Run()
+	_ = exec.Command("reg", "delete", `HKCU\Environment`, "/v", "RD_FORCE_RELAY", "/f").Run()
 }
 
 // executeForceUpdate downloads and installs agent update.
