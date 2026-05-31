@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.1.87 - 2026-05-31
+- Add the same `turn.hawkeye123.dk` coturn fallback to the agent ICE server list that the dashboard already uses.
+- Fix relay-only agents that returned an answer but did not generate ICE relay candidates.
+
 ## v3.1.86 - 2026-05-31
 - Add remote `enable_relay` and `disable_relay` pending commands for agents.
 - Allow an online agent to switch TURN relay-only mode without physical access.

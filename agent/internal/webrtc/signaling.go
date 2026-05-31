@@ -2,6 +2,9 @@ package webrtc
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -87,7 +90,7 @@ func (m *Manager) getICEServers() []webrtc.ICEServer {
 	// Try fetching from Edge Function first
 	authToken, _ := m.tokenProvider.GetToken()
 	if servers := fetchTurnCredentials(m.cfg.SupabaseURL, m.cfg.SupabaseAnonKey, authToken, m.httpClient); len(servers) > 0 {
-		return servers
+		return appendCoturnFallback(servers)
 	}
 
 	// Fallback to env vars
@@ -109,6 +112,27 @@ func (m *Manager) getICEServers() []webrtc.ICEServer {
 	}
 
 	return iceServers
+}
+
+func appendCoturnFallback(servers []webrtc.ICEServer) []webrtc.ICEServer {
+	const coturnSecret = "HawkeyeTurnSecret2026x"
+	username := fmt.Sprintf("%d:remotedesktop", time.Now().Add(24*time.Hour).Unix())
+	mac := hmac.New(sha1.New, []byte(coturnSecret))
+	_, _ = mac.Write([]byte(username))
+	credential := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+
+	return append(servers,
+		webrtc.ICEServer{
+			URLs:       []string{"turn:turn.hawkeye123.dk:3478?transport=udp"},
+			Username:   username,
+			Credential: credential,
+		},
+		webrtc.ICEServer{
+			URLs:       []string{"turn:turn.hawkeye123.dk:3478?transport=tcp"},
+			Username:   username,
+			Credential: credential,
+		},
+	)
 }
 
 type Session struct {
@@ -705,9 +729,15 @@ func (m *Manager) waitForOffer(sessionID string) {
 					}
 					if icePayload.Candidate != "" {
 						candidate := &webrtc.ICECandidateInit{
-							Candidate:     icePayload.Candidate,
-							SDPMid:        &icePayload.SDPMid,
-							SDPMLineIndex: func() *uint16 { if icePayload.SDPMLineIndex != nil { v := uint16(*icePayload.SDPMLineIndex); return &v }; return nil }(),
+							Candidate: icePayload.Candidate,
+							SDPMid:    &icePayload.SDPMid,
+							SDPMLineIndex: func() *uint16 {
+								if icePayload.SDPMLineIndex != nil {
+									v := uint16(*icePayload.SDPMLineIndex)
+									return &v
+								}
+								return nil
+							}(),
 						}
 						m.handleICECandidate(candidate)
 					}
@@ -828,9 +858,15 @@ func (m *Manager) listenForICE(sessionID string) {
 				}
 				if icePayload.Candidate != "" {
 					candidate := &webrtc.ICECandidateInit{
-						Candidate:     icePayload.Candidate,
-						SDPMid:        &icePayload.SDPMid,
-						SDPMLineIndex: func() *uint16 { if icePayload.SDPMLineIndex != nil { v := uint16(*icePayload.SDPMLineIndex); return &v }; return nil }(),
+						Candidate: icePayload.Candidate,
+						SDPMid:    &icePayload.SDPMid,
+						SDPMLineIndex: func() *uint16 {
+							if icePayload.SDPMLineIndex != nil {
+								v := uint16(*icePayload.SDPMLineIndex)
+								return &v
+							}
+							return nil
+						}(),
 					}
 					m.handleICECandidate(candidate)
 				}
