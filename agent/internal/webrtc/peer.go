@@ -352,6 +352,10 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 	config := pionwebrtc.Configuration{
 		ICEServers: iceServers,
 	}
+	if forceRelayEnabled() {
+		log.Println("🔒 RD_FORCE_RELAY enabled — agent using TURN relay-only ICE policy")
+		config.ICETransportPolicy = pionwebrtc.ICETransportPolicyRelay
+	}
 
 	// Create MediaEngine with H.264 codec support (required for H.264 track negotiation).
 	me := &pionwebrtc.MediaEngine{}
@@ -620,6 +624,15 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 	})
 
 	return nil
+}
+
+func forceRelayEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("RD_FORCE_RELAY"))) {
+	case "1", "true", "yes", "y", "on", "relay":
+		return true
+	default:
+		return false
+	}
 }
 
 func (m *Manager) setupDataChannelHandlers(dc *pionwebrtc.DataChannel) {
