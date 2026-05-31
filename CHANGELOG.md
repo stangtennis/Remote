@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.1.85 - 2026-05-31
+- Add `RD_FORCE_RELAY=1` support on the agent so VPN/CGNAT hosts can advertise TURN relay candidates only.
+- Keep controller relay mode from v3.1.84 and make the VPN path configurable on both ends.
+
 ## v3.1.84 - 2026-05-31
 - Add optional controller relay-only mode with `RD_FORCE_RELAY=1` for VPN/CGNAT devices such as Mullvad.
 - Pass relay-only ICE policy through native viewer, CLI, and Wails controller connection paths.
