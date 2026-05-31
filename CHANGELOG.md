@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.1.86 - 2026-05-31
+- Add remote `enable_relay` and `disable_relay` pending commands for agents.
+- Allow an online agent to switch TURN relay-only mode without physical access.
+
 ## v3.1.85 - 2026-05-31
 - Add `RD_FORCE_RELAY=1` support on the agent so VPN/CGNAT hosts can advertise TURN relay candidates only.
 - Keep controller relay mode from v3.1.84 and make the VPN path configurable on both ends.

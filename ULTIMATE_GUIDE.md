@@ -236,19 +236,19 @@ ssh ubuntu "docker stop caddy"
 ### Project Info
 ```yaml
 Repository: https://github.com/stangtennis/Remote
-Agent Version: v3.1.85
-Controller Version: v3.1.85
+Agent Version: v3.1.86
+Controller Version: v3.1.86
 Last Updated: 2026-05-25
 Build Server: Ubuntu (192.168.1.92), cross-compile to Windows
-Build Script: ./build-local.sh v3.1.85 (builds all 3 exe + NSIS installers)
+Build Script: ./build-local.sh v3.1.86 (builds all 3 exe + NSIS installers)
 ```
 
 ### Downloads
 ```yaml
 Releases: https://github.com/stangtennis/Remote/releases
-Agent Installer: https://updates.hawkeye123.dk/RemoteDesktopAgent-v3.1.85-Setup.exe
-Agent Console Installer: https://updates.hawkeye123.dk/RemoteDesktopAgentConsole-v3.1.85-Setup.exe
-Controller Installer: https://updates.hawkeye123.dk/RemoteDesktopController-v3.1.85-Setup.exe
+Agent Installer: https://updates.hawkeye123.dk/RemoteDesktopAgent-v3.1.86-Setup.exe
+Agent Console Installer: https://updates.hawkeye123.dk/RemoteDesktopAgentConsole-v3.1.86-Setup.exe
+Controller Installer: https://updates.hawkeye123.dk/RemoteDesktopController-v3.1.86-Setup.exe
 ```
 
 ### Auto-Update (Agent + Controller)
@@ -303,7 +303,7 @@ https://downloads.hawkeye123.dk
 ```bash
 # Byg alle 3 exe + NSIS installere:
 cd ~/projekter/Remote\ Desktop
-./build-local.sh v3.1.85
+./build-local.sh v3.1.86
 
 # Deploy til Caddy:
 cp builds/*.exe ~/caddy/downloads/
@@ -2972,7 +2972,7 @@ WebRTC-based remote desktop solution with three components:
 - **Controller** - Desktop app (Windows, Fyne UI) for controlling remote machines
 - **Dashboard** - Web interface for remote control and management
 
-### Current Version: v3.1.85 (2026-05-31)
+### Current Version: v3.1.86 (2026-05-31)
 
 ### Repository
 ```yaml
@@ -2995,7 +2995,7 @@ Builds: ~/projekter/Remote Desktop/builds/
 ```bash
 # Byg alle 3 exe + NSIS installere (fra Ubuntu):
 cd ~/projekter/Remote\ Desktop
-./build-local.sh v3.1.85
+./build-local.sh v3.1.86
 
 # Deploy:
 cp builds/*.exe ~/caddy/downloads/
@@ -3095,7 +3095,7 @@ cp builds/*.exe ~/caddy/downloads/
 ### Troubleshooting
 
 #### Mouse Not Working Correctly
-1. Check agent version (use a recent `v3.x` release, ideally `v3.1.85+`)
+1. Check agent version (use a recent `v3.x` release, ideally `v3.1.86+`)
 2. Check DPI scaling on agent machine
 3. Verify `rel: true` flag in mouse events (dashboard)
 4. Check agent logs for coordinate values
@@ -3145,7 +3145,7 @@ cp builds/*.exe ~/caddy/downloads/
 
 ## 🖥️ REMOTE DESKTOP APPLICATION - COMPLETE REFERENCE
 
-### Current Version: v3.1.85
+### Current Version: v3.1.86
 
 ### Repository & Downloads
 ```yaml
@@ -3157,9 +3157,9 @@ Downloads (Basic Auth): https://downloads.hawkeye123.dk
 
 ### NSIS Installere
 ```yaml
-Agent Setup: https://updates.hawkeye123.dk/RemoteDesktopAgent-v3.1.85-Setup.exe
-Agent Console Setup: https://updates.hawkeye123.dk/RemoteDesktopAgentConsole-v3.1.85-Setup.exe
-Controller Setup: https://updates.hawkeye123.dk/RemoteDesktopController-v3.1.85-Setup.exe
+Agent Setup: https://updates.hawkeye123.dk/RemoteDesktopAgent-v3.1.86-Setup.exe
+Agent Console Setup: https://updates.hawkeye123.dk/RemoteDesktopAgentConsole-v3.1.86-Setup.exe
+Controller Setup: https://updates.hawkeye123.dk/RemoteDesktopController-v3.1.86-Setup.exe
 ```
 
 ### Components
@@ -3173,29 +3173,29 @@ Controller Setup: https://updates.hawkeye123.dk/RemoteDesktopController-v3.1.85-
 ### Build Commands (Ubuntu cross-compile)
 ```bash
 # Build all 3 exe files (agent GUI, agent console, controller)
-./build-local.sh v3.1.85
+./build-local.sh v3.1.86
 
 # Or manually:
 # Agent GUI (no console window)
 cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
-go build -ldflags '-s -w -H windowsgui -X main.Version=v3.1.85' \
--o ../builds/remote-agent-v3.1.85.exe ./cmd/remote-agent
+go build -ldflags '-s -w -H windowsgui -X main.Version=v3.1.86' \
+-o ../builds/remote-agent-v3.1.86.exe ./cmd/remote-agent
 
 # Agent Console (with console window for debugging)
 cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
-go build -ldflags '-s -w -X main.Version=v3.1.85' \
--o ../builds/remote-agent-console-v3.1.85.exe ./cmd/remote-agent
+go build -ldflags '-s -w -X main.Version=v3.1.86' \
+-o ../builds/remote-agent-console-v3.1.86.exe ./cmd/remote-agent
 
 # Controller
 cd controller && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
 CC=x86_64-w64-mingw32-gcc \
-go build -ldflags '-s -w -H windowsgui -X main.version=v3.1.85' \
--o ../builds/controller-v3.1.85.exe .
+go build -ldflags '-s -w -H windowsgui -X main.version=v3.1.86' \
+-o ../builds/controller-v3.1.86.exe .
 ```
 
-### Agent Features (v3.1.85)
+### Agent Features (v3.1.86)
 - **Screen Capture**: DXGI (fast, hardware accelerated) or GDI (universal fallback)
 - **Session 0 Pipe Capturer**: Named pipe IPC for login screen capture (service mode)
 - **SYSTEM Token Fallback**: Capture works even when nobody is logged in
@@ -3210,7 +3210,7 @@ go build -ldflags '-s -w -H windowsgui -X main.version=v3.1.85' \
 - **Authenticated JWT**: Agent uses JWT tokens (not anon key) for API calls
 - **System Tray**: Icon with update check, install/uninstall options
 
-### Controller Features (v3.1.85)
+### Controller Features (v3.1.86)
 - **Fyne UI**: Native Windows desktop application
 - **Multi-device**: Connect to multiple agents
 - **H.264 Decoding**: FFmpeg subprocess (NV12→MJPEG output, self-framing)
@@ -3234,7 +3234,7 @@ go build -ldflags '-s -w -H windowsgui -X main.version=v3.1.85' \
 
 #### Via NSIS Installer (Anbefalet)
 ```
-Download: https://updates.hawkeye123.dk/RemoteDesktopAgent-v3.1.85-Setup.exe
+Download: https://updates.hawkeye123.dk/RemoteDesktopAgent-v3.1.86-Setup.exe
 - Installerer til Program Files\RemoteDesktopAgent
 - Opretter Start Menu genvej
 - Registrerer autostart
@@ -3453,7 +3453,7 @@ Get-Content "$env:APPDATA\RemoteAgent\agent.log" -Tail 50
 # Edit code on Ubuntu build server
 
 # Build all 3 exe files
-./build-local.sh v3.1.85
+./build-local.sh v3.1.86
 
 # Deploy to Caddy
 cp builds/*.exe ~/caddy/downloads/
@@ -3462,12 +3462,12 @@ cp builds/*.exe ~/caddy/downloads/
 cd "/home/dennis/projekter/Remote Desktop"
 git add -A
 git commit -m "Description of changes"
-git push && git tag v3.1.85 && git push origin v3.1.85
+git push && git tag v3.1.86 && git push origin v3.1.86
 
 # Deploy to Caddy (auto-update)
-cp builds/remote-agent-v3.1.85.exe ~/caddy/downloads/remote-agent.exe
-cp builds/remote-agent-console-v3.1.85.exe ~/caddy/downloads/remote-agent-console.exe
-cp builds/controller-v3.1.85.exe ~/caddy/downloads/controller.exe
+cp builds/remote-agent-v3.1.86.exe ~/caddy/downloads/remote-agent.exe
+cp builds/remote-agent-console-v3.1.86.exe ~/caddy/downloads/remote-agent-console.exe
+cp builds/controller-v3.1.86.exe ~/caddy/downloads/controller.exe
 # Update version.json med ny version
 ```
 
