@@ -151,6 +151,12 @@ class ViewerSession {
     this.screenHeight = 0;
     this.usingH264 = false;
     this.requestedCodec = 'jpeg';
+    this.h264FallbackTimer = null;
+    this.h264RequestedAt = 0;
+    this.h264LastProgressAt = 0;
+    this.h264LastVideoTime = 0;
+    this.h264FrameCallbackActive = false;
+    this.lastJpegFrameAt = 0;
     this.isFullscreen = false;
     this.inputSetup = false;
     this.autoLoginAttempted = false;
@@ -496,6 +502,7 @@ class ViewerSession {
         // by checking if video element receives frames (videoWidth > 0).
         this.videoEl.srcObject = event.streams[0];
         this.videoEl.style.display = this.requestedCodec === 'h264' ? '' : 'none';
+        this._startH264ProgressWatch();
         this.canvasEl.style.pointerEvents = 'auto';
         this.canvasEl.style.background = 'transparent';
       } else if (event.track.kind === 'audio') {
@@ -726,6 +733,7 @@ class ViewerSession {
       if (this.videoEl) this.videoEl.style.display = 'none';
     } else {
       if (this.videoEl) this.videoEl.style.display = '';
+      this._scheduleH264Fallback();
     }
 
     if (msg.accepted === false) {
@@ -793,6 +801,7 @@ class ViewerSession {
   renderFrame(data) {
     const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
     if (blob.size < 100) return;
+    this.lastJpegFrameAt = Date.now();
     // Count frames for FPS calculation
     if (!this._frameCount) this._frameCount = 0;
     this._frameCount++;
@@ -811,6 +820,9 @@ class ViewerSession {
         this._fitCanvasToContainer(canvas);
       }
       ctx.drawImage(img, 0, 0);
+      if (!this.usingH264 && this.canvasEl) {
+        this.canvasEl.style.display = '';
+      }
       URL.revokeObjectURL(img.src);
     };
     img.onerror = () => URL.revokeObjectURL(img.src);
@@ -1231,9 +1243,11 @@ class ViewerSession {
       if (rtt != null) parts.push(`${rtt}ms`);
       if (fps != null) parts.push(`${fps}fps`);
       if (bwText) parts.push(bwText);
-      // Detect actual codec: H.264 if video element has frames, JPEG if canvas gets data channel frames
+      // Detect actual H.264 from real video progress, not only videoWidth.
+      // WebView can keep videoWidth from a stale first frame while the stream
+      // has stopped; treating that as active H.264 hides the live JPEG canvas.
       const wasH264 = this.usingH264;
-      this.usingH264 = !!(this.videoEl && this.videoEl.videoWidth > 0 && this.videoEl.videoHeight > 0);
+      this.usingH264 = this._hasRecentH264Progress();
       parts.push(this.usingH264 ? 'H.264' : 'JPEG');
 
       // Skjul/vis canvas afhængigt af mode. I JPEG-tile-mode tegner vi på
@@ -1585,6 +1599,8 @@ class ViewerSession {
     this.legacyFrameChunks = {};
     this.usingH264 = false;
     this.requestedCodec = 'jpeg';
+    if (this.h264FallbackTimer) { clearTimeout(this.h264FallbackTimer); this.h264FallbackTimer = null; }
+    this.h264FrameCallbackActive = false;
     this.processedSignalIds.clear();
     this.pendingIceCandidates = [];
     this.stopTerminal();
@@ -2028,7 +2044,7 @@ class ViewerSession {
     }
     const h264ActiveOrRequested = this.requestedCodec === 'h264' || this.usingH264;
     const newMode = h264ActiveOrRequested ? 'tiles' : 'h264';
-    const bitrate = newMode === 'h264' ? 32000 : 0;
+    const bitrate = newMode === 'h264' ? this._h264BitrateKbps() : 0;
     try {
       const ok = this.sendControlJSON({ type: 'set_mode', t: 'set_mode', mode: newMode, bitrate: bitrate }, 2, 350);
       if (!ok) throw new Error('control channel not open');
@@ -2044,6 +2060,7 @@ class ViewerSession {
         if (this.videoEl) this.videoEl.style.display = 'none';
         const sObj = this.videoEl.srcObject;
         this.videoEl.srcObject = null;
+        if (this.h264FallbackTimer) { clearTimeout(this.h264FallbackTimer); this.h264FallbackTimer = null; }
         // Re-attach efter 100ms så ny H.264 strøm kan fanges hvis brugeren skifter tilbage
         setTimeout(() => { if (this.videoEl && sObj) this.videoEl.srcObject = sObj; }, 100);
       } else {
@@ -2052,6 +2069,11 @@ class ViewerSession {
         // like a black screen and the user cannot switch back reliably.
         if (this.canvasEl) this.canvasEl.style.display = '';
         if (this.videoEl) this.videoEl.style.display = '';
+        this.h264RequestedAt = Date.now();
+        this.h264LastProgressAt = 0;
+        this.h264LastVideoTime = this.videoEl?.currentTime || 0;
+        this._startH264ProgressWatch();
+        this._scheduleH264Fallback();
       }
       this._updateCodecBtn();
       // Toolbar click can steal focus; re-focus viewer so keyboard/mouse keep working.
@@ -2076,6 +2098,61 @@ class ViewerSession {
       btn.classList.add('codec-active-jpeg');
       btn.classList.remove('codec-active-h264');
     }
+  }
+
+  _h264BitrateKbps() {
+    // Keep controller H.264 conservative. 32 Mbps is too aggressive over TURN
+    // relay/VPN links and can starve the stream before the first decoded frame.
+    return 4000;
+  }
+
+  _startH264ProgressWatch() {
+    if (!this.videoEl || this.h264FrameCallbackActive) return;
+    if (typeof this.videoEl.requestVideoFrameCallback !== 'function') return;
+
+    this.h264FrameCallbackActive = true;
+    const onFrame = () => {
+      if (!this.videoEl || !this.videoEl.srcObject) {
+        this.h264FrameCallbackActive = false;
+        return;
+      }
+      if (this.videoEl.videoWidth > 0 && this.videoEl.videoHeight > 0) {
+        this.h264LastProgressAt = Date.now();
+        this.h264LastVideoTime = this.videoEl.currentTime || this.h264LastVideoTime;
+      }
+      this.videoEl.requestVideoFrameCallback(onFrame);
+    };
+    this.videoEl.requestVideoFrameCallback(onFrame);
+  }
+
+  _hasRecentH264Progress() {
+    const video = this.videoEl;
+    if (!video || video.videoWidth <= 0 || video.videoHeight <= 0) return false;
+
+    const now = Date.now();
+    const currentTime = video.currentTime || 0;
+    if (currentTime > this.h264LastVideoTime + 0.05) {
+      this.h264LastVideoTime = currentTime;
+      this.h264LastProgressAt = now;
+    }
+
+    return this.requestedCodec === 'h264' &&
+      this.h264LastProgressAt > 0 &&
+      now - this.h264LastProgressAt < 2500;
+  }
+
+  _scheduleH264Fallback() {
+    if (this.h264FallbackTimer) clearTimeout(this.h264FallbackTimer);
+    if (this.requestedCodec !== 'h264') return;
+
+    this.h264FallbackTimer = setTimeout(() => {
+      this.h264FallbackTimer = null;
+      if (this.requestedCodec !== 'h264' || this._hasRecentH264Progress()) return;
+
+      console.warn(`[${this.deviceName}] H.264 produced no moving frames; falling back to JPEG`);
+      showToast('H.264 gav ingen stabil video - skifter tilbage til JPEG', 'warning');
+      this.requestJpegMode();
+    }, 4500);
   }
 
   // Vis session-log i en modal — samler connect-log + recent console-events
@@ -2183,12 +2260,17 @@ class ViewerSession {
   enableH264Mode() {
     // Request H.264 streaming mode for better performance on large screen changes
     if (!this.dataChannel) return;
-    if (!this.sendControlJSON({ type: 'set_mode', t: 'set_mode', mode: 'h264', bitrate: 32000 }, 2, 350)) {
+    if (!this.sendControlJSON({ type: 'set_mode', t: 'set_mode', mode: 'h264', bitrate: this._h264BitrateKbps() }, 2, 350)) {
       return;
     }
     this.requestedCodec = 'h264';
+    this.h264RequestedAt = Date.now();
+    this.h264LastProgressAt = 0;
+    this.h264LastVideoTime = this.videoEl?.currentTime || 0;
+    this._startH264ProgressWatch();
+    this._scheduleH264Fallback();
     this._updateCodecBtn();
-    console.log(`[${this.deviceName}] Requested H.264 mode (32 Mbps)`);
+    console.log(`[${this.deviceName}] Requested H.264 mode (${this._h264BitrateKbps()} kbps)`);
   }
 
   requestJpegMode() {
@@ -2198,6 +2280,7 @@ class ViewerSession {
     }
     this.requestedCodec = 'jpeg';
     this.usingH264 = false;
+    if (this.h264FallbackTimer) { clearTimeout(this.h264FallbackTimer); this.h264FallbackTimer = null; }
     if (this.canvasEl) this.canvasEl.style.display = '';
     if (this.videoEl) this.videoEl.style.display = 'none';
     this._updateCodecBtn();

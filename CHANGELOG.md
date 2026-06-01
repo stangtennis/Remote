@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.1.89 - 2026-06-01
+- Fix controller H.264 mode freezing by detecting real video-frame progress instead of stale video dimensions.
+- Lower controller H.264 toggle bitrate from 32 Mbps to 4 Mbps for TURN/VPN stability.
+- Add automatic controller fallback to JPEG if H.264 does not produce moving frames.
+
 ## v3.1.88 - 2026-05-31
 - Always include the coturn fallback in the agent ICE server list, even if Edge Function TURN credentials cannot be fetched.
 - Fix relay-only agents producing an SDP answer but no ICE candidates when their auth token is stale.
