@@ -125,11 +125,11 @@ func (e *NVENCEncoder) startFFmpeg() error {
 		"-c:v", "h264_nvenc",
 		"-preset", "p4", // Medium kvalitet (var p1=fastest); ~1ms ekstra
 		"-tune", "ull", // Ultra-low latency (no lookahead/reorder)
-		"-rc", "vbr", // Better desktop quality than low CBR
+		"-rc", "cbr", // Constant bitrate for stable quality
 		"-b:v", fmt.Sprintf("%dk", e.config.Bitrate),
-		"-maxrate", fmt.Sprintf("%dk", e.config.Bitrate*2),
-		"-bufsize", fmt.Sprintf("%dk", e.config.Bitrate*2),
-		"-profile:v", "baseline", // Browser-safe profile for dashboard H.264 decode
+		"-maxrate", fmt.Sprintf("%dk", e.config.Bitrate),
+		"-bufsize", fmt.Sprintf("%dk", e.config.Bitrate*3),
+		"-profile:v", "high", // High profile for better compression efficiency
 		"-g", fmt.Sprintf("%d", e.config.KeyframeInterval),
 		"-bf", "0", // No B-frames for low latency
 		"-forced-idr", "1",
