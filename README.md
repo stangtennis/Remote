@@ -2,7 +2,7 @@
 
 A **professional remote desktop solution** built with **Supabase**, **WebRTC**, and **Go** — like TeamViewer, but self-hosted and open-source.
 
-**Current version: v3.1.89** | [Download](https://github.com/stangtennis/Remote/releases/latest) | [Dashboard](https://dashboard.hawkeye123.dk)
+**Current version: v3.1.90** | [Download](https://github.com/stangtennis/Remote/releases/latest) | [Dashboard](https://dashboard.hawkeye123.dk)
 
 ## Features
 
@@ -104,8 +104,8 @@ Controller (Windows/macOS)          Agent (Windows/macOS)
 
 ### Download
 Grab the latest installers from [GitHub Releases](https://github.com/stangtennis/Remote/releases/latest):
-- `RemoteDesktopAgent-v3.1.89-Setup.exe` — Windows agent (GUI + console + OpenH264 + TurboJPEG)
-- `RemoteDesktopController-v3.1.89-Setup.exe` — Windows controller
+- `RemoteDesktopAgent-v3.1.90-Setup.exe` — Windows agent (GUI + console + OpenH264 + TurboJPEG)
+- `RemoteDesktopController-v3.1.90-Setup.exe` — Windows controller
 
 ### Agent Setup
 1. Run the installer or portable EXE as Administrator
@@ -132,7 +132,7 @@ cd agent && CGO_ENABLED=1 go build -tags turbo -o remote-agent ./cmd/remote-agen
 
 ```bash
 # Full build (all platforms + installers)
-./build-local.sh v3.1.89
+./build-local.sh v3.1.90
 
 # Manual Windows agent (with turbo JPEG)
 cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
@@ -147,7 +147,7 @@ cd controller && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
   -o ../builds/controller.exe .
 ```
 
-Version is injected via `-ldflags -X` — no source code changes needed.
+Version is injected via `-ldflags -X`; also keep the source version constants aligned before release builds.
 
 ### Build Tags
 - `turbo` — enables libjpeg-turbo SIMD JPEG encoding (requires `libturbojpeg` library)
