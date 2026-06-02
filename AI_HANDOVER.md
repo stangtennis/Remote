@@ -7,6 +7,8 @@ Date: 2026-06-03
 - Local path: `/home/dennis/projekter/Remote Desktop`
 - GitHub repo: `https://github.com/stangtennis/Remote`
 - Git remote: `origin https://github.com/stangtennis/Remote.git`
+- Info/docs repo: `https://github.com/stangtennis/info/tree/main/Remote-Desktop`
+- Local info/docs path: `/home/dennis/projekter/info/Remote-Desktop`
 - Main branch: `main`
 - Current git state at handover: clean, `main...origin/main`
 - Latest GitHub release: `v3.1.89`
@@ -254,4 +256,3 @@ Likely next debugging targets:
 - `.env` contains Supabase keys and must not be committed.
 - Treat TURN secrets and Supabase service role keys as secrets.
 - Avoid weakening Supabase RLS/policies without a clear reason.
-
