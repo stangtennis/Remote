@@ -11,9 +11,9 @@ Date: 2026-06-03
 - Local info/docs path: `/home/dennis/projekter/info/Remote-Desktop`
 - Main branch: `main`
 - Current git state at handover: clean, `main...origin/main`
-- Latest GitHub release: `v3.1.89`
-- Latest release URL: `https://github.com/stangtennis/Remote/releases/tag/v3.1.89`
-- GitHub releases currently show `v3.1.89` as Latest.
+- Latest GitHub release: `v3.1.90`
+- Latest release URL: `https://github.com/stangtennis/Remote/releases/tag/v3.1.90`
+- GitHub releases currently show `v3.1.90` as Latest.
 
 ## Update And Download Endpoints
 
@@ -25,16 +25,16 @@ Current update-server state:
 
 ```json
 {
-  "agent_version": "v3.1.89",
-  "controller_version": "v3.1.89",
-  "agent_url": "https://updates.hawkeye123.dk/remote-agent-v3.1.89.exe",
-  "agent_url_macos": "https://updates.hawkeye123.dk/remote-agent-macos-v3.1.89",
-  "controller_url": "https://updates.hawkeye123.dk/controller-v3.1.89.exe",
-  "controller_url_macos": "https://updates.hawkeye123.dk/controller-macos-v3.1.89",
-  "agent_sha256": "2b85e57baf5a67433b54880f0498dee1f144a19e5fe4af7ecd01ef33465a15ef",
-  "agent_sha256_macos": "1e9549210e407074d2f8198663a1e4432ea6ca16a621f15222d2b6baef5d6353",
-  "controller_sha256": "08e482059578d8611e6b21efcb5bcdeeee56c08539df2dbb50fe7e518a08cb19",
-  "controller_sha256_macos": "f24eafe7067d29dd09d8d24f65f020987f89059035271b41ca7558d6abe5d817"
+  "agent_version": "v3.1.90",
+  "controller_version": "v3.1.90",
+  "agent_url": "https://updates.hawkeye123.dk/remote-agent-v3.1.90.exe",
+  "agent_url_macos": "https://updates.hawkeye123.dk/remote-agent-macos-v3.1.90",
+  "controller_url": "https://updates.hawkeye123.dk/controller-v3.1.90.exe",
+  "controller_url_macos": "https://updates.hawkeye123.dk/controller-macos-v3.1.90",
+  "agent_sha256": "e85765178031d260a39980180cb54f0822c2257d1238972c68f49b646d04e12d",
+  "agent_sha256_macos": "28f6f5ef0c12025503bd3fc6811ea55536cda951d048066def4037417930b717",
+  "controller_sha256": "bb0792a791df29f38670b93e238cb5bdacb3a9f38bf4f770a16de119a9d94e97",
+  "controller_sha256_macos": "60b98f80fdbc4fb0306ea4f2d08eaf9e505c826f213a147b8772b71dc060feff"
 }
 ```
 
@@ -82,6 +82,12 @@ Relay-only is opt-in:
 For `WIN11DL`, relay was applied only on the agent side so the controller can keep working normally.
 
 ## Recent Release Summary
+
+### v3.1.90
+
+- Increased controller-requested H.264 bitrate to `10000` kbps.
+- Changed NVENC H.264 to high-profile CBR.
+- Rebuilt and republished full release artifacts after version metadata alignment.
 
 ### v3.1.84
 
@@ -165,17 +171,17 @@ cd controller && go test ./internal/webrtc ./cmd/remote-desktop-cli && go test .
 Build and publish:
 
 ```bash
-./build-local.sh v3.1.89
-./scripts/publish-to-caddy.sh v3.1.89 /home/dennis/caddy/downloads
+./build-local.sh v3.1.90
+./scripts/publish-to-caddy.sh v3.1.90 /home/dennis/caddy/downloads
 ```
 
 GitHub release:
 
 ```bash
-git tag -a v3.1.89 -m "Release v3.1.89"
+git tag -a v3.1.90 -m "Release v3.1.90"
 git push origin main
-git push origin v3.1.89
-gh release create v3.1.89 --title "Remote Desktop v3.1.89" --notes-file builds/RELEASE_NOTES-v3.1.89.md builds/*v3.1.89*
+git push origin v3.1.90
+gh release create v3.1.90 --title "Remote Desktop v3.1.90" --notes-file builds/RELEASE_NOTES-v3.1.90.md builds/*v3.1.90*
 ```
 
 Status checks:
@@ -223,7 +229,7 @@ curl -fsS -X PATCH "$SUPABASE_URL/rest/v1/remote_devices?device_id=eq.device_66c
 
 ## If H.264 Still Freezes In Controller
 
-First verify the controller is actually `v3.1.89`.
+First verify the controller is actually `v3.1.90`.
 
 Then ask for the controller session log. In the controller viewer UI, the log should show:
 

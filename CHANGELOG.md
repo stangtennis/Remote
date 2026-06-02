@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.1.90 - 2026-06-03
+- Increase controller-requested H.264 bitrate from 4 Mbps to 10 Mbps for sharper 1080p+ desktop text.
+- Change NVENC H.264 from baseline/VBR to high-profile/CBR for better compression efficiency and stable quality.
+- Rebuild and republish full release artifacts after version metadata alignment.
+
 ## v3.1.89 - 2026-06-01
 - Fix controller H.264 mode freezing by detecting real video-frame progress instead of stale video dimensions.
 - Lower controller H.264 toggle bitrate from 32 Mbps to 4 Mbps for TURN/VPN stability.
