@@ -2101,9 +2101,9 @@ class ViewerSession {
   }
 
   _h264BitrateKbps() {
-    // Keep controller H.264 conservative. 32 Mbps is too aggressive over TURN
-    // relay/VPN links and can starve the stream before the first decoded frame.
-    return 4000;
+    // 10 Mbps for good 1080p desktop quality without being too aggressive.
+    // 4 Mbps was too low and made text blurry compared to JPEG tiles.
+    return 10000;
   }
 
   _startH264ProgressWatch() {
