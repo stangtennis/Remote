@@ -1399,10 +1399,22 @@ function applyStreamingPreferences(session = getActiveSessionContext()) {
   currentQualityPreset = presetKey;
 
   sendControlEvent({ type: 'set_stream_params', ...preset });
-  sendControlEvent({ type: 'set_mode', mode: session.streamMode || 'tiles' });
+  sendStreamMode(session.streamMode || 'tiles');
   refreshStreamingControls(session);
   refreshPreviewSurface(session);
   scheduleH264Fallback(session);
+}
+
+function h264BitrateKbpsForDashboard() {
+  // Match the native controller's balanced H.264 quality target.
+  // Without this, dashboard H.264 kept the agent's 16 Mbps default, which can
+  // overload browser decoders/TURN links and corrupt the lower part of frames.
+  return 10000;
+}
+
+function sendStreamMode(mode) {
+  const bitrate = (mode === 'h264' || mode === 'hybrid') ? h264BitrateKbpsForDashboard() : 0;
+  sendControlEvent({ type: 'set_mode', mode, bitrate });
 }
 
 function toggleStreamMode() {
@@ -1411,7 +1423,7 @@ function toggleStreamMode() {
 
   const currentIndex = STREAM_MODES.indexOf(session.streamMode || 'tiles');
   session.streamMode = STREAM_MODES[(currentIndex + 1) % STREAM_MODES.length];
-  sendControlEvent({ type: 'set_mode', mode: session.streamMode });
+  sendStreamMode(session.streamMode);
   refreshStreamingControls(session);
   refreshPreviewSurface(session);
   scheduleH264Fallback(session);
