@@ -97,13 +97,13 @@ func (e *NVENCEncoder) startFFmpeg() error {
 	//
 	// QUALITY-TUNED for desktop content (tekst, skarpe kanter):
 	//   - profile baseline — lidt mindre effektiv kompression end High,
-	//     men langt mere robust i browser-dekodere ved mode-skift midt i
-	//     en eksisterende WebRTC-session.
+	//     men langt mere robust i browser-dekodere ved store UI-skift
+	//     som Start-menuen i dashboardets native browser-H.264 pipeline.
 	//   - preset p4 (medium) — endnu lav-latency på GPU men højere kvalitet
 	//     end p1 (fastest); kun ~1ms ekstra encode-tid på GTX 1060.
-	//   - VBR-rate control med maxrate-headroom — lader bitrate stige
-	//     midlertidigt under hurtige scene-changes. 4 Mbps CBR var stabilt,
-	//     men gjorde desktop-tekst og UI markant udtværet ved 1080p+.
+	//   - CBR ved eksplicit klient-bitrate — holder browser/TURN path
+	//     forudsigelig. Dashboard sender 10 Mbps fra v3.1.91, så agenten
+	//     ikke bliver stående på init-default 16 Mbps i browser-H.264.
 	//   - color_range tv + colorspace bt709 — eksplicit BT.709 (sRGB-mapped)
 	//     i stedet for FFmpeg default BT.601. Fjerner farve-shift hvor
 	//     rød/grøn blev "lidt off" på tekst og UI-elementer.
@@ -129,7 +129,7 @@ func (e *NVENCEncoder) startFFmpeg() error {
 		"-b:v", fmt.Sprintf("%dk", e.config.Bitrate),
 		"-maxrate", fmt.Sprintf("%dk", e.config.Bitrate),
 		"-bufsize", fmt.Sprintf("%dk", e.config.Bitrate*3),
-		"-profile:v", "high", // High profile for better compression efficiency
+		"-profile:v", "baseline", // Browser-safe profile for dashboard H.264 decode
 		"-g", fmt.Sprintf("%d", e.config.KeyframeInterval),
 		"-bf", "0", // No B-frames for low latency
 		"-forced-idr", "1",

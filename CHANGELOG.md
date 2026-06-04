@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.1.91 - 2026-06-04
+- Fix dashboard H.264 bottom-frame corruption by sending an explicit 10 Mbps H.264 bitrate from dashboard mode changes.
+- Keep NVENC H.264 browser-safe by using baseline profile instead of high profile for browser-native dashboard decoding.
+- Bump dashboard `webrtc.js` cache version.
+
 ## v3.1.90 - 2026-06-03
 - Increase controller-requested H.264 bitrate from 4 Mbps to 10 Mbps for sharper 1080p+ desktop text.
 - Change NVENC H.264 from baseline/VBR to high-profile/CBR for better compression efficiency and stable quality.
