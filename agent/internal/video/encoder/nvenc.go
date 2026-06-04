@@ -30,6 +30,12 @@ type NVENCEncoder struct {
 	stopCh chan struct{}
 }
 
+const (
+	nvencFirstChunkTimeout = 120 * time.Millisecond
+	nvencChunkQuietPeriod  = 12 * time.Millisecond
+	nvencMaxDrainDuration  = 90 * time.Millisecond
+)
+
 // NewNVENCEncoder creates a new NVENC encoder
 func NewNVENCEncoder() *NVENCEncoder {
 	return &NVENCEncoder{}
@@ -169,7 +175,7 @@ func (e *NVENCEncoder) startFFmpeg() error {
 	}
 
 	// Start background reader goroutine
-	e.outCh = make(chan []byte, 4) // Small buffer so reader doesn't block
+	e.outCh = make(chan []byte, 32) // Large enough for bursty keyframes
 	e.errCh = make(chan error, 1)
 	e.stopCh = make(chan struct{})
 	go e.readLoop()
@@ -182,10 +188,11 @@ func (e *NVENCEncoder) startFFmpeg() error {
 }
 
 // readLoop continuously reads from FFmpeg stdout in a background goroutine.
-// Each Read() may return partial data; we send whatever we get to outCh.
-// With tune=ull and no B-frames, FFmpeg outputs one access unit per input frame.
+// Each Read() may return partial data; Encode() reassembles the burst before
+// writing one WebRTC sample. This matters for browser decoders: sending a
+// partial H.264 access unit can smear/corrupt the lower part of the frame.
 func (e *NVENCEncoder) readLoop() {
-	buf := make([]byte, 512*1024) // 512KB read buffer
+	buf := make([]byte, 1024*1024)
 	for {
 		n, err := e.stdout.Read(buf)
 		if n > 0 {
@@ -238,11 +245,7 @@ func (e *NVENCEncoder) Encode(frame *image.RGBA, forceKeyframe bool) ([]byte, er
 		return nil, fmt.Errorf("write frame: %w (stderr: %s)", err, stderrMsg)
 	}
 
-	// Wait for encoded output from the background reader.
-	// With tune=ull, FFmpeg should produce output within a few ms after receiving a frame.
-	// We collect all available chunks within the timeout window.
 	var result []byte
-	timeout := time.After(100 * time.Millisecond)
 
 	// Wait for first chunk (blocking with timeout)
 	select {
@@ -250,20 +253,36 @@ func (e *NVENCEncoder) Encode(frame *image.RGBA, forceKeyframe bool) ([]byte, er
 		result = data
 	case err := <-e.errCh:
 		return nil, fmt.Errorf("ffmpeg read error: %w", err)
-	case <-timeout:
+	case <-time.After(nvencFirstChunkTimeout):
 		return nil, nil // No output yet (first few frames may buffer)
 	}
 
-	// Give a short pause for any remaining data to arrive (FFmpeg may write
-	// a frame in multiple pipe writes even with flush_packets=1)
-	time.Sleep(2 * time.Millisecond)
+	quietTimer := time.NewTimer(nvencChunkQuietPeriod)
+	deadline := time.NewTimer(nvencMaxDrainDuration)
+	defer quietTimer.Stop()
+	defer deadline.Stop()
 
-	// Drain any additional chunks that are already available (non-blocking)
 	for {
 		select {
 		case data := <-e.outCh:
 			result = append(result, data...)
-		default:
+			if !quietTimer.Stop() {
+				select {
+				case <-quietTimer.C:
+				default:
+				}
+			}
+			quietTimer.Reset(nvencChunkQuietPeriod)
+		case err := <-e.errCh:
+			if len(result) > 0 {
+				log.Printf("NVENC: returning buffered H.264 after read error: %v", err)
+				return result, nil
+			}
+			return nil, fmt.Errorf("ffmpeg read error: %w", err)
+		case <-quietTimer.C:
+			return result, nil
+		case <-deadline.C:
+			log.Printf("NVENC: H.264 drain deadline hit, returning %d bytes", len(result))
 			return result, nil
 		}
 	}
