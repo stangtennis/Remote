@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.1.92 - 2026-06-04
+- Fix dashboard/browser H.264 smearing on large white UI changes by draining bursty NVENC stdout chunks until a quiet period before writing one WebRTC sample.
+- Increase NVENC stdout read buffer/channel capacity so large keyframes are not split into partial browser samples.
+
 ## v3.1.91 - 2026-06-04
 - Fix dashboard H.264 bottom-frame corruption by sending an explicit 10 Mbps H.264 bitrate from dashboard mode changes.
 - Keep NVENC H.264 browser-safe by using baseline profile instead of high profile for browser-native dashboard decoding.
