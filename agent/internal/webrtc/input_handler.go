@@ -281,6 +281,9 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 				}
 			}
 			return
+		case "release_all_keys":
+			m.releaseAllKeys()
+			return
 		case "remote_login":
 			m.handleRemoteLogin(event)
 			return
@@ -492,6 +495,26 @@ func (m *Manager) handleRemoteLogin(event map[string]interface{}) {
 	case m.inputFrameTrigger <- struct{}{}:
 	default:
 	}
+}
+
+func (m *Manager) releaseAllKeys() {
+	if m.keyController != nil {
+		m.keyController.ClearModifiers()
+	}
+
+	if m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
+		for _, code := range []string{
+			"ControlLeft", "ControlRight",
+			"ShiftLeft", "ShiftRight",
+			"AltLeft", "AltRight",
+			"MetaLeft", "MetaRight",
+		} {
+			if err := m.screenCapturer.ForwardKeyEvent(code, false, false, false, false, false); err != nil {
+				log.Printf("⚠️ release_all_keys: forward %s keyup failed: %v", code, err)
+			}
+		}
+	}
+	log.Println("⌨️ Released remote modifier keys")
 }
 
 func (m *Manager) remoteTypeText(text string) error {

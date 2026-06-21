@@ -216,8 +216,8 @@ func (m *Manager) switchMode(newMode StreamMode, fps *int, quality *int, scale *
 		log.Printf("🔄 Mode switch: %s -> %s (FPS:%d Q:%d Scale:%.0f%%)", oldMode, newMode, *fps, *quality, *scale*100)
 	case ModeActiveTiles:
 		*fps = 25
-		*quality = 80
-		*scale = 0.85
+		*quality = 85
+		*scale = 1.0
 		log.Printf("🔄 Mode switch: %s -> %s (FPS:%d Q:%d Scale:%.0f%%)", oldMode, newMode, *fps, *quality, *scale*100)
 	case ModeActiveH264:
 		*fps = 25
@@ -297,8 +297,6 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	bufferMedium := uint64(1 * 1024 * 1024) // 1MB - skip every 2nd frame
 	bufferLow := uint64(512 * 1024)         // 512KB - can increase quality
 	minFPS := 10
-	minQuality := 50      // Below 50% introduces visible JPEG artifacts on text
-	minScale := 0.65      // Below 65% makes small text unreadable
 	frameSkipCounter := 0 // Counter for frame skipping under buffer pressure
 
 	// Apply controller caps if set
@@ -310,6 +308,12 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	}
 	if m.streamMaxScale > 0 {
 		maxScale = m.streamMaxScale
+	}
+	if quality > maxQuality {
+		quality = maxQuality
+	}
+	if scale > maxScale {
+		scale = maxScale
 	}
 
 	frameCount := 0
@@ -505,8 +509,9 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		// Track if we're in idle mode for logging
 		isIdle = (m.modeState.current == ModeIdleTiles)
 
-		// Adaptive quality adjustment (every 500ms, skip if idle)
-		if !isIdle && time.Since(lastAdaptTime) > 500*time.Millisecond {
+		// Adaptive pacing adjustment. Keep JPEG quality and scale stable to avoid
+		// visible blur/sharp pulsing; absorb pressure by changing FPS only.
+		if !isIdle && time.Since(lastAdaptTime) > 1500*time.Millisecond {
 			lastAdaptTime = time.Now()
 			changed := false
 
@@ -525,9 +530,8 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			// Check for congestion: high buffer OR high loss OR high RTT OR high CPU
 			congested := bufferedAmount > bufferHigh || curLossPct > 5 || curRTT > 250*time.Millisecond || cpuHigh
 
-			// CPU-guard: reduce quality if CPU is high
 			if cpuHigh && !congested {
-				log.Printf("🔥 CPU-guard triggered (%.1f%%) - reducing quality", cpuPct)
+				log.Printf("🔥 CPU-guard triggered (%.1f%%) - reducing FPS", cpuPct)
 				congested = true
 			}
 
@@ -548,94 +552,26 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			isLAN := avgRTT > 0 && avgRTT < 20*time.Millisecond
 
 			if congested {
-				if isLAN {
-					// LAN: NEVER reduce quality or scale — only drop FPS
-					// LAN has plenty of bandwidth, congestion is temporary
-					if fps > minFPS {
-						fps -= 5
-						if fps < minFPS {
-							fps = minFPS
-						}
-						changed = true
+				fpsStep := 3
+				if !isLAN && (bufferedAmount > bufferHigh*2 || curLossPct > 10 || curRTT > 400*time.Millisecond || cpuHigh) {
+					fpsStep = 5
+				}
+				if fps > minFPS {
+					fps -= fpsStep
+					if fps < minFPS {
+						fps = minFPS
 					}
-				} else {
-					// WAN: reduce FPS first, then scale, then quality
-					severeCongestion := bufferedAmount > (bufferHigh * 3 / 4)
-					fpsStep := 5
-					scaleStep := 0.1
-					qualityStep := 5
-					if severeCongestion {
-						fpsStep = 8
-						scaleStep = 0.15
-						qualityStep = 10
-					}
-
-					if fps > minFPS {
-						fps -= fpsStep
-						if fps < minFPS {
-							fps = minFPS
-						}
-						changed = true
-					} else if scale > minScale {
-						scale -= scaleStep
-						if scale < minScale {
-							scale = minScale
-						}
-						changed = true
-					} else if quality > minQuality {
-						quality -= qualityStep
-						if quality < minQuality {
-							quality = minQuality
-						}
-						changed = true
-					}
+					changed = true
 				}
 			} else if bufferedAmount < bufferLow && droppedFrames == 0 {
-				// Network clear — ramp back up fast
-				if isLAN {
-					// LAN: fast ramp (2-3 ticks to max, avoids buffer spikes)
-					if quality < maxQuality {
-						quality += 20
-						if quality > maxQuality {
-							quality = maxQuality
-						}
-						changed = true
+				// Network clear — recover FPS slowly. Quality/scale stay fixed.
+				canRecover := isLAN || (curLossPct < 1 && curRTT < 120*time.Millisecond)
+				if canRecover && fps < maxFPS {
+					fps += 2
+					if fps > maxFPS {
+						fps = maxFPS
 					}
-					if scale < maxScale {
-						scale += 0.2
-						if scale > maxScale {
-							scale = maxScale
-						}
-						changed = true
-					}
-					if fps < maxFPS {
-						fps += 10
-						if fps > maxFPS {
-							fps = maxFPS
-						}
-						changed = true
-					}
-				} else if curLossPct < 1 && curRTT < 120*time.Millisecond {
-					// WAN: fast recovery
-					if quality < maxQuality {
-						quality += 15
-						if quality > maxQuality {
-							quality = maxQuality
-						}
-						changed = true
-					} else if scale < maxScale {
-						scale += 0.2
-						if scale > maxScale {
-							scale = maxScale
-						}
-						changed = true
-					} else if fps < maxFPS {
-						fps += 5
-						if fps > maxFPS {
-							fps = maxFPS
-						}
-						changed = true
-					}
+					changed = true
 				}
 			}
 

@@ -156,11 +156,10 @@ class ViewerSession {
     this.h264LastProgressAt = 0;
     this.h264LastVideoTime = 0;
     this.h264FrameCallbackActive = false;
+    this.videoTransceiver = null;
     this.lastJpegFrameAt = 0;
     this.isFullscreen = false;
     this.inputSetup = false;
-    this.autoLoginAttempted = false;
-    this.autoLoginInFlight = false;
 
     // Auto-reconnect state
     this.reconnectState = 'idle';       // 'idle' | 'reconnecting' | 'gave_up'
@@ -200,8 +199,8 @@ class ViewerSession {
             <option value="0">Skærm 1</option>
           </select>
           <div class="quality-presets" style="display:flex; gap:2px; margin-right:0.25rem;">
-            <button class="btn btn-sm quality-preset-btn" data-preset="low" title="Lav kvalitet (15 FPS, 45%)">Lav</button>
-            <button class="btn btn-sm quality-preset-btn active" data-preset="medium" title="Mellem kvalitet (25 FPS, 70%)">Mellem</button>
+            <button class="btn btn-sm quality-preset-btn" data-preset="low" title="Lav kvalitet (15 FPS, 75%)">Lav</button>
+            <button class="btn btn-sm quality-preset-btn active" data-preset="medium" title="Mellem kvalitet (22 FPS, 85%)">Mellem</button>
             <button class="btn btn-sm quality-preset-btn" data-preset="high" title="Høj kvalitet (30 FPS, 95%)">Høj</button>
           </div>
           <button class="btn btn-sm btn-icon session-files-btn" title="Filoverførsel"><i class="fas fa-folder-open"></i></button>
@@ -451,6 +450,10 @@ class ViewerSession {
     }
     this.setConnectStatus(`ICE servers: ${config.iceServers?.length || 0}, policy: ${config.iceTransportPolicy || 'all'}`);
     this.peerConnection = new RTCPeerConnection(config);
+    this.videoTransceiver = this.peerConnection.addTransceiver('video', {
+      direction: 'recvonly'
+    });
+    console.log(`[${this.deviceName}] Video transceiver added for H.264 receive`);
 
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
@@ -592,8 +595,7 @@ class ViewerSession {
         try {
           const msg = JSON.parse(new TextDecoder().decode(data));
           if (msg.type === 'screen_info' || msg.type === 'frame_meta') {
-            this.screenWidth = msg.width;
-            this.screenHeight = msg.height;
+            this.updateResolution(msg.width, msg.height);
           }
         } catch (e) { /* not JSON */ }
         return;
@@ -692,8 +694,7 @@ class ViewerSession {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'screen_info' || msg.type === 'frame_meta') {
-          this.screenWidth = msg.width;
-          this.screenHeight = msg.height;
+          this.updateResolution(msg.width, msg.height);
         } else if (msg.type === 'monitor_list') {
           this.updateMonitorList(msg.monitors || [], msg.active || 0);
         } else if (msg.type === 'update_status') {
@@ -798,6 +799,12 @@ class ViewerSession {
     this.dataChannel.send(JSON.stringify({ type: 'switch_monitor', t: 'switch_monitor', index: parseInt(index) }));
   }
 
+  updateResolution(width, height) {
+    if (!width || !height) return;
+    this.screenWidth = width;
+    this.screenHeight = height;
+  }
+
   renderFrame(data) {
     const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
     if (blob.size < 100) return;
@@ -811,11 +818,10 @@ class ViewerSession {
       const canvas = this.canvasEl;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
+      this.updateResolution(img.width, img.height);
       if (canvas.width !== img.width || canvas.height !== img.height) {
         canvas.width = img.width;
         canvas.height = img.height;
-        this.screenWidth = img.width;
-        this.screenHeight = img.height;
         this._ensureCanvasAutoFit(canvas);
         this._fitCanvasToContainer(canvas);
       }
@@ -1104,63 +1110,6 @@ class ViewerSession {
     if (window.SessionManager) {
       window.SessionManager.onSessionConnected(this.id);
     }
-
-    // Auto-login: only try once for the whole ViewerSession. Reconnects can
-    // call onConnected() again, but must not resend the saved password.
-    this.tryAutoLogin();
-  }
-
-  async tryAutoLogin() {
-    try {
-      if (this.autoLoginAttempted || this.autoLoginInFlight) {
-        console.log(`[${this.deviceName}] Auto-login already attempted, skipping`);
-        return;
-      }
-      this.autoLoginInFlight = true;
-      this.autoLoginAttempted = true;
-
-      const saved = await window.go?.main?.App?.LoadDeviceLogin?.(this.deviceId);
-      if (!saved) return;
-      const autoLogin = !!(saved.auto_login ?? saved.AutoLogin);
-      if (!autoLogin || !saved.password) return;
-
-      const sendUsername = !!(saved.send_username ?? saved.SendUsername);
-      const username = sendUsername ? (saved.username || saved.Username || '') : '';
-      const domain = sendUsername ? (saved.domain || saved.Domain || '') : '';
-      const password = saved.password || saved.Password || '';
-
-      // Wait for the data channel to be open
-      const waitForChannel = () => new Promise((resolve) => {
-        let attempts = 0;
-        const check = () => {
-          if (this.dataChannel && this.dataChannel.readyState === 'open') {
-            resolve(true);
-          } else if (++attempts > 30) {
-            resolve(false);
-          } else {
-            setTimeout(check, 200);
-          }
-        };
-        check();
-      });
-
-      const ready = await waitForChannel();
-      if (!ready || !this.connected) return;
-
-      // Small extra delay so Windows login screen is ready for input
-      await new Promise(r => setTimeout(r, 1500));
-      if (!this.connected) return;
-
-      const ok = this.sendRemoteLogin(username, password, domain, sendUsername);
-      if (ok) {
-        console.log(`[${this.deviceName}] Auto-login sendt (RDP-stil)`);
-        showToast(`Auto-login sendt til ${this.deviceName}`, 'success');
-      }
-    } catch (e) {
-      console.warn(`[${this.deviceName}] Auto-login fejl:`, e);
-    } finally {
-      this.autoLoginInFlight = false;
-    }
   }
 
   // Connection statistics — polls getStats() every second
@@ -1240,6 +1189,10 @@ class ViewerSession {
 
       // Build display string
       const parts = [];
+      const resolutionText = this.screenWidth > 0 && this.screenHeight > 0
+        ? `${this.screenWidth}x${this.screenHeight}`
+        : '';
+      if (resolutionText) parts.push(resolutionText);
       if (rtt != null) parts.push(`${rtt}ms`);
       if (fps != null) parts.push(`${fps}fps`);
       if (bwText) parts.push(bwText);
@@ -1603,6 +1556,7 @@ class ViewerSession {
     this.h264FrameCallbackActive = false;
     this.processedSignalIds.clear();
     this.pendingIceCandidates = [];
+    this.videoTransceiver = null;
     this.stopTerminal();
   }
 
@@ -1886,10 +1840,6 @@ class ViewerSession {
             <input class="remote-login-save" type="checkbox">
             <span>Gem login til denne client lokalt på controlleren</span>
           </label>
-          <label class="checkbox-label" style="margin-bottom:1rem;">
-            <input class="remote-login-auto" type="checkbox">
-            <span>Auto-login ved forbindelse (ligesom RDP)</span>
-          </label>
           <div style="display:flex;justify-content:flex-end;gap:0.5rem;">
             <button class="btn btn-sm btn-secondary remote-login-delete" type="button" style="margin-right:auto;display:none;">Slet gemt</button>
             <button class="btn btn-sm btn-secondary remote-login-cancel" type="button">Annuller</button>
@@ -1906,11 +1856,7 @@ class ViewerSession {
     const domainEl = modal.querySelector('.remote-login-domain');
     const passwordEl = modal.querySelector('.remote-login-password');
     const saveEl = modal.querySelector('.remote-login-save');
-    const autoEl = modal.querySelector('.remote-login-auto');
     const deleteBtn = modal.querySelector('.remote-login-delete');
-    // Auto-login implies save — check save when auto is toggled on
-    autoEl.addEventListener('change', () => { if (autoEl.checked) saveEl.checked = true; });
-    saveEl.addEventListener('change', () => { if (!saveEl.checked) autoEl.checked = false; });
     const close = () => {
       if (passwordEl) passwordEl.value = '';
       modal.remove();
@@ -1945,7 +1891,7 @@ class ViewerSession {
 
       const ok = this.sendRemoteLogin(username, password, domain, sendUsername);
       if (ok) {
-        this.saveDeviceLoginIfRequested(saveEl.checked, autoEl.checked, username, password, domain, sendUsername);
+        this.saveDeviceLoginIfRequested(saveEl.checked, username, password, domain, sendUsername);
         showToast('Login sendt til Windows login-skærmen', 'success');
         close();
       }
@@ -1955,7 +1901,6 @@ class ViewerSession {
         await window.go?.main?.App?.DeleteDeviceLogin?.(this.deviceId);
         showToast('Gemt login slettet for denne client', 'success');
         saveEl.checked = false;
-        autoEl.checked = false;
         deleteBtn.style.display = 'none';
         usernameEl.value = '';
         domainEl.value = '';
@@ -1972,7 +1917,6 @@ class ViewerSession {
       domainEl.value = savedLogin.domain || savedLogin.Domain || '';
       passwordEl.value = savedLogin.password || savedLogin.Password || '';
       saveEl.checked = true;
-      autoEl.checked = !!(savedLogin.auto_login ?? savedLogin.AutoLogin);
       deleteBtn.style.display = '';
     }
 
@@ -1997,7 +1941,7 @@ class ViewerSession {
     }, 0);
   }
 
-  async saveDeviceLoginIfRequested(shouldSave, autoLogin, username, password, domain, sendUsername) {
+  async saveDeviceLoginIfRequested(shouldSave, username, password, domain, sendUsername) {
     if (!shouldSave) return;
     const payload = {
       device_id: this.deviceId,
@@ -2006,7 +1950,7 @@ class ViewerSession {
       domain,
       password,
       send_username: !!sendUsername,
-      auto_login: !!autoLogin
+      auto_login: false
     };
     console.log('[saveDeviceLogin] payload:', JSON.stringify({...payload, password: '***'}));
     try {
@@ -2212,8 +2156,8 @@ class ViewerSession {
 
   applyQualityPreset(preset) {
     const presets = {
-      low:    { max_fps: 15, max_quality: 45, max_scale: 0.5 },
-      medium: { max_fps: 25, max_quality: 70, max_scale: 0.75 },
+      low:    { max_fps: 15, max_quality: 75, max_scale: 1.0 },
+      medium: { max_fps: 22, max_quality: 85, max_scale: 1.0 },
       high:   { max_fps: 30, max_quality: 95, max_scale: 1.0 }
     };
     const params = presets[preset];
