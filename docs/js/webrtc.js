@@ -273,11 +273,14 @@ async function initWebRTC(sessionData, ctx) {
 
     // Create peer connection on ctx
     ctx.peerConnection = new RTCPeerConnection(configuration);
+    ctx.videoTransceiver = ctx.peerConnection.addTransceiver('video', {
+      direction: 'recvonly'
+    });
     // Set global ref for active session
     if (window.SessionManager.activeSessionId === ctx.id) {
       window.peerConnection = ctx.peerConnection;
     }
-    debug('✅ PeerConnection created for', ctx.id);
+    debug('✅ PeerConnection created for', ctx.id, '(video recvonly transceiver added)');
 
     // Set up event handlers
     setupPeerConnectionHandlers(ctx);
@@ -992,6 +995,21 @@ function getImageCoordinates(element, clientX, clientY) {
 let inputListenersAttached = false;
 let inputEventHandlers = {};
 
+const CONTROL_BUFFER_DROP_MOUSEMOVE = 16 * 1024;
+const CONTROL_BUFFER_WARN = 256 * 1024;
+let _lastControlBufferWarn = 0;
+let remoteInputSuppressedUntil = 0;
+
+function shouldIgnoreRemoteInputEvent(e) {
+  if (Date.now() < remoteInputSuppressedUntil) return true;
+  return !!e?.target?.closest?.(
+    'button, a, input, textarea, select, option, label, [role="button"], ' +
+    '[data-remote-ui-control="true"], ' +
+    '.preview-toolbar, .preview-controls, .fullscreen-toggle, .fullscreen-btn, ' +
+    '.session-tabs, .preview-idle, .preview-connecting, .preview-reconnecting'
+  );
+}
+
 function setupInputCapture() {
   const target = getInputCaptureTarget();
 
@@ -1012,9 +1030,27 @@ function setupInputCapture() {
   target.focus();
   debug('🎯 Canvas focused for keyboard input');
 
+  let lastRightMouseDown = 0;
+
   const contextMenuHandler = (e) => {
+    if (shouldIgnoreRemoteInputEvent(e)) return;
     e.preventDefault();
     e.stopPropagation();
+    const dc = getActiveDataChannel();
+    if (!dc || dc.readyState !== 'open') return;
+
+    // Some browsers suppress normal right-button down/up around contextmenu.
+    // Send a compact fallback right-click unless mousedown just handled it.
+    const now = Date.now();
+    if (now - lastRightMouseDown > 250) {
+      const coords = getImageCoordinates(target, e.clientX, e.clientY);
+      const x = Math.round(coords.x * 10000) / 10000;
+      const y = Math.round(coords.y * 10000) / 10000;
+      sendControlEvent({ t: 'mouse_click', button: 'right', down: true, x, y, rel: true }, { priority: true });
+      setTimeout(() => {
+        sendControlEvent({ t: 'mouse_click', button: 'right', down: false, x, y, rel: true }, { priority: true });
+      }, 35);
+    }
   };
   target.addEventListener('contextmenu', contextMenuHandler);
   inputEventHandlers.contextMenu = contextMenuHandler;
@@ -1022,11 +1058,13 @@ function setupInputCapture() {
   let lastMouseMove = 0;
   let lastCoords = { x: 0.5, y: 0.5 }; // Track last known mouse position for clicks
   const mouseMoveHandler = (e) => {
+    if (shouldIgnoreRemoteInputEvent(e)) return;
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
 
     const now = Date.now();
-    if (now - lastMouseMove < 16) return;
+    if (now - lastMouseMove < 33) return;
+    if (dc.bufferedAmount > CONTROL_BUFFER_DROP_MOUSEMOVE) return;
     lastMouseMove = now;
 
     const coords = getImageCoordinates(target, e.clientX, e.clientY);
@@ -1046,6 +1084,7 @@ function setupInputCapture() {
   inputEventHandlers.mouseMove = mouseMoveHandler;
 
   const mouseDownHandler = (e) => {
+    if (shouldIgnoreRemoteInputEvent(e)) return;
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
 
@@ -1055,6 +1094,7 @@ function setupInputCapture() {
       y: Math.round(coords.y * 10000) / 10000
     };
     const button = ['left', 'middle', 'right'][e.button] || 'left';
+    if (button === 'right') lastRightMouseDown = Date.now();
     sendControlEvent({
       t: 'mouse_click',
       button,
@@ -1062,13 +1102,15 @@ function setupInputCapture() {
       x: lastCoords.x,
       y: lastCoords.y,
       rel: true
-    });
+    }, { priority: true });
     e.preventDefault();
+    e.stopPropagation();
   };
   target.addEventListener('mousedown', mouseDownHandler);
   inputEventHandlers.mouseDown = mouseDownHandler;
 
   const mouseUpHandler = (e) => {
+    if (shouldIgnoreRemoteInputEvent(e)) return;
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
 
@@ -1085,8 +1127,9 @@ function setupInputCapture() {
       x: lastCoords.x,
       y: lastCoords.y,
       rel: true
-    });
+    }, { priority: true });
     e.preventDefault();
+    e.stopPropagation();
   };
   target.addEventListener('mouseup', mouseUpHandler);
   inputEventHandlers.mouseUp = mouseUpHandler;
@@ -1098,6 +1141,7 @@ function setupInputCapture() {
   let twoFingerLastY = null;
 
   const touchStartHandler = (e) => {
+    if (shouldIgnoreRemoteInputEvent(e)) return;
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
     e.preventDefault();
@@ -1122,6 +1166,7 @@ function setupInputCapture() {
   inputEventHandlers.touchStart = touchStartHandler;
 
   const touchMoveHandler = (e) => {
+    if (shouldIgnoreRemoteInputEvent(e)) return;
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
     e.preventDefault();
@@ -1142,7 +1187,9 @@ function setupInputCapture() {
       x: Math.round(coords.x * 10000) / 10000,
       y: Math.round(coords.y * 10000) / 10000
     };
-    sendControlEvent({ t: 'mouse_move', x: lastCoords.x, y: lastCoords.y, rel: true });
+    if (dc.bufferedAmount <= CONTROL_BUFFER_DROP_MOUSEMOVE) {
+      sendControlEvent({ t: 'mouse_move', x: lastCoords.x, y: lastCoords.y, rel: true });
+    }
   };
   target.addEventListener('touchmove', touchMoveHandler, { passive: false });
   inputEventHandlers.touchMove = touchMoveHandler;
@@ -1183,23 +1230,24 @@ function setupInputCapture() {
   }
 
   const touchEndHandler = (e) => {
+    if (shouldIgnoreRemoteInputEvent(e)) return;
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
     e.preventDefault();
     const duration = Date.now() - touchStartTime;
     if (!touchMoved && duration < 500) {
       // Tap = click + show keyboard
-      sendControlEvent({ t: 'mouse_click', button: 'left', down: true, x: lastCoords.x, y: lastCoords.y, rel: true });
+      sendControlEvent({ t: 'mouse_click', button: 'left', down: true, x: lastCoords.x, y: lastCoords.y, rel: true }, { priority: true });
       setTimeout(() => {
-        sendControlEvent({ t: 'mouse_click', button: 'left', down: false, x: lastCoords.x, y: lastCoords.y, rel: true });
+        sendControlEvent({ t: 'mouse_click', button: 'left', down: false, x: lastCoords.x, y: lastCoords.y, rel: true }, { priority: true });
         // Focus hidden input to show mobile keyboard
         if (mobileInput) { mobileInput.value = ''; mobileInput.focus(); }
       }, 50);
     } else if (!touchMoved && duration >= 500) {
       // Long press = right click
-      sendControlEvent({ t: 'mouse_click', button: 'right', down: true, x: lastCoords.x, y: lastCoords.y, rel: true });
+      sendControlEvent({ t: 'mouse_click', button: 'right', down: true, x: lastCoords.x, y: lastCoords.y, rel: true }, { priority: true });
       setTimeout(() => {
-        sendControlEvent({ t: 'mouse_click', button: 'right', down: false, x: lastCoords.x, y: lastCoords.y, rel: true });
+        sendControlEvent({ t: 'mouse_click', button: 'right', down: false, x: lastCoords.x, y: lastCoords.y, rel: true }, { priority: true });
       }, 50);
     }
   };
@@ -1207,13 +1255,14 @@ function setupInputCapture() {
   inputEventHandlers.touchEnd = touchEndHandler;
 
   const wheelHandler = (e) => {
+    if (shouldIgnoreRemoteInputEvent(e)) return;
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
 
     sendControlEvent({
       t: 'mouse_scroll',
       delta: e.deltaY > 0 ? -1 : 1
-    });
+    }, { priority: true });
     e.preventDefault();
   };
   target.addEventListener('wheel', wheelHandler);
@@ -1222,7 +1271,8 @@ function setupInputCapture() {
   target.tabIndex = 0;
   target.style.outline = 'none';
 
-  const clickHandler = () => {
+  const clickHandler = (e) => {
+    if (shouldIgnoreRemoteInputEvent(e)) return;
     target.focus();
   };
   target.addEventListener('click', clickHandler);
@@ -1240,6 +1290,7 @@ function setupInputCapture() {
   };
 
   const keyDownHandler = async (e) => {
+    if (shouldIgnoreRemoteInputEvent(e)) return;
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
 
@@ -1270,7 +1321,7 @@ function setupInputCapture() {
     if (shouldForwardUnicodeChar(e)) {
       evt.char = e.key;
     }
-    sendControlEvent(evt);
+    sendControlEvent(evt, { priority: true });
     e.preventDefault();
     e.stopPropagation();
   };
@@ -1278,6 +1329,7 @@ function setupInputCapture() {
   inputEventHandlers.keyDown = keyDownHandler;
 
   const keyUpHandler = (e) => {
+    if (shouldIgnoreRemoteInputEvent(e)) return;
     const dc = getActiveDataChannel();
     if (!dc || dc.readyState !== 'open') return;
 
@@ -1287,12 +1339,27 @@ function setupInputCapture() {
       t: 'key',
       code: e.code,
       down: false
-    });
+    }, { priority: true });
     e.preventDefault();
     e.stopPropagation();
   };
   target.addEventListener('keyup', keyUpHandler);
   inputEventHandlers.keyUp = keyUpHandler;
+
+  const blurHandler = () => {
+    pressedKeys.clear();
+    releaseRemoteInput('viewer_blur');
+  };
+  const visibilityHandler = () => {
+    if (document.visibilityState !== 'visible') {
+      pressedKeys.clear();
+      releaseRemoteInput('viewer_hidden');
+    }
+  };
+  window.addEventListener('blur', blurHandler);
+  document.addEventListener('visibilitychange', visibilityHandler);
+  inputEventHandlers.windowBlur = blurHandler;
+  inputEventHandlers.visibilityChange = visibilityHandler;
 
   debug('✅ Input capture enabled (routes to active session)');
 }
@@ -1321,6 +1388,12 @@ function cleanupInputCapture() {
         target.removeEventListener(eventName, handler);
       }
     });
+    if (inputEventHandlers.windowBlur) {
+      window.removeEventListener('blur', inputEventHandlers.windowBlur);
+    }
+    if (inputEventHandlers.visibilityChange) {
+      document.removeEventListener('visibilitychange', inputEventHandlers.visibilityChange);
+    }
   }
 
   // Remove mobile keyboard input element
@@ -1341,11 +1414,34 @@ function getActiveDataChannel() {
   return session?.dataChannel || null;
 }
 
-function sendControlEvent(event) {
+function sendControlEvent(event, opts = {}) {
   const dc = getActiveDataChannel();
   if (dc && dc.readyState === 'open') {
+    const buffered = dc.bufferedAmount || 0;
+    if (!opts.priority && event?.t === 'mouse_move' && buffered > CONTROL_BUFFER_DROP_MOUSEMOVE) {
+      return false;
+    }
+    if (buffered > CONTROL_BUFFER_WARN) {
+      const now = Date.now();
+      if (now - _lastControlBufferWarn > 2000) {
+        _lastControlBufferWarn = now;
+        debug(`⚠️ Control channel backlog: ${Math.round(buffered / 1024)} KB`);
+      }
+      if (!opts.priority) return false;
+    }
     dc.send(JSON.stringify(event));
+    return true;
   }
+  return false;
+}
+
+function releaseRemoteInput(reason = '') {
+  sendControlEvent({ type: 'release_all_keys', reason }, { priority: true });
+}
+
+function suppressRemoteInput(ms = 500, reason = '') {
+  remoteInputSuppressedUntil = Math.max(remoteInputSuppressedUntil, Date.now() + ms);
+  releaseRemoteInput(reason || 'remote_input_suppressed');
 }
 
 const STREAM_MODES = ['tiles', 'h264', 'hybrid'];
@@ -1360,9 +1456,9 @@ const STREAM_MODE_ICONS = {
   hybrid: 'fa-layer-group'
 };
 const QUALITY_PRESETS = {
-  low:    { max_fps: 15, max_quality: 45, max_scale: 0.5,  label: 'Lav' },
-  medium: { max_fps: 25, max_quality: 70, max_scale: 0.75, label: 'Mellem' },
-  high:   { max_fps: 30, max_quality: 95, max_scale: 1.0,  label: 'Høj' }
+  low:    { max_fps: 15, max_quality: 75, max_scale: 1.0, label: 'Lav' },
+  medium: { max_fps: 22, max_quality: 85, max_scale: 1.0, label: 'Mellem' },
+  high:   { max_fps: 30, max_quality: 95, max_scale: 1.0, label: 'Høj' }
 };
 const QUALITY_CYCLE = { medium: 'high', high: 'low', low: 'medium' };
 let currentQualityPreset = 'medium';
@@ -1422,6 +1518,7 @@ function toggleStreamMode() {
   if (!session) return;
 
   const currentIndex = STREAM_MODES.indexOf(session.streamMode || 'tiles');
+  releaseRemoteInput('stream_mode_toggle');
   session.streamMode = STREAM_MODES[(currentIndex + 1) % STREAM_MODES.length];
   sendStreamMode(session.streamMode);
   refreshStreamingControls(session);
@@ -1438,6 +1535,7 @@ function toggleQuality() {
   if (!session) return;
 
   const currentPreset = session.qualityPreset || currentQualityPreset || 'medium';
+  releaseRemoteInput('quality_toggle');
   session.qualityPreset = QUALITY_CYCLE[currentPreset] || 'medium';
   currentQualityPreset = session.qualityPreset;
   const p = QUALITY_PRESETS[session.qualityPreset];
@@ -1459,6 +1557,8 @@ if (document.readyState === 'loading') {
 
 // Export for use in other modules
 window.sendControlEvent = sendControlEvent;
+window.releaseRemoteInput = releaseRemoteInput;
+window.suppressRemoteInput = suppressRemoteInput;
 window.refreshStreamingControls = refreshStreamingControls;
 window.refreshPreviewSurface = refreshPreviewSurface;
 
@@ -1797,7 +1897,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const viewerContainer = document.getElementById('viewerContainer');
 
   if (fullscreenBtn && viewerContainer) {
-    fullscreenBtn.addEventListener('click', () => {
+    fullscreenBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      suppressRemoteInput(700, 'fullscreen_toggle_start');
       if (!document.fullscreenElement) {
         viewerContainer.requestFullscreen().catch(err => {
           console.error('Failed to enter fullscreen:', err);
@@ -1805,9 +1908,11 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         document.exitFullscreen();
       }
+      setTimeout(() => suppressRemoteInput(500, 'fullscreen_toggle_end'), 150);
     });
 
     document.addEventListener('fullscreenchange', () => {
+      suppressRemoteInput(500, 'fullscreen_change');
       if (document.fullscreenElement) {
         fullscreenBtn.textContent = '⛶';
         fullscreenBtn.title = 'Exit Fullscreen (Esc)';
