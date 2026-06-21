@@ -190,7 +190,7 @@ func (a *App) LoadDeviceLogin(deviceID string) (*DeviceLoginInfo, error) {
 		Domain:       login.Domain,
 		Password:     login.Password,
 		SendUsername: login.SendUsername,
-		AutoLogin:    login.AutoLogin,
+		AutoLogin:    false,
 		UpdatedAt:    login.UpdatedAt,
 	}, nil
 }
@@ -210,7 +210,7 @@ func (a *App) SaveDeviceLogin(login DeviceLoginInfo) error {
 		Domain:       login.Domain,
 		Password:     login.Password,
 		SendUsername: login.SendUsername,
-		AutoLogin:    login.AutoLogin,
+		AutoLogin:    false,
 	})
 }
 
