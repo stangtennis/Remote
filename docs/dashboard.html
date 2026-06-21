@@ -7,7 +7,7 @@
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="robots" content="noindex, nofollow">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
-  <link rel="stylesheet" href="css/styles.css?v=7">
+  <link rel="stylesheet" href="css/styles.css?v=9">
   <link rel="stylesheet" href="css/loading-states.css?v=6">
   <link rel="stylesheet" href="css/mobile.css?v=12">
   <link rel="stylesheet" href="css/accessibility.css?v=6">
@@ -67,7 +67,7 @@
           <div class="section-header">
             <h2>Fjernsessioner</h2>
             <div class="preview-controls">
-              <button id="previewFullscreenBtn" class="btn btn-icon" title="Fuldskærm"><i class="fas fa-expand"></i></button>
+              <button id="previewFullscreenBtn" class="btn btn-icon" type="button" data-remote-ui-control="true" title="Fuldskærm"><i class="fas fa-expand"></i></button>
               <button id="previewSettingsBtn" class="btn btn-icon" title="Indstillinger"><i class="fas fa-cog"></i></button>
             </div>
           </div>
@@ -85,9 +85,6 @@
             <div class="preview-screen" id="previewScreen">
               <video id="previewVideo" autoplay playsinline></video>
               <canvas id="previewCanvas" tabindex="0"></canvas>
-              
-              <!-- Fullscreen Toggle Button -->
-              <button class="fullscreen-toggle" id="fullscreenToggle" title="Skift fuldskærm (F11)"><i class="fas fa-expand"></i></button>
               
               <!-- Idle State -->
               <div class="preview-idle" id="previewIdle">
@@ -214,6 +211,9 @@
           <p id="downloadsDescription" style="margin-top: 0.5rem; font-size: 0.875rem; color: #888; text-align: center;">
             Agent Installer: permanent installation med service + tray • Quick Connect: kør én gang uden installation
           </p>
+          <p id="latestVersionInfo" style="margin-top: 0.35rem; font-size: 0.82rem; color: #9ca3af; text-align: center;">
+            Nyeste version: henter...
+          </p>
           <script>
             (function() {
               var isMac = /Mac/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent);
@@ -221,14 +221,30 @@
               // Agent installer
               var agentBtn = document.getElementById('agentDownloadBtn');
               if (agentBtn) {
-                agentBtn.onclick = function() { signedDownload(isMac ? 'RemoteDesktopAgent-macOS-v3.1.92.tar.gz' : 'RemoteDesktopAgent-v3.1.92-Setup.exe'); return false; };
+                agentBtn.onclick = function() { signedDownload(isMac ? 'RemoteDesktopAgent-macOS-v3.1.95.tar.gz' : 'RemoteDesktopAgent-v3.1.95-Setup.exe'); return false; };
                 if (isMac) agentBtn.innerHTML = '<i class="fas fa-apple-alt"></i> Agent (macOS)';
               }
               // Quick Connect (run once)
               var runOnceBtn = document.getElementById('agentRunOnceBtn');
               if (runOnceBtn) {
-                runOnceBtn.onclick = function() { signedDownload(isMac ? 'RemoteDesktopAgent-macOS-v3.1.92.tar.gz' : 'RemoteDesktopAgent-RunOnce-v3.1.92-Setup.exe'); return false; };
+                runOnceBtn.onclick = function() { signedDownload(isMac ? 'RemoteDesktopAgent-macOS-v3.1.95.tar.gz' : 'RemoteDesktopAgent-RunOnce-v3.1.95-Setup.exe'); return false; };
                 if (isMac) runOnceBtn.innerHTML = '<i class="fas fa-play"></i> Quick Connect (macOS)';
+              }
+              var versionInfo = document.getElementById('latestVersionInfo');
+              if (versionInfo) {
+                fetch('https://updates.hawkeye123.dk/version.json', { cache: 'no-store' })
+                  .then(function(res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                  })
+                  .then(function(data) {
+                    var agentVersion = data.agent_version || data.version || '-';
+                    var controllerVersion = data.controller_version || data.version || '-';
+                    versionInfo.textContent = 'Nyeste version: Agent ' + agentVersion + ' • Controller ' + controllerVersion;
+                  })
+                  .catch(function() {
+                    versionInfo.textContent = 'Nyeste version: kunne ikke hentes lige nu';
+                  });
               }
             })();
           </script>
@@ -273,7 +289,7 @@
                   <div class="step-title">Hent og installér agenten</div>
                   <div class="step-desc">På den computer du vil styre — vælg din platform:</div>
                   <div class="quickstart-platforms" id="quickstartPlatforms">
-                    <a href="#" data-platform="windows" onclick="signedDownload('RemoteDesktopAgent-v3.1.92-Setup.exe'); return false;"
+                    <a href="#" data-platform="windows" onclick="signedDownload('RemoteDesktopAgent-v3.1.95-Setup.exe'); return false;"
                        class="platform-btn" title="Windows installer"><i class="fab fa-windows"></i> Windows</a>
                     <a href="#" data-platform="macos" onclick="signedDownload('RemoteDesktopAgent-macOS.tar.gz'); return false;"
                        class="platform-btn" title="macOS agent"><i class="fab fa-apple"></i> macOS</a>
@@ -640,7 +656,7 @@
   <script src="js/app.js?v=10"></script>
   <script src="js/devices.js?v=15"></script>
   <script src="js/sessions.js?v=8"></script>
-  <script src="js/webrtc.js?v=34"></script>
+  <script src="js/webrtc.js?v=40"></script>
   <script src="js/signaling.js?v=103"></script>
   <script src="js/notifications.js?v=1"></script>
   <script src="js/activity-log.js?v=2"></script>
@@ -688,37 +704,71 @@
       }
 
       function toggleFullscreen() {
+        if (window.suppressRemoteInput) window.suppressRemoteInput(700, 'preview_fullscreen_toggle_start');
+        else if (window.releaseRemoteInput) window.releaseRemoteInput('preview_fullscreen_toggle_start');
         if (isInFullscreen() || container.classList.contains('fullscreen')) {
           exitFullscreen();
         } else {
           enterFullscreen();
         }
+        setTimeout(() => {
+          if (window.suppressRemoteInput) window.suppressRemoteInput(500, 'preview_fullscreen_toggle_end');
+          else if (window.releaseRemoteInput) window.releaseRemoteInput('preview_fullscreen_toggle_end');
+        }, 150);
       }
 
       // Sync the CSS class with real fullscreen state (user can also exit
       // via browser ESC, F11, or the address-bar prompt — all funnel here).
       function syncFullscreenClass() {
+        if (window.suppressRemoteInput) window.suppressRemoteInput(500, 'preview_fullscreen_change');
+        else if (window.releaseRemoteInput) window.releaseRemoteInput('preview_fullscreen_change');
         if (isInFullscreen()) {
           container.classList.add('fullscreen');
           document.body.style.overflow = 'hidden';
-          if (toggleBtn) toggleBtn.title = 'Afslut fuldskærm (ESC)';
+          if (toggleBtn) {
+            toggleBtn.title = 'Afslut fuldskærm med ESC eller F11';
+            toggleBtn.style.display = 'none';
+            toggleBtn.style.pointerEvents = 'none';
+          }
         } else {
           container.classList.remove('fullscreen');
           document.body.style.overflow = '';
-          if (toggleBtn) toggleBtn.title = 'Fuldskærm (F11)';
+          if (toggleBtn) {
+            toggleBtn.title = 'Fuldskærm (F11)';
+            toggleBtn.style.display = '';
+            toggleBtn.style.pointerEvents = '';
+          }
         }
       }
       document.addEventListener('fullscreenchange', syncFullscreenClass);
       document.addEventListener('webkitfullscreenchange', syncFullscreenClass);
 
-      if (toggleBtn) toggleBtn.addEventListener('click', toggleFullscreen);
-      if (headerToggleBtn) headerToggleBtn.addEventListener('click', toggleFullscreen);
+      function guardFullscreenPointer(e) {
+        if (window.suppressRemoteInput) window.suppressRemoteInput(700, 'preview_fullscreen_pointer_guard');
+        else if (window.releaseRemoteInput) window.releaseRemoteInput('preview_fullscreen_pointer_guard');
+        e.stopPropagation();
+      }
+
+      function handleFullscreenClick(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleFullscreen();
+      }
+
+      [toggleBtn, headerToggleBtn].forEach((btn) => {
+        if (!btn) return;
+        ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'dblclick', 'contextmenu'].forEach((eventName) => {
+          btn.addEventListener(eventName, guardFullscreenPointer);
+        });
+        btn.addEventListener('click', handleFullscreenClick);
+      });
 
       // F11 toggle (ESC is handled by the browser when in real fullscreen).
       // We still listen for ESC as a fallback for the CSS-only path.
       document.addEventListener('keydown', function(e) {
         if (e.key === 'F11') {
           e.preventDefault();
+          e.stopPropagation();
           toggleFullscreen();
           return;
         }

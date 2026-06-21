@@ -778,6 +778,11 @@ body::before {
   transform: scale(1.1);
 }
 
+.viewer-container:fullscreen .fullscreen-btn {
+  display: none;
+  pointer-events: none;
+}
+
 /* Fullscreen mode styles */
 .viewer-container:fullscreen {
   background: #000;
@@ -1301,9 +1306,21 @@ body::before {
   opacity: 0;
 }
 
-.preview-screen:hover .fullscreen-toggle,
-.remote-preview-container.fullscreen .fullscreen-toggle {
+.preview-screen:hover .fullscreen-toggle {
   opacity: 1;
+}
+
+.remote-preview-container.fullscreen .fullscreen-toggle {
+  display: none !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+
+.remote-preview-container:fullscreen .fullscreen-toggle,
+.remote-preview-container:-webkit-full-screen .fullscreen-toggle {
+  display: none !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
 }
 
 .fullscreen-toggle:hover {
