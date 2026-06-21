@@ -777,6 +777,7 @@ function attachSessionVideoTrack(ctx, stream) {
   const markVideoReady = () => {
     ctx.screenWidth = ctx.videoElement.videoWidth || ctx.screenWidth;
     ctx.screenHeight = ctx.videoElement.videoHeight || ctx.screenHeight;
+    updateResolutionDisplay(ctx.screenWidth, ctx.screenHeight);
     ctx.h264FramesAvailable = (ctx.videoElement.videoWidth > 0 && ctx.videoElement.videoHeight > 0);
     refreshPreviewSurface(ctx);
     startSessionVideoRendering(ctx);
@@ -807,6 +808,7 @@ function startSessionVideoRendering(ctx) {
         if (width > 0 && height > 0) {
           ctx.screenWidth = width;
           ctx.screenHeight = height;
+          updateResolutionDisplay(width, height);
           if (canvas.width !== width || canvas.height !== height) {
             canvas.width = width;
             canvas.height = height;
@@ -1487,6 +1489,18 @@ function refreshStreamingControls(session = getActiveSessionContext()) {
   }
 }
 
+function updateResolutionDisplay(width, height) {
+  if (!width || !height) return;
+  const text = `${width}x${height}`;
+  const previewResolution = document.getElementById('previewResolution');
+  if (previewResolution) {
+    previewResolution.textContent = text;
+    previewResolution.title = `Remote opløsning: ${text}`;
+  }
+  const statResolution = document.getElementById('statResolution');
+  if (statResolution) statResolution.textContent = text;
+}
+
 function applyStreamingPreferences(session = getActiveSessionContext()) {
   if (!session) return;
 
@@ -1811,6 +1825,7 @@ function displayVideoFrame(data, ctx) {
     if (ctx) {
       ctx.screenWidth = img.width;
       ctx.screenHeight = img.height;
+      updateResolutionDisplay(img.width, img.height);
     }
 
     if (canvas.width !== img.width || canvas.height !== img.height) {
@@ -2128,6 +2143,7 @@ function handleMonitorSwitched(msg) {
     ctx.activeMonitor = index;
     ctx.screenWidth = width;
     ctx.screenHeight = height;
+    updateResolutionDisplay(width, height);
   }
 
   // Update dropdown selection
