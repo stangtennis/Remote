@@ -212,6 +212,7 @@ func New(cfg *config.Config, dev *device.Device, tokenProvider *auth.TokenProvid
 	if capturer != nil {
 		width, height = capturer.GetResolution()
 		log.Printf("✅ Screen capturer initialized: %dx%d (Session0: %v)", width, height, isSession0)
+		logLowDisplayResolution("initial capture", width, height)
 	}
 
 	// Set up file transfer handler
@@ -231,7 +232,7 @@ func New(cfg *config.Config, dev *device.Device, tokenProvider *auth.TokenProvid
 	if err := videoEncoder.Init(encoder.Config{
 		Width:            width,
 		Height:           height,
-		Bitrate:          16000, // 16 Mbps - high quality for screen content (text clarity)
+		Bitrate:          10000, // 10 Mbps - stable desktop quality without bitrate-restart stalls
 		Framerate:        30,
 		KeyframeInterval: 90, // Keyframe every 3 seconds at 30fps
 	}); err != nil {
@@ -320,6 +321,7 @@ func (m *Manager) monitorDesktopChanges() {
 					m.mouseController = input.NewMouseController(width, height)
 					hasForwarder := m.screenCapturer.HasInputForwarder()
 					log.Printf("✅ Capturer reinitialized: %dx%d, HasInputForwarder=%v", width, height, hasForwarder)
+					logLowDisplayResolution("login screen capture", width, height)
 				}
 			} else {
 				log.Println("🔓 Desktop switched to user desktop")
@@ -334,12 +336,19 @@ func (m *Manager) monitorDesktopChanges() {
 					width, height := m.screenCapturer.GetResolution()
 					m.mouseController = input.NewMouseController(width, height)
 					log.Printf("✅ Updated screen resolution: %dx%d", width, height)
+					logLowDisplayResolution("user desktop capture", width, height)
 				}
 			}
 		default:
 			log.Printf("⚠️  Desktop switched to unknown type: %d (was: %d)", dt, oldDesktop)
 		}
 	})
+}
+
+func logLowDisplayResolution(context string, width, height int) {
+	if width <= 640 || height <= 480 {
+		log.Printf("⚠️ Low capture resolution during %s: %dx%d. This usually means Windows console/headless display is low resolution; use dummy HDMI, a virtual display driver, or set console display resolution.", context, width, height)
+	}
 }
 
 func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error {

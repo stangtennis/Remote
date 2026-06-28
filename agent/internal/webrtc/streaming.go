@@ -3,6 +3,7 @@ package webrtc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"log"
@@ -15,6 +16,7 @@ import (
 	"github.com/stangtennis/remote-agent/internal/input"
 	"github.com/stangtennis/remote-agent/internal/metrics"
 	"github.com/stangtennis/remote-agent/internal/screen"
+	"github.com/stangtennis/remote-agent/internal/video/encoder"
 )
 
 // StreamMode represents the current streaming mode
@@ -260,6 +262,7 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 		width, height := capturer.GetResolution()
 		m.mouseController = input.NewMouseController(width, height)
 		log.Printf("✅ Updated screen resolution: %dx%d", width, height)
+		logLowDisplayResolution("stream capture init", width, height)
 	}
 
 	// Initialize dirty region detector for motion detection
@@ -629,6 +632,9 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 				// Encode RGBA to H.264
 				nalUnits, encErr := m.videoEncoder.Encode(rgbaFrame)
 				if encErr != nil {
+					if errors.Is(encErr, encoder.ErrNoFrameReady) {
+						return
+					}
 					errorCount++
 					if errorCount%100 == 1 {
 						log.Printf("⚠️ H.264 encode fejl: %v", encErr)

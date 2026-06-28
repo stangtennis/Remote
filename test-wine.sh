@@ -26,8 +26,8 @@ BUILDS_DIR="$(cd "$(dirname "$0")" && pwd)/builds"
 SUPABASE_HOST="192.168.1.92"
 SUPABASE_PORT="8888"
 SUPABASE_URL="http://${SUPABASE_HOST}:${SUPABASE_PORT}"
-ANON_KEY="REDACTED_JWT"
-SERVICE_KEY="REDACTED_JWT"
+ANON_KEY="${SUPABASE_ANON_KEY:-}"
+SERVICE_KEY="${SUPABASE_SERVICE_ROLE_KEY:-}"
 TEST_EMAIL="hansemand@gmail.com"
 AGENT_TIMEOUT=15
 CRED_FILE="${BUILDS_DIR}/.credentials"
@@ -43,6 +43,11 @@ NC='\033[0m'
 PASS=0
 FAIL=0
 TOTAL=0
+
+if [[ -z "$ANON_KEY" || -z "$SERVICE_KEY" ]]; then
+    echo "SUPABASE_ANON_KEY og SUPABASE_SERVICE_ROLE_KEY skal være sat i miljøet"
+    exit 1
+fi
 
 # --- Helpers ---
 check() {

@@ -337,6 +337,7 @@ html, body {
 }
 .viewer-device-label { font-weight: 600; font-size: 0.85rem; flex: 1; }
 .viewer-stats { font-size: 0.7rem; color: var(--text-muted); }
+.viewer-stats.low-resolution-warning { color: var(--warning); font-weight: 600; }
 .quality-presets { display: flex; gap: 2px; }
 .quality-preset-btn {
   font-size: 0.65rem; padding: 0.15rem 0.45rem;
@@ -1060,6 +1061,15 @@ body.viewer-fullscreen .fullscreen-exit-hint.hidden { opacity: 0; }
 
 /* ===== VIEWER TOOLBAR POLISH ===== */
 .viewer-toolbar .btn-icon { width: 30px; height: 30px; font-size: 0.8rem; }
+.viewer-toolbar .session-codec-btn {
+  min-width: 72px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+}
 .session-timer { font-variant-numeric: tabular-nums; }
 
 /* Codec-toggle: subtil farvekode så brugeren ser hvilken mode der kører */

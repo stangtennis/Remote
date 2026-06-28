@@ -5,10 +5,15 @@
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://supabase.hawkeye123.dk';
-const SERVICE_ROLE_KEY = 'REDACTED_JWT';
-const ANON_KEY = 'REDACTED_JWT';
-const SITE_URL = 'https://stangtennis.github.io/Remote';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://supabase.hawkeye123.dk';
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SITE_URL = process.env.SITE_URL || 'https://stangtennis.github.io/Remote';
+
+if (!SERVICE_ROLE_KEY || !ANON_KEY) {
+  console.error('Set SUPABASE_SERVICE_ROLE_KEY and SUPABASE_ANON_KEY before running this test');
+  process.exit(1);
+}
 
 async function main() {
   // 1. Create support session directly via service role

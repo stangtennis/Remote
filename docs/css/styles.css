@@ -1537,6 +1537,12 @@ body::before {
   color: #ecfeff;
   border-color: rgba(34, 211, 238, 0.72);
   background: rgba(8, 47, 73, 0.92);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 76px;
+  justify-content: center;
+  font-size: 0.78rem;
 }
 
 .connection-stats {
@@ -1545,6 +1551,11 @@ body::before {
   font-size: 0.75rem;
   color: var(--text-muted);
   font-family: monospace;
+}
+
+.low-resolution-warning {
+  color: var(--warning) !important;
+  font-weight: 700;
 }
 
 /* Connection Stats Mini Grid */
