@@ -1480,25 +1480,34 @@ function refreshStreamingControls(session = getActiveSessionContext()) {
     const iconClass = STREAM_MODE_ICONS[mode] || STREAM_MODE_ICONS.tiles;
     const label = STREAM_MODE_LABELS[mode] || STREAM_MODE_LABELS.tiles;
     modeBtn.title = `Stream mode: ${label}`;
-    modeBtn.innerHTML = `<i class="fas ${iconClass}"></i>`;
+    modeBtn.innerHTML = `<i class="fas ${iconClass}"></i><span>${label}</span>`;
   }
 
   if (qualityBtn) {
     qualityBtn.title = `Kvalitet: ${preset.label}`;
-    qualityBtn.innerHTML = '<i class="fas fa-sliders"></i>';
+    qualityBtn.innerHTML = `<i class="fas fa-sliders"></i><span>${preset.label}</span>`;
   }
 }
 
 function updateResolutionDisplay(width, height) {
   if (!width || !height) return;
   const text = `${width}x${height}`;
+  const lowResolution = width <= 640 || height <= 480;
+  const title = lowResolution
+    ? `Remote opløsning: ${text}. Serveren sender lav console-opløsning; brug dummy HDMI/virtuel display-driver eller højere console-opløsning.`
+    : `Remote opløsning: ${text}`;
   const previewResolution = document.getElementById('previewResolution');
   if (previewResolution) {
-    previewResolution.textContent = text;
-    previewResolution.title = `Remote opløsning: ${text}`;
+    previewResolution.textContent = lowResolution ? `${text} lav` : text;
+    previewResolution.title = title;
+    previewResolution.classList.toggle('low-resolution-warning', lowResolution);
   }
   const statResolution = document.getElementById('statResolution');
-  if (statResolution) statResolution.textContent = text;
+  if (statResolution) {
+    statResolution.textContent = lowResolution ? `${text} lav` : text;
+    statResolution.title = title;
+    statResolution.classList.toggle('low-resolution-warning', lowResolution);
+  }
 }
 
 function applyStreamingPreferences(session = getActiveSessionContext()) {

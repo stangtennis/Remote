@@ -2,11 +2,17 @@
 package encoder
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"log"
 	"sync"
 )
+
+// ErrNoFrameReady means the encoder accepted input but did not produce a
+// complete output frame yet. Callers should skip sending for this tick without
+// treating it as a codec failure.
+var ErrNoFrameReady = errors.New("encoder output frame not ready")
 
 // Config holds encoder configuration
 type Config struct {
@@ -22,7 +28,8 @@ type Encoder interface {
 	// Init initializes the encoder with the given config
 	Init(cfg Config) error
 
-	// Encode encodes an RGBA frame to H.264 NAL units
+	// Encode encodes an RGBA frame to H.264 NAL units.
+	// It returns ErrNoFrameReady when no complete output frame is ready yet.
 	Encode(frame *image.RGBA, forceKeyframe bool) ([]byte, error)
 
 	// SetBitrate dynamically adjusts the bitrate
@@ -103,22 +110,28 @@ func (m *Manager) Init(cfg Config) error {
 // Encode encodes a frame
 func (m *Manager) Encode(frame *image.RGBA) ([]byte, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	if m.encoder == nil {
+		m.mu.Unlock()
 		return nil, fmt.Errorf("encoder not initialized")
+	}
+	if frame == nil {
+		m.mu.Unlock()
+		return nil, fmt.Errorf("nil frame")
 	}
 
 	bounds := frame.Bounds()
 	width := bounds.Dx()
 	height := bounds.Dy()
 	if width <= 0 || height <= 0 {
+		m.mu.Unlock()
 		return nil, fmt.Errorf("invalid frame size: %dx%d", width, height)
 	}
 	if width != m.config.Width || height != m.config.Height {
 		log.Printf("🎬 Reinitializing video encoder for new frame size: %dx%d -> %dx%d",
 			m.config.Width, m.config.Height, width, height)
 		if err := m.reinitializeLocked(width, height); err != nil {
+			m.mu.Unlock()
 			return nil, err
 		}
 	}
@@ -132,7 +145,10 @@ func (m *Manager) Encode(frame *image.RGBA) ([]byte, error) {
 		forceKeyframe = true
 	}
 
-	return m.encoder.Encode(frame, forceKeyframe)
+	enc := m.encoder
+	m.mu.Unlock()
+
+	return enc.Encode(frame, forceKeyframe)
 }
 
 func (m *Manager) reinitializeLocked(width, height int) error {

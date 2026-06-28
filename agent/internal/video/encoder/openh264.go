@@ -169,7 +169,7 @@ func (e *OpenH264Encoder) Encode(frame *image.RGBA, forceKeyframe bool) (output 
 
 	// Skip frames produce no output
 	if encInfo.EFrameType == openh264.VideoFrameTypeSkip {
-		return nil, nil
+		return nil, ErrNoFrameReady
 	}
 
 	// Collect NAL units from OpenH264 output.

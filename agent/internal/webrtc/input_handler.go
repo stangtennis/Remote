@@ -622,6 +622,7 @@ func (m *Manager) handleSwitchMonitor(event map[string]interface{}) {
 			}
 		}
 		log.Printf("✅ Switched to monitor %d: %dx%d (offset: %d,%d)", index, width, height, offsetX, offsetY)
+		logLowDisplayResolution("monitor switch", width, height)
 	}
 }
 

@@ -5,10 +5,15 @@
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://supabase.hawkeye123.dk';
-const SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q';
-const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE';
-const SITE_URL = 'https://stangtennis.github.io/Remote';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://supabase.hawkeye123.dk';
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SITE_URL = process.env.SITE_URL || 'https://stangtennis.github.io/Remote';
+
+if (!SERVICE_ROLE_KEY || !ANON_KEY) {
+  console.error('Set SUPABASE_SERVICE_ROLE_KEY and SUPABASE_ANON_KEY before running this test');
+  process.exit(1);
+}
 
 async function main() {
   // 1. Create support session directly via service role

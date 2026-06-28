@@ -13,19 +13,20 @@ import (
 // Credentials stores user login information
 type Credentials struct {
 	Email    string `json:"email"`
-	Password string `json:"password"` // Note: In production, use OS keyring instead
+	Password string `json:"password,omitempty"`
 	Remember bool   `json:"remember"`
 }
 
 // DeviceLogin stores Windows login details for a single remote device.
 // Stored locally only; never sent to Supabase. The file is restricted to the
-// current OS user, matching the existing controller-login credential storage.
+// current OS user. Passwords are stored through the OS secret store and are
+// only kept in this struct while in memory.
 type DeviceLogin struct {
 	DeviceID     string `json:"device_id"`
 	DeviceName   string `json:"device_name,omitempty"`
 	Username     string `json:"username,omitempty"`
 	Domain       string `json:"domain,omitempty"`
-	Password     string `json:"password"`
+	Password     string `json:"password,omitempty"`
 	SendUsername bool   `json:"send_username"`
 	AutoLogin    bool   `json:"auto_login"`
 	UpdatedAt    string `json:"updated_at"`
@@ -34,6 +35,7 @@ type DeviceLogin struct {
 const (
 	credentialsFile       = "credentials.json"
 	deviceCredentialsFile = "device_logins.json"
+	controllerPasswordKey = "controller-login"
 )
 
 // getCredentialsPath returns the path to the credentials file
@@ -67,13 +69,23 @@ func Save(creds *Credentials) error {
 		return Delete()
 	}
 
+	if strings.TrimSpace(creds.Password) != "" {
+		if err := saveSecret(controllerPasswordKey, creds.Password); err != nil {
+			logger.Error("Failed to save controller password in OS secret store: %v", err)
+			return err
+		}
+	}
+
 	path, err := getCredentialsPath()
 	if err != nil {
 		logger.Error("Failed to get credentials path: %v", err)
 		return err
 	}
 
-	data, err := json.Marshal(creds)
+	fileCreds := *creds
+	fileCreds.Password = ""
+
+	data, err := json.Marshal(fileCreds)
 	if err != nil {
 		logger.Error("Failed to marshal credentials: %v", err)
 		return err
@@ -112,6 +124,24 @@ func Load() (*Credentials, error) {
 		return nil, err
 	}
 
+	if creds.Password != "" {
+		legacyPassword := creds.Password
+		if err := saveSecret(controllerPasswordKey, legacyPassword); err != nil {
+			logger.Error("Failed to migrate controller password to OS secret store: %v", err)
+		} else {
+			creds.Password = ""
+			if err := writeCredentialsMetadata(path, &creds); err != nil {
+				return nil, err
+			}
+		}
+		creds.Password = legacyPassword
+	} else if password, err := loadSecret(controllerPasswordKey); err != nil {
+		logger.Error("Failed to load controller password from OS secret store: %v", err)
+		return nil, err
+	} else {
+		creds.Password = password
+	}
+
 	logger.Info("Credentials loaded successfully")
 	return &creds, nil
 }
@@ -125,6 +155,10 @@ func Delete() error {
 
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		logger.Error("Failed to delete credentials: %v", err)
+		return err
+	}
+	if err := deleteSecret(controllerPasswordKey); err != nil {
+		logger.Error("Failed to delete controller password from OS secret store: %v", err)
 		return err
 	}
 
@@ -147,6 +181,24 @@ func LoadDeviceLogin(deviceID string) (*DeviceLogin, error) {
 	if !ok {
 		return nil, nil
 	}
+	if login.Password != "" {
+		legacyPassword := login.Password
+		if err := saveSecret(devicePasswordKey(deviceID), legacyPassword); err != nil {
+			logger.Error("Failed to migrate device password to OS secret store: %v", err)
+		} else {
+			login.Password = ""
+			logins[deviceID] = login
+			if err := saveDeviceLogins(logins); err != nil {
+				return nil, err
+			}
+		}
+		login.Password = legacyPassword
+	} else if password, err := loadSecret(devicePasswordKey(deviceID)); err != nil {
+		logger.Error("Failed to load device password from OS secret store: %v", err)
+		return nil, err
+	} else {
+		login.Password = password
+	}
 	return &login, nil
 }
 
@@ -161,11 +213,20 @@ func SaveDeviceLogin(login *DeviceLogin) error {
 	login.Domain = strings.TrimSpace(login.Domain)
 	login.UpdatedAt = time.Now().Format(time.RFC3339)
 
+	if strings.TrimSpace(login.Password) != "" {
+		if err := saveSecret(devicePasswordKey(login.DeviceID), login.Password); err != nil {
+			logger.Error("Failed to save device password in OS secret store: %v", err)
+			return err
+		}
+	}
+
 	logins, err := loadDeviceLogins()
 	if err != nil {
 		return err
 	}
-	logins[login.DeviceID] = *login
+	fileLogin := *login
+	fileLogin.Password = ""
+	logins[login.DeviceID] = fileLogin
 	return saveDeviceLogins(logins)
 }
 
@@ -180,7 +241,30 @@ func DeleteDeviceLogin(deviceID string) error {
 		return err
 	}
 	delete(logins, deviceID)
+	if err := deleteSecret(devicePasswordKey(deviceID)); err != nil {
+		logger.Error("Failed to delete device password from OS secret store: %v", err)
+		return err
+	}
 	return saveDeviceLogins(logins)
+}
+
+func writeCredentialsMetadata(path string, creds *Credentials) error {
+	fileCreds := *creds
+	fileCreds.Password = ""
+	data, err := json.Marshal(fileCreds)
+	if err != nil {
+		logger.Error("Failed to marshal credentials: %v", err)
+		return err
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		logger.Error("Failed to write credentials: %v", err)
+		return err
+	}
+	return nil
+}
+
+func devicePasswordKey(deviceID string) string {
+	return "device-login:" + strings.TrimSpace(deviceID)
 }
 
 func loadDeviceLogins() (map[string]DeviceLogin, error) {

@@ -23,8 +23,8 @@ var agentIconICO []byte
 
 // Version aliases for backwards compatibility (ldflags still inject here)
 var (
-	Version       = "v3.1.96"
-	BuildDate     = "2026-06-21"
+	Version       = "v3.1.97"
+	BuildDate     = "2026-06-27"
 	VersionString = ""
 )
 

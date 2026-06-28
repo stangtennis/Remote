@@ -28,8 +28,11 @@ agent/*.exe
 *.wasm
 vendor/
 
-# Test files
+# Test files and local screenshots
 agent/test_*
+/*.png
+/*.jpg
+/*.jpeg
 *.png
 *.jpg
 *.jpeg
@@ -85,9 +88,18 @@ dele filer/
 slet.txt/
 test-support-queue.js
 test-results/
+.playwright-mcp/
+\#playwright/
 node_modules/
 package.json
 package-lock.json
+
+# Local one-off scripts/experiments
+scripts/Simple-DiskScanner-GUI.ps1
+scripts/Windows-DiskSpace-GUI.ps1
+scripts/guacamole-finish-upgrade-1.6.0.sh
+scripts/guacamole-upgrade-1.6.0.sh
+scripts/windows/
 
 # Old project (legacy Python prototype, should not be tracked)
 old projekt/

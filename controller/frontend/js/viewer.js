@@ -209,7 +209,7 @@ class ViewerSession {
           <button class="btn btn-sm btn-icon session-screenshot-btn" title="Tag screenshot"><i class="fas fa-camera"></i></button>
           <button class="btn btn-sm btn-icon session-terminal-btn" title="Terminal"><i class="fas fa-terminal"></i></button>
           <button class="btn btn-sm btn-icon session-login-btn" title="Login som RDP"><i class="fas fa-right-to-bracket"></i></button>
-          <button class="btn btn-sm btn-icon session-codec-btn" title="Skift codec (H.264 ⇄ JPEG)"><i class="fas fa-film"></i></button>
+          <button class="btn btn-sm session-codec-btn" title="Skift codec (H.264 ⇄ JPEG)"><i class="fas fa-film"></i><span>JPEG</span></button>
           <button class="btn btn-sm btn-icon session-log-btn" title="Vis session-log"><i class="fas fa-file-alt"></i></button>
           <button class="btn btn-sm btn-icon session-chat-btn" title="Chat"><i class="fas fa-comment"></i></button>
           <button class="btn btn-sm btn-icon session-fullscreen-btn" title="Fuldskærm"><i class="fas fa-expand"></i></button>
@@ -404,16 +404,10 @@ class ViewerSession {
       });
       if (response.ok) {
         const data = await response.json();
-        // STUN for P2P + Cloudflare TURN + local coturn as backup
-        // Generate coturn temp credentials (HMAC-based, valid 24h)
-        const coturnUser = Math.floor(Date.now()/1000 + 86400) + ':remotedesktop';
-        const coturnKey = 'HawkeyeTurnSecret2026x';
-        const coturnCred = await this.hmacSHA1(coturnKey, coturnUser);
+        // STUN for P2P plus TURN credentials from the edge function.
         this.iceConfig = { iceServers: [
           { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-          ...data.iceServers,
-          { urls: 'turn:turn.hawkeye123.dk:3478?transport=udp', username: coturnUser, credential: coturnCred },
-          { urls: 'turn:turn.hawkeye123.dk:3478?transport=tcp', username: coturnUser, credential: coturnCred }
+          ...data.iceServers
         ]};
         const hasTurn = JSON.stringify(data.iceServers).includes('turn:');
         this.setConnectStatus(`TURN: ${hasTurn ? 'OK' : 'KUN STUN'} (${data.iceServers.length} servere)`);
@@ -803,6 +797,7 @@ class ViewerSession {
     if (!width || !height) return;
     this.screenWidth = width;
     this.screenHeight = height;
+    this.lowResolutionWarning = width <= 640 || height <= 480;
   }
 
   renderFrame(data) {
@@ -1193,6 +1188,7 @@ class ViewerSession {
         ? `${this.screenWidth}x${this.screenHeight}`
         : '';
       if (resolutionText) parts.push(resolutionText);
+      if (this.lowResolutionWarning) parts.push('Lav opløsning');
       if (rtt != null) parts.push(`${rtt}ms`);
       if (fps != null) parts.push(`${fps}fps`);
       if (bwText) parts.push(bwText);
@@ -1219,6 +1215,10 @@ class ViewerSession {
       const statsEl = this.wrapper.querySelector('.viewer-stats');
       if (statsEl) {
         statsEl.textContent = parts.length > 0 ? parts.join(' | ') : '';
+        statsEl.classList.toggle('low-resolution-warning', !!this.lowResolutionWarning);
+        statsEl.title = this.lowResolutionWarning
+          ? 'Serveren sender lav console-opløsning. Brug dummy HDMI/virtuel display-driver eller log ind på konsollen med højere opløsning.'
+          : '';
       }
 
       // Update detail panel
@@ -1530,13 +1530,6 @@ class ViewerSession {
       };
       check();
     });
-  }
-
-  async hmacSHA1(key, message) {
-    const enc = new TextEncoder();
-    const cryptoKey = await crypto.subtle.importKey('raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
-    const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
-    return btoa(String.fromCharCode(...new Uint8Array(sig)));
   }
 
   cleanupConnection() {
@@ -2033,12 +2026,12 @@ class ViewerSession {
     const h264Requested = this.requestedCodec === 'h264';
     if (h264Requested) {
       btn.title = this.usingH264 ? 'Skift til JPEG (nu: H.264)' : 'Skift til JPEG (H.264 anmodet)';
-      btn.innerHTML = '<i class="fas fa-film"></i>';
+      btn.innerHTML = `<i class="fas fa-film"></i><span>${this.usingH264 ? 'H.264' : 'H.264?'}</span>`;
       btn.classList.add('codec-active-h264');
       btn.classList.remove('codec-active-jpeg');
     } else {
       btn.title = 'Skift til H.264 (nu: JPEG)';
-      btn.innerHTML = '<i class="fas fa-image"></i>';
+      btn.innerHTML = '<i class="fas fa-image"></i><span>JPEG</span>';
       btn.classList.add('codec-active-jpeg');
       btn.classList.remove('codec-active-h264');
     }

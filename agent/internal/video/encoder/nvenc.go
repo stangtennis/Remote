@@ -25,14 +25,14 @@ type NVENCEncoder struct {
 	started bool
 
 	// Background reader goroutine sends encoded chunks here
-	outCh  chan []byte
-	errCh  chan error
-	stopCh chan struct{}
+	outCh   chan []byte
+	errCh   chan error
+	stopCh  chan struct{}
+	pending []byte
 }
 
 const (
 	nvencFirstChunkTimeout = 120 * time.Millisecond
-	nvencChunkQuietPeriod  = 12 * time.Millisecond
 	nvencMaxDrainDuration  = 90 * time.Millisecond
 )
 
@@ -139,6 +139,7 @@ func (e *NVENCEncoder) startFFmpeg() error {
 		"-g", fmt.Sprintf("%d", e.config.KeyframeInterval),
 		"-bf", "0", // No B-frames for low latency
 		"-forced-idr", "1",
+		"-aud", "1", // Emit access unit delimiters so frame boundaries are parseable.
 		"-spatial_aq", "1", // Adaptive quantization PÅ — bedre kvalitet på flade områder
 		"-temporal_aq", "1", // Temporal AQ — bedre kvalitet ved bevægelse
 		"-rc-lookahead", "0", // No lookahead = no latency tradeoff
@@ -178,6 +179,7 @@ func (e *NVENCEncoder) startFFmpeg() error {
 	e.outCh = make(chan []byte, 32) // Large enough for bursty keyframes
 	e.errCh = make(chan error, 1)
 	e.stopCh = make(chan struct{})
+	e.pending = nil
 	go e.readLoop()
 
 	e.started = true
@@ -245,50 +247,132 @@ func (e *NVENCEncoder) Encode(frame *image.RGBA, forceKeyframe bool) ([]byte, er
 		return nil, fmt.Errorf("write frame: %w (stderr: %s)", err, stderrMsg)
 	}
 
-	var result []byte
+	if au := e.popAccessUnitLocked(); len(au) > 0 {
+		return au, nil
+	}
 
 	// Wait for first chunk (blocking with timeout)
 	select {
 	case data := <-e.outCh:
-		result = data
+		e.pending = append(e.pending, data...)
 	case err := <-e.errCh:
 		return nil, fmt.Errorf("ffmpeg read error: %w", err)
 	case <-time.After(nvencFirstChunkTimeout):
-		return nil, nil // No output yet (first few frames may buffer)
+		return nil, ErrNoFrameReady // First few frames may buffer.
 	}
 
-	quietTimer := time.NewTimer(nvencChunkQuietPeriod)
 	deadline := time.NewTimer(nvencMaxDrainDuration)
-	defer quietTimer.Stop()
 	defer deadline.Stop()
 
 	for {
+		if au := e.popAccessUnitLocked(); len(au) > 0 {
+			return au, nil
+		}
+
 		select {
 		case data := <-e.outCh:
-			result = append(result, data...)
-			if !quietTimer.Stop() {
-				select {
-				case <-quietTimer.C:
-				default:
-				}
-			}
-			quietTimer.Reset(nvencChunkQuietPeriod)
+			e.pending = append(e.pending, data...)
 		case err := <-e.errCh:
-			if len(result) > 0 {
+			if len(e.pending) > 0 {
 				log.Printf("NVENC: returning buffered H.264 after read error: %v", err)
+				result := e.pending
+				e.pending = nil
 				return result, nil
 			}
 			return nil, fmt.Errorf("ffmpeg read error: %w", err)
-		case <-quietTimer.C:
-			return result, nil
 		case <-deadline.C:
-			log.Printf("NVENC: H.264 drain deadline hit, returning %d bytes", len(result))
+			if len(e.pending) == 0 {
+				return nil, ErrNoFrameReady
+			}
+			// Fail open if FFmpeg does not emit AUD despite -aud 1. This keeps
+			// video alive, but the normal path above is delimiter-based.
+			result := e.pending
+			e.pending = nil
+			log.Printf("NVENC: H.264 access-unit deadline hit, returning %d bytes", len(result))
 			return result, nil
 		}
 	}
 }
 
-// SetBitrate adjusts the encoding bitrate (requires FFmpeg restart)
+func (e *NVENCEncoder) popAccessUnitLocked() []byte {
+	au, rest := popAnnexBAccessUnit(e.pending)
+	if len(au) == 0 {
+		return nil
+	}
+	e.pending = rest
+	return au
+}
+
+func popAnnexBAccessUnit(data []byte) ([]byte, []byte) {
+	if len(data) < 6 {
+		return nil, data
+	}
+
+	firstStart := findStartCode(data, 0)
+	if firstStart < 0 {
+		if len(data) > 3 {
+			return nil, append([]byte(nil), data[len(data)-3:]...)
+		}
+		return nil, data
+	}
+	if firstStart > 0 {
+		data = data[firstStart:]
+	}
+
+	secondAUD := -1
+	seenAUD := false
+	for pos := 0; ; {
+		start := findStartCode(data, pos)
+		if start < 0 {
+			break
+		}
+		nalStart := start + startCodeLen(data[start:])
+		if nalStart >= len(data) {
+			break
+		}
+		if data[nalStart]&0x1f == 9 {
+			if seenAUD {
+				secondAUD = start
+				break
+			}
+			seenAUD = true
+		}
+		pos = nalStart + 1
+	}
+
+	if secondAUD < 0 {
+		return nil, data
+	}
+	return append([]byte(nil), data[:secondAUD]...), append([]byte(nil), data[secondAUD:]...)
+}
+
+func findStartCode(data []byte, from int) int {
+	for i := from; i+3 < len(data); i++ {
+		if data[i] == 0 && data[i+1] == 0 {
+			if data[i+2] == 1 {
+				return i
+			}
+			if i+4 <= len(data) && data[i+2] == 0 && data[i+3] == 1 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func startCodeLen(data []byte) int {
+	if len(data) >= 4 && data[0] == 0 && data[1] == 0 && data[2] == 0 && data[3] == 1 {
+		return 4
+	}
+	return 3
+}
+
+// SetBitrate records the requested bitrate without restarting FFmpeg.
+//
+// FFmpeg/NVENC does not accept this bitrate change through the current stdin
+// pipeline. Restarting here causes a visible keyframe burst and short capture
+// stall on every dashboard quality change, so the new value takes effect on the
+// next encoder restart, e.g. a resolution change or new session.
 func (e *NVENCEncoder) SetBitrate(kbps int) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -296,10 +380,8 @@ func (e *NVENCEncoder) SetBitrate(kbps int) error {
 	oldBitrate := e.config.Bitrate
 	e.config.Bitrate = kbps
 
-	// Restart FFmpeg with new bitrate for immediate effect
 	if e.started && oldBitrate != kbps {
-		log.Printf("NVENC: bitrate changed %d -> %d kbps, restarting encoder", oldBitrate, kbps)
-		return e.startFFmpeg()
+		log.Printf("NVENC: bitrate requested %d -> %d kbps (effective on next encoder restart)", oldBitrate, kbps)
 	}
 	return nil
 }

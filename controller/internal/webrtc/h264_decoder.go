@@ -3,8 +3,6 @@ package webrtc
 import (
 	"bytes"
 	"fmt"
-	"image"
-	"image/jpeg"
 	"io"
 	"log"
 	"os"
@@ -26,8 +24,6 @@ type H264Decoder struct {
 	running  bool
 	mu       sync.Mutex
 	stopChan chan struct{}
-	width    int
-	height   int
 }
 
 // NewH264Decoder creates a new FFmpeg-based H.264 decoder
@@ -194,49 +190,9 @@ func (d *H264Decoder) readStderr() {
 		if n > 0 {
 			line := string(bytes.TrimSpace(buf[:n]))
 			log.Printf("🎬 ffmpeg: %s", line)
-			// Parse resolution from FFmpeg output (e.g., "Stream #0:0: Video: h264, 1920x1080")
-			d.parseResolution(line)
 		}
 		if err != nil {
 			return
-		}
-	}
-}
-
-// parseResolution extracts video resolution from FFmpeg stderr output
-func (d *H264Decoder) parseResolution(line string) {
-	// Look for resolution pattern like "1920x1080" or "3840x2160"
-	// FFmpeg outputs: "Stream #0:0: Video: h264 (High), yuv420p, 1920x1080, 30 fps"
-	if d.width > 0 && d.height > 0 {
-		return // Already have resolution
-	}
-
-	// Simple pattern matching for WxH
-	for i := 0; i < len(line)-4; i++ {
-		if line[i] >= '0' && line[i] <= '9' {
-			// Found a digit, try to parse WxH
-			j := i
-			for j < len(line) && line[j] >= '0' && line[j] <= '9' {
-				j++
-			}
-			if j < len(line) && line[j] == 'x' {
-				k := j + 1
-				for k < len(line) && line[k] >= '0' && line[k] <= '9' {
-					k++
-				}
-				if k > j+1 {
-					var w, h int
-					fmt.Sscanf(line[i:k], "%dx%d", &w, &h)
-					if w >= 320 && w <= 7680 && h >= 240 && h <= 4320 {
-						d.mu.Lock()
-						d.width = w
-						d.height = h
-						d.mu.Unlock()
-						log.Printf("🎬 Detected video resolution: %dx%d", w, h)
-						return
-					}
-				}
-			}
 		}
 	}
 }
@@ -340,77 +296,6 @@ func (d *H264Decoder) readFrames() {
 			}
 		}
 	}
-}
-
-// nv12ToJPEG converts NV12 raw frame to JPEG
-// NV12 format: Y plane (width*height bytes) followed by interleaved UV plane (width*height/2 bytes)
-func nv12ToJPEG(nv12 []byte, width, height int) []byte {
-	ySize := width * height
-	if len(nv12) < ySize+ySize/2 {
-		return nil
-	}
-
-	// Create RGB image
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-
-	// Y plane
-	yPlane := nv12[:ySize]
-	// UV plane (interleaved)
-	uvPlane := nv12[ySize:]
-
-	// Convert NV12 to RGB
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			// Get Y value
-			yIdx := y*width + x
-			yVal := int(yPlane[yIdx])
-
-			// Get UV values (subsampled 2x2)
-			uvIdx := (y/2)*(width) + (x/2)*2
-			if uvIdx+1 >= len(uvPlane) {
-				continue
-			}
-			uVal := int(uvPlane[uvIdx]) - 128
-			vVal := int(uvPlane[uvIdx+1]) - 128
-
-			// YUV to RGB conversion (BT.601)
-			r := yVal + (359*vVal)>>8
-			g := yVal - (88*uVal+183*vVal)>>8
-			b := yVal + (454*uVal)>>8
-
-			// Clamp values
-			if r < 0 {
-				r = 0
-			} else if r > 255 {
-				r = 255
-			}
-			if g < 0 {
-				g = 0
-			} else if g > 255 {
-				g = 255
-			}
-			if b < 0 {
-				b = 0
-			} else if b > 255 {
-				b = 255
-			}
-
-			// Set pixel
-			idx := (y*width + x) * 4
-			img.Pix[idx+0] = uint8(r)
-			img.Pix[idx+1] = uint8(g)
-			img.Pix[idx+2] = uint8(b)
-			img.Pix[idx+3] = 255
-		}
-	}
-
-	// Encode to JPEG with medium quality (faster)
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 75}); err != nil {
-		return nil
-	}
-
-	return buf.Bytes()
 }
 
 // Decode sends H.264 NAL units to the decoder
