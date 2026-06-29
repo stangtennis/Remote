@@ -156,6 +156,16 @@ class ViewerSession {
     this.h264LastProgressAt = 0;
     this.h264LastVideoTime = 0;
     this.h264FrameCallbackActive = false;
+    this.h264Stats = {
+      packetsReceived: 0,
+      bytesReceived: 0,
+      framesDecoded: 0,
+      framesDropped: 0,
+      keyFramesDecoded: 0,
+      codec: '',
+      lastPacketAt: 0,
+      lastDecodedAt: 0
+    };
     this.videoTransceiver = null;
     this.lastJpegFrameAt = 0;
     this.isFullscreen = false;
@@ -497,7 +507,7 @@ class ViewerSession {
         // Don't set usingH264 yet — agent always adds video track but only
         // sends frames when H.264 mode is active. Detect actual H.264 usage
         // by checking if video element receives frames (videoWidth > 0).
-        this.videoEl.srcObject = event.streams[0];
+        this._attachH264VideoStream(event.streams[0]);
         this.videoEl.style.display = this.requestedCodec === 'h264' ? '' : 'none';
         this._startH264ProgressWatch();
         this.canvasEl.style.pointerEvents = 'auto';
@@ -586,12 +596,7 @@ class ViewerSession {
       if (data.length === 0) return;
 
       if (data[0] === 0x7B) {
-        try {
-          const msg = JSON.parse(new TextDecoder().decode(data));
-          if (msg.type === 'screen_info' || msg.type === 'frame_meta') {
-            this.updateResolution(msg.width, msg.height);
-          }
-        } catch (e) { /* not JSON */ }
+        this._handleJsonMessage(new TextDecoder().decode(data));
         return;
       }
 
@@ -685,36 +690,48 @@ class ViewerSession {
     } else if (event.data instanceof Blob) {
       event.data.arrayBuffer().then(buf => this.handleDataMessage({ data: buf }));
     } else if (typeof event.data === 'string') {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'screen_info' || msg.type === 'frame_meta') {
-          this.updateResolution(msg.width, msg.height);
-        } else if (msg.type === 'monitor_list') {
-          this.updateMonitorList(msg.monitors || [], msg.active || 0);
-        } else if (msg.type === 'update_status') {
-          const type = msg.status === 'error' ? 'error' : msg.status === 'up_to_date' ? 'success' : 'info';
-          showToast(msg.message || msg.status, type);
-        } else if (msg.type === 'codec_status') {
-          this.handleCodecStatus(msg);
-        } else if (msg.type === 'chat') {
-          this.addChatMessage('Agent', msg.text || msg.message || '');
-        } else if (msg.type === 'clipboard_text') {
-          // Remote PC copied text — write it to the local OS clipboard,
-          // and broadcast to every OTHER connected session so the user can
-          // paste it on any of the connected machines (and on the
-          // controller itself).
-          if (msg.content) {
-            ClipboardBroker.spread('text', msg.content, this.id);
-          }
-        } else if (msg.type === 'clipboard_image') {
-          // Remote PC copied an image — decode base64 PNG, write to local
-          // clipboard, and forward to every other open session.
-          if (msg.content) {
-            ClipboardBroker.spread('image', msg.content, this.id);
-          }
-        }
-      } catch (e) { /* not JSON */ }
+      this._handleJsonMessage(event.data);
     }
+  }
+
+  _handleJsonMessage(raw) {
+    let msg;
+    try {
+      msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (e) {
+      return false;
+    }
+
+    if (!msg || typeof msg !== 'object') return false;
+
+    if (msg.type === 'screen_info' || msg.type === 'frame_meta') {
+      this.updateResolution(msg.width, msg.height);
+    } else if (msg.type === 'monitor_list') {
+      this.updateMonitorList(msg.monitors || [], msg.active || 0);
+    } else if (msg.type === 'update_status') {
+      const type = msg.status === 'error' ? 'error' : msg.status === 'up_to_date' ? 'success' : 'info';
+      showToast(msg.message || msg.status, type);
+    } else if (msg.type === 'codec_status') {
+      console.log(`[${this.deviceName}] Codec status from agent:`, msg);
+      this.handleCodecStatus(msg);
+    } else if (msg.type === 'chat') {
+      this.addChatMessage('Agent', msg.text || msg.message || '');
+    } else if (msg.type === 'clipboard_text') {
+      // Remote PC copied text — write it to the local OS clipboard,
+      // and broadcast to every OTHER connected session so the user can
+      // paste it on any of the connected machines (and on the
+      // controller itself).
+      if (msg.content) {
+        ClipboardBroker.spread('text', msg.content, this.id);
+      }
+    } else if (msg.type === 'clipboard_image') {
+      // Remote PC copied an image — decode base64 PNG, write to local
+      // clipboard, and forward to every other open session.
+      if (msg.content) {
+        ClipboardBroker.spread('image', msg.content, this.id);
+      }
+    }
+    return true;
   }
 
   handleCodecStatus(msg) {
@@ -1126,6 +1143,12 @@ class ViewerSession {
       let timestamp = 0;
       let packetsLost = 0;
       let packetsReceived = 0;
+      let videoBytesReceived = 0;
+      let framesDecoded = null;
+      let framesDropped = null;
+      let keyFramesDecoded = null;
+      let videoCodecId = '';
+      let videoCodec = '';
 
       stats.forEach(report => {
         // RTT from active candidate pair
@@ -1137,7 +1160,12 @@ class ViewerSession {
           if (report.framesPerSecond != null) {
             fps = Math.round(report.framesPerSecond);
           }
+          if (report.framesDecoded != null) framesDecoded = report.framesDecoded;
+          if (report.framesDropped != null) framesDropped = report.framesDropped;
+          if (report.keyFramesDecoded != null) keyFramesDecoded = report.keyFramesDecoded;
+          if (report.codecId) videoCodecId = report.codecId;
           if (report.bytesReceived != null) {
+            videoBytesReceived = report.bytesReceived;
             bytesReceived = report.bytesReceived;
             timestamp = report.timestamp;
           }
@@ -1151,7 +1179,23 @@ class ViewerSession {
             timestamp = report.timestamp;
           }
         }
+        if (report.type === 'codec' && report.id === videoCodecId) {
+          videoCodec = [report.mimeType, report.sdpFmtpLine].filter(Boolean).join(' ');
+        }
       });
+
+      if (packetsReceived > this.h264Stats.packetsReceived) {
+        this.h264Stats.lastPacketAt = Date.now();
+      }
+      if (framesDecoded != null && framesDecoded > this.h264Stats.framesDecoded) {
+        this.h264Stats.lastDecodedAt = Date.now();
+      }
+      this.h264Stats.packetsReceived = packetsReceived;
+      this.h264Stats.bytesReceived = videoBytesReceived;
+      this.h264Stats.framesDecoded = framesDecoded ?? this.h264Stats.framesDecoded;
+      this.h264Stats.framesDropped = framesDropped ?? this.h264Stats.framesDropped;
+      this.h264Stats.keyFramesDecoded = keyFramesDecoded ?? this.h264Stats.keyFramesDecoded;
+      if (videoCodec) this.h264Stats.codec = videoCodec;
 
       // Calculate packet loss % (delta since last sample)
       let lossPercent = null;
@@ -2009,6 +2053,7 @@ class ViewerSession {
         this.h264RequestedAt = Date.now();
         this.h264LastProgressAt = 0;
         this.h264LastVideoTime = this.videoEl?.currentTime || 0;
+        this._ensureH264VideoPlaying('codec-toggle');
         this._startH264ProgressWatch();
         this._scheduleH264Fallback();
       }
@@ -2038,9 +2083,56 @@ class ViewerSession {
   }
 
   _h264BitrateKbps() {
-    // 10 Mbps for good 1080p desktop quality without being too aggressive.
-    // 4 Mbps was too low and made text blurry compared to JPEG tiles.
-    return 10000;
+    // Keep WebView/browser decode conservative. If this works reliably we can
+    // raise it again; right now the failure mode is no decoded video at all.
+    return 4000;
+  }
+
+  _attachH264VideoStream(stream) {
+    if (!this.videoEl || !stream) return;
+
+    this.videoEl.autoplay = true;
+    this.videoEl.muted = true;
+    this.videoEl.playsInline = true;
+    this.videoEl.controls = false;
+
+    if (this.videoEl.srcObject !== stream) {
+      this.videoEl.srcObject = stream;
+    }
+
+    const markReady = () => {
+      if (this.videoEl && this.videoEl.videoWidth > 0 && this.videoEl.videoHeight > 0) {
+        this.h264LastProgressAt = Date.now();
+        this.h264LastVideoTime = this.videoEl.currentTime || this.h264LastVideoTime;
+        this.updateResolution(this.videoEl.videoWidth, this.videoEl.videoHeight);
+      }
+    };
+
+    this.videoEl.onloadedmetadata = () => {
+      markReady();
+      this._ensureH264VideoPlaying('loadedmetadata');
+    };
+    this.videoEl.onloadeddata = markReady;
+    this.videoEl.onplaying = markReady;
+    this.videoEl.ontimeupdate = markReady;
+    this.videoEl.onerror = () => {
+      const err = this.videoEl?.error;
+      console.warn(`[${this.deviceName}] H.264 video element error:`, err ? `${err.code}: ${err.message || ''}` : 'unknown');
+    };
+
+    this._ensureH264VideoPlaying('track');
+  }
+
+  _ensureH264VideoPlaying(reason = '') {
+    const video = this.videoEl;
+    if (!video || !video.srcObject) return;
+
+    const playPromise = video.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(err => {
+        console.warn(`[${this.deviceName}] H.264 video play blocked (${reason}):`, err?.message || err);
+      });
+    }
   }
 
   _startH264ProgressWatch() {
@@ -2087,9 +2179,21 @@ class ViewerSession {
       if (this.requestedCodec !== 'h264' || this._hasRecentH264Progress()) return;
 
       console.warn(`[${this.deviceName}] H.264 produced no moving frames; falling back to JPEG`);
+      const diag = this._h264DiagnosticLine();
+      if (diag) console.warn(`[${this.deviceName}] H.264 diagnostics: ${diag}`);
       showToast('H.264 gav ingen stabil video - skifter tilbage til JPEG', 'warning');
       this.requestJpegMode();
-    }, 4500);
+    }, 8000);
+  }
+
+  _h264DiagnosticLine() {
+    if (!this.h264Stats) return '';
+    const sincePacket = this.h264Stats.lastPacketAt ? `${Math.round((Date.now() - this.h264Stats.lastPacketAt) / 1000)}s siden packet` : 'ingen packets';
+    const sinceDecoded = this.h264Stats.lastDecodedAt ? `${Math.round((Date.now() - this.h264Stats.lastDecodedAt) / 1000)}s siden decode` : 'ingen decoded frames';
+    const video = this.videoEl;
+    const ready = video ? `${video.readyState}/${video.networkState}` : '?';
+    const size = video ? `${video.videoWidth || 0}x${video.videoHeight || 0}` : '0x0';
+    return `packets=${this.h264Stats.packetsReceived}, bytes=${this.h264Stats.bytesReceived}, decoded=${this.h264Stats.framesDecoded}, dropped=${this.h264Stats.framesDropped}, keyframes=${this.h264Stats.keyFramesDecoded}, video=${size}, ready=${ready}, ${sincePacket}, ${sinceDecoded}, codec=${this.h264Stats.codec || '?'}`;
   }
 
   // Vis session-log i en modal — samler connect-log + recent console-events
@@ -2106,7 +2210,8 @@ class ViewerSession {
       lines.push(`Canvas: ${this.canvasEl.width}x${this.canvasEl.height} (display ${this.canvasEl.clientWidth}x${this.canvasEl.clientHeight})`);
     }
     if (this.videoEl) {
-      lines.push(`Video: ${this.videoEl.videoWidth}x${this.videoEl.videoHeight}`);
+      lines.push(`Video: ${this.videoEl.videoWidth}x${this.videoEl.videoHeight} ready=${this.videoEl.readyState} network=${this.videoEl.networkState} paused=${this.videoEl.paused}`);
+      lines.push(`H264 stats: ${this._h264DiagnosticLine() || '?'}`);
     }
     lines.push('');
     lines.push('=== Connect log ===');
@@ -2204,6 +2309,7 @@ class ViewerSession {
     this.h264RequestedAt = Date.now();
     this.h264LastProgressAt = 0;
     this.h264LastVideoTime = this.videoEl?.currentTime || 0;
+    this._ensureH264VideoPlaying('enable-h264');
     this._startH264ProgressWatch();
     this._scheduleH264Fallback();
     this._updateCodecBtn();
