@@ -191,6 +191,14 @@ Hvis Fyne-controlleren fortsat skal vedligeholdes:
 - [x] Generer SHA256 checksums for alle tre exe-filer.
 - [x] Byg installers for `v3.1.97`.
 - [x] Deploy `v3.1.97` til download/update-server.
+- [x] Byg Windows controller hotfix: `builds/controller-v3.1.98.exe`.
+- [x] Byg Windows controller installer hotfix: `builds/RemoteDesktopController-v3.1.98-Setup.exe`.
+- [x] Deploy controller `v3.1.98` til download/update-server; agent bliver på `v3.1.97`.
+- [!] H.264 test fra controller til `WIN-TEST` gav "ingen stabil video"; controller hotfix starter video-track eksplicit og skal retestes.
+- [x] Byg og deploy controller `v3.1.99` med H.264 getStats-diagnostik og konservativ 4 Mbps bitrate.
+- [x] H.264 fra controller til `WIN-TEST` retestet på `v3.1.99`; fejlede stadig med 0 RTP-pakker og ingen decoded frames.
+- [x] Byg og deploy controller `v3.1.100` med parsing af binære JSON datachannel-beskeder, så `codec_status` fra agenten vises.
+- [!] H.264 fra controller til `WIN-TEST` skal retestes på `v3.1.100`; session-loggen skal nu vise om agenten accepterer eller afviser H.264.
 
 ## Foreslået rækkefølge
 
@@ -205,8 +213,8 @@ Hvis Fyne-controlleren fortsat skal vedligeholdes:
 
 - [x] Ingen nye passwords gemmes i klartekst.
 - [x] Eksisterende password-data migreres væk fra klartekst JSON ved næste load.
-- [ ] Dashboard/controller viser tydelig remote oplosning.
+- [x] Dashboard/controller viser tydelig remote oplosning.
 - [ ] H.264 bitrate-skift staller ikke capture-loopet.
 - [ ] H.264 frame boundaries er robuste under load.
-- [ ] Repoet indeholder ikke release/debug binaries som tracked source.
-- [ ] Arkitekturen for controller-varianter er dokumenteret.
+- [x] Repoet indeholder ikke release/debug binaries som tracked source.
+- [x] Arkitekturen for controller-varianter er dokumenteret.
