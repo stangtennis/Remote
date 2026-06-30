@@ -200,7 +200,9 @@ Hvis Fyne-controlleren fortsat skal vedligeholdes:
 - [x] Byg og deploy controller `v3.1.100` med parsing af binære JSON datachannel-beskeder, så `codec_status` fra agenten vises.
 - [x] H.264 fra controller til `WIN-TEST` retestet på `v3.1.100`; agent afviste med `h264_unavailable_for_session0_gdi`.
 - [x] Byg og deploy agent `v3.1.101`, så Session0 pipe-helper kan tillade H.264 når den følger en aktiv brugerdesktop.
-- [!] H.264 fra controller `v3.1.100` til agent `v3.1.101` på `WIN-TEST` skal retestes; forventet `codec_status.accepted=true` hvis helperen er i aktiv user desktop.
+- [x] H.264 fra controller `v3.1.100` til agent `v3.1.101` på `WIN-TEST` retestet; H.264 virker og decoder 1920x1080, men input stopper.
+- [x] Byg og deploy agent `v3.1.102`, så Session0 pipe-helper input får prioritet over kontinuerlig H.264 capture.
+- [!] H.264 input fra controller `v3.1.100` til agent `v3.1.102` på `WIN-TEST` skal retestes.
 
 ## Foreslået rækkefølge
 

@@ -19,6 +19,11 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 		return
 	}
 
+	switch eventType {
+	case "mouse_move", "mouse_click", "mouse_scroll", "key":
+		m.noteInputPriority()
+	}
+
 	// Track last input time for idle detection
 	m.setLastInputTime(time.Now())
 
@@ -175,6 +180,17 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 			m.keyController.SendKeyWithModifiers(code, down, ctrl, shift, alt, meta)
 		}
 	}
+}
+
+func (m *Manager) noteInputPriority() {
+	if m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
+		m.inputPriorityUntil.Store(time.Now().Add(80 * time.Millisecond).UnixNano())
+	}
+}
+
+func (m *Manager) inputPriorityActive() bool {
+	deadline := m.inputPriorityUntil.Load()
+	return deadline > 0 && time.Now().UnixNano() < deadline
 }
 
 // handleControlEvent handles control events from the dashboard data channel
