@@ -61,15 +61,14 @@ func (m *Manager) canUseH264Mode() bool {
 		}
 	}
 
-	// Software encoder (OpenH264): block in Session 0 / GDI / pipe-helper
-	// to avoid CPU overload from encode + capture competing.
-	if m.isSession0 {
-		return false
+	// Software encoder (OpenH264): let the active capture backend decide.
+	// Direct GDI and Winlogon/login desktops stay JPEG-only, while the
+	// Session0 pipe helper may allow H.264 after it follows an active user
+	// desktop.
+	if m.screenCapturer != nil {
+		return m.screenCapturer.AllowsH264()
 	}
-	if m.screenCapturer != nil && (m.screenCapturer.IsGDIMode() || m.screenCapturer.HasInputForwarder()) {
-		return false
-	}
-	return true
+	return !m.isSession0
 }
 
 // SetH264Mode enables or disables H.264 video track mode.
