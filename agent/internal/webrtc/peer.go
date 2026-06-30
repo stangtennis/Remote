@@ -60,6 +60,10 @@ type Manager struct {
 	isSession0         bool         // Running in Session 0 (before user login)
 	startedInSession0  bool         // Process was started in Session 0 (never changes)
 	inputPriorityUntil atomic.Int64 // UnixNano deadline where Session0 pipe input gets capture priority
+	inputEvents        atomic.Uint64
+	inputForwarded     atomic.Uint64
+	inputForwardErrors atomic.Uint64
+	lastInputStatusAt  atomic.Int64
 
 	// Concurrency control
 	mu                sync.Mutex         // Protects peerConnection, dataChannel, controlChannel

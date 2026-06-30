@@ -2,6 +2,6 @@ package version
 
 // Version information - injected at build time via -ldflags -X
 var (
-	Version   = "v3.1.102"
+	Version   = "v3.1.104"
 	BuildDate = "2026-06-30"
 )

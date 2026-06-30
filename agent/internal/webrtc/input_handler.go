@@ -22,6 +22,7 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 	switch eventType {
 	case "mouse_move", "mouse_click", "mouse_scroll", "key":
 		m.noteInputPriority()
+		m.inputEvents.Add(1)
 	}
 
 	// Track last input time for idle detection
@@ -67,6 +68,7 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 
 	// Route input via pipe when in Session 0 with a pipe-based capturer
 	if m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
+		var forwardErr error
 		// Helper: convert relative (0.0-1.0) coordinates to absolute pixel coordinates
 		resolveCoords := func(x, y float64) (int, int) {
 			isRelative, _ := event["rel"].(bool)
@@ -82,7 +84,7 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 			x, _ := event["x"].(float64)
 			y, _ := event["y"].(float64)
 			absX, absY := resolveCoords(x, y)
-			m.screenCapturer.ForwardMouseMove(absX, absY)
+			forwardErr = m.screenCapturer.ForwardMouseMove(absX, absY)
 
 		case "mouse_click":
 			button, _ := event["button"].(string)
@@ -100,11 +102,11 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 				downVal = 1
 			}
 			absX, absY := resolveCoords(x, y)
-			m.screenCapturer.ForwardMouseClick(btnCode, downVal, absX, absY)
+			forwardErr = m.screenCapturer.ForwardMouseClick(btnCode, downVal, absX, absY)
 
 		case "mouse_scroll":
 			delta, _ := event["delta"].(float64)
-			m.screenCapturer.ForwardScroll(int(delta), 0, 0)
+			forwardErr = m.screenCapturer.ForwardScroll(int(delta), 0, 0)
 
 		case "key":
 			code, _ := event["code"].(string)
@@ -120,11 +122,25 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 			// KEYEVENTF_UNICODE for non-ASCII chars.
 			if charStr, ok := event["char"].(string); ok && charStr != "" && down {
 				for _, ch := range charStr {
-					m.screenCapturer.ForwardUnicodeChar(ch)
+					if err := m.screenCapturer.ForwardUnicodeChar(ch); err != nil {
+						forwardErr = err
+						break
+					}
 				}
 			} else {
-				m.screenCapturer.ForwardKeyEvent(code, down, ctrl, shift, alt, meta)
+				forwardErr = m.screenCapturer.ForwardKeyEvent(code, down, ctrl, shift, alt, meta)
 			}
+		}
+		if forwardErr != nil {
+			m.inputForwardErrors.Add(1)
+			if eventType != "mouse_move" {
+				log.Printf("⚠️ Session0 input forward failed (%s): %v", eventType, forwardErr)
+			}
+			m.sendInputStatus(eventType, "forward_error", forwardErr.Error(), true)
+		} else {
+			m.inputForwarded.Add(1)
+			force := eventType == "mouse_click" || eventType == "key"
+			m.sendInputStatus(eventType, "forwarded", "", force)
 		}
 		return
 	}
@@ -179,6 +195,38 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 		} else if m.keyController != nil {
 			m.keyController.SendKeyWithModifiers(code, down, ctrl, shift, alt, meta)
 		}
+	}
+}
+
+func (m *Manager) sendInputStatus(eventType, route, errMsg string, force bool) {
+	now := time.Now()
+	last := time.Unix(0, m.lastInputStatusAt.Load())
+	if !force && now.Sub(last) < 2*time.Second {
+		return
+	}
+	m.lastInputStatusAt.Store(now.UnixNano())
+
+	status := map[string]interface{}{
+		"type":      "input_status",
+		"event":     eventType,
+		"route":     route,
+		"session0":  m.isSession0,
+		"forwarder": m.screenCapturer != nil && m.screenCapturer.HasInputForwarder(),
+		"events":    m.inputEvents.Load(),
+		"forwarded": m.inputForwarded.Load(),
+		"errors":    m.inputForwardErrors.Load(),
+		"error":     errMsg,
+	}
+	data, jsonErr := json.Marshal(status)
+	if jsonErr != nil {
+		return
+	}
+	if m.controlChannel != nil && m.controlChannel.ReadyState() == pionwebrtc.DataChannelStateOpen {
+		_ = m.controlChannel.Send(data)
+		return
+	}
+	if m.dataChannel != nil && m.dataChannel.ReadyState() == pionwebrtc.DataChannelStateOpen {
+		_ = m.dataChannel.Send(data)
 	}
 }
 
