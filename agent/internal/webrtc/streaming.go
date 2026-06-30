@@ -425,6 +425,14 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			continue
 		}
 
+		if m.useH264.Load() && m.isSession0 && sc.HasInputForwarder() && m.inputPriorityActive() {
+			// Session0 helper capture and input share the same pipe. H.264 can
+			// request full BGRA frames continuously; give recent input a short
+			// quiet window so mouse/keyboard commands are not stuck behind video.
+			time.Sleep(5 * time.Millisecond)
+			continue
+		}
+
 		// Switch to input desktop before capture (important for Session 0/login screen)
 		if m.isSession0 {
 			desktop.SwitchToInputDesktop()

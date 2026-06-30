@@ -55,10 +55,11 @@ type Manager struct {
 	clipboardReceiver      *clipboard.Receiver
 	clipboardSessionHelper *clipboard.SessionHelper // Set when running as Session 0 service on Windows
 
-	sessionID         string
-	isStreaming       atomic.Bool
-	isSession0        bool // Running in Session 0 (before user login)
-	startedInSession0 bool // Process was started in Session 0 (never changes)
+	sessionID          string
+	isStreaming        atomic.Bool
+	isSession0         bool         // Running in Session 0 (before user login)
+	startedInSession0  bool         // Process was started in Session 0 (never changes)
+	inputPriorityUntil atomic.Int64 // UnixNano deadline where Session0 pipe input gets capture priority
 
 	// Concurrency control
 	mu                sync.Mutex         // Protects peerConnection, dataChannel, controlChannel
