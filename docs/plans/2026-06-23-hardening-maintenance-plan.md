@@ -204,7 +204,9 @@ Hvis Fyne-controlleren fortsat skal vedligeholdes:
 - [x] Byg og deploy agent `v3.1.102`, så Session0 pipe-helper input får prioritet over kontinuerlig H.264 capture.
 - [x] H.264 input fra controller `v3.1.100` til agent `v3.1.102` på `WIN-TEST` retestet; input stadig ikke synligt.
 - [x] Byg og deploy controller `v3.1.103` med input-send tællere i session-log og keyboard focus fallback.
-- [!] H.264 input fra controller `v3.1.103` til agent `v3.1.102` skal retestes; session-log skal vise `Input stats`.
+- [x] H.264 input fra controller `v3.1.103` til agent `v3.1.102` retestet; controller sender input (`sent>0`) uden fejl.
+- [x] Byg og deploy agent/controller `v3.1.104` med agent-side `input_status` tilbage til session-log.
+- [!] H.264 input på `WIN-TEST` skal retestes på `v3.1.104`; session-log skal vise både `Input stats` og `Agent input`.
 
 ## Foreslået rækkefølge
 

@@ -183,6 +183,7 @@ class ViewerSession {
       lastSentAt: 0,
       lastError: ''
     };
+    this.agentInputStatus = null;
 
     // Auto-reconnect state
     this.reconnectState = 'idle';       // 'idle' | 'reconnecting' | 'gave_up'
@@ -727,6 +728,9 @@ class ViewerSession {
     } else if (msg.type === 'codec_status') {
       console.log(`[${this.deviceName}] Codec status from agent:`, msg);
       this.handleCodecStatus(msg);
+    } else if (msg.type === 'input_status') {
+      this.agentInputStatus = msg;
+      console.log(`[${this.deviceName}] Input status from agent:`, msg);
     } else if (msg.type === 'chat') {
       this.addChatMessage('Agent', msg.text || msg.message || '');
     } else if (msg.type === 'clipboard_text') {
@@ -2244,6 +2248,12 @@ class ViewerSession {
     if (this.inputStats) {
       const lastInput = this.inputStats.lastSentAt ? `${Math.round((Date.now() - this.inputStats.lastSentAt) / 1000)}s siden` : 'aldrig';
       lines.push(`Input stats: sent=${this.inputStats.sent}, failed=${this.inputStats.failed}, move=${this.inputStats.mouseMove}, down=${this.inputStats.mouseDown}, up=${this.inputStats.mouseUp}, wheel=${this.inputStats.wheel}, keydown=${this.inputStats.keyDown}, keyup=${this.inputStats.keyUp}, last=${this.inputStats.lastType || '?'}, lastSent=${lastInput}, err=${this.inputStats.lastError || '-'}`);
+    }
+    if (this.agentInputStatus) {
+      const s = this.agentInputStatus;
+      lines.push(`Agent input: route=${s.route || '?'}, event=${s.event || '?'}, received=${s.events ?? '?'}, forwarded=${s.forwarded ?? '?'}, errors=${s.errors ?? '?'}, session0=${s.session0}, forwarder=${s.forwarder}, err=${s.error || '-'}`);
+    } else {
+      lines.push('Agent input: ingen input_status modtaget');
     }
     lines.push('');
     lines.push('=== Connect log ===');
