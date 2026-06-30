@@ -21,7 +21,7 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 
 	switch eventType {
 	case "mouse_move", "mouse_click", "mouse_scroll", "key":
-		m.noteInputPriority()
+		m.noteInputPriority(eventType)
 		m.inputEvents.Add(1)
 	}
 
@@ -230,9 +230,13 @@ func (m *Manager) sendInputStatus(eventType, route, errMsg string, force bool) {
 	}
 }
 
-func (m *Manager) noteInputPriority() {
+func (m *Manager) noteInputPriority(eventType string) {
 	if m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
-		m.inputPriorityUntil.Store(time.Now().Add(80 * time.Millisecond).UnixNano())
+		window := 55 * time.Millisecond
+		if eventType == "mouse_move" {
+			window = 12 * time.Millisecond
+		}
+		m.inputPriorityUntil.Store(time.Now().Add(window).UnixNano())
 	}
 }
 

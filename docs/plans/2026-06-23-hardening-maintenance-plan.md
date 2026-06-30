@@ -207,6 +207,8 @@ Hvis Fyne-controlleren fortsat skal vedligeholdes:
 - [x] H.264 input fra controller `v3.1.103` til agent `v3.1.102` retestet; controller sender input (`sent>0`) uden fejl.
 - [x] Byg og deploy agent/controller `v3.1.104` med agent-side `input_status` tilbage til session-log.
 - [!] H.264 input på `WIN-TEST` skal retestes på `v3.1.104`; session-log skal vise både `Input stats` og `Agent input`.
+- [x] Byg og deploy agent/controller `v3.1.105` med 10 Mbps H.264 og kortere mousemove input-prioritet for mindre video-lag.
+- [!] H.264 kvalitet/input-lag skal retestes på `WIN-TEST` med `v3.1.105`.
 
 ## Foreslået rækkefølge
 

@@ -2115,9 +2115,9 @@ class ViewerSession {
   }
 
   _h264BitrateKbps() {
-    // Keep WebView/browser decode conservative. If this works reliably we can
-    // raise it again; right now the failure mode is no decoded video at all.
-    return 4000;
+    // 10 Mbps gives readable 1080p desktop text while still using much less
+    // bandwidth than full-screen JPEG tiles during motion.
+    return 10000;
   }
 
   _attachH264VideoStream(stream) {
