@@ -170,6 +170,19 @@ class ViewerSession {
     this.lastJpegFrameAt = 0;
     this.isFullscreen = false;
     this.inputSetup = false;
+    this.inputStats = {
+      mouseMove: 0,
+      mouseDown: 0,
+      mouseUp: 0,
+      wheel: 0,
+      keyDown: 0,
+      keyUp: 0,
+      sent: 0,
+      failed: 0,
+      lastType: '',
+      lastSentAt: 0,
+      lastError: ''
+    };
 
     // Auto-reconnect state
     this.reconnectState = 'idle';       // 'idle' | 'reconnecting' | 'gave_up'
@@ -1580,6 +1593,11 @@ class ViewerSession {
     if (this.sessionTimerInterval) { clearInterval(this.sessionTimerInterval); this.sessionTimerInterval = null; }
     if (this.statsInterval) { clearInterval(this.statsInterval); this.statsInterval = null; }
     if (this.pollingInterval) { clearInterval(this.pollingInterval); this.pollingInterval = null; }
+    if (this._documentKeyHandler) {
+      document.removeEventListener('keydown', this._documentKeyHandler);
+      document.removeEventListener('keyup', this._documentKeyHandler);
+      this._documentKeyHandler = null;
+    }
     if (this.signalingChannel && this.supabase) { this.supabase.removeChannel(this.signalingChannel); this.signalingChannel = null; }
     if (this.peerConnection) { this.peerConnection.close(); this.peerConnection = null; }
     this.dataChannel = null;
@@ -1749,11 +1767,21 @@ class ViewerSession {
     screen.addEventListener('click', () => screen.focus());
     screen.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); });
     screen.addEventListener('mousemove', (e) => this.sendMouseEvent('mousemove', e));
-    screen.addEventListener('mousedown', (e) => { e.preventDefault(); this.sendMouseEvent('mousedown', e); });
-    screen.addEventListener('mouseup', (e) => { e.preventDefault(); this.sendMouseEvent('mouseup', e); });
+    screen.addEventListener('mousedown', (e) => { e.preventDefault(); screen.focus(); this.sendMouseEvent('mousedown', e); });
+    screen.addEventListener('mouseup', (e) => { e.preventDefault(); screen.focus(); this.sendMouseEvent('mouseup', e); });
     screen.addEventListener('wheel', (e) => { e.preventDefault(); this.sendWheelEvent(e); }, { passive: false });
     screen.addEventListener('keydown', (e) => this.sendKeyEvent('keydown', e));
     screen.addEventListener('keyup', (e) => { e.preventDefault(); this.sendKeyEvent('keyup', e); });
+    this._documentKeyHandler = (e) => {
+      if (!this.connected) return;
+      if (this.wrapper.contains(e.target)) return;
+      if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+      if (!this.wrapper.contains(document.activeElement) && document.activeElement !== document.body) return;
+      if (e.type === 'keydown') this.sendKeyEvent('keydown', e);
+      if (e.type === 'keyup') this.sendKeyEvent('keyup', e);
+    };
+    document.addEventListener('keydown', this._documentKeyHandler);
+    document.addEventListener('keyup', this._documentKeyHandler);
 
     this.wrapper.querySelector('.session-disconnect-btn').addEventListener('click', () => { this.manualDisconnect = true; this.disconnect(); });
     this.wrapper.querySelector('.session-fullscreen-btn').addEventListener('click', () => this.toggleFullscreen());
@@ -2213,6 +2241,10 @@ class ViewerSession {
       lines.push(`Video: ${this.videoEl.videoWidth}x${this.videoEl.videoHeight} ready=${this.videoEl.readyState} network=${this.videoEl.networkState} paused=${this.videoEl.paused}`);
       lines.push(`H264 stats: ${this._h264DiagnosticLine() || '?'}`);
     }
+    if (this.inputStats) {
+      const lastInput = this.inputStats.lastSentAt ? `${Math.round((Date.now() - this.inputStats.lastSentAt) / 1000)}s siden` : 'aldrig';
+      lines.push(`Input stats: sent=${this.inputStats.sent}, failed=${this.inputStats.failed}, move=${this.inputStats.mouseMove}, down=${this.inputStats.mouseDown}, up=${this.inputStats.mouseUp}, wheel=${this.inputStats.wheel}, keydown=${this.inputStats.keyDown}, keyup=${this.inputStats.keyUp}, last=${this.inputStats.lastType || '?'}, lastSent=${lastInput}, err=${this.inputStats.lastError || '-'}`);
+    }
     lines.push('');
     lines.push('=== Connect log ===');
     lines.push((this._connectLog || []).join('\n'));
@@ -2370,6 +2402,9 @@ class ViewerSession {
 
   sendMouseEvent(type, e) {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
+    if (type === 'mousemove') this.inputStats.mouseMove++;
+    if (type === 'mousedown') this.inputStats.mouseDown++;
+    if (type === 'mouseup') this.inputStats.mouseUp++;
 
     // Calculate coordinates accounting for object-fit: contain (black bars)
     // Brug det SYNLIGE element (canvas i JPEG-mode, video i H.264-mode).
@@ -2425,25 +2460,28 @@ class ViewerSession {
     // e.button: 0=left, 1=middle, 2=right
     const buttonNames = ['left', 'middle', 'right'];
     if (type === 'mousemove') {
-      this.dataChannel.send(JSON.stringify({ t: 'mouse_move', x, y, rel: true }));
+      this._sendInputPayload({ t: 'mouse_move', x, y, rel: true });
     } else if (type === 'mousedown') {
-      this.dataChannel.send(JSON.stringify({ t: 'mouse_click', x, y, button: buttonNames[e.button] || 'left', down: true, rel: true }));
+      this._sendInputPayload({ t: 'mouse_click', x, y, button: buttonNames[e.button] || 'left', down: true, rel: true });
     } else if (type === 'mouseup') {
-      this.dataChannel.send(JSON.stringify({ t: 'mouse_click', x, y, button: buttonNames[e.button] || 'left', down: false, rel: true }));
+      this._sendInputPayload({ t: 'mouse_click', x, y, button: buttonNames[e.button] || 'left', down: false, rel: true });
     }
   }
 
   sendWheelEvent(e) {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
+    this.inputStats.wheel++;
     // Agent expects: t=mouse_scroll, delta (positive=up, negative=down)
-    this.dataChannel.send(JSON.stringify({
+    this._sendInputPayload({
       t: 'mouse_scroll',
       delta: e.deltaY > 0 ? -1 : 1
-    }));
+    });
   }
 
   sendKeyEvent(type, e) {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
+    if (type === 'keydown') this.inputStats.keyDown++;
+    if (type === 'keyup') this.inputStats.keyUp++;
 
     if (type === 'keydown') {
       if (e.code === 'F11') { this.toggleFullscreen(); return; }
@@ -2486,9 +2524,32 @@ class ViewerSession {
       evt.char = e.key;
     }
 
-    this.dataChannel.send(JSON.stringify(evt));
+    this._sendInputPayload(evt);
     e.preventDefault();
     e.stopPropagation();
+  }
+
+  _sendInputPayload(payload) {
+    try {
+      if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+        throw new Error(`control channel ${this.dataChannel ? this.dataChannel.readyState : 'missing'}`);
+      }
+      this.dataChannel.send(JSON.stringify(payload));
+      if (this.inputStats) {
+        this.inputStats.sent++;
+        this.inputStats.lastType = payload.t || payload.type || '';
+        this.inputStats.lastSentAt = Date.now();
+        this.inputStats.lastError = '';
+      }
+      return true;
+    } catch (err) {
+      if (this.inputStats) {
+        this.inputStats.failed++;
+        this.inputStats.lastError = err?.message || String(err);
+      }
+      console.warn(`[${this.deviceName}] Input send failed:`, err);
+      return false;
+    }
   }
 
   // ==================== SUPPORT SESSION (VIEW-ONLY) ====================
