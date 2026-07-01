@@ -863,7 +863,7 @@ class ViewerSession {
             if ((this.usingH264 || this.requestedCodec === 'h264') && this.canvasEl) {
               this.canvasEl.style.display = 'none';
             }
-          }, 1400);
+          }, 4000);
         } else {
           this.canvasEl.style.display = '';
         }

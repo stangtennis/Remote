@@ -684,12 +684,12 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 				}
 			}()
 			if m.h264JpegRefreshes.Load() > 0 {
-				jpeg, _, _, encErr := sc.EncodeRGBAToJPEG(rgbaFrame, 88, 1.0)
+				jpeg, _, _, encErr := sc.EncodeRGBAToJPEG(rgbaFrame, 84, 1.0)
 				if encErr != nil {
 					if errorCount%100 == 1 {
 						log.Printf("⚠️ H.264 hybrid JPEG encode error: %v", encErr)
 					}
-				} else if sendErr := m.sendFullFrame(jpeg); sendErr != nil {
+				} else if sendErr := m.sendFullFrameReliable(jpeg); sendErr != nil {
 					if errorCount%100 == 1 {
 						log.Printf("⚠️ H.264 hybrid JPEG send error: %v", sendErr)
 					}
@@ -815,6 +815,15 @@ func (m *Manager) sendFullFrame(data []byte) error {
 	return m.sendFrameChunked(fullData)
 }
 
+// sendFullFrameReliable sends a complete frame over the reliable control/data
+// channel. H.264 hybrid refreshes must arrive intact because they are the
+// visible confirmation after input when the browser video surface stalls.
+func (m *Manager) sendFullFrameReliable(data []byte) error {
+	header := []byte{frameTypeFull, 0, 0, 0}
+	fullData := append(header, data...)
+	return m.sendFrameChunkedOn(fullData, m.reliableSendChannel())
+}
+
 // sendDirtyRegion sends a single dirty region update
 func (m *Manager) sendDirtyRegion(region screen.DirtyRegion) error {
 	// Header: [type(1), x(2), y(2), w(2), h(2), ...jpeg_data]
@@ -845,6 +854,10 @@ func (m *Manager) sendDirtyRegion(region screen.DirtyRegion) error {
 }
 
 func (m *Manager) sendFrameChunked(data []byte) error {
+	return m.sendFrameChunkedOn(data, m.videoSendChannel())
+}
+
+func (m *Manager) sendFrameChunkedOn(data []byte, sendChannel *pionwebrtc.DataChannel) error {
 	const maxChunkSize = 60000 // 60KB chunks (safely under 64KB limit)
 	const chunkMagic = 0xFE    // Magic byte for chunked frames with frame ID (new format)
 
@@ -855,15 +868,6 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 	metrics.FramesTotal.WithLabelValues("jpeg").Inc()
 	metrics.AddBytesSent("video", len(data))
 
-	// Channel selection strategy:
-	// - Prefer the dedicated unreliable/unordered video channel for every
-	//   video frame, including chunked JPEG frames.
-	// - Fall back to the control/data channel only for older clients.
-	//
-	// Large reliable JPEG chunks can build SCTP head-of-line backlog and then
-	// input, ping and codec-switch commands stop reacting. Dropping an
-	// incomplete video frame is better than blocking control.
-	sendChannel := m.videoSendChannel()
 	if sendChannel == nil {
 		return fmt.Errorf("no channel available for sending")
 	}
@@ -903,6 +907,16 @@ func (m *Manager) sendFrameChunked(data []byte) error {
 func (m *Manager) videoSendChannel() *pionwebrtc.DataChannel {
 	if m.videoChannel != nil && m.videoChannel.ReadyState() == pionwebrtc.DataChannelStateOpen {
 		return m.videoChannel
+	}
+	if m.dataChannel != nil && m.dataChannel.ReadyState() == pionwebrtc.DataChannelStateOpen {
+		return m.dataChannel
+	}
+	return nil
+}
+
+func (m *Manager) reliableSendChannel() *pionwebrtc.DataChannel {
+	if m.controlChannel != nil && m.controlChannel.ReadyState() == pionwebrtc.DataChannelStateOpen {
+		return m.controlChannel
 	}
 	if m.dataChannel != nil && m.dataChannel.ReadyState() == pionwebrtc.DataChannelStateOpen {
 		return m.dataChannel
