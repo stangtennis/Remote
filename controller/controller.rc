@@ -1,6 +1,6 @@
 1 VERSIONINFO
-FILEVERSION 3,1,105,0
-PRODUCTVERSION 3,1,105,0
+FILEVERSION 3,1,108,0
+PRODUCTVERSION 3,1,108,0
 FILEFLAGSMASK 0x3fL
 FILEFLAGS 0x0L
 FILEOS 0x40004L
@@ -13,12 +13,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "StangTennis"
             VALUE "FileDescription", "Remote Desktop Controller"
-            VALUE "FileVersion", "3.1.105.0"
+            VALUE "FileVersion", "3.1.108.0"
             VALUE "InternalName", "controller"
             VALUE "LegalCopyright", "StangTennis"
             VALUE "OriginalFilename", "controller.exe"
             VALUE "ProductName", "Remote Desktop Controller"
-            VALUE "ProductVersion", "3.1.105.0"
+            VALUE "ProductVersion", "3.1.108.0"
         END
     END
     BLOCK "VarFileInfo"

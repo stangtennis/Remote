@@ -855,8 +855,18 @@ class ViewerSession {
         this._fitCanvasToContainer(canvas);
       }
       ctx.drawImage(img, 0, 0);
-      if (!this.usingH264 && this.canvasEl) {
-        this.canvasEl.style.display = '';
+      if (this.canvasEl) {
+        if (this.usingH264 || this.requestedCodec === 'h264') {
+          this.canvasEl.style.display = '';
+          if (this._h264HybridOverlayTimer) clearTimeout(this._h264HybridOverlayTimer);
+          this._h264HybridOverlayTimer = setTimeout(() => {
+            if ((this.usingH264 || this.requestedCodec === 'h264') && this.canvasEl) {
+              this.canvasEl.style.display = 'none';
+            }
+          }, 1400);
+        } else {
+          this.canvasEl.style.display = '';
+        }
       }
       URL.revokeObjectURL(img.src);
     };
@@ -1597,6 +1607,7 @@ class ViewerSession {
     if (this.sessionTimerInterval) { clearInterval(this.sessionTimerInterval); this.sessionTimerInterval = null; }
     if (this.statsInterval) { clearInterval(this.statsInterval); this.statsInterval = null; }
     if (this.pollingInterval) { clearInterval(this.pollingInterval); this.pollingInterval = null; }
+    if (this._h264HybridOverlayTimer) { clearTimeout(this._h264HybridOverlayTimer); this._h264HybridOverlayTimer = null; }
     if (this._documentKeyHandler) {
       document.removeEventListener('keydown', this._documentKeyHandler);
       document.removeEventListener('keyup', this._documentKeyHandler);

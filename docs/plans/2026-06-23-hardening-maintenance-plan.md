@@ -213,6 +213,8 @@ Hvis Fyne-controlleren fortsat skal vedligeholdes:
 - [x] H.264 live-opdatering under mousemove retestet på `WIN-TEST` med agent `v3.1.106`; H.264-billedet opdaterer stadig ikke stabilt.
 - [x] Byg og deploy agent `v3.1.107`; force keyframe og capture-trigger kort efter forwarded input.
 - [!] H.264 live-opdatering efter klik/input skal retestes på `WIN-TEST` med agent `v3.1.107`.
+- [x] Byg og deploy agent/controller `v3.1.108` med hybrid JPEG refresh ovenpå H.264 efter input.
+- [!] Hybrid H.264/JPEG refresh skal retestes på `WIN-TEST` med `v3.1.108`.
 
 ## Foreslået rækkefølge
 
