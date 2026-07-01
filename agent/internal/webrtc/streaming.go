@@ -50,6 +50,10 @@ type ModeState struct {
 }
 
 func (m *Manager) canUseH264Mode() bool {
+	if m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
+		return false
+	}
+
 	// Allow H.264 if using hardware encoder (NVENC) — even in Session 0.
 	// Hardware encoding runs on GPU and doesn't compete with capture CPU.
 	if m.videoEncoder != nil {
