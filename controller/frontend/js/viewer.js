@@ -166,6 +166,11 @@ class ViewerSession {
       lastPacketAt: 0,
       lastDecodedAt: 0
     };
+    this.jpegStats = {
+      frames: 0,
+      bytes: 0,
+      lastFrameAt: 0
+    };
     this.videoTransceiver = null;
     this.lastJpegFrameAt = 0;
     this.isFullscreen = false;
@@ -838,6 +843,11 @@ class ViewerSession {
     const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
     if (blob.size < 100) return;
     this.lastJpegFrameAt = Date.now();
+    if (this.jpegStats) {
+      this.jpegStats.frames++;
+      this.jpegStats.bytes += blob.size;
+      this.jpegStats.lastFrameAt = this.lastJpegFrameAt;
+    }
     // Count frames for FPS calculation
     if (!this._frameCount) this._frameCount = 0;
     this._frameCount++;
@@ -858,12 +868,17 @@ class ViewerSession {
       if (this.canvasEl) {
         if (this.usingH264 || this.requestedCodec === 'h264') {
           this.canvasEl.style.display = '';
-          if (this._h264HybridOverlayTimer) clearTimeout(this._h264HybridOverlayTimer);
-          this._h264HybridOverlayTimer = setTimeout(() => {
-            if ((this.usingH264 || this.requestedCodec === 'h264') && this.canvasEl) {
-              this.canvasEl.style.display = 'none';
-            }
-          }, 4000);
+          if (this._isSession0HybridH264()) {
+            if (this.videoEl) this.videoEl.style.display = 'none';
+            if (this._h264HybridOverlayTimer) { clearTimeout(this._h264HybridOverlayTimer); this._h264HybridOverlayTimer = null; }
+          } else {
+            if (this._h264HybridOverlayTimer) clearTimeout(this._h264HybridOverlayTimer);
+            this._h264HybridOverlayTimer = setTimeout(() => {
+              if ((this.usingH264 || this.requestedCodec === 'h264') && this.canvasEl && !this._isSession0HybridH264()) {
+                this.canvasEl.style.display = 'none';
+              }
+            }, 4000);
+          }
         } else {
           this.canvasEl.style.display = '';
         }
@@ -1268,17 +1283,18 @@ class ViewerSession {
       // has stopped; treating that as active H.264 hides the live JPEG canvas.
       const wasH264 = this.usingH264;
       this.usingH264 = this._hasRecentH264Progress();
-      parts.push(this.usingH264 ? 'H.264' : 'JPEG');
+      const session0HybridH264 = this._isSession0HybridH264();
+      parts.push(session0HybridH264 ? 'H.264+JPEG' : this.usingH264 ? 'H.264' : 'JPEG');
 
       // Skjul/vis canvas afhængigt af mode. I JPEG-tile-mode tegner vi på
       // canvas (z-index 1, over video). I H.264-mode kommer frames via
       // video-track, og canvas'en sidder bare med frozen sidste-JPEG-content
       // og blokerer for video'en — derfor BLACK SCREEN. Skjul canvas så
       // video'en kommer igennem.
-      if (this.usingH264 !== wasH264 && this.canvasEl) {
-        this.canvasEl.style.display = this.usingH264 ? 'none' : '';
-        if (this.videoEl) this.videoEl.style.display = this.usingH264 ? '' : 'none';
-        console.log(`[${this.deviceName}] Codec switch → ${this.usingH264 ? 'H.264 (canvas hidden)' : 'JPEG (canvas shown)'}`);
+      if ((this.usingH264 !== wasH264 || session0HybridH264) && this.canvasEl) {
+        this.canvasEl.style.display = (this.usingH264 && !session0HybridH264) ? 'none' : '';
+        if (this.videoEl) this.videoEl.style.display = (this.usingH264 && !session0HybridH264) ? '' : 'none';
+        console.log(`[${this.deviceName}] Codec switch → ${session0HybridH264 ? 'H.264 hybrid (canvas shown)' : this.usingH264 ? 'H.264 (canvas hidden)' : 'JPEG (canvas shown)'}`);
         if (this._updateCodecBtn) this._updateCodecBtn();
         this.focusInputSurface();
       }
@@ -2213,6 +2229,11 @@ class ViewerSession {
       now - this.h264LastProgressAt < 2500;
   }
 
+  _isSession0HybridH264() {
+    return this.requestedCodec === 'h264' &&
+      !!(this.agentInputStatus && this.agentInputStatus.session0 === true && this.agentInputStatus.forwarder === true);
+  }
+
   _scheduleH264Fallback() {
     if (this.h264FallbackTimer) clearTimeout(this.h264FallbackTimer);
     if (this.requestedCodec !== 'h264') return;
@@ -2255,6 +2276,10 @@ class ViewerSession {
     if (this.videoEl) {
       lines.push(`Video: ${this.videoEl.videoWidth}x${this.videoEl.videoHeight} ready=${this.videoEl.readyState} network=${this.videoEl.networkState} paused=${this.videoEl.paused}`);
       lines.push(`H264 stats: ${this._h264DiagnosticLine() || '?'}`);
+    }
+    if (this.jpegStats) {
+      const lastJpeg = this.jpegStats.lastFrameAt ? `${Math.round((Date.now() - this.jpegStats.lastFrameAt) / 1000)}s siden` : 'aldrig';
+      lines.push(`JPEG stats: frames=${this.jpegStats.frames}, bytes=${this.jpegStats.bytes}, last=${lastJpeg}`);
     }
     if (this.inputStats) {
       const lastInput = this.inputStats.lastSentAt ? `${Math.round((Date.now() - this.inputStats.lastSentAt) / 1000)}s siden` : 'aldrig';
