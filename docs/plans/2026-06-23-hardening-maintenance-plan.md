@@ -208,7 +208,9 @@ Hvis Fyne-controlleren fortsat skal vedligeholdes:
 - [x] Byg og deploy agent/controller `v3.1.104` med agent-side `input_status` tilbage til session-log.
 - [!] H.264 input på `WIN-TEST` skal retestes på `v3.1.104`; session-log skal vise både `Input stats` og `Agent input`.
 - [x] Byg og deploy agent/controller `v3.1.105` med 10 Mbps H.264 og kortere mousemove input-prioritet for mindre video-lag.
-- [!] H.264 kvalitet/input-lag skal retestes på `WIN-TEST` med `v3.1.105`.
+- [x] H.264 kvalitet/input-lag testet på `WIN-TEST` med `v3.1.105`; input virker, men H.264-billedet fryser under mousemove.
+- [x] Byg og deploy agent `v3.1.106`; mousemove fornyer ikke længere capture-skip-prioritet.
+- [!] H.264 live-opdatering under mousemove skal retestes på `WIN-TEST` med agent `v3.1.106`.
 
 ## Foreslået rækkefølge
 
