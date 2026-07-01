@@ -64,6 +64,7 @@ type Manager struct {
 	inputForwarded     atomic.Uint64
 	inputForwardErrors atomic.Uint64
 	lastInputStatusAt  atomic.Int64
+	lastH264RefreshAt  atomic.Int64
 
 	// Concurrency control
 	mu                sync.Mutex         // Protects peerConnection, dataChannel, controlChannel

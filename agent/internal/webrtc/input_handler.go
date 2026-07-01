@@ -141,6 +141,7 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 			m.inputForwarded.Add(1)
 			force := eventType == "mouse_click" || eventType == "key"
 			m.sendInputStatus(eventType, "forwarded", "", force)
+			m.scheduleH264InputRefresh(eventType)
 		}
 		return
 	}
@@ -243,6 +244,35 @@ func (m *Manager) noteInputPriority(eventType string) {
 func (m *Manager) inputPriorityActive() bool {
 	deadline := m.inputPriorityUntil.Load()
 	return deadline > 0 && time.Now().UnixNano() < deadline
+}
+
+func (m *Manager) scheduleH264InputRefresh(eventType string) {
+	if !m.useH264.Load() || m.videoEncoder == nil {
+		return
+	}
+
+	now := time.Now()
+	minGap := 120 * time.Millisecond
+	if eventType == "mouse_move" {
+		minGap = 350 * time.Millisecond
+	}
+	last := time.Unix(0, m.lastH264RefreshAt.Load())
+	if now.Sub(last) < minGap {
+		return
+	}
+	m.lastH264RefreshAt.Store(now.UnixNano())
+
+	go func() {
+		time.Sleep(90 * time.Millisecond)
+		if !m.useH264.Load() || !m.isStreaming.Load() {
+			return
+		}
+		m.videoEncoder.ForceKeyframe()
+		select {
+		case m.inputFrameTrigger <- struct{}{}:
+		default:
+		}
+	}()
 }
 
 // handleControlEvent handles control events from the dashboard data channel
