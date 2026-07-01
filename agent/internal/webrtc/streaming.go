@@ -683,8 +683,13 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 					}
 				}
 			}()
-			if m.h264JpegRefreshes.Load() > 0 {
-				jpeg, _, _, encErr := sc.EncodeRGBAToJPEG(rgbaFrame, 84, 1.0)
+			hybridRefreshDue := m.h264JpegRefreshes.Load() > 0
+			if !hybridRefreshDue && m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
+				lastHybrid := time.Unix(0, m.lastH264HybridAt.Load())
+				hybridRefreshDue = time.Since(lastHybrid) >= 350*time.Millisecond
+			}
+			if hybridRefreshDue {
+				jpeg, _, _, encErr := sc.EncodeRGBAToJPEG(rgbaFrame, 80, 1.0)
 				if encErr != nil {
 					if errorCount%100 == 1 {
 						log.Printf("⚠️ H.264 hybrid JPEG encode error: %v", encErr)
@@ -694,7 +699,10 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 						log.Printf("⚠️ H.264 hybrid JPEG send error: %v", sendErr)
 					}
 				} else {
-					m.h264JpegRefreshes.Add(-1)
+					m.lastH264HybridAt.Store(time.Now().UnixNano())
+					if m.h264JpegRefreshes.Load() > 0 {
+						m.h264JpegRefreshes.Add(-1)
+					}
 				}
 			}
 			continue

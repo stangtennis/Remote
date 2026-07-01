@@ -65,6 +65,7 @@ type Manager struct {
 	inputForwardErrors atomic.Uint64
 	lastInputStatusAt  atomic.Int64
 	lastH264RefreshAt  atomic.Int64
+	lastH264HybridAt   atomic.Int64
 	h264JpegRefreshes  atomic.Int64
 
 	// Concurrency control

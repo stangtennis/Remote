@@ -216,7 +216,9 @@ Hvis Fyne-controlleren fortsat skal vedligeholdes:
 - [x] Byg og deploy agent/controller `v3.1.108` med hybrid JPEG refresh ovenpå H.264 efter input.
 - [x] Hybrid H.264/JPEG refresh retestet på `WIN-TEST` med `v3.1.108`; H.264 modtager/decoder stadig frames, men billedet opdaterer ikke synligt efter input.
 - [x] Byg og deploy agent/controller `v3.1.109` med reliable hybrid JPEG refresh-burst ovenpå H.264 efter input.
-- [!] Hybrid H.264/JPEG reliable refresh skal retestes på `WIN-TEST` med `v3.1.109`.
+- [x] Hybrid H.264/JPEG reliable refresh retestet på `WIN-TEST` med `v3.1.109`; stadig ingen synlig H.264-opdatering efter input.
+- [x] Byg og deploy agent/controller `v3.1.110` med Session0/helper H.264 som synlig hybrid-canvas og løbende reliable JPEG visual refresh.
+- [!] Session0/helper H.264 hybrid-canvas skal retestes på `WIN-TEST` med `v3.1.110`.
 
 ## Foreslået rækkefølge
 
