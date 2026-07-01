@@ -267,9 +267,9 @@ func (m *Manager) scheduleH264InputRefresh(eventType string) {
 		if !m.useH264.Load() || !m.isStreaming.Load() {
 			return
 		}
-		refreshes := int64(2)
+		refreshes := int64(5)
 		if eventType == "mouse_move" {
-			refreshes = 1
+			refreshes = 2
 		}
 		m.h264JpegRefreshes.Add(refreshes)
 		m.videoEncoder.ForceKeyframe()

@@ -214,7 +214,9 @@ Hvis Fyne-controlleren fortsat skal vedligeholdes:
 - [x] Byg og deploy agent `v3.1.107`; force keyframe og capture-trigger kort efter forwarded input.
 - [!] H.264 live-opdatering efter klik/input skal retestes på `WIN-TEST` med agent `v3.1.107`.
 - [x] Byg og deploy agent/controller `v3.1.108` med hybrid JPEG refresh ovenpå H.264 efter input.
-- [!] Hybrid H.264/JPEG refresh skal retestes på `WIN-TEST` med `v3.1.108`.
+- [x] Hybrid H.264/JPEG refresh retestet på `WIN-TEST` med `v3.1.108`; H.264 modtager/decoder stadig frames, men billedet opdaterer ikke synligt efter input.
+- [x] Byg og deploy agent/controller `v3.1.109` med reliable hybrid JPEG refresh-burst ovenpå H.264 efter input.
+- [!] Hybrid H.264/JPEG reliable refresh skal retestes på `WIN-TEST` med `v3.1.109`.
 
 ## Foreslået rækkefølge
 
