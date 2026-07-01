@@ -683,6 +683,20 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 					}
 				}
 			}()
+			if m.h264JpegRefreshes.Load() > 0 {
+				jpeg, _, _, encErr := sc.EncodeRGBAToJPEG(rgbaFrame, 88, 1.0)
+				if encErr != nil {
+					if errorCount%100 == 1 {
+						log.Printf("⚠️ H.264 hybrid JPEG encode error: %v", encErr)
+					}
+				} else if sendErr := m.sendFullFrame(jpeg); sendErr != nil {
+					if errorCount%100 == 1 {
+						log.Printf("⚠️ H.264 hybrid JPEG send error: %v", sendErr)
+					}
+				} else {
+					m.h264JpegRefreshes.Add(-1)
+				}
+			}
 			continue
 		}
 
