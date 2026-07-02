@@ -222,7 +222,9 @@ Hvis Fyne-controlleren fortsat skal vedligeholdes:
 - [x] Byg og deploy agent/controller `v3.1.111`; Session0/helper afviser H.264 og bliver på JPEG-tiles for brugbar remote control.
 - [x] `v3.1.111` blev droppet som retning; brugeren kan selv falde tilbage til JPEG, så H.264 skal testes videre.
 - [x] Byg og deploy agent/controller `v3.1.112`; H.264 får kortere GOP, scene-change keyframe request, RTP-loss/RTT pacing og NVENC sender ikke længere partial access units.
-- [!] `WIN-TEST` skal retestes med `v3.1.112`; session-log skal vise om H.264 stadig freezer ved vindue-open/store skærmændringer.
+- [x] `WIN-TEST` retestet med `v3.1.112`; H.264 og hybrid JPEG frames fortsætter, men billedindholdet opdaterer stadig ikke synligt.
+- [x] Byg og deploy agent/controller `v3.1.113`; Session0/helper H.264 sænkes til 15 FPS, hybrid JPEG bruger frisk capture, og session-log viser JPEG checksum/change-count.
+- [!] `WIN-TEST` skal retestes med `v3.1.113`; check især `JPEG stats checksum/changes`.
 
 ## Foreslået rækkefølge
 
