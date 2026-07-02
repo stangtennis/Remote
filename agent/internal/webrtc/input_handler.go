@@ -268,11 +268,13 @@ func (m *Manager) scheduleH264InputRefresh(eventType string) {
 		if !m.useH264.Load() || !m.isStreaming.Load() {
 			return
 		}
-		refreshes := int64(5)
-		if eventType == "mouse_move" {
-			refreshes = 2
+		if m.currentDesktop == desktop.DesktopWinlogon {
+			refreshes := int64(5)
+			if eventType == "mouse_move" {
+				refreshes = 2
+			}
+			m.h264JpegRefreshes.Add(refreshes)
 		}
-		m.h264JpegRefreshes.Add(refreshes)
 		m.videoEncoder.ForceKeyframe()
 		select {
 		case m.inputFrameTrigger <- struct{}{}:

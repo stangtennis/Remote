@@ -845,6 +845,7 @@ class ViewerSession {
     const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
     if (blob.size < 100) return;
     this.lastJpegFrameAt = Date.now();
+    const h264NormalDesktop = (this.usingH264 || this.requestedCodec === 'h264') && !this._isSession0HybridH264();
     if (this.jpegStats) {
       const checksum = this._sampleChecksum(data);
       if (this.jpegStats.frames > 0 && checksum !== this.jpegStats.checksum) {
@@ -858,6 +859,12 @@ class ViewerSession {
     // Count frames for FPS calculation
     if (!this._frameCount) this._frameCount = 0;
     this._frameCount++;
+
+    if (h264NormalDesktop) {
+      if (this.canvasEl) this.canvasEl.style.display = 'none';
+      if (this.videoEl) this.videoEl.style.display = '';
+      return;
+    }
 
     const img = new Image();
     img.onload = () => {
