@@ -242,7 +242,7 @@ func New(cfg *config.Config, dev *device.Device, tokenProvider *auth.TokenProvid
 		Height:           height,
 		Bitrate:          10000, // 10 Mbps - stable desktop quality without bitrate-restart stalls
 		Framerate:        30,
-		KeyframeInterval: 90, // Keyframe every 3 seconds at 30fps
+		KeyframeInterval: 30, // Keyframe every ~1s at 30fps for faster decoder recovery after loss
 	}); err != nil {
 		log.Printf("⚠️ Video encoder init failed: %v (H.264 disabled)", err)
 	}

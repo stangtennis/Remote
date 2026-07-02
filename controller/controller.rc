@@ -13,12 +13,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "StangTennis"
             VALUE "FileDescription", "Remote Desktop Controller"
-            VALUE "FileVersion", "3.1.111.0"
+            VALUE "FileVersion", "3.1.112.0"
             VALUE "InternalName", "controller"
             VALUE "LegalCopyright", "StangTennis"
             VALUE "OriginalFilename", "controller.exe"
             VALUE "ProductName", "Remote Desktop Controller"
-            VALUE "ProductVersion", "3.1.111.0"
+            VALUE "ProductVersion", "3.1.112.0"
         END
     END
     BLOCK "VarFileInfo"
