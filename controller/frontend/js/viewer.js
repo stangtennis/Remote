@@ -156,6 +156,7 @@ class ViewerSession {
     this.h264LastProgressAt = 0;
     this.h264LastVideoTime = 0;
     this.h264FrameCallbackActive = false;
+    this.h264MirrorToCanvas = true;
     this.h264Stats = {
       packetsReceived: 0,
       bytesReceived: 0,
@@ -165,6 +166,12 @@ class ViewerSession {
       codec: '',
       lastPacketAt: 0,
       lastDecodedAt: 0
+    };
+    this.h264VisualStats = {
+      frames: 0,
+      checksum: 0,
+      changes: 0,
+      lastFrameAt: 0
     };
     this.jpegStats = {
       frames: 0,
@@ -861,7 +868,7 @@ class ViewerSession {
     this._frameCount++;
 
     if (h264NormalDesktop) {
-      if (this.canvasEl) this.canvasEl.style.display = 'none';
+      this._drawH264VideoToCanvas();
       if (this.videoEl) this.videoEl.style.display = '';
       return;
     }
@@ -1300,15 +1307,10 @@ class ViewerSession {
       const session0HybridH264 = this._isSession0HybridH264();
       parts.push(session0HybridH264 ? 'H.264+JPEG' : this.usingH264 ? 'H.264' : 'JPEG');
 
-      // Skjul/vis canvas afhængigt af mode. I JPEG-tile-mode tegner vi på
-      // canvas (z-index 1, over video). I H.264-mode kommer frames via
-      // video-track, og canvas'en sidder bare med frozen sidste-JPEG-content
-      // og blokerer for video'en — derfor BLACK SCREEN. Skjul canvas så
-      // video'en kommer igennem.
       if ((this.usingH264 !== wasH264 || session0HybridH264) && this.canvasEl) {
-        this.canvasEl.style.display = (this.usingH264 && !session0HybridH264) ? 'none' : '';
+        this.canvasEl.style.display = '';
         if (this.videoEl) this.videoEl.style.display = (this.usingH264 && !session0HybridH264) ? '' : 'none';
-        console.log(`[${this.deviceName}] Codec switch → ${session0HybridH264 ? 'H.264 hybrid (canvas shown)' : this.usingH264 ? 'H.264 (canvas hidden)' : 'JPEG (canvas shown)'}`);
+        console.log(`[${this.deviceName}] Codec switch → ${session0HybridH264 ? 'H.264 hybrid (canvas shown)' : this.usingH264 ? 'H.264 canvas mirror' : 'JPEG (canvas shown)'}`);
         if (this._updateCodecBtn) this._updateCodecBtn();
         this.focusInputSurface();
       }
@@ -2221,10 +2223,57 @@ class ViewerSession {
       if (this.videoEl.videoWidth > 0 && this.videoEl.videoHeight > 0) {
         this.h264LastProgressAt = Date.now();
         this.h264LastVideoTime = this.videoEl.currentTime || this.h264LastVideoTime;
+        this._drawH264VideoToCanvas();
       }
       this.videoEl.requestVideoFrameCallback(onFrame);
     };
     this.videoEl.requestVideoFrameCallback(onFrame);
+  }
+
+  _drawH264VideoToCanvas() {
+    const video = this.videoEl;
+    const canvas = this.canvasEl;
+    if (!this.h264MirrorToCanvas || !video || !canvas) return;
+    if (this.requestedCodec !== 'h264' || this._isSession0HybridH264()) return;
+    if (video.videoWidth <= 0 || video.videoHeight <= 0 || video.readyState < 2) return;
+
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      this._ensureCanvasAutoFit(canvas);
+      this._fitCanvasToContainer(canvas);
+      this.updateResolution(video.videoWidth, video.videoHeight);
+    }
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.style.display = '';
+    video.style.display = '';
+    this._updateH264VisualStats(canvas);
+  }
+
+  _updateH264VisualStats(canvas) {
+    if (!canvas || !this.h264VisualStats) return;
+    try {
+      if (!this._h264SampleCanvas) {
+        this._h264SampleCanvas = document.createElement('canvas');
+        this._h264SampleCanvas.width = 64;
+        this._h264SampleCanvas.height = 36;
+      }
+      const sample = this._h264SampleCanvas;
+      const sctx = sample.getContext('2d', { willReadFrequently: true });
+      sctx.drawImage(canvas, 0, 0, sample.width, sample.height);
+      const pixels = sctx.getImageData(0, 0, sample.width, sample.height).data;
+      const checksum = this._sampleChecksum(pixels);
+      if (this.h264VisualStats.frames > 0 && checksum !== this.h264VisualStats.checksum) {
+        this.h264VisualStats.changes++;
+      }
+      this.h264VisualStats.frames++;
+      this.h264VisualStats.checksum = checksum;
+      this.h264VisualStats.lastFrameAt = Date.now();
+    } catch (e) {
+      // Some WebViews can disallow video-to-canvas readback. Rendering still works.
+    }
   }
 
   _hasRecentH264Progress() {
@@ -2300,11 +2349,15 @@ class ViewerSession {
     lines.push(`Connection: ${this.peerConnection ? this.peerConnection.connectionState : '?'}`);
     lines.push(`ICE: ${this.peerConnection ? this.peerConnection.iceConnectionState : '?'}`);
     if (this.canvasEl) {
-      lines.push(`Canvas: ${this.canvasEl.width}x${this.canvasEl.height} (display ${this.canvasEl.clientWidth}x${this.canvasEl.clientHeight})`);
+      lines.push(`Canvas: ${this.canvasEl.width}x${this.canvasEl.height} (display ${this.canvasEl.clientWidth}x${this.canvasEl.clientHeight}, style=${this.canvasEl.style.display || 'shown'})`);
     }
     if (this.videoEl) {
-      lines.push(`Video: ${this.videoEl.videoWidth}x${this.videoEl.videoHeight} ready=${this.videoEl.readyState} network=${this.videoEl.networkState} paused=${this.videoEl.paused}`);
+      lines.push(`Video: ${this.videoEl.videoWidth}x${this.videoEl.videoHeight} ready=${this.videoEl.readyState} network=${this.videoEl.networkState} paused=${this.videoEl.paused}, style=${this.videoEl.style.display || 'shown'}`);
       lines.push(`H264 stats: ${this._h264DiagnosticLine() || '?'}`);
+    }
+    if (this.h264VisualStats) {
+      const lastVisual = this.h264VisualStats.lastFrameAt ? `${Math.round((Date.now() - this.h264VisualStats.lastFrameAt) / 1000)}s siden` : 'aldrig';
+      lines.push(`H264 visual: frames=${this.h264VisualStats.frames}, checksum=${this.h264VisualStats.checksum}, changes=${this.h264VisualStats.changes}, last=${lastVisual}`);
     }
     if (this.jpegStats) {
       const lastJpeg = this.jpegStats.lastFrameAt ? `${Math.round((Date.now() - this.jpegStats.lastFrameAt) / 1000)}s siden` : 'aldrig';

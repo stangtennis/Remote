@@ -228,6 +228,7 @@ Hvis Fyne-controlleren fortsat skal vedligeholdes:
 - [x] Byg og deploy agent/controller `v3.1.114`; agent sender `login_screen` i `input_status`, controller viser kun Session0-hybrid på Winlogon/login-screen, og controller-login stopper auto-retry ved auth rate-limit.
 - [!] `WIN-TEST` skal retestes med `v3.1.114`; controller-login kan være midlertidigt blokeret af Supabase/Cloudflare `1015`/`429`, så vent 5-10 minutter før næste loginforsøg.
 - [x] Byg agent/controller `v3.1.115`; stop input-triggerede hybrid-JPEG frames på normalt desktop og skjul canvas straks når H.264 kører uden `login_screen`.
+- [x] Byg controller/agent `v3.1.116`; spejl decoded H.264 video til canvas og log H.264 visual checksum/change-count for at omgå WebView video-paint problemer.
 
 ## Foreslået rækkefølge
 
