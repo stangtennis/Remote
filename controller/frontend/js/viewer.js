@@ -169,7 +169,9 @@ class ViewerSession {
     this.jpegStats = {
       frames: 0,
       bytes: 0,
-      lastFrameAt: 0
+      lastFrameAt: 0,
+      checksum: 0,
+      changes: 0
     };
     this.videoTransceiver = null;
     this.lastJpegFrameAt = 0;
@@ -844,9 +846,14 @@ class ViewerSession {
     if (blob.size < 100) return;
     this.lastJpegFrameAt = Date.now();
     if (this.jpegStats) {
+      const checksum = this._sampleChecksum(data);
+      if (this.jpegStats.frames > 0 && checksum !== this.jpegStats.checksum) {
+        this.jpegStats.changes++;
+      }
       this.jpegStats.frames++;
       this.jpegStats.bytes += blob.size;
       this.jpegStats.lastFrameAt = this.lastJpegFrameAt;
+      this.jpegStats.checksum = checksum;
     }
     // Count frames for FPS calculation
     if (!this._frameCount) this._frameCount = 0;
@@ -2234,6 +2241,21 @@ class ViewerSession {
       !!(this.agentInputStatus && this.agentInputStatus.session0 === true && this.agentInputStatus.forwarder === true);
   }
 
+  _sampleChecksum(data) {
+    const view = data instanceof ArrayBuffer ? new Uint8Array(data) :
+      ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) :
+        null;
+    if (!view || view.length === 0) return 0;
+    let hash = 2166136261;
+    const step = Math.max(1, Math.floor(view.length / 2048));
+    for (let i = 0; i < view.length; i += step) {
+      hash ^= view[i];
+      hash = Math.imul(hash, 16777619) >>> 0;
+    }
+    hash ^= view.length & 0xff;
+    return hash >>> 0;
+  }
+
   _scheduleH264Fallback() {
     if (this.h264FallbackTimer) clearTimeout(this.h264FallbackTimer);
     if (this.requestedCodec !== 'h264') return;
@@ -2279,7 +2301,7 @@ class ViewerSession {
     }
     if (this.jpegStats) {
       const lastJpeg = this.jpegStats.lastFrameAt ? `${Math.round((Date.now() - this.jpegStats.lastFrameAt) / 1000)}s siden` : 'aldrig';
-      lines.push(`JPEG stats: frames=${this.jpegStats.frames}, bytes=${this.jpegStats.bytes}, last=${lastJpeg}`);
+      lines.push(`JPEG stats: frames=${this.jpegStats.frames}, bytes=${this.jpegStats.bytes}, last=${lastJpeg}, checksum=${this.jpegStats.checksum}, changes=${this.jpegStats.changes}`);
     }
     if (this.inputStats) {
       const lastInput = this.inputStats.lastSentAt ? `${Math.round((Date.now() - this.inputStats.lastSentAt) / 1000)}s siden` : 'aldrig';

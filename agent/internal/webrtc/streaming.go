@@ -222,6 +222,9 @@ func (m *Manager) switchMode(newMode StreamMode, fps *int, quality *int, scale *
 		log.Printf("🔄 Mode switch: %s -> %s (FPS:%d Q:%d Scale:%.0f%%)", oldMode, newMode, *fps, *quality, *scale*100)
 	case ModeActiveH264:
 		*fps = 25
+		if m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
+			*fps = 15
+		}
 		*quality = 70 // Not used for H.264, but keep reasonable
 		*scale = 1.0
 		log.Printf("🔄 Mode switch: %s -> %s (FPS:%d H.264 active)", oldMode, newMode, *fps)
@@ -710,7 +713,15 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 				hybridRefreshDue = time.Since(lastHybrid) >= 350*time.Millisecond
 			}
 			if hybridRefreshDue {
-				jpeg, _, _, encErr := sc.EncodeRGBAToJPEG(rgbaFrame, 80, 1.0)
+				jpegFrame := rgbaFrame
+				if m.isSession0 && sc.HasInputForwarder() {
+					if freshFrame, freshErr := sc.CaptureRGBA(); freshErr == nil {
+						jpegFrame = freshFrame
+					} else if errorCount%100 == 1 {
+						log.Printf("⚠️ H.264 hybrid fresh capture error: %v", freshErr)
+					}
+				}
+				jpeg, _, _, encErr := sc.EncodeRGBAToJPEG(jpegFrame, 80, 1.0)
 				if encErr != nil {
 					if errorCount%100 == 1 {
 						log.Printf("⚠️ H.264 hybrid JPEG encode error: %v", encErr)
