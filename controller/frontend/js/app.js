@@ -41,6 +41,12 @@ const App = {
 
   async tryAutoLogin() {
     try {
+      const rateLimitedUntil = Number(localStorage.getItem('controllerAuthRateLimitedUntil') || '0');
+      if (rateLimitedUntil && Date.now() < rateLimitedUntil) {
+        document.getElementById('loginStatus').textContent = 'Login er midlertidigt rate-limited. Vent lidt og prøv igen.';
+        document.getElementById('loginStatus').className = 'status-text warning';
+        return;
+      }
       const creds = await window.go.main.App.LoadCredentials();
       if (creds && creds.remember && creds.email && creds.password) {
         document.getElementById('email').value = creds.email;
@@ -74,11 +80,15 @@ const App = {
     statusEl.textContent = '';
 
     try {
-      // Save credentials
-      await window.go.main.App.SaveCredentials(email, password, remember);
-
       // Login
       const result = await window.go.main.App.Login(email, password);
+      localStorage.removeItem('controllerAuthRateLimitedUntil');
+
+      try {
+        await window.go.main.App.SaveCredentials(email, password, remember);
+      } catch (saveErr) {
+        console.warn('SaveCredentials failed after successful login:', saveErr);
+      }
 
       if (!result.approved) {
         statusEl.textContent = 'Konto afventer godkendelse';
@@ -111,7 +121,13 @@ const App = {
       }
 
     } catch (err) {
-      statusEl.textContent = err?.message || err || 'Login mislykkedes';
+      const message = String(err?.message || err || 'Login mislykkedes');
+      if (message.includes('429') || message.includes('1015')) {
+        localStorage.setItem('controllerAuthRateLimitedUntil', String(Date.now() + 5 * 60 * 1000));
+        statusEl.textContent = 'Login er midlertidigt rate-limited af serveren. Vent 5-10 minutter og prøv igen.';
+      } else {
+        statusEl.textContent = message;
+      }
       statusEl.className = 'status-text error';
     }
 

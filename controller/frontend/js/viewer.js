@@ -2238,7 +2238,7 @@ class ViewerSession {
 
   _isSession0HybridH264() {
     return this.requestedCodec === 'h264' &&
-      !!(this.agentInputStatus && this.agentInputStatus.session0 === true && this.agentInputStatus.forwarder === true);
+      !!(this.agentInputStatus && this.agentInputStatus.login_screen === true);
   }
 
   _sampleChecksum(data) {
@@ -2309,7 +2309,7 @@ class ViewerSession {
     }
     if (this.agentInputStatus) {
       const s = this.agentInputStatus;
-      lines.push(`Agent input: route=${s.route || '?'}, event=${s.event || '?'}, received=${s.events ?? '?'}, forwarded=${s.forwarded ?? '?'}, errors=${s.errors ?? '?'}, session0=${s.session0}, forwarder=${s.forwarder}, err=${s.error || '-'}`);
+      lines.push(`Agent input: route=${s.route || '?'}, event=${s.event || '?'}, received=${s.events ?? '?'}, forwarded=${s.forwarded ?? '?'}, errors=${s.errors ?? '?'}, session0=${s.session0}, forwarder=${s.forwarder}, login_screen=${s.login_screen}, err=${s.error || '-'}`);
     } else {
       lines.push('Agent input: ingen input_status modtaget');
     }

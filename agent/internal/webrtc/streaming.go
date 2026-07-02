@@ -708,13 +708,13 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 				}
 			}()
 			hybridRefreshDue := m.h264JpegRefreshes.Load() > 0
-			if !hybridRefreshDue && m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
+			if !hybridRefreshDue && m.currentDesktop == desktop.DesktopWinlogon && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
 				lastHybrid := time.Unix(0, m.lastH264HybridAt.Load())
 				hybridRefreshDue = time.Since(lastHybrid) >= 350*time.Millisecond
 			}
 			if hybridRefreshDue {
 				jpegFrame := rgbaFrame
-				if m.isSession0 && sc.HasInputForwarder() {
+				if m.currentDesktop == desktop.DesktopWinlogon && sc.HasInputForwarder() {
 					if freshFrame, freshErr := sc.CaptureRGBA(); freshErr == nil {
 						jpegFrame = freshFrame
 					} else if errorCount%100 == 1 {

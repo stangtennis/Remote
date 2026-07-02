@@ -208,15 +208,16 @@ func (m *Manager) sendInputStatus(eventType, route, errMsg string, force bool) {
 	m.lastInputStatusAt.Store(now.UnixNano())
 
 	status := map[string]interface{}{
-		"type":      "input_status",
-		"event":     eventType,
-		"route":     route,
-		"session0":  m.isSession0,
-		"forwarder": m.screenCapturer != nil && m.screenCapturer.HasInputForwarder(),
-		"events":    m.inputEvents.Load(),
-		"forwarded": m.inputForwarded.Load(),
-		"errors":    m.inputForwardErrors.Load(),
-		"error":     errMsg,
+		"type":         "input_status",
+		"event":        eventType,
+		"route":        route,
+		"session0":     m.isSession0,
+		"forwarder":    m.screenCapturer != nil && m.screenCapturer.HasInputForwarder(),
+		"login_screen": m.currentDesktop == desktop.DesktopWinlogon,
+		"events":       m.inputEvents.Load(),
+		"forwarded":    m.inputForwarded.Load(),
+		"errors":       m.inputForwardErrors.Load(),
+		"error":        errMsg,
 	}
 	data, jsonErr := json.Marshal(status)
 	if jsonErr != nil {
