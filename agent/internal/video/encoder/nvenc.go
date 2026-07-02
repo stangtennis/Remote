@@ -273,23 +273,13 @@ func (e *NVENCEncoder) Encode(frame *image.RGBA, forceKeyframe bool) ([]byte, er
 		case data := <-e.outCh:
 			e.pending = append(e.pending, data...)
 		case err := <-e.errCh:
-			if len(e.pending) > 0 {
-				log.Printf("NVENC: returning buffered H.264 after read error: %v", err)
-				result := e.pending
-				e.pending = nil
-				return result, nil
-			}
 			return nil, fmt.Errorf("ffmpeg read error: %w", err)
 		case <-deadline.C:
-			if len(e.pending) == 0 {
-				return nil, ErrNoFrameReady
+			if len(e.pending) > 4*1024*1024 {
+				log.Printf("NVENC: dropping %d pending bytes without complete access unit", len(e.pending))
+				e.pending = nil
 			}
-			// Fail open if FFmpeg does not emit AUD despite -aud 1. This keeps
-			// video alive, but the normal path above is delimiter-based.
-			result := e.pending
-			e.pending = nil
-			log.Printf("NVENC: H.264 access-unit deadline hit, returning %d bytes", len(result))
-			return result, nil
+			return nil, ErrNoFrameReady
 		}
 	}
 }

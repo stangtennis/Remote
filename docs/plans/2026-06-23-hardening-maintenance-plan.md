@@ -220,7 +220,9 @@ Hvis Fyne-controlleren fortsat skal vedligeholdes:
 - [x] Byg og deploy agent/controller `v3.1.110` med Session0/helper H.264 som synlig hybrid-canvas og løbende reliable JPEG visual refresh.
 - [x] Session0/helper H.264 hybrid-canvas retestet på `WIN-TEST` med `v3.1.110`; JPEG refresh frames kommer frem (`frames>0`), men capture-indholdet opdaterer stadig ikke brugbart.
 - [x] Byg og deploy agent/controller `v3.1.111`; Session0/helper afviser H.264 og bliver på JPEG-tiles for brugbar remote control.
-- [!] `WIN-TEST` skal retestes med `v3.1.111`; H.264-knappen skal give afvisning/fallback og JPEG skal være brugbar.
+- [x] `v3.1.111` blev droppet som retning; brugeren kan selv falde tilbage til JPEG, så H.264 skal testes videre.
+- [x] Byg og deploy agent/controller `v3.1.112`; H.264 får kortere GOP, scene-change keyframe request, RTP-loss/RTT pacing og NVENC sender ikke længere partial access units.
+- [!] `WIN-TEST` skal retestes med `v3.1.112`; session-log skal vise om H.264 stadig freezer ved vindue-open/store skærmændringer.
 
 ## Foreslået rækkefølge
 

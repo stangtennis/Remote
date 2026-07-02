@@ -50,10 +50,6 @@ type ModeState struct {
 }
 
 func (m *Manager) canUseH264Mode() bool {
-	if m.isSession0 && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
-		return false
-	}
-
 	// Allow H.264 if using hardware encoder (NVENC) — even in Session 0.
 	// Hardware encoding runs on GPU and doesn't compete with capture CPU.
 	if m.videoEncoder != nil {
@@ -335,6 +331,8 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 	isIdle := false             // Tracked from modeState for logging
 	motionPct := 0.0
 	forceFullFrame := false
+	lastH264SceneKeyframe := time.Now().Add(-time.Second)
+	h264PaceCounter := 0
 
 	ticker := time.NewTicker(frameInterval)
 	defer ticker.Stop()
@@ -630,6 +628,25 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 
 		// H.264 mode: encode and send via video track
 		if m.useH264.Load() && m.videoTrack != nil && m.videoEncoder != nil {
+			h264PaceCounter++
+			curLossPct := m.getLossPct()
+			curRTT := m.getLastRTT()
+			h264SkipEvery := 0
+			switch {
+			case curLossPct > 10 || curRTT > 400*time.Millisecond:
+				h264SkipEvery = 3
+			case curLossPct > 5 || curRTT > 250*time.Millisecond:
+				h264SkipEvery = 2
+			}
+			if h264SkipEvery > 0 && h264PaceCounter%h264SkipEvery != 0 {
+				skippedFrames++
+				continue
+			}
+			if motionPct > 8 && time.Since(lastH264SceneKeyframe) > 700*time.Millisecond {
+				m.videoEncoder.ForceKeyframe()
+				lastH264SceneKeyframe = time.Now()
+			}
+
 			// Wrap H.264 encoding in panic recovery
 			func() {
 				defer func() {
