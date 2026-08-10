@@ -269,8 +269,6 @@ async function initWebRTC(sessionData, ctx) {
       debug('⚠️ RELAY-ONLY MODE ENABLED (for testing)');
     }
 
-    debug('🔐 Dashboard TURN config:', JSON.stringify(configuration, null, 2));
-
     // Create peer connection on ctx
     ctx.peerConnection = new RTCPeerConnection(configuration);
     ctx.videoTransceiver = ctx.peerConnection.addTransceiver('video', {

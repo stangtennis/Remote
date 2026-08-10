@@ -563,8 +563,8 @@ func (v *Viewer) handleDisconnect() {
 
 	// Stop reconnection manager
 	if v.reconnectionMgr != nil {
-		if reconnMgr, ok := v.reconnectionMgr.(interface{ Stop() }); ok {
-			reconnMgr.Stop()
+		if reconnMgr, ok := v.reconnectionMgr.(interface{ Cancel() }); ok {
+			reconnMgr.Cancel()
 		}
 	}
 

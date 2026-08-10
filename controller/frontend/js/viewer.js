@@ -362,7 +362,13 @@ class ViewerSession {
     const msg = document.createElement('div');
     msg.style.cssText = 'margin-bottom:0.3rem; padding:0.2rem 0.4rem; border-radius:4px; background:rgba(255,255,255,0.05);';
     const time = new Date().toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' });
-    msg.innerHTML = `<span style="color:var(--primary); font-weight:500;">${sender}</span> <span style="color:var(--text-dim); font-size:0.65rem;">${time}</span><br>${text}`;
+    const esc = (s) => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    msg.innerHTML = `<span style="color:var(--primary); font-weight:500;">${esc(sender)}</span> <span style="color:var(--text-dim); font-size:0.65rem;">${esc(time)}</span><br>${esc(text)}`;
     chatMessages.appendChild(msg);
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }

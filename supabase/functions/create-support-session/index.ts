@@ -40,20 +40,23 @@ serve(async (req) => {
       throw new Error('Unauthorized')
     }
 
-    // Check if user is admin
+    // Check if user is admin (and approved)
     const { data: userApproval } = await supabaseClient
       .from('user_approvals')
-      .select('role')
+      .select('role, approved')
       .eq('user_id', user.id)
       .single()
 
-    const isAdmin = userApproval?.role === 'admin' || userApproval?.role === 'super_admin'
+    const isAdmin = userApproval?.approved === true &&
+      (userApproval?.role === 'admin' || userApproval?.role === 'super_admin')
     if (!isAdmin) {
       throw new Error('Admin access required')
     }
 
-    // Generate 6-digit PIN
-    const pin = Math.floor(100000 + Math.random() * 900000).toString()
+    // Generate 6-digit PIN using cryptographically strong randomness
+    const pinBuf = new Uint32Array(1)
+    crypto.getRandomValues(pinBuf)
+    const pin = (100000 + (pinBuf[0] % 900000)).toString()
 
     // Generate UUID token
     const token = crypto.randomUUID()

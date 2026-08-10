@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.1.118 - 2026-08-13
+- Security hardening: fix active XSS paths in dashboard session tabs, controller chat, support modal, device-load errors, and TURN test page (add HTML escapers).
+- Edge functions: generate support/session PINs with `crypto.getRandomValues` instead of `Math.random`.
+- Edge functions: require `approved=true` for admin-gated actions in `create-support-session`, `session-token`, and `support-signal` (toggle-public), matching `session-cleanup`.
+- Edge functions: add resource limits (chunk count, chunk size, filename validation) to `file-transfer` fallback path.
+- Version metadata aligned across agent/controller to v3.1.118.
+
 ## v3.1.92 - 2026-06-04
 - Fix dashboard/browser H.264 smearing on large white UI changes by draining bursty NVENC stdout chunks until a quiet period before writing one WebRTC sample.
 - Increase NVENC stdout read buffer/channel capacity so large keyframes are not split into partial browser samples.

@@ -70,6 +70,10 @@ logs/
 *.pem
 *.key
 
+# Local secrets / password notes (never track)
+ULTIMATE_GUIDE_LOCAL_PASSWORDS.md
+ULTIMATE_GUIDE_LOCAL_*.md
+
 # Temporary files
 tmp/
 temp/

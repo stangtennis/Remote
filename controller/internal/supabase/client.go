@@ -2,6 +2,7 @@ package supabase
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,13 +15,14 @@ import (
 
 // Client represents a Supabase client
 type Client struct {
-	URL          string
-	AnonKey      string
-	AuthToken    string
-	RefreshTok   string
-	tokenExpiry  time.Time
-	mu           sync.Mutex
-	client       *http.Client
+	URL           string
+	AnonKey       string
+	AuthToken     string
+	RefreshTok    string
+	tokenExpiry   time.Time
+	mu            sync.Mutex
+	client        *http.Client
+	refreshCancel context.CancelFunc
 }
 
 // AuthResponse represents the authentication response
@@ -41,14 +43,14 @@ type User struct {
 
 // Device represents a remote device
 type Device struct {
-	DeviceID     string    `json:"device_id"`
-	DeviceName   string    `json:"device_name"`
-	Platform     string    `json:"platform"`
-	OwnerID      string    `json:"owner_id"`
-	Status       string    `json:"status"`
-	AgentVersion string    `json:"agent_version"`
-	LastSeen     time.Time `json:"last_seen"`
-	CreatedAt    time.Time `json:"created_at"`
+	DeviceID      string    `json:"device_id"`
+	DeviceName    string    `json:"device_name"`
+	Platform      string    `json:"platform"`
+	OwnerID       string    `json:"owner_id"`
+	Status        string    `json:"status"`
+	AgentVersion  string    `json:"agent_version"`
+	LastSeen      time.Time `json:"last_seen"`
+	CreatedAt     time.Time `json:"created_at"`
 	AssignedAt    time.Time `json:"assigned_at"`
 	CpuPercent    float64   `json:"cpu_percent"`
 	MemoryUsedMB  int       `json:"memory_used_mb"`
@@ -61,7 +63,7 @@ type Device struct {
 func NewClient(url, anonKey string) *Client {
 	logger.Debug("Creating Supabase client with URL: %s", url)
 	logger.Debug("Anon key length: %d", len(anonKey))
-	
+
 	client := &Client{
 		URL:     url,
 		AnonKey: anonKey,
@@ -69,7 +71,7 @@ func NewClient(url, anonKey string) *Client {
 			Timeout: 10 * time.Second,
 		},
 	}
-	
+
 	logger.Debug("Supabase client created successfully")
 	return client
 }
@@ -138,8 +140,12 @@ func (c *Client) SignIn(email, password string) (*AuthResponse, error) {
 	logger.Debug("[SignIn] Auth token stored, length: %d, expires in %ds", len(c.AuthToken), authResp.ExpiresIn)
 	logger.Info("[SignIn] Authentication successful for user: %s", authResp.User.Email)
 
-	// Start background token refresh
-	go c.autoRefreshToken()
+	// Start background token refresh (cancellable via SignOut)
+	ctx, cancel := context.WithCancel(context.Background())
+	c.mu.Lock()
+	c.refreshCancel = cancel
+	c.mu.Unlock()
+	go c.autoRefreshToken(ctx)
 
 	return &authResp, nil
 }
@@ -204,8 +210,9 @@ func (c *Client) RefreshToken() error {
 	return nil
 }
 
-// autoRefreshToken runs in background and refreshes token before expiry
-func (c *Client) autoRefreshToken() {
+// autoRefreshToken runs in background and refreshes token before expiry. It
+// stops when ctx is cancelled (e.g. by SignOut).
+func (c *Client) autoRefreshToken(ctx context.Context) {
 	for {
 		c.mu.Lock()
 		sleepDuration := time.Until(c.tokenExpiry)
@@ -215,14 +222,63 @@ func (c *Client) autoRefreshToken() {
 			sleepDuration = 30 * time.Second
 		}
 
-		time.Sleep(sleepDuration)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(sleepDuration):
+		}
 
 		if err := c.RefreshToken(); err != nil {
 			logger.Error("[autoRefreshToken] Failed to refresh token: %v", err)
-			// Retry in 30 seconds
-			time.Sleep(30 * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(30 * time.Second):
+			}
 		}
 	}
+}
+
+// SignOut revokes the current session server-side and stops the background
+// token-refresh goroutine. Safe to call when not signed in.
+func (c *Client) SignOut() error {
+	c.mu.Lock()
+	token := c.AuthToken
+	cancel := c.refreshCancel
+	c.AuthToken = ""
+	c.RefreshTok = ""
+	c.refreshCancel = nil
+	c.tokenExpiry = time.Time{}
+	c.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+
+	if token == "" {
+		return nil
+	}
+
+	url := fmt.Sprintf("%s/auth/v1/logout", c.URL)
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("logout failed: status %d", resp.StatusCode)
+	}
+
+	logger.Info("[SignOut] Session invalidated server-side")
+	return nil
 }
 
 // ensureValidToken checks if token needs refresh and refreshes if needed
@@ -417,7 +473,7 @@ func (c *Client) AssignDevice(deviceID, userID string) error {
 	defer deviceResp.Body.Close()
 
 	deviceBody, _ := io.ReadAll(deviceResp.Body)
-	
+
 	if deviceResp.StatusCode != http.StatusNoContent && deviceResp.StatusCode != http.StatusOK {
 		logger.Error("[AssignDevice] Failed to update device with status %d: %s", deviceResp.StatusCode, string(deviceBody))
 		return fmt.Errorf("failed to update device: %s (status: %d)", string(deviceBody), deviceResp.StatusCode)
@@ -460,7 +516,7 @@ func (c *Client) AssignDevice(deviceID, userID string) error {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	
+
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		logger.Error("[AssignDevice] Failed with status %d: %s", resp.StatusCode, string(body))
 		return fmt.Errorf("failed to assign device: %s (status: %d)", string(body), resp.StatusCode)
@@ -513,7 +569,7 @@ func (c *Client) UnassignDevice(deviceID, userID string) error {
 	defer deviceResp.Body.Close()
 
 	deviceBody, _ := io.ReadAll(deviceResp.Body)
-	
+
 	if deviceResp.StatusCode != http.StatusNoContent && deviceResp.StatusCode != http.StatusOK {
 		logger.Error("[UnassignDevice] Failed to update device with status %d: %s", deviceResp.StatusCode, string(deviceBody))
 		return fmt.Errorf("failed to update device: %s (status: %d)", string(deviceBody), deviceResp.StatusCode)
@@ -543,7 +599,7 @@ func (c *Client) UnassignDevice(deviceID, userID string) error {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	
+
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		logger.Error("[UnassignDevice] Failed with status %d: %s", resp.StatusCode, string(body))
 		return fmt.Errorf("failed to unassign device: %s (status: %d)", string(body), resp.StatusCode)
@@ -629,7 +685,7 @@ func (c *Client) DeleteDevice(deviceID string) error {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	
+
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		logger.Error("[DeleteDevice] Failed with status %d: %s", resp.StatusCode, string(body))
 		return fmt.Errorf("failed to delete device: %s (status: %d)", string(body), resp.StatusCode)

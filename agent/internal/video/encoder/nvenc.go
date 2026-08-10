@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/stangtennis/remote-agent/internal/video/encoder/annexb"
 )
 
 // NVENCEncoder implements H.264 encoding using FFmpeg's NVENC backend.
@@ -285,76 +287,12 @@ func (e *NVENCEncoder) Encode(frame *image.RGBA, forceKeyframe bool) ([]byte, er
 }
 
 func (e *NVENCEncoder) popAccessUnitLocked() []byte {
-	au, rest := popAnnexBAccessUnit(e.pending)
+	au, rest := annexb.PopAccessUnit(e.pending)
 	if len(au) == 0 {
 		return nil
 	}
 	e.pending = rest
 	return au
-}
-
-func popAnnexBAccessUnit(data []byte) ([]byte, []byte) {
-	if len(data) < 6 {
-		return nil, data
-	}
-
-	firstStart := findStartCode(data, 0)
-	if firstStart < 0 {
-		if len(data) > 3 {
-			return nil, append([]byte(nil), data[len(data)-3:]...)
-		}
-		return nil, data
-	}
-	if firstStart > 0 {
-		data = data[firstStart:]
-	}
-
-	secondAUD := -1
-	seenAUD := false
-	for pos := 0; ; {
-		start := findStartCode(data, pos)
-		if start < 0 {
-			break
-		}
-		nalStart := start + startCodeLen(data[start:])
-		if nalStart >= len(data) {
-			break
-		}
-		if data[nalStart]&0x1f == 9 {
-			if seenAUD {
-				secondAUD = start
-				break
-			}
-			seenAUD = true
-		}
-		pos = nalStart + 1
-	}
-
-	if secondAUD < 0 {
-		return nil, data
-	}
-	return append([]byte(nil), data[:secondAUD]...), append([]byte(nil), data[secondAUD:]...)
-}
-
-func findStartCode(data []byte, from int) int {
-	for i := from; i+3 < len(data); i++ {
-		if data[i] == 0 && data[i+1] == 0 {
-			if data[i+2] == 1 {
-				return i
-			}
-			if i+4 <= len(data) && data[i+2] == 0 && data[i+3] == 1 {
-				return i
-			}
-		}
-	}
-	return -1
-}
-
-func startCodeLen(data []byte) int {
-	if len(data) >= 4 && data[0] == 0 && data[1] == 0 && data[2] == 0 && data[3] == 1 {
-		return 4
-	}
-	return 3
 }
 
 // SetBitrate records the requested bitrate without restarting FFmpeg.

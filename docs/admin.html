@@ -2,6 +2,7 @@
 <html lang="da">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://supabase.hawkeye123.dk wss://supabase.hawkeye123.dk; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Adminpanel - Fjernskrivebord</title>
   <meta name="referrer" content="strict-origin-when-cross-origin">
@@ -14,7 +15,6 @@
   <link rel="stylesheet" href="css/empty-states.css?v=4">
   <link rel="stylesheet" href="css/modern.css?v=4">
   <link rel="stylesheet" href="css/redesign.css?v=4">
-  <link rel="stylesheet" href="css/polish.css?v=7">
   <script>
     (function() {
       try {
@@ -72,18 +72,18 @@
     <div style="background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; border: 1px solid rgba(255, 255, 255, 0.1);">
       <h3 style="margin: 0 0 1rem 0; font-size: 1.125rem;"><i class="fas fa-download"></i> Downloads</h3>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
-        <a href="https://downloads.hawkeye123.dk/remote-agent.exe" 
-           class="btn btn-primary" 
+        <a href="https://downloads.hawkeye123.dk/remote-agent.exe"
+           class="btn btn-primary"
            style="text-decoration: none; text-align: center;">
           <i class="fas fa-desktop"></i> Windows Agent
         </a>
-        <a href="agent.html" 
-           class="btn btn-primary" 
+        <a href="agent.html"
+           class="btn btn-primary"
            style="text-decoration: none; text-align: center; ">
           <i class="fas fa-globe"></i> Web Agent
         </a>
-        <a href="https://downloads.hawkeye123.dk/controller.exe" 
-           class="btn btn-secondary" 
+        <a href="https://downloads.hawkeye123.dk/controller.exe"
+           class="btn btn-secondary"
            style="text-decoration: none; text-align: center;">
           <i class="fas fa-gamepad"></i> Controller
         </a>
@@ -170,7 +170,7 @@
           <button onclick="sendInvitation()" class="btn btn-primary">Send invitation</button>
         </div>
       </div>
-      
+
       <h3 style="margin-top: 2rem;"><i class="fas fa-list"></i> Sendte invitationer</h3>
       <div id="invitationsList"></div>
     </div>
@@ -178,7 +178,7 @@
     <!-- Remote Control Tab -->
     <div id="remoteTab" class="tab-content" style="display: none;">
       <h3><i class="fas fa-desktop"></i> Remote Control - Administrer enheder direkte</h3>
-      
+
       <!-- Device Selection -->
       <div class="form-group" style="max-width: 600px; margin-bottom: 2rem;">
         <label for="remoteDeviceSelect">Vælg enhed at kontrollere</label>
@@ -196,7 +196,7 @@
               <button id="remoteDisconnectBtn" class="btn btn-danger btn-sm" onclick="disconnectRemote()">Afbryd</button>
             </div>
           </div>
-          
+
           <!-- Video Preview -->
           <div class="preview-container" style="position: relative; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 16/9;">
             <canvas id="remoteCanvas" style="width: 100%; height: 100%; object-fit: contain;"></canvas>
@@ -233,7 +233,7 @@
         </div>
         <button onclick="transferDevice()" class="btn btn-primary">Overfør enhed</button>
       </div>
-      
+
       <h3 style="margin-top: 2rem;">📜 Overførselshistorik</h3>
       <div id="transferHistory"></div>
     </div>
@@ -266,10 +266,10 @@
   <!-- Error Boundary -->
   <script src="js/error-boundary.js?v=4"></script>
   <script src="js/polish.js?v=4" defer></script>
-  
+
   <!-- UI Helpers -->
   <script src="js/ui-helpers.js?v=4"></script>
-  
+
   <!-- Supabase Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js?v=4"></script>
@@ -284,6 +284,14 @@
     let isSuperAdmin = false;
     let currentUserId = null;
 
+    // Escape user-controlled text for safe insertion into HTML text context.
+    function esc(s) {
+      if (s === null || s === undefined) return '';
+      const d = document.createElement('div');
+      d.textContent = String(s);
+      return d.innerHTML;
+    }
+
     // Initialize on page load
     async function init() {
       // Check if user is logged in
@@ -292,22 +300,22 @@
         window.location.href = 'login.html';
         return;
       }
-      
+
       currentUserId = session.user.id;
-      
+
       // Check if user is admin
       const { data: approval } = await supabase
         .from('user_approvals')
         .select('role')
         .eq('user_id', session.user.id)
         .single();
-      
+
       if (!approval || !['admin', 'super_admin'].includes(approval.role)) {
         showToast('⛔ Adgang nægtet. Admin-rettigheder kræves.', 'error');
         setTimeout(() => window.location.href = 'index.html', 1500);
         return;
       }
-      
+
       // Check if super admin
       isSuperAdmin = approval.role === 'super_admin';
       if (isSuperAdmin) {
@@ -315,65 +323,65 @@
         document.getElementById('tabTransfers').style.display = 'inline-block';
         document.getElementById('adminRoleOption').style.display = 'block';
       }
-      
+
       // Load initial data
       await loadUsers();
       await loadInvitations();
       if (isSuperAdmin) {
         await loadTransferData();
       }
-      
+
       // Auto-refresh every 30 seconds
       setInterval(loadUsers, 30000);
     }
-    
+
     // Show tab
     function showTab(tab) {
       // Hide all tabs
       document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
       document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-      
+
       // Show selected tab
       document.getElementById(tab + 'Tab').style.display = 'block';
       document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
-      
+
       // Load data for tab
       if (tab === 'devices') loadDevices();
       if (tab === 'invites') loadInvitations();
       if (tab === 'transfers' && isSuperAdmin) loadTransferData();
     }
-    
+
     // Send invitation
     async function sendInvitation() {
       const email = document.getElementById('inviteEmail').value.trim();
       const role = document.getElementById('inviteRole').value;
-      
+
       if (!email) {
         showToast('Indtast venligst en e-mailadresse', 'warning');
         return;
       }
-      
+
       try {
         const { data, error } = await supabase.rpc('send_invitation', {
           p_email: email,
           p_role: role
         });
-        
+
         if (error) throw error;
-        
+
         const inviteUrl = window.location.origin + '/Remote/index.html?invite=' + data;
-        
+
         showToast('Invitation sendt! Link kopieret til udklipsholder.', 'success', 5000);
         navigator.clipboard.writeText(inviteUrl).catch(() => {});
         document.getElementById('inviteEmail').value = '';
         loadInvitations();
-        
+
       } catch (error) {
         console.error('Error sending invitation:', error);
         showToast('Kunne ikke sende invitation: ' + error.message, 'error');
       }
     }
-    
+
     // Load invitations
     async function loadInvitations() {
       try {
@@ -381,33 +389,33 @@
           .from('user_invitations')
           .select('*')
           .order('created_at', { ascending: false });
-        
+
         if (error) throw error;
-        
+
         const container = document.getElementById('invitationsList');
         if (!invitations || invitations.length === 0) {
           container.innerHTML = '<p style="color: var(--text-secondary);">No invitations sent yet.</p>';
           return;
         }
-        
+
         container.innerHTML = invitations.map(inv => `
           <div class="user-card">
             <div class="user-info">
-              <div class="user-email">${inv.email}</div>
+              <div class="user-email">${esc(inv.email)}</div>
               <div class="user-meta">
-                Role: ${inv.role} | 
+                Role: ${esc(inv.role)} |
                 Sent: ${new Date(inv.created_at).toLocaleDateString()} |
                 Status: ${inv.accepted_at ? '✅ Accepted' : (new Date(inv.expires_at) < new Date() ? '❌ Expired' : '⏳ Pending')}
               </div>
             </div>
           </div>
         `).join('');
-        
+
       } catch (error) {
         console.error('Error loading invitations:', error);
       }
     }
-    
+
     // Load transfer data (super admin only)
     async function loadTransferData() {
       try {
@@ -415,78 +423,78 @@
         const { data: devices } = await supabase
           .from('remote_devices')
           .select('device_id, device_name, owner_id');
-        
+
         const deviceSelect = document.getElementById('transferDevice');
         deviceSelect.innerHTML = '<option value="">Select a device...</option>' +
-          (devices || []).map(d => `<option value="${d.device_id}">${d.device_name || d.device_id}</option>`).join('');
-        
+          (devices || []).map(d => `<option value="${esc(d.device_id)}">${esc(d.device_name || d.device_id)}</option>`).join('');
+
         // Load all users for transfer dropdown
         const { data: users } = await supabase
           .from('user_approvals')
           .select('user_id, role');
-        
+
         // Get user emails
         const userSelect = document.getElementById('transferToUser');
         userSelect.innerHTML = '<option value="">Select a user...</option>' +
-          (users || []).map(u => `<option value="${u.user_id}">${u.user_id} (${u.role})</option>`).join('');
-        
+          (users || []).map(u => `<option value="${esc(u.user_id)}">${esc(u.user_id)} (${esc(u.role)})</option>`).join('');
+
         // Load transfer history
         const { data: transfers } = await supabase
           .from('device_transfers')
           .select('*')
           .order('transferred_at', { ascending: false })
           .limit(20);
-        
+
         const historyContainer = document.getElementById('transferHistory');
         if (!transfers || transfers.length === 0) {
           historyContainer.innerHTML = '<p style="color: var(--text-secondary);">No transfers yet.</p>';
           return;
         }
-        
+
         historyContainer.innerHTML = transfers.map(t => `
           <div class="user-card">
             <div class="user-info">
-              <div class="user-email">Device: ${t.device_id}</div>
+              <div class="user-email">Device: ${esc(t.device_id)}</div>
               <div class="user-meta">
-                From: ${t.from_user_id || 'Unassigned'} → To: ${t.to_user_id} |
+                From: ${esc(t.from_user_id || 'Unassigned')} → To: ${esc(t.to_user_id)} |
                 ${new Date(t.transferred_at).toLocaleString()}
-                ${t.reason ? ' | Reason: ' + t.reason : ''}
+                ${t.reason ? ' | Reason: ' + esc(t.reason) : ''}
               </div>
             </div>
           </div>
         `).join('');
-        
+
       } catch (error) {
         console.error('Error loading transfer data:', error);
       }
     }
-    
+
     // Transfer device
     async function transferDevice() {
       const deviceId = document.getElementById('transferDevice').value;
       const toUserId = document.getElementById('transferToUser').value;
       const reason = document.getElementById('transferReason').value;
-      
+
       if (!deviceId || !toUserId) {
         showToast('Vælg venligst både en enhed og en bruger', 'warning');
         return;
       }
-      
+
       try {
         const { data, error } = await supabase.rpc('transfer_device', {
           p_device_id: deviceId,
           p_to_user_id: toUserId,
           p_reason: reason || null
         });
-        
+
         if (error) throw error;
-        
+
         showToast('Enhed overført!', 'success');
         document.getElementById('transferDevice').value = '';
         document.getElementById('transferToUser').value = '';
         document.getElementById('transferReason').value = '';
         loadTransferData();
-        
+
       } catch (error) {
         console.error('Error transferring device:', error);
         showToast('Kunne ikke overføre enhed: ' + error.message, 'error');
@@ -541,7 +549,7 @@
         <div class="pending-user ${user.approved ? 'approved' : ''}">
           <div class="user-header">
             <div class="user-email">
-              ${user.email}
+              ${esc(user.email)}
               ${user.role === 'admin' ? '<span class="admin-badge">👑 Admin</span>' : ''}
             </div>
             <span class="user-status ${user.approved ? 'status-approved' : 'status-pending'}">
@@ -551,29 +559,29 @@
           <div class="user-details">
             <div>Requested: ${new Date(user.requested_at).toLocaleString()}</div>
             ${user.approved ? `<div>Approved: ${new Date(user.approved_at).toLocaleString()}</div>` : ''}
-            ${user.notes ? `<div>Notes: ${user.notes}</div>` : ''}
-            <div>Role: ${user.role || 'user'}</div>
+            ${user.notes ? `<div>Notes: ${esc(user.notes)}</div>` : ''}
+            <div>Role: ${esc(user.role || 'user')}</div>
           </div>
           <div class="user-actions">
-            <button 
-              class="approve-btn" 
-              onclick="approveUser('${user.user_id}', '${user.email}')"
+            <button
+              class="approve-btn"
+              onclick="approveUser('${user.user_id}')"
               ${user.approved ? 'disabled' : ''}
             >
               ${user.approved ? 'Already Approved' : 'Approve User'}
             </button>
             ${user.approved && user.role !== 'admin' ? `
-              <button 
-                class="admin-btn" 
-                onclick="makeAdmin('${user.user_id}', '${user.email}')"
+              <button
+                class="admin-btn"
+                onclick="makeAdmin('${user.user_id}')"
               >
                 👑 Make Admin
               </button>
             ` : ''}
             ${user.role === 'admin' ? `
-              <button 
-                class="revoke-admin-btn" 
-                onclick="revokeAdmin('${user.user_id}', '${user.email}')"
+              <button
+                class="revoke-admin-btn"
+                onclick="revokeAdmin('${user.user_id}')"
               >
                 ❌ Remove Admin
               </button>
@@ -585,16 +593,20 @@
 
     window.filterUsers = function(filter) {
       currentFilter = filter;
-      
+
       // Update button states
       document.getElementById('filterAll').classList.toggle('active', filter === 'all');
       document.getElementById('filterPending').classList.toggle('active', filter === 'pending');
       document.getElementById('filterApproved').classList.toggle('active', filter === 'approved');
-      
+
       displayUsers();
     };
 
     window.approveUser = async function(userId, email) {
+      if (!email) {
+        const u = allUsers.find(x => x.user_id === userId);
+        email = u ? u.email : userId;
+      }
       if (!await showConfirm(`Godkend bruger: ${email}?\n\nEn velkomst-e-mail vil blive sendt.`, { title: 'Godkend bruger', confirmText: 'Godkend', type: 'info', icon: '✅' })) return;
 
       try {
@@ -616,7 +628,7 @@
               Authorization: `Bearer ${session.access_token}`
             }
           });
-          
+
           if (response.data?.success) {
             console.log('✅ Welcome email sent:', response.data);
             emailSent = true;
@@ -641,6 +653,10 @@
     };
 
     window.makeAdmin = async function(userId, email) {
+      if (!email) {
+        const u = allUsers.find(x => x.user_id === userId);
+        email = u ? u.email : userId;
+      }
       if (!await showConfirm(`Gør ${email} til admin?\n\nBrugeren vil kunne:\n• Godkende nye brugere\n• Administrere enheder\n• Gøre andre til admin`, { title: 'Giv admin-rettigheder', confirmText: 'Gør til admin', type: 'warning', icon: '👑' })) return;
 
       try {
@@ -660,6 +676,10 @@
     };
 
     window.revokeAdmin = async function(userId, email) {
+      if (!email) {
+        const u = allUsers.find(x => x.user_id === userId);
+        email = u ? u.email : userId;
+      }
       // Get current user to prevent self-demotion
       const { data: { session } } = await supabase.auth.getSession();
       if (session.user.id === userId) {
@@ -712,7 +732,7 @@
             .from('user_approvals')
             .select('user_id, email')
             .in('user_id', userIds);
-          
+
           // Map emails to assignments
           const userMap = {};
           if (users) {
@@ -725,7 +745,7 @@
 
         allDevices = devices || [];
         assignedDevices = assignments || [];
-        
+
         updateDeviceStats();
         displayDevices();
       } catch (error) {
@@ -772,20 +792,20 @@
         return `
           <div class="device-card ${isAssigned ? 'assigned' : 'unassigned'}">
             <div class="device-header">
-              <div class="device-name">${device.device_name || device.device_id}</div>
+              <div class="device-name">${esc(device.device_name || device.device_id)}</div>
               <span class="device-status-badge ${statusClass}">${statusText}</span>
             </div>
             <div class="device-details">
-              <div>Device ID: ${device.device_id}</div>
-              <div>Platform: ${device.platform || 'Unknown'}</div>
+              <div>Device ID: ${esc(device.device_id)}</div>
+              <div>Platform: ${esc(device.platform || 'Unknown')}</div>
               <div>Created: ${new Date(device.created_at).toLocaleString()}</div>
               ${device.last_heartbeat ? `<div>Last Seen: ${new Date(device.last_heartbeat).toLocaleString()}</div>` : ''}
-              ${isAssigned ? `<div>✅ Assigned to: ${assignment.user_email}</div>` : '<div>⚠️ Not assigned to any user</div>'}
+              ${isAssigned ? `<div>✅ Assigned to: ${esc(assignment.user_email)}</div>` : '<div>⚠️ Not assigned to any user</div>'}
               ${device.approved_at ? '<div>✅ Approved for use</div>' : '<div>⏸️ Pending approval</div>'}
             </div>
             <div class="device-actions">
               ${!isAssigned ? `
-                <button class="assign-btn" onclick="showAssignModal('${device.device_id}', '${device.device_name || device.device_id}')">
+                <button class="assign-btn" onclick="showAssignModal('${device.device_id}')">
                   Assign to User
                 </button>
               ` : `
@@ -801,26 +821,30 @@
 
     window.filterDevices = function(filter) {
       currentDeviceFilter = filter;
-      
+
       // Update button states
       document.getElementById('filterAllDevices').classList.toggle('active', filter === 'all');
       document.getElementById('filterUnassigned').classList.toggle('active', filter === 'unassigned');
       document.getElementById('filterAssigned').classList.toggle('active', filter === 'assigned');
-      
+
       displayDevices();
     };
 
     window.showAssignModal = function(deviceId, deviceName) {
       currentAssignDevice = deviceId;
+      if (!deviceName) {
+        const d = allDevices.find(x => x.device_id === deviceId);
+        deviceName = d ? (d.device_name || d.device_id) : deviceId;
+      }
       document.getElementById('modalDeviceName').textContent = `Device: ${deviceName}`;
-      
+
       // Populate user dropdown with approved users
       const userSelect = document.getElementById('userSelect');
       const approvedUsers = allUsers.filter(u => u.approved);
-      
+
       userSelect.innerHTML = '<option value="">Select a user...</option>' +
-        approvedUsers.map(u => `<option value="${u.user_id}">${u.email}</option>`).join('');
-      
+        approvedUsers.map(u => `<option value="${esc(u.user_id)}">${esc(u.email)}</option>`).join('');
+
       document.getElementById('assignModal').style.display = 'block';
     };
 
@@ -1420,12 +1444,12 @@
       // Hide all tabs
       document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
       document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-      
+
       // Show selected tab
       const tabId = tab.charAt(0).toUpperCase() + tab.slice(1);
       document.getElementById(tab + 'Tab').style.display = 'block';
       document.getElementById('tab' + tabId).classList.add('active');
-      
+
       // Load data for specific tabs
       if (tab === 'devices') {
         loadDevices();

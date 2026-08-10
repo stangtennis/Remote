@@ -46,6 +46,18 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
+    // Validate the JWT (ADV-07: previously only checked the header existed,
+    // so any caller with "Authorization: Bearer junk" could register/squat
+    // devices). The agent sends its real login JWT.
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token)
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid token' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      )
+    }
+
     // Parse request body
     const {
       device_id,

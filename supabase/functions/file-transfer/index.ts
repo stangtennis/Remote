@@ -17,6 +17,11 @@ interface FileTransferRequest {
   data: string; // base64 encoded chunk
 }
 
+// Resource limits to prevent abuse of the fallback file-transfer path.
+const MAX_CHUNKS = 2048           // hard cap on total_chunks per file
+const MAX_CHUNK_BYTES = 4 * 1024 * 1024 // max decoded size per chunk (4 MB)
+const MAX_FILE_NAME_LEN = 255
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -61,6 +66,22 @@ serve(async (req) => {
 
       if (!session_id || !file_name || chunk_index === undefined || !data) {
         throw new Error('Missing required fields')
+      }
+
+      // Enforce resource limits before touching storage.
+      if (total_chunks < 1 || total_chunks > MAX_CHUNKS) {
+        throw new Error(`total_chunks out of range (1..${MAX_CHUNKS})`)
+      }
+      if (chunk_index < 0 || chunk_index >= total_chunks) {
+        throw new Error('chunk_index out of range')
+      }
+      if (file_name.length > MAX_FILE_NAME_LEN || /[\\/]|\.\./.test(file_name)) {
+        throw new Error('Invalid file_name')
+      }
+      // base64 length -> approximate decoded byte length (4/3 ratio).
+      const decodedLen = Math.floor((data.length * 3) / 4)
+      if (decodedLen > MAX_CHUNK_BYTES) {
+        throw new Error(`Chunk too large (max ${MAX_CHUNK_BYTES} bytes)`)
       }
 
       // Verify session ownership

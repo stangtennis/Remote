@@ -9,6 +9,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Escape caller-supplied values before interpolating into the HTML email body
+// to prevent HTML/script injection in email clients.
+function escapeHtml(s: string): string {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 // Resend API for sending emails (free tier: 100 emails/day)
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 
@@ -37,7 +48,7 @@ serve(async (req) => {
 
     const token = authHeader.replace('Bearer ', '')
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token)
-    
+
     if (authError || !user) {
       throw new Error('Unauthorized')
     }
@@ -49,7 +60,7 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .single()
 
-    if (!approval || approval.role !== 'admin') {
+    if (!approval || (approval.role !== 'admin' && approval.role !== 'super_admin')) {
       throw new Error('Admin access required')
     }
 
@@ -64,13 +75,13 @@ serve(async (req) => {
     if (!RESEND_API_KEY) {
       console.log('RESEND_API_KEY not configured, skipping email send')
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Email service not configured. Please set RESEND_API_KEY.' 
+        JSON.stringify({
+          success: false,
+          message: 'Email service not configured. Please set RESEND_API_KEY.'
         }),
-        { 
+        {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200 
+          status: 200
         }
       )
     }
@@ -112,29 +123,29 @@ serve(async (req) => {
                 <div class="logo">🖥️</div>
                 <h1>Welcome to Remote Desktop!</h1>
               </div>
-              
+
               <div class="content">
                 <p>Great news! Your account has been approved by an administrator.</p>
                 <p>You can now log in and start sharing your screen securely.</p>
-                
+
                 <div class="credentials">
-                  <p><span class="label">Email:</span><br><span class="value">${email}</span></p>
-                  ${tempPassword ? `<p><span class="label">Temporary Password:</span><br><span class="value">${tempPassword}</span></p>` : ''}
+                  <p><span class="label">Email:</span><br><span class="value">${escapeHtml(email)}</span></p>
+                  ${tempPassword ? `<p><span class="label">Temporary Password:</span><br><span class="value">${escapeHtml(tempPassword)}</span></p>` : ''}
                 </div>
-                
+
                 <p style="text-align: center;">
                   <a href="https://stangtennis.github.io/Remote/agent.html" class="button">
                     🚀 Login Now
                   </a>
                 </p>
-                
+
                 ${tempPassword ? `
                 <div class="warning">
                   ⚠️ <strong>Security Notice:</strong> Please change your password after your first login.
                 </div>
                 ` : ''}
               </div>
-              
+
               <div class="footer">
                 <p>🔒 All connections are encrypted end-to-end</p>
                 <p>Remote Desktop © 2025</p>
@@ -157,9 +168,9 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true, message: 'Welcome email sent!', id: result.id }),
-      { 
+      {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 
+        status: 200
       }
     )
 
@@ -167,9 +178,9 @@ serve(async (req) => {
     console.error('Error:', error.message)
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
-      { 
+      {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400 
+        status: 400
       }
     )
   }

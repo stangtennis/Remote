@@ -129,6 +129,11 @@ func (a *App) Login(email, password string) (*AuthResult, error) {
 // Logout signs out the current user
 func (a *App) Logout() {
 	a.stopDeviceRefresh()
+	if a.supabase != nil {
+		if err := a.supabase.SignOut(); err != nil {
+			logger.Error("SignOut failed: %v", err)
+		}
+	}
 	a.currentUser = nil
 	logger.Info("User logged out")
 }

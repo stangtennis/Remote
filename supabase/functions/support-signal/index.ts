@@ -15,6 +15,33 @@ const TURN_SERVER = Deno.env.get('TURN_SERVER') || ''
 const TURN_SECRET = Deno.env.get('TURN_SECRET') || ''
 const TURN_TTL = parseInt(Deno.env.get('TURN_TTL') || '3600')
 
+// --- PIN rate-limiting (brute-force protection for support PINs) ---
+const PIN_MAX_ATTEMPTS = 10
+const PIN_WINDOW_SEC = 600 // 10 minutes
+
+function getClientIP(req: Request): string {
+  return (
+    req.headers.get('cf-connecting-ip') ||
+    req.headers.get('x-real-ip') ||
+    (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() ||
+    'unknown'
+  )
+}
+
+async function checkPinRateLimit(supabase: any, source: string): Promise<boolean> {
+  const since = new Date(Date.now() - PIN_WINDOW_SEC * 1000).toISOString()
+  const { count } = await supabase
+    .from('support_pin_attempts')
+    .select('*', { count: 'exact', head: true })
+    .eq('source', source)
+    .gte('created_at', since)
+  return !!count && count >= PIN_MAX_ATTEMPTS
+}
+
+async function recordPinAttempt(supabase: any, source: string): Promise<void> {
+  await supabase.from('support_pin_attempts').insert({ source })
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -69,8 +96,11 @@ serve(async (req) => {
         )
       }
 
-      // Generate PIN (not used for public, but column is required)
-      const pin = String(Math.floor(100000 + Math.random() * 900000))
+      // Generate PIN (not used for public, but column is required).
+      // Use cryptographically strong randomness instead of Math.random().
+      const pinBuf = new Uint32Array(1)
+      crypto.getRandomValues(pinBuf)
+      const pin = (100000 + (pinBuf[0] % 900000)).toString()
 
       // Create public support session
       const { data: newSession, error: insertError } = await supabase
@@ -132,14 +162,15 @@ serve(async (req) => {
         )
       }
 
-      // Check admin role
+      // Check admin role (and approved)
       const { data: approval } = await supabase
         .from('user_approvals')
-        .select('role')
+        .select('role, approved')
         .eq('user_id', user.id)
         .single()
 
-      if (!approval || !['admin', 'super_admin'].includes(approval.role)) {
+      if (!approval || approval.approved !== true ||
+          !['admin', 'super_admin'].includes(approval.role)) {
         return new Response(
           JSON.stringify({ error: 'Admin access required' }),
           {
@@ -207,6 +238,15 @@ serve(async (req) => {
 
       session = data
     } else if (pin) {
+      // Rate-limit PIN validation to prevent brute-force of the 6-digit space.
+      const source = getClientIP(req)
+      if (await checkPinRateLimit(supabase, source)) {
+        return new Response(
+          JSON.stringify({ error: 'Too many PIN attempts. Please try again later.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
+        )
+      }
+
       // PIN-based lookup: find most recent pending/active session with this PIN
       const { data, error } = await supabase
         .from('support_sessions')
@@ -218,10 +258,12 @@ serve(async (req) => {
         .single()
 
       if (error || !data) {
+        await recordPinAttempt(supabase, source)
         throw new Error('Invalid PIN or no active session found')
       }
 
       if (new Date(data.expires_at) < new Date()) {
+        await recordPinAttempt(supabase, source)
         await supabase
           .from('support_sessions')
           .update({ status: 'expired' })

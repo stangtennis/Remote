@@ -204,7 +204,7 @@ const App = {
       this.renderDevices(devices, container);
       this.updateQuickConnect();
     } catch (err) {
-      container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Kunne ikke hente enheder</h3><p>${err?.message || err}</p></div>`;
+      container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Kunne ikke hente enheder</h3><p>${this.escHtml(err?.message || err)}</p></div>`;
     }
 
     // Auto-refresh hver 15. sek så agent_version, status, last_seen
@@ -285,7 +285,7 @@ const App = {
             <i class="fa${favs.includes(d.device_id) ? 's' : 'r'} fa-star"></i>
           </button>
           <div class="status-dot ${d.status}"></div>
-          <span class="device-name">${this.esc(d.device_name)}</span>
+          <span class="device-name">${this.jsEsc(d.device_name)}</span>
         </div>
         <div class="device-meta">
           <span><i class="fas fa-${d.platform === 'darwin' ? 'apple' : 'windows'}"></i> ${this.esc(d.platform)}</span>
@@ -310,13 +310,13 @@ const App = {
           </div>
         </div>` : ''}
         <div class="device-actions">
-          <button class="btn btn-sm btn-primary" ${d.is_online ? '' : 'disabled'} onclick="App.connectDevice('${d.device_id}', '${this.esc(d.device_name)}')">
+          <button class="btn btn-sm btn-primary" ${d.is_online ? '' : 'disabled'} onclick="App.connectDevice('${d.device_id}', '${this.jsEsc(d.device_name)}')">
             <i class="fas fa-plug"></i> ${d.is_online ? 'Connect' : 'Offline'}
           </button>
-          <button class="btn btn-sm btn-secondary" onclick="App.renameDevice('${d.device_id}', '${this.esc(d.device_name)}')">
+          <button class="btn btn-sm btn-secondary" onclick="App.renameDevice('${d.device_id}', '${this.jsEsc(d.device_name)}')">
             <i class="fas fa-pen"></i>
           </button>
-          <button class="btn btn-sm btn-secondary" onclick="App.removeDevice('${d.device_id}', '${this.esc(d.device_name)}')">
+          <button class="btn btn-sm btn-secondary" onclick="App.removeDevice('${d.device_id}', '${this.jsEsc(d.device_name)}')">
             <i class="fas fa-user-minus"></i>
           </button>
           <div class="dropdown" style="position:relative;display:inline-block;">
@@ -324,13 +324,13 @@ const App = {
               <i class="fas fa-ellipsis-v"></i>
             </button>
             <div class="dropdown-menu">
-              <button onclick="App.sendDeviceCommand('${d.device_id}', '${this.esc(d.device_name)}', 'force_update')"><i class="fas fa-sync-alt"></i> Opdater agent</button>
-              <button onclick="App.sendDeviceCommand('${d.device_id}', '${this.esc(d.device_name)}', 'lock')"><i class="fas fa-lock"></i> Lås skærm</button>
-              <button onclick="App.sendDeviceCommand('${d.device_id}', '${this.esc(d.device_name)}', 'restart')"><i class="fas fa-redo"></i> Genstart</button>
-              <button onclick="App.sendDeviceCommand('${d.device_id}', '${this.esc(d.device_name)}', 'shutdown')"><i class="fas fa-power-off"></i> Luk ned</button>
+              <button onclick="App.sendDeviceCommand('${d.device_id}', '${this.jsEsc(d.device_name)}', 'force_update')"><i class="fas fa-sync-alt"></i> Opdater agent</button>
+              <button onclick="App.sendDeviceCommand('${d.device_id}', '${this.jsEsc(d.device_name)}', 'lock')"><i class="fas fa-lock"></i> Lås skærm</button>
+              <button onclick="App.sendDeviceCommand('${d.device_id}', '${this.jsEsc(d.device_name)}', 'restart')"><i class="fas fa-redo"></i> Genstart</button>
+              <button onclick="App.sendDeviceCommand('${d.device_id}', '${this.jsEsc(d.device_name)}', 'shutdown')"><i class="fas fa-power-off"></i> Luk ned</button>
             </div>
           </div>
-          <button class="btn btn-sm btn-danger" onclick="App.deleteDevice('${d.device_id}', '${this.esc(d.device_name)}')">
+          <button class="btn btn-sm btn-danger" onclick="App.deleteDevice('${d.device_id}', '${this.jsEsc(d.device_name)}')">
             <i class="fas fa-trash"></i>
           </button>
         </div>
@@ -427,17 +427,17 @@ const App = {
       <div class="device-card" data-id="${d.device_id}">
         <div class="device-card-header">
           <div class="status-dot ${d.status}"></div>
-          <span class="device-name">${this.esc(d.device_name)}</span>
+          <span class="device-name">${this.jsEsc(d.device_name)}</span>
         </div>
         <div class="device-meta">
           <span><i class="fas fa-${d.platform === 'darwin' ? 'apple' : 'windows'}"></i> ${this.esc(d.platform)}</span>
           <span><i class="fas fa-fingerprint"></i> ${d.device_id.substring(0, 12)}...</span>
         </div>
         <div class="device-actions">
-          <button class="btn btn-sm btn-success" onclick="App.approveDevice('${d.device_id}', '${this.esc(d.device_name)}')">
+          <button class="btn btn-sm btn-success" onclick="App.approveDevice('${d.device_id}', '${this.jsEsc(d.device_name)}')">
             <i class="fas fa-check"></i> Godkend
           </button>
-          <button class="btn btn-sm btn-danger" onclick="App.deleteDevice('${d.device_id}', '${this.esc(d.device_name)}')">
+          <button class="btn btn-sm btn-danger" onclick="App.deleteDevice('${d.device_id}', '${this.jsEsc(d.device_name)}')">
             <i class="fas fa-trash"></i> Slet
           </button>
         </div>
@@ -657,22 +657,25 @@ const App = {
 
     try {
       const info = await window.go.main.App.CreateSupportSession();
+      const pin = this.escHtml(info.pin);
+      const shareUrl = this.escHtml(info.share_url);
+      const expires = this.escHtml(info.expires_at);
       body.innerHTML = `
         <p>Del denne PIN eller link med personen der skal hjælpe dig:</p>
-        <div class="pin-display">${info.pin}</div>
+        <div class="pin-display">${pin}</div>
         <div class="form-group">
           <label>Delelink</label>
-          <input type="text" class="share-url" value="${info.share_url}" readonly onclick="this.select()">
+          <input type="text" class="share-url" value="${shareUrl}" readonly onclick="this.select()">
         </div>
         <div style="display:flex;gap:0.5rem;">
-          <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText('${info.share_url}');showToast('Link kopieret!','success')">
+          <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText('${this.jsEsc(info.share_url)}');showToast('Link kopieret!','success')">
             <i class="fas fa-copy"></i> Kopier link
           </button>
         </div>
-        <p style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-muted)">Udløber: ${info.expires_at}</p>
+        <p style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-muted)">Udløber: ${expires}</p>
       `;
     } catch (err) {
-      body.innerHTML = `<p style="color:var(--danger)">Fejl: ${err?.message || err}</p>`;
+      body.innerHTML = `<p style="color:var(--danger)">Fejl: ${this.escHtml(err?.message || err)}</p>`;
     }
   },
 
@@ -1105,9 +1108,9 @@ const App = {
       return;
     }
     grid.innerHTML = online.map(d => `
-      <button class="quick-connect-card glass" onclick="App.connectDevice('${d.device_id}', '${App.esc(d.device_name)}')">
+      <button class="quick-connect-card glass" onclick="App.connectDevice('${d.device_id}', '${App.jsEsc(d.device_name)}')">
         <i class="fas fa-${d.platform === 'darwin' ? 'apple' : 'desktop'}"></i>
-        <span>${App.esc(d.device_name)}</span>
+        <span>${App.jsEsc(d.device_name)}</span>
       </button>
     `).join('');
   },
@@ -1181,6 +1184,33 @@ const App = {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  },
+
+  // Escape a value for safe insertion into a JavaScript single-quoted string
+  // (e.g. inside inline onclick="App.fn('...')"). esc() only HTML-escapes and
+  // leaves single quotes intact, which breaks out of the JS string context.
+  jsEsc(str) {
+    if (str == null) return '';
+    return String(str)
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/"/g, '\\"')
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e')
+      .replace(/&/g, '\\u0026')
+      .replace(/`/g, '\\u0060')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r');
+  },
+
+  // HTML-content escaper for values interpolated into innerHTML (not JS string context).
+  escHtml(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 };
 

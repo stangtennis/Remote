@@ -1,6 +1,16 @@
 // Device Management Module
 // Handles device list, approval, selection, search/filter, tags, and favorites
 
+// Escape untrusted strings before interpolating into innerHTML.
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Cached data for client-side filtering
 let _allDevices = [];
 let _deviceTags = {};     // { device_id: ['tag1', 'tag2'] }
@@ -674,14 +684,14 @@ async function assignDevicePrompt(device) {
         if (ownerRow) {
           const row = document.createElement('div');
           row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:.4rem .25rem;border-bottom:1px solid rgba(255,255,255,0.06)';
-          row.innerHTML = `<span><strong>👑 Ejer:</strong> ${ownerRow.email}</span>`;
+          row.innerHTML = `<span><strong>👑 Ejer:</strong> ${escapeHtml(ownerRow.email)}</span>`;
           list.appendChild(row);
         }
         for (const a of assigned) {
           const row = document.createElement('div');
           row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:.4rem .25rem;border-bottom:1px solid rgba(255,255,255,0.06)';
           const span = document.createElement('span');
-          span.innerHTML = `👤 ${a.email}`;
+          span.textContent = `👤 ${a.email}`;
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.textContent = '✕ Fjern';
@@ -711,7 +721,7 @@ async function assignDevicePrompt(device) {
         list.innerHTML = '<div style="opacity:0.5;text-align:center;padding:.5rem">Ingen tildelinger</div>';
       }
     } catch (err) {
-      list.innerHTML = `<div style="color:#ef4444;text-align:center;padding:.5rem">Kunne ikke indlæse: ${err.message || err}</div>`;
+        list.innerHTML = `<div style="color:#ef4444;text-align:center;padding:.5rem">Kunne ikke indlæse: ${escapeHtml(err.message || err)}</div>`;
     }
   };
   refreshList();

@@ -130,8 +130,18 @@ func handleInput(cmd map[string]interface{}) {
 
 // Mouse move
 func handleMouseMove(cmd map[string]interface{}) {
-	x := int(cmd["x"].(float64))
-	y := int(cmd["y"].(float64))
+	xf, ok := cmd["x"].(float64)
+	if !ok {
+		sendError("Missing x coordinate")
+		return
+	}
+	yf, ok := cmd["y"].(float64)
+	if !ok {
+		sendError("Missing y coordinate")
+		return
+	}
+	x := int(xf)
+	y := int(yf)
 
 	robotgo.Move(x, y)
 	sendMessage(Message{Type: "input_success"})
@@ -249,21 +259,21 @@ func handleKeyboardType(cmd map[string]interface{}) {
 // Map JavaScript key names to robotgo key names
 func mapKeyToRobotgo(key string) string {
 	keyMap := map[string]string{
-		"Enter":     "enter",
-		"Backspace": "backspace",
-		"Delete":    "delete",
-		"Tab":       "tab",
-		"Escape":    "esc",
-		"Space":     "space",
-		"ArrowUp":   "up",
-		"ArrowDown": "down",
-		"ArrowLeft": "left",
+		"Enter":      "enter",
+		"Backspace":  "backspace",
+		"Delete":     "delete",
+		"Tab":        "tab",
+		"Escape":     "esc",
+		"Space":      "space",
+		"ArrowUp":    "up",
+		"ArrowDown":  "down",
+		"ArrowLeft":  "left",
 		"ArrowRight": "right",
-		"Home":      "home",
-		"End":       "end",
-		"PageUp":    "pageup",
-		"PageDown":  "pagedown",
-		"Insert":    "insert",
+		"Home":       "home",
+		"End":        "end",
+		"PageUp":     "pageup",
+		"PageDown":   "pagedown",
+		"Insert":     "insert",
 	}
 
 	if mapped, ok := keyMap[key]; ok {

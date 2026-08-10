@@ -70,14 +70,15 @@ serve(async (req) => {
       throw new Error('Device is not approved by admin')
     }
 
-    // Check if user is admin
+    // Check if user is admin (and approved)
     const { data: userApproval } = await supabaseClient
       .from('user_approvals')
-      .select('role')
+      .select('role, approved')
       .eq('user_id', user.id)
       .single()
 
-    const isAdmin = userApproval?.role === 'admin' || userApproval?.role === 'super_admin'
+    const isAdmin = userApproval?.approved === true &&
+      (userApproval?.role === 'admin' || userApproval?.role === 'super_admin')
 
     // Check device assignment (unless user is admin)
     if (!isAdmin) {
@@ -102,10 +103,13 @@ serve(async (req) => {
     // Generate session token (JWT-style random string)
     const token = crypto.randomUUID() + '-' + Date.now()
     
-    // Generate PIN (6 digits)
-    const pin = use_pin 
-      ? Math.floor(100000 + Math.random() * 900000).toString()
-      : null
+    // Generate PIN (6 digits) using cryptographically strong randomness
+    let pin: string | null = null
+    if (use_pin) {
+      const pinBuf = new Uint32Array(1)
+      crypto.getRandomValues(pinBuf)
+      pin = (100000 + (pinBuf[0] % 900000)).toString()
+    }
 
     // Session expires in 15 minutes
     const expires_at = new Date(Date.now() + 15 * 60 * 1000).toISOString()

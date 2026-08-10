@@ -8,7 +8,6 @@ Working notes for contributors to the Remote Desktop project (Go + Supabase + We
 - `docs/` — GitHub Pages dashboard (`index.html`), admin, and web agent assets (HTML/CSS/JS).
 - `extension/` — Browser extension for remote control; pairs with `native-host/`.
 - `native-host/` — Native messaging helper (Go) for the extension.
-- `electron-agent/` — Cross-platform agent prototype.
 - `supabase/` — Migrations and edge functions for the backend schema and signaling.
 - Root docs: `README.md`, `CONFIGURATION.md`, `SUMMARY.md`, `ULTIMATE_GUIDE.md`, and setup notes for Nginx/Unifi.
 
@@ -45,7 +44,8 @@ Working notes for contributors to the Remote Desktop project (Go + Supabase + We
 5. Repeat until done or error
 
 **Version files to update BEFORE building:**
-- `agent/internal/tray/tray.go` - Version and BuildDate
+- `agent/internal/version/version.go` - Version and BuildDate
+- `agent/internal/tray/tray_windows.go` and `tray_darwin.go` - Version and BuildDate
 - `controller/main.go` - Version and BuildDate
 
 **Cross-compile commands (from Ubuntu to Windows):**
@@ -61,8 +61,8 @@ cd controller && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-g
 ```
 
 ## Current version
-- **Agent:** v3.1.81 (injected via `build-local.sh` ldflags)
-- **Controller:** v3.1.81 (injected via `build-local.sh` ldflags)
+- **Agent:** v3.1.118 (injected via `build-local.sh` ldflags)
+- **Controller:** v3.1.118 (injected via `build-local.sh` ldflags)
 - **Update server:** `https://updates.hawkeye123.dk/version.json`
 - **Downloads:** `https://downloads.hawkeye123.dk/`
 - **Latest GitHub Release:** `https://github.com/stangtennis/Remote/releases/tag/v3.1.81`

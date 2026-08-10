@@ -46,9 +46,6 @@ var (
 
 func initTurboCompressor() {
 	turboCompressor = C.tjInitCompress()
-	if turboCompressor == nil {
-		panic("tjInitCompress failed")
-	}
 }
 
 // EncodeJPEG encodes raw pixel data to JPEG using libjpeg-turbo.
@@ -59,6 +56,12 @@ func EncodeJPEG(pix []byte, width, height, stride, quality int, bgra bool) ([]by
 	}
 
 	turboInitOnce.Do(initTurboCompressor)
+
+	if turboCompressor == nil {
+		// libjpeg-turbo failed to initialise — degrade to the pure-Go encoder
+		// instead of crashing the agent.
+		return encodeJPEGStandard(pix, width, height, stride, quality, bgra)
+	}
 
 	turboMu.Lock()
 	defer turboMu.Unlock()

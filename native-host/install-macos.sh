@@ -8,8 +8,8 @@ INSTALL_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 MANIFEST="$INSTALL_DIR/com.remote.desktop.control.json"
 MANIFEST_NAME="com.remote.desktop.control.json"
 
-# Update manifest with absolute path
-sed -i '' "s|\"path\": \"remote-desktop-control.exe\"|\"path\": \"$INSTALL_DIR/remote-desktop-control\"|g" "$MANIFEST"
+# Update manifest with absolute path (rewrites any existing "path" value)
+sed -i '' "s|\"path\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|\"path\": \"$INSTALL_DIR/remote-desktop-control\"|g" "$MANIFEST"
 
 # Make the executable runnable
 chmod +x "$INSTALL_DIR/remote-desktop-control"

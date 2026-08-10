@@ -111,7 +111,7 @@ async function login() {
     document.getElementById('deviceSection').style.display = 'block';
     const userEmailEl = document.getElementById('userEmail');
     if (userEmailEl) userEmailEl.textContent = currentUser.email;
-    
+
     // Update header status
     updateHeaderStatus('online', 'Connected');
 
@@ -154,12 +154,12 @@ async function signup() {
 
     debug('✅ Account created:', email);
     showMessage('✅ Account created! Please wait for admin approval before logging in.', 'success');
-    
+
     // Clear form and switch back to login after 3 seconds
     document.getElementById('signupEmail').value = '';
     document.getElementById('signupPassword').value = '';
     document.getElementById('signupPasswordConfirm').value = '';
-    
+
     setTimeout(() => {
       showLogin();
     }, 3000);
@@ -214,7 +214,7 @@ async function logout() {
   document.getElementById('loginSection').style.display = 'block';
   document.getElementById('email').value = '';
   document.getElementById('password').value = '';
-  
+
   // Update header status
   updateHeaderStatus('offline', 'Not Connected');
 
@@ -231,14 +231,14 @@ async function logout() {
 async function generateDeviceID() {
   // Generate unique device ID based on browser fingerprint
   const data = `${navigator.userAgent}-${navigator.platform}-${currentUser.id}`;
-  
+
   // Create SHA-256 hash
   const encoder = new TextEncoder();
   const dataBuffer = encoder.encode(data);
   const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  
+
   return 'web-' + hashHex.substring(0, 16); // First 16 chars
 }
 
@@ -250,18 +250,18 @@ async function registerDevice() {
     // Generate device ID
     const generatedDeviceId = await generateDeviceID();
     console.log('[WebAgent] Registering device:', generatedDeviceId, 'name:', deviceName);
-    
+
     // Check if device already exists
     const { data: existing, error: checkError } = await supabase
       .from('remote_devices')
       .select('device_id')
       .eq('device_id', generatedDeviceId)
       .maybeSingle(); // Use maybeSingle instead of single to handle 0 or 1 results
-    
+
     if (checkError) {
       console.error('[WebAgent] Device check error:', checkError);
     }
-    
+
     if (existing) {
       // Device exists - update it
       console.log('[WebAgent] Device exists, updating...');
@@ -276,7 +276,7 @@ async function registerDevice() {
         .eq('device_id', generatedDeviceId)
         .select()
         .single();
-      
+
       if (error) {
         console.error('[WebAgent] Device update error:', error);
         throw error;
@@ -348,7 +348,7 @@ function startHeartbeat() {
     try {
       await supabase
         .from('remote_devices')
-        .update({ 
+        .update({
           last_seen: new Date().toISOString(),
           is_online: true
         })
@@ -445,7 +445,7 @@ async function stopSharing() {
   document.getElementById('sessionSection').style.display = 'none';
   updateHeaderStatus('online', 'Connected');
   stopSessionTimer();
-  
+
   // Reset offer tracking so new sessions can be detected
   processedOfferIds.clear();
 
@@ -471,7 +471,7 @@ function startSessionPolling() {
   // Poll session_signaling for offers from dashboard/controller targeting our device.
   // This mirrors the native Go agent's fetchWebDashboardSessions() pattern.
   console.log('[WebAgent] Starting session polling for device:', deviceId);
-  
+
   sessionPollInterval = setInterval(async () => {
     if (!deviceId || currentSession) return;
     if (!mediaStream) return; // Only accept sessions while sharing
@@ -509,7 +509,7 @@ function startSessionPolling() {
           console.warn('[WebAgent] Session lookup error for', sig.session_id, sessError);
           continue; // Don't mark as processed — retry next cycle
         }
-        
+
         if (!sessions || sessions.length === 0) {
           // Mark as processed only if lookup succeeded but no match (not our device or wrong status)
           processedOfferIds.add(sig.id);
@@ -587,7 +587,7 @@ async function endSession() {
     supabase.removeChannel(signalingChannel);
     signalingChannel = null;
   }
-  
+
   // Stop signaling polling
   stopSignalingPolling();
 
@@ -624,7 +624,7 @@ async function endSession() {
     updateHeaderStatus('online', 'Connected');
   }
   stopSessionTimer();
-  
+
   // Reset offer tracking so new sessions can be detected
   processedOfferIds.clear();
 
@@ -695,6 +695,7 @@ async function startWebRTC(sessionId, offerPayload) {
     };
 
     // Handle connection state changes
+    let reconnectTimer = null;
     peerConnection.onconnectionstatechange = () => {
       debug('Connection state:', peerConnection.connectionState);
       const qualityEl = document.getElementById('connectionQuality');
@@ -707,20 +708,32 @@ async function startWebRTC(sessionId, offerPayload) {
         debug('✅ WebRTC CONNECTED!');
         // Stop signaling polling once connected
         stopSignalingPolling();
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       }
 
-      if (peerConnection.connectionState === 'disconnected' ||
-          peerConnection.connectionState === 'failed') {
-        console.warn('⚠️ Connection lost');
+      // Grant a grace period on a transient 'disconnected' state before ending,
+      // so a brief network blip can recover. (Full re-negotiation is
+      // dashboard-driven, so we do not re-initiate from the agent side.)
+      if (peerConnection.connectionState === 'disconnected') {
+        console.warn('⚠️ Connection lost — grace period before ending session');
+        if (!reconnectTimer) {
+          reconnectTimer = setTimeout(() => {
+            console.warn('⚠️ Connection did not recover — ending session');
+            endSession();
+          }, 15000);
+        }
+      }
+
+      if (peerConnection.connectionState === 'failed') {
+        console.warn('⚠️ Connection failed — ending session');
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
         endSession();
       }
     };
 
     // Set remote description (the dashboard's offer)
     const offerSDP = offerPayload.sdp || offerPayload.SDP;
-    console.log('[WebAgent] Offer SDP found:', !!offerSDP, 'payload keys:', Object.keys(offerPayload || {}));
     if (!offerSDP) {
-      console.error('[WebAgent] Full offer payload:', JSON.stringify(offerPayload));
       throw new Error('No SDP in offer payload');
     }
 
@@ -748,7 +761,7 @@ async function startWebRTC(sessionId, offerPayload) {
           sdp: answer.sdp
         }
       });
-    
+
     if (answerError) {
       console.error('[WebAgent] Failed to send answer:', answerError);
       throw answerError;
@@ -792,7 +805,7 @@ let processedSignalIds = new Set();
 
 function listenForSignaling() {
   const sessionId = currentSession.session_id || currentSession.id;
-  
+
   // Subscribe to signaling messages via Realtime
   signalingChannel = supabase
     .channel(`session_${sessionId}`)
@@ -808,19 +821,19 @@ function listenForSignaling() {
     .subscribe();
 
   debug('✅ Listening for signaling messages (realtime)');
-  
+
   // Start polling fallback
   startSignalingPolling();
 }
 
 function startSignalingPolling() {
   debug('🔄 Starting signaling polling fallback...');
-  
+
   signalingPollingInterval = setInterval(async () => {
     if (!currentSession) return;
-    
+
     const sessionId = currentSession.session_id || currentSession.id;
-    
+
     try {
       const { data, error } = await supabase
         .from('session_signaling')
@@ -859,7 +872,7 @@ function stopSignalingPolling() {
 async function handleSignalingMessage(msg) {
   // Skip our own messages (from agent)
   if (msg.from_side === 'agent') return;
-  
+
   // Skip already processed
   if (processedSignalIds.has(msg.id)) return;
   processedSignalIds.add(msg.id);
@@ -876,7 +889,7 @@ async function handleSignalingMessage(msg) {
       if (data.candidate && typeof data.candidate === 'object') {
         iceData = data.candidate;
       }
-      
+
       if (iceData && iceData.candidate) {
         debug('📥 ICE candidate from dashboard');
         await peerConnection.addIceCandidate(new RTCIceCandidate({
@@ -907,7 +920,7 @@ const HELPER_STATUS_URL = 'http://127.0.0.1:9877/status';
 // Check if helper is running (HTTP status check)
 async function checkHelperStatus() {
   try {
-    const response = await fetch(HELPER_STATUS_URL, { 
+    const response = await fetch(HELPER_STATUS_URL, {
       method: 'GET',
       mode: 'cors'
     });

@@ -35,6 +35,15 @@
             results.appendChild(div);
             console.log(message);
         }
+
+        function esc(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
         
         async function fetchTurnCredentials() {
             try {
@@ -86,13 +95,13 @@
                         
                         if (c.type === 'relay') {
                             hasRelay = true;
-                            log(`✅ RELAY candidate: ${c.candidate}`, 'success');
+                            log(`✅ RELAY candidate: ${esc(c.candidate)}`, 'success');
                         } else if (c.type === 'srflx') {
                             hasSrflx = true;
-                            log(`📡 SRFLX candidate: ${c.candidate}`, 'info');
+                            log(`📡 SRFLX candidate: ${esc(c.candidate)}`, 'info');
                         } else if (c.type === 'host') {
                             hasHost = true;
-                            log(`🏠 HOST candidate: ${c.candidate}`, 'info');
+                            log(`🏠 HOST candidate: ${esc(c.candidate)}`, 'info');
                         }
                     }
                 };
@@ -127,16 +136,18 @@
                 log('⏳ Gathering ICE candidates (wait 10 seconds)...', 'info');
                 
             } catch (error) {
-                log(`❌ Error: ${error.message}`, 'error');
+                log(`❌ Error: ${esc(error.message)}`, 'error');
             }
         }
-        
+
         async function testRelayOnly() {
             document.getElementById('results').innerHTML = '';
             log('🔄 Testing RELAY-ONLY mode (forces TURN)...', 'info');
+            log('🔐 Fetching TURN credentials from backend...', 'info');
             
+            const iceServers = await fetchTurnCredentials();
             const config = {
-                iceServers: [TURN_CONFIG],
+                iceServers,
                 iceTransportPolicy: 'relay'  // Force relay only
             };
             
@@ -150,7 +161,7 @@
                 pc.onicecandidate = (event) => {
                     if (event.candidate) {
                         hasRelay = true;
-                        log(`✅ RELAY candidate: ${event.candidate.candidate}`, 'success');
+                        log(`✅ RELAY candidate: ${esc(event.candidate.candidate)}`, 'success');
                     }
                 };
                 
@@ -175,7 +186,7 @@
                 log('⏳ Gathering relay candidates (wait 10 seconds)...', 'info');
                 
             } catch (error) {
-                log(`❌ Error: ${error.message}`, 'error');
+                log(`❌ Error: ${esc(error.message)}`, 'error');
             }
         }
     </script>

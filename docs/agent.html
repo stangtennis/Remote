@@ -2,6 +2,7 @@
 <html lang="da">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://supabase.hawkeye123.dk wss://supabase.hawkeye123.dk; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fjernagent - Del din skærm</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
@@ -163,7 +164,7 @@
             <span class="helper-value" id="helperStatusText">Tjekker...</span>
           </div>
           <div class="helper-actions">
-            <a href="https://downloads.hawkeye123.dk/input-helper.exe" 
+            <a href="https://downloads.hawkeye123.dk/input-helper.exe"
                class="btn btn-sm btn-primary" id="downloadHelperBtn" style="display: none;">
               <i class="fas fa-download"></i> Hent
             </a>
@@ -173,7 +174,7 @@
           </div>
         </div>
         <p class="helper-hint" id="helperHint" style="display: none;">
-          <i class="fas fa-info-circle"></i> 
+          <i class="fas fa-info-circle"></i>
           Kør <code>input-helper.exe</code> for at aktivere fjernmus/tastatur kontrol
         </p>
       </div>
@@ -288,10 +289,10 @@
   <!-- Scripts -->
   <!-- Error Boundary -->
   <script src="js/error-boundary.js?v=4"></script>
-  
+
   <!-- UI Helpers -->
   <script src="js/ui-helpers.js?v=4"></script>
-  
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js?v=4"></script>
   <script src="js/web-agent.js?v=4"></script>

@@ -30,7 +30,7 @@ file_size_limit = "50MiB"
 [auth]
 enabled = true
 site_url = "https://stangtennis.github.io/Remote/"
-additional_redirect_urls = ["http://localhost:3000", "http://127.0.0.1:5500", "https://yourusername.github.io"]
+additional_redirect_urls = ["http://localhost:3000", "http://127.0.0.1:5500"]
 jwt_expiry = 3600
 enable_signup = true
 
@@ -52,4 +52,25 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.file-transfer]
+verify_jwt = true
+
+[functions.session-cleanup]
+verify_jwt = true
+
+# Unauthenticated beacon (sent on page unload, cannot carry a JWT).
+[functions.session-cleanup-beacon]
+verify_jwt = false
+
+# Manages its own per-action auth (anon PIN validate/create-public/check-public/
+# turn/ready are unauthenticated; toggle-public checks JWT internally).
+[functions.support-signal]
+verify_jwt = false
+
+[functions.turn-credentials]
+verify_jwt = true
+
+[functions.create-support-session]
+verify_jwt = true
+
+[functions.send-welcome-email]
 verify_jwt = true

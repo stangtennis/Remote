@@ -64,3 +64,16 @@ jobs:
           CC: x86_64-w64-mingw32-gcc
           CXX: x86_64-w64-mingw32-g++
         run: go test -short -exec /bin/true ./...
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: govulncheck agent (advisory)
+        working-directory: ./agent
+        continue-on-error: true
+        run: govulncheck ./...
+
+      - name: govulncheck controller (advisory)
+        working-directory: ./controller
+        continue-on-error: true
+        run: govulncheck ./...

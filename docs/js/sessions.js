@@ -1,6 +1,15 @@
 // Multi-Session Tab Manager
 // Handles multiple simultaneous remote desktop connections
 
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const SessionManager = {
   sessions: new Map(), // deviceId -> session object
   activeSessionId: null,
@@ -101,7 +110,7 @@ const SessionManager = {
     tab.dataset.sessionId = session.id;
     tab.innerHTML = `
       <span class="tab-status"></span>
-      <span class="tab-name" title="${session.deviceName}">${session.deviceName}</span>
+      <span class="tab-name" title="${escHtml(session.deviceName)}">${escHtml(session.deviceName)}</span>
       <button class="tab-close" title="Close session">×</button>
     `;
 

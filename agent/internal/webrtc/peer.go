@@ -1209,9 +1209,13 @@ func (m *Manager) handleDrivesListRequest() {
 	m.sendResponse(response)
 }
 
-// handleFileRequest handles file download requests from controller
+// handleFileRequest handles legacy single-shot file download requests.
+// The chunked transfer was never implemented here (the data was read into
+// memory and then discarded). To avoid unbounded memory use, we no longer read
+// the file and instead tell the client to use the chunked file-transfer
+// protocol (filetransfer.Handler). Path sanitization is still applied.
 func (m *Manager) handleFileRequest(remotePath string) {
-	log.Printf("📥 File request: %s", remotePath)
+	log.Printf("📥 File request (legacy path, unsupported): %s", remotePath)
 
 	// Sanitize path - reject traversal attempts
 	cleanPath := filepath.Clean(remotePath)
@@ -1219,26 +1223,12 @@ func (m *Manager) handleFileRequest(remotePath string) {
 		log.Printf("⚠️ Path traversal rejected: %s", remotePath)
 		return
 	}
-	remotePath = cleanPath
 
-	// Read file
-	data, err := os.ReadFile(remotePath)
-	if err != nil {
-		response := map[string]interface{}{
-			"type":  "file_response_error",
-			"path":  remotePath,
-			"error": err.Error(),
-		}
-		m.sendResponse(response)
-		return
-	}
-
-	// Send file in chunks via file transfer handler
-	if m.fileTransferHandler != nil {
-		// Use existing file transfer mechanism
-		log.Printf("📤 Sending file: %s (%d bytes)", remotePath, len(data))
-		// TODO: Implement proper chunked transfer
-	}
+	m.sendResponse(map[string]interface{}{
+		"type":  "file_response_error",
+		"path":  cleanPath,
+		"error": "legacy file_request is not supported; use the chunked file-transfer protocol",
+	})
 }
 
 // sendResponse sends a JSON response over the data channel

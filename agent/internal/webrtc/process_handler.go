@@ -3,6 +3,7 @@ package webrtc
 import (
 	"encoding/json"
 	"log"
+	"os"
 	"strconv"
 
 	pionwebrtc "github.com/pion/webrtc/v3"
@@ -62,6 +63,13 @@ func (m *Manager) handleProcessList(dc *pionwebrtc.DataChannel) {
 func (m *Manager) handleProcessKill(dc *pionwebrtc.DataChannel, pid int) {
 	if pid <= 0 {
 		sendProcessError(dc, "invalid PID")
+		return
+	}
+
+	// Refuse to kill the agent itself to prevent a connected client from
+	// remotely disabling the agent.
+	if pid == os.Getpid() {
+		sendProcessError(dc, "refusing to kill agent process")
 		return
 	}
 

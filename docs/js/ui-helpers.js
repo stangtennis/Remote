@@ -398,10 +398,13 @@ function showToast(message, type = 'info', duration = 4000) {
   
   toast.innerHTML = `
     <span class="toast-icon">${icons[type] || icons.info}</span>
-    <span class="toast-message">${message}</span>
+    <span class="toast-message"></span>
     <button class="toast-close" aria-label="Luk">&times;</button>
   `;
-  
+
+  // Set message as text (not HTML) to prevent injection from agent/server payloads
+  toast.querySelector('.toast-message').textContent = message;
+
   // Close button handler
   toast.querySelector('.toast-close').addEventListener('click', () => dismissToast(toast));
   

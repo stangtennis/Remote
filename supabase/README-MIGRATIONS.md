@@ -4,7 +4,12 @@
 
 This folder contains all SQL migrations for the Remote Desktop Application database schema. These migrations must be applied to your local Supabase instance for the application to work.
 
-## Migration Files (21 total)
+## Migration Files
+
+> The `supabase/migrations/` directory is the source of truth — it grows over
+> time. The numbered list below documents the original migrations; later
+> hardening fixes (2026) are appended in chronological order. Run
+> `ls supabase/migrations/*.sql | wc -l` for the current count.
 
 1. `20250101000000_initial_schema.sql` - Core tables (devices, sessions, signaling, audit_logs)
 2. `20250101000001_storage_setup.sql` - Storage configuration
@@ -79,8 +84,8 @@ After applying migrations, verify the schema:
 
 ```sql
 -- Check tables exist
-SELECT table_name FROM information_schema.tables 
-WHERE table_schema = 'public' 
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public'
 ORDER BY table_name;
 
 -- Expected tables:

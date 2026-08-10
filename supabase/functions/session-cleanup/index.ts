@@ -44,6 +44,20 @@ serve(async (req) => {
       )
     }
 
+    // ADV-08: restrict global cleanup to admins (previously any authenticated
+    // user could trigger it, a DoS / undesired global mutation vector).
+    const { data: approval } = await supabase
+      .from('user_approvals')
+      .select('role, approved')
+      .eq('user_id', user.id)
+      .single()
+    if (!approval || !approval.approved || (approval.role !== 'admin' && approval.role !== 'super_admin')) {
+      return new Response(
+        JSON.stringify({ error: 'Admin access required' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+      )
+    }
+
     const now = new Date()
     const oneMinuteAgo = new Date(now.getTime() - 60 * 1000)
     const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000)

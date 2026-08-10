@@ -7,8 +7,8 @@ REM Get the current directory (where the .bat file is located)
 set "INSTALL_DIR=%~dp0"
 set "MANIFEST=%INSTALL_DIR%com.remote.desktop.control.json"
 
-REM Update manifest with absolute path using PowerShell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$content = Get-Content '%MANIFEST%' -Raw; $newPath = '%INSTALL_DIR%remote-desktop-control.exe'.Replace('\', '\\'); $content = $content -replace '\"path\": \"remote-desktop-control.exe\"', ('\"path\": \"' + $newPath + '\"'); Set-Content '%MANIFEST%' -Value $content -NoNewline"
+REM Update manifest with absolute path using PowerShell (rewrites any existing "path" value)
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$content = Get-Content '%MANIFEST%' -Raw; $newPath = '%INSTALL_DIR%remote-desktop-control.exe'.Replace('\', '\\'); $content = $content -replace '\"path\"\s*:\s*\"[^\"]*\"', ('\"path\": \"' + $newPath + '\"'); Set-Content '%MANIFEST%' -Value $content -NoNewline"
 
 REM Register with Chrome
 echo Registering with Google Chrome...

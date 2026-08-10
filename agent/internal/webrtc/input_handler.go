@@ -73,8 +73,17 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 		resolveCoords := func(x, y float64) (int, int) {
 			isRelative, _ := event["rel"].(bool)
 			if isRelative {
+				x = clampf(x, 0, 1)
+				y = clampf(y, 0, 1)
 				w, h := m.screenCapturer.GetResolution()
 				return int(x * float64(w)), int(y * float64(h))
+			}
+			w, h := m.screenCapturer.GetResolution()
+			if w > 0 {
+				x = clampf(x, 0, float64(w))
+			}
+			if h > 0 {
+				y = clampf(y, 0, float64(h))
 			}
 			return int(x), int(y)
 		}
@@ -106,7 +115,7 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 
 		case "mouse_scroll":
 			delta, _ := event["delta"].(float64)
-			forwardErr = m.screenCapturer.ForwardScroll(int(delta), 0, 0)
+			forwardErr = m.screenCapturer.ForwardScroll(int(clampf(delta, -1000, 1000)), 0, 0)
 
 		case "key":
 			code, _ := event["code"].(string)
@@ -153,9 +162,10 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 		y, _ := event["y"].(float64)
 		isRelative, _ := event["rel"].(bool)
 		if isRelative {
-			m.mouseController.MoveRelative(x, y)
+			m.mouseController.MoveRelative(clampf(x, 0, 1), clampf(y, 0, 1))
 		} else {
-			m.mouseController.Move(x, y)
+			ax, ay := m.clampAbsolute(x, y)
+			m.mouseController.Move(ax, ay)
 		}
 
 	case "mouse_click":
@@ -166,16 +176,17 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 		isRelative, _ := event["rel"].(bool)
 		if hasX && hasY {
 			if isRelative {
-				m.mouseController.MoveRelative(x, y)
+				m.mouseController.MoveRelative(clampf(x, 0, 1), clampf(y, 0, 1))
 			} else {
-				m.mouseController.Move(x, y)
+				ax, ay := m.clampAbsolute(x, y)
+				m.mouseController.Move(ax, ay)
 			}
 		}
 		m.mouseController.Click(button, down)
 
 	case "mouse_scroll":
 		delta, _ := event["delta"].(float64)
-		m.mouseController.Scroll(int(delta))
+		m.mouseController.Scroll(int(clampf(delta, -1000, 1000)))
 
 	case "key":
 		code, _ := event["code"].(string)
@@ -245,6 +256,40 @@ func (m *Manager) noteInputPriority(eventType string) {
 func (m *Manager) inputPriorityActive() bool {
 	deadline := m.inputPriorityUntil.Load()
 	return deadline > 0 && time.Now().UnixNano() < deadline
+}
+
+// clampf clamps v to the inclusive [lo, hi] range.
+func clampf(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+// clampAbsolute clamps absolute pixel coordinates received from untrusted
+// network input to the capture resolution (non-negative) so a malformed or
+// hostile client cannot drive the cursor far off-screen.
+func (m *Manager) clampAbsolute(x, y float64) (float64, float64) {
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	if m.screenCapturer != nil {
+		if w, h := m.screenCapturer.GetResolution(); w > 0 && h > 0 {
+			if x > float64(w) {
+				x = float64(w)
+			}
+			if y > float64(h) {
+				y = float64(h)
+			}
+		}
+	}
+	return x, y
 }
 
 func (m *Manager) scheduleH264InputRefresh(eventType string) {
