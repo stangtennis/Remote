@@ -74,6 +74,12 @@ logs/
 ULTIMATE_GUIDE_LOCAL_PASSWORDS.md
 ULTIMATE_GUIDE_LOCAL_*.md
 
+# Local duplicate trees / scratch copies (do not commit)
+/Remote-Desktop/
+/info/
+/nodesource_setup.sh
+/unifi-cloud-init/
+
 # Temporary files
 tmp/
 temp/

@@ -71,7 +71,7 @@ If you have `psql` installed on Windows:
 Or manually:
 
 ```powershell
-$env:PGPASSWORD = "postgres"
+$env:PGPASSWORD = "<your-postgres-password>"
 Get-ChildItem .\migrations\*.sql | Sort-Object Name | ForEach-Object {
     Write-Host "Applying $($_.Name)..."
     psql -h 192.168.1.92 -p 5432 -U postgres -d postgres -f $_.FullName
@@ -135,7 +135,7 @@ If you see "already exists" errors, the migrations may have been partially appli
 
 Ensure you're using the `postgres` superuser:
 - User: `postgres`
-- Password: `postgres`
+- Password: `<your-postgres-password>` (set during Supabase setup; do not commit the real value)
 - Database: `postgres`
 
 ### Connection Refused

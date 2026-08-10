@@ -1,0 +1,28 @@
+# Normalize line endings repository-wide.
+# Treats all text files as LF in the index/working tree so CRLF is no longer
+# flagged as trailing whitespace by `git diff --check`. Binary assets are
+# explicitly excluded.
+* text=auto eol=lf
+
+# Windows shell scripts keep CRLF by convention (cmd/PowerShell tolerate LF,
+# but some editors/tools expect CRLF for .bat/.cmd).
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Binary assets — never normalize or diff.
+*.png   binary
+*.ico   binary
+*.jpg   binary
+*.jpeg  binary
+*.webm  binary
+*.syso  binary
+*.zip   binary
+*.gz    binary
+*.tar   binary
+*.dll   binary
+*.exe   binary
+*.so    binary
+*.dylib binary
+*.pfx   binary
+*.p12   binary
