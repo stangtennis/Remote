@@ -59,8 +59,8 @@ Uafhængig GPT-5.6 review (8-min kald via baggrund-wrapper) fandt 6 ægte residu
 
 ## 🟡 Tilbage — Medium
 
-- ⬜ **Fyne-viewer dead code** — fjern/arkivér `controller/internal/viewer/` (aktiv UI er `frontend/js/viewer.js`)
-- ⬜ **OpenH264 checksum** — verificér downloadet `.dll` (kræver autoritativ checksum-kilde fra vedligeholder)
+- ✅ **Fyne-viewer dead code** — legacy `controller/internal/viewer/` slettet (aktiv UI er `frontend/js/viewer.js`); Fyne-dep. beholdes (`ui/`, `filebrowser/`, `filetransfer/browser.go` bruger det stadig)
+- ✅ **OpenH264 checksum** — v2.1.1 SHA256 (win64/darwin/linux) pinnet i `openh264_download.go`; downloader afviser mismatch før biblioteket installeres
 - ✅ **`webrtc_sessions.user_id`** — `text`→`uuid` (migration `20260810`; NULLIF-guard, transient tabel)
 - ✅ **Linux secret store** — fil-baseret fallback (0600, sha256-keyed) så "remember me" virker på Linux (build+vet OK)
 - ✅ **Audio-checkbox** — disabled + "ikke tilgængelig" (element bevares, undgår JS-break)
