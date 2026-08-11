@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.1.119 - 2026-08-11
+- Remove legacy Fyne viewer package (Wails controller is the maintained path).
+- OpenH264: pin v2.1.1 SHA256 and verify-on-download (fail closed on mismatch).
+- session-cleanup-beacon: per-IP rate limit + documented threat model.
+- Isolate H.264 Annex-B parser into a testable package with unit tests.
+- TURN shared secret rotated on the infrastructure (coturn + edge functions).
+- Purge historical TURN secret from git history.
+- Line-ending normalization via .gitattributes; prevent accidental junk commits.
+
 ## v3.1.118 - 2026-08-13
 - Security hardening: fix active XSS paths in dashboard session tabs, controller chat, support modal, device-load errors, and TURN test page (add HTML escapers).
 - Edge functions: generate support/session PINs with `crypto.getRandomValues` instead of `Math.random`.
