@@ -3,7 +3,7 @@
 
 const SUPABASE_CONFIG = {
   url: 'https://supabase.hawkeye123.dk',
-  anonKey: 'REDACTED_JWT'
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg2NDk3MDQ5LCJleHAiOjQ5NDAwOTcwNDl9.Inmhq9QxPXQKburj2RzRS-bZROeYfYT_k8A9ti-faVo'
 };
 
 // Debug mode: enable via ?debug=true in URL or localStorage.setItem('debug','true')

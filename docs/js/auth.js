@@ -264,7 +264,7 @@ if (document.getElementById('logoutBtn')) {
       const downloadsGrid = document.getElementById('downloadsGrid');
       if (downloadsGrid && isAdmin) {
         const isMac = window._isMacPlatform || /Mac/i.test(navigator.platform);
-        const controllerFile = isMac ? 'RemoteDesktopController-macOS-v3.1.119.tar.gz' : 'RemoteDesktopController-v3.1.119-Setup.exe';
+        const controllerFile = isMac ? 'RemoteDesktopController-macOS-v3.1.120.tar.gz' : 'RemoteDesktopController-v3.1.120-Setup.exe';
         const controllerLabel = isMac ? '<i class="fas fa-gamepad"></i> Controller (macOS)' : '<i class="fas fa-gamepad"></i> Controller';
         const controllerLink = document.createElement('a');
         controllerLink.href = '#';

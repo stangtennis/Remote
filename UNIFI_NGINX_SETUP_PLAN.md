@@ -406,7 +406,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 # NEW (works from anywhere!)
 SUPABASE_URL=https://supabase.hawkeye123.dk
-SUPABASE_ANON_KEY=REDACTED_JWT
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg2NDk3MDQ5LCJleHAiOjQ5NDAwOTcwNDl9.Inmhq9QxPXQKburj2RzRS-bZROeYfYT_k8A9ti-faVo
 ```
 
 #### Step 8.2: Update Agent .env
@@ -416,7 +416,7 @@ SUPABASE_ANON_KEY=REDACTED_JWT
 
 # NEW (works from anywhere!)
 SUPABASE_URL=https://supabase.hawkeye123.dk
-SUPABASE_ANON_KEY=REDACTED_JWT
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg2NDk3MDQ5LCJleHAiOjQ5NDAwOTcwNDl9.Inmhq9QxPXQKburj2RzRS-bZROeYfYT_k8A9ti-faVo
 DEVICE_NAME=MyDevice
 DEVICE_ID=auto-generated
 API_KEY=optional-api-key

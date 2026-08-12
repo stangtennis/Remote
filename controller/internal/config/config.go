@@ -18,7 +18,7 @@ func Load() (*Config, error) {
 	config := &Config{
 		// Default values (public HTTPS URL for remote access)
 		SupabaseURL:     "https://supabase.hawkeye123.dk",
-		SupabaseAnonKey: "REDACTED_JWT",
+		SupabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg2NDk3MDQ5LCJleHAiOjQ5NDAwOTcwNDl9.Inmhq9QxPXQKburj2RzRS-bZROeYfYT_k8A9ti-faVo",
 	}
 
 	// Environment variables override defaults

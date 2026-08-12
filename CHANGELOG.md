@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.1.120 - 2026-08-11
+- SECURITY (critical): rotate Supabase JWT_SECRET away from the public demo
+  value. The live instance previously accepted the well-known demo
+  service_role key (full DB access). The new anon key is now baked into the
+  agent, controller, and dashboard defaults so field clients reconnect after
+  auto-update.
+- Purge all Supabase JWTs from git history (anon + service_role + legacy
+  cloud-project keys).
+
 ## v3.1.119 - 2026-08-11
 - Remove legacy Fyne viewer package (Wails controller is the maintained path).
 - OpenH264: pin v2.1.1 SHA256 and verify-on-download (fail closed on mismatch).

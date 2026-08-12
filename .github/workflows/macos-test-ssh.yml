@@ -77,7 +77,7 @@ jobs:
           AGENT_PASSWORD: ${{ secrets.AGENT_PASSWORD }}
         run: |
           SUPABASE_URL="https://supabase.hawkeye123.dk"
-          ANON_KEY="REDACTED_JWT"
+          ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg2NDk3MDQ5LCJleHAiOjQ5NDAwOTcwNDl9.Inmhq9QxPXQKburj2RzRS-bZROeYfYT_k8A9ti-faVo"
 
           RESPONSE=$(curl -s "$SUPABASE_URL/auth/v1/token?grant_type=password" \
             -H "apikey: $ANON_KEY" \
@@ -129,7 +129,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           SUPABASE_URL="https://supabase.hawkeye123.dk"
-          ANON_KEY="REDACTED_JWT"
+          ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg2NDk3MDQ5LCJleHAiOjQ5NDAwOTcwNDl9.Inmhq9QxPXQKburj2RzRS-bZROeYfYT_k8A9ti-faVo"
 
           echo "=== Starter macOS agent (auto-TURN) ==="
           cd agent
@@ -260,7 +260,7 @@ jobs:
       - name: Overvåg agent (heartbeat hver 60s)
         run: |
           SUPABASE_URL="https://supabase.hawkeye123.dk"
-          ANON_KEY="REDACTED_JWT"
+          ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg2NDk3MDQ5LCJleHAiOjQ5NDAwOTcwNDl9.Inmhq9QxPXQKburj2RzRS-bZROeYfYT_k8A9ti-faVo"
           CRASHES=0
 
           while [ ! -f /tmp/continue ]; do
