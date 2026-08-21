@@ -376,6 +376,10 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			// Small delay to let the input take effect
 			time.Sleep(10 * time.Millisecond)
 		}
+		if m.supportIsActive() && !m.supportAllows("screen") {
+			log.Println("🚫 Support screen scope expired or denied; stopping stream")
+			return
+		}
 
 		// Honour controller-driven pause: while the user is AFK (no input
 		// for several minutes), skip the entire capture+encode+send path.

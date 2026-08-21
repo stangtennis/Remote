@@ -22,6 +22,9 @@ serve(async (req) => {
   }
 
   try {
+    const body = (await req.json().catch(() => ({}))) || {}
+    const requireRelay = body.require_relay === true
+
     // Verify user is authenticated
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
@@ -74,20 +77,29 @@ serve(async (req) => {
         if (cfResp.ok) {
           const cfData = await cfResp.json()
           // Add Cloudflare ICE servers (skip their STUN, we already have it)
+          let usableTurn = false
           for (const srv of cfData.iceServers || []) {
             const urls = Array.isArray(srv.urls) ? srv.urls : [srv.urls]
             const turnUrls = urls.filter((u: string) => u.startsWith('turn'))
             if (turnUrls.length > 0 && srv.username) {
               allIceServers.push({ urls: turnUrls, username: srv.username, credential: srv.credential })
+              usableTurn = true
             }
           }
-          provider = 'cloudflare'
+          if (usableTurn) provider = 'cloudflare'
         } else {
           console.error('Cloudflare TURN failed:', cfResp.status)
         }
       } catch (e) {
         console.error('Cloudflare TURN error:', e)
       }
+    }
+
+    if (requireRelay && provider !== 'cloudflare') {
+      return new Response(
+        JSON.stringify({ error: 'Cloudflare TURN relay is unavailable' }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
 
     // 2) Coturn fallback — disabled for now (relay ports 49200-49300 not forwarded on router)

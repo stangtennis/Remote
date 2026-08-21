@@ -23,6 +23,33 @@ remote-desktop-cli connect $ARGUMENTS
 
 Vent på "Connected" besked. Daemon kører i baggrunden med auto-reconnect.
 
+## AI Quick Support uden installeret agent
+
+Ubuntu/OpenCode skal have watcher-processen kørende én gang:
+
+```bash
+remote-desktop-cli support-watch
+```
+
+Watcher-processen bruger samme `RD_EMAIL`/`RD_PASSWORD` som CLI'en, ser efter
+aktive AI-supportsessioner oprettet i dashboardet og starter automatisk den
+lokale forbindelse. Klienten skal først have kørt den portable supportfil,
+indtastet PIN-koden og accepteret scopes.
+
+Manuel fallback, hvis watcher'en ikke kører:
+
+```bash
+remote-desktop-cli support-list
+remote-desktop-cli support-connect <client-key>
+```
+
+Når forbindelsen er oprettet, bruger AI'en de samme `screenshot`, `click`, `type`, `key`,
+`exec`, `upload`, `download`, `ps` og `sysinfo` kommandoer sessionen. Der åbnes
+ingen inbound port; forbindelsen bruger Supabase-signaling og Cloudflare TURN.
+Support-sessionen er one-shot og udløber/revokeres fail-closed. Ved et
+forbindelsesbrud skal klienten starte en ny support-session; watcher-processen
+opfanger automatisk det nye session-ID.
+
 ## Screenshot-Analyze-Act Loop
 
 Dit primære workflow er:

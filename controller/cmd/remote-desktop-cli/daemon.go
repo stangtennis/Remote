@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -154,8 +155,14 @@ func runDaemon(deviceID, deviceName string) {
 	connMgr := NewConnectionManager(cfg, auth)
 	connMgr.StartIdleChecker()
 
-	if err := connMgr.Connect(deviceID, deviceName); err != nil {
-		log.Fatalf("[daemon] Failed to connect: %v", err)
+	var connectErr error
+	if strings.HasPrefix(deviceID, "support:") {
+		connectErr = connMgr.ConnectSupport(strings.TrimPrefix(deviceID, "support:"))
+	} else {
+		connectErr = connMgr.Connect(deviceID, deviceName)
+	}
+	if connectErr != nil {
+		log.Fatalf("[daemon] Failed to connect: %v", connectErr)
 	}
 	log.Printf("[daemon] Connected to %s", deviceName)
 
@@ -231,21 +238,49 @@ func handleDaemonConnection(conn net.Conn, connMgr *ConnectionManager, deviceID,
 		sendResponse(conn, daemonResponse{OK: false, Error: "invalid request"})
 		return
 	}
+	actionType, summary, target, details, audit := daemonAuditInfo(req)
+	if audit {
+		if err := connMgr.AuditSupportAction(deviceID, actionType, "started", summary, target, details); err != nil {
+			sendResponse(conn, daemonResponse{OK: false, Error: err.Error()})
+			return
+		}
+	}
 
 	// Streaming commands write a series of JSON messages and close the
 	// connection themselves. They never call sendResponse.
 	switch req.Cmd {
 	case "exec":
 		conn.SetDeadline(time.Now().Add(15 * time.Minute))
-		handleExecStream(conn, req, connMgr, deviceID)
+		streamErr := handleExecStream(conn, req, connMgr, deviceID)
+		if audit {
+			status := "succeeded"
+			if streamErr != nil {
+				status = "failed"
+			}
+			_ = connMgr.AuditSupportAction(deviceID, actionType, status, summary, target, details)
+		}
 		return
 	case "upload", "download":
 		conn.SetDeadline(time.Now().Add(15 * time.Minute))
-		handleFileStream(conn, req, connMgr, deviceID)
+		streamErr := handleFileStream(conn, req, connMgr, deviceID)
+		if audit {
+			status := "succeeded"
+			if streamErr != nil {
+				status = "failed"
+			}
+			_ = connMgr.AuditSupportAction(deviceID, actionType, status, summary, target, details)
+		}
 		return
 	}
 
 	resp := handleCommand(req, connMgr, deviceID, deviceName, startTime)
+	if audit {
+		status := "succeeded"
+		if !resp.OK {
+			status = "failed"
+		}
+		_ = connMgr.AuditSupportAction(deviceID, actionType, status, summary, target, details)
+	}
 	sendResponse(conn, resp)
 
 	// If disconnect was requested, shutdown daemon
@@ -256,6 +291,43 @@ func handleDaemonConnection(conn net.Conn, connMgr *ConnectionManager, deviceID,
 			os.Remove(getPIDPath())
 			os.Exit(0)
 		}()
+	}
+}
+
+func daemonAuditInfo(req daemonRequest) (string, string, string, map[string]interface{}, bool) {
+	details := map[string]interface{}{}
+	switch req.Cmd {
+	case "screenshot":
+		return "SCREEN_SCREENSHOT", "AI requested a screenshot", "screen", details, true
+	case "click":
+		return "INPUT_CLICK", "AI clicked the remote desktop", "screen", details, true
+	case "type":
+		if text, ok := req.Args["text"].(string); ok {
+			details["length"] = len(text)
+		}
+		return "INPUT_TYPE", "AI typed into the remote desktop", "screen", details, true
+	case "key":
+		return "INPUT_KEY", "AI pressed a key", "keyboard", details, true
+	case "scroll":
+		return "INPUT_SCROLL", "AI scrolled the remote desktop", "screen", details, true
+	case "exec":
+		if command, ok := req.Args["cmd"].(string); ok {
+			details["command_length"] = len(command)
+			details["command_sha256"] = fmt.Sprintf("%x", sha256.Sum256([]byte(command)))
+		}
+		return "SHELL_EXEC", "AI requested a remote shell command", "shell", details, true
+	case "upload":
+		return "FILE_UPLOAD", "AI uploaded a file", "file", details, true
+	case "download":
+		return "FILE_DOWNLOAD", "AI downloaded a file", "file", details, true
+	case "ps":
+		return "PROCESS_PS", "AI requested a process list", "process", details, true
+	case "kill":
+		return "PROCESS_KILL", "AI requested a process termination", "process", details, true
+	case "sysinfo":
+		return "PROCESS_SYSINFO", "AI requested system information", "system", details, true
+	default:
+		return "", "", "", nil, false
 	}
 }
 

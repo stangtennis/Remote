@@ -15,6 +15,8 @@ serve(async (req) => {
   }
 
   try {
+    const body = (await req.json().catch(() => ({}))) || {}
+
     // Get authenticated user
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
@@ -53,6 +55,18 @@ serve(async (req) => {
       throw new Error('Admin access required')
     }
 
+    const supportMode = body.support_mode === 'ai' ? 'ai' : 'screen'
+    const allowedScopes = ['screen', 'input', 'files', 'terminal', 'process', 'admin']
+    const requestedScopes = Array.isArray(body.requested_scopes)
+      ? [...new Set(body.requested_scopes.filter((scope: unknown) =>
+          typeof scope === 'string' && allowedScopes.includes(scope)
+        ))]
+      : ['screen']
+
+    if (requestedScopes.length === 0 || !requestedScopes.includes('screen')) {
+      throw new Error('A support session must include the screen scope')
+    }
+
     // Generate 6-digit PIN using cryptographically strong randomness
     const pinBuf = new Uint32Array(1)
     crypto.getRandomValues(pinBuf)
@@ -73,6 +87,10 @@ serve(async (req) => {
         pin,
         token,
         expires_at,
+        support_mode: supportMode,
+        requested_scopes: requestedScopes,
+        requires_client_code: supportMode === 'ai',
+        controller_requested: false,
       })
       .select()
       .single()
@@ -80,6 +98,29 @@ serve(async (req) => {
     if (sessionError) {
       console.error('Failed to create support session:', sessionError)
       throw sessionError
+    }
+
+    const serviceClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    )
+    const { error: auditError } = await serviceClient.from('support_action_audit').insert({
+      support_session_id: session.id,
+      actor_type: 'admin',
+      actor_id: user.id,
+      action_type: 'SUPPORT_SESSION_CREATED',
+      status: 'succeeded',
+      summary: `Created ${supportMode} support session`,
+      details: {
+        requested_scopes: requestedScopes,
+        requires_client_code: supportMode === 'ai',
+        expires_at,
+      },
+      completed_at: new Date().toISOString(),
+    })
+    if (auditError) {
+      await serviceClient.from('support_sessions').delete().eq('id', session.id)
+      throw auditError
     }
 
     // Build share URL
@@ -93,6 +134,9 @@ serve(async (req) => {
         token,
         share_url,
         expires_at,
+        support_mode: supportMode,
+        requested_scopes: requestedScopes,
+        requires_client_code: supportMode === 'ai',
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -2,7 +2,9 @@ package webrtc
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 
@@ -57,6 +59,10 @@ func (m *Manager) setupShellChannelHandlers(dc *pionwebrtc.DataChannel) {
 	})
 
 	dc.OnMessage(func(msg pionwebrtc.DataChannelMessage) {
+		if m.supportIsActive() && !m.supportAllows("terminal") {
+			sendShellMsg(dc, map[string]interface{}{"op": "error", "error": "terminal scope denied"})
+			return
+		}
 		var req map[string]interface{}
 		if err := json.Unmarshal(msg.Data, &req); err != nil {
 			log.Printf("⚠️ shell: invalid message: %v", err)
@@ -96,6 +102,19 @@ func (m *Manager) handleShellExec(dc *pionwebrtc.DataChannel, id, cmdStr string,
 		})
 		return
 	}
+	if m.supportIsActive() {
+		if !m.supportAllows("admin") {
+			sendShellMsg(dc, map[string]interface{}{"op": "error", "id": id, "error": "admin scope required for elevated shell"})
+			return
+		}
+		if err := m.recordSupportAction("SHELL_EXEC", "started", "Started shell command", "shell", map[string]interface{}{
+			"action_id": id,
+			"as_user":   asUser,
+		}); err != nil {
+			sendShellMsg(dc, map[string]interface{}{"op": "error", "id": id, "error": err.Error()})
+			return
+		}
+	}
 
 	state := m.ensureShellState()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -109,7 +128,7 @@ func (m *Manager) handleShellExec(dc *pionwebrtc.DataChannel, id, cmdStr string,
 		cancel()
 	}()
 
-	log.Printf("🐚 shell: exec id=%s as_user=%v timeout=%ds cmd=%q", id, asUser, timeoutSec, truncate(cmdStr, 200))
+	log.Printf("🐚 shell: exec id=%s as_user=%v timeout=%ds cmd_len=%d", id, asUser, timeoutSec, len(cmdStr))
 
 	onStarted := func(pid int) {
 		sendShellMsg(dc, map[string]interface{}{
@@ -117,11 +136,17 @@ func (m *Manager) handleShellExec(dc *pionwebrtc.DataChannel, id, cmdStr string,
 		})
 	}
 	onStdout := func(data []byte) {
+		if m.supportIsActive() && !m.supportAllows("terminal") {
+			return
+		}
 		sendShellMsg(dc, map[string]interface{}{
 			"op": "stdout", "id": id, "data": string(data),
 		})
 	}
 	onStderr := func(data []byte) {
+		if m.supportIsActive() && !m.supportAllows("terminal") {
+			return
+		}
 		sendShellMsg(dc, map[string]interface{}{
 			"op": "stderr", "id": id, "data": string(data),
 		})
@@ -144,9 +169,21 @@ func (m *Manager) handleShellExec(dc *pionwebrtc.DataChannel, id, cmdStr string,
 		exitMsg["error"] = res.Err.Error()
 	}
 	sendShellMsg(dc, exitMsg)
+	if m.supportIsActive() {
+		status := "succeeded"
+		if res.ExitCode != 0 || res.Err != nil {
+			status = "failed"
+		}
+		_ = m.recordSupportAction("SHELL_EXEC", status, "Finished shell command", "shell", map[string]interface{}{
+			"action_id":   id,
+			"exit_code":   res.ExitCode,
+			"duration_ms": res.DurationMs,
+			"as_user":     asUser,
+		})
+	}
 
 	// Best-effort audit log (async, fire-and-forget)
-	if m.device != nil {
+	if m.device != nil && !m.supportIsActive() {
 		go m.auditShellCommand(cmdStr, asUser, res)
 	}
 }
@@ -162,26 +199,18 @@ func sendShellMsg(dc *pionwebrtc.DataChannel, msg map[string]interface{}) {
 	}
 }
 
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
-}
-
 // auditShellCommand records an executed shell command. Posts to Supabase
-// audit_logs (fire-and-forget); also logged locally so the operator can
-// inspect it on the host without database access.
 func (m *Manager) auditShellCommand(cmd string, asUser bool, res shell.Result) {
-	log.Printf("🛡️ AUDIT shell exit=%d duration=%dms as_user=%v cmd=%q",
-		res.ExitCode, res.DurationMs, asUser, truncate(cmd, 200))
+	log.Printf("🛡️ AUDIT shell exit=%d duration=%dms as_user=%v cmd_len=%d",
+		res.ExitCode, res.DurationMs, asUser, len(cmd))
 
 	severity := "info"
 	if res.ExitCode != 0 || res.Err != nil {
 		severity = "warning"
 	}
 	details := map[string]interface{}{
-		"cmd":         truncate(cmd, 4096),
+		"cmd_length":  len(cmd),
+		"cmd_sha256":  fmt.Sprintf("%x", sha256.Sum256([]byte(cmd))),
 		"as_user":     asUser,
 		"exit_code":   res.ExitCode,
 		"duration_ms": res.DurationMs,

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -240,6 +242,185 @@ func (cm *ConnectionManager) Connect(deviceID, deviceName string) error {
 	return nil
 }
 
+// ConnectSupport connects the authenticated admin CLI to a temporary support
+// session. The session is identified by its server-side UUID, not by a device
+// registration, and uses only outbound Supabase/Cloudflare traffic.
+func (cm *ConnectionManager) ConnectSupport(supportSessionID string) error {
+	deviceKey := "support:" + supportSessionID
+	cm.mu.RLock()
+	if conn, exists := cm.connections[deviceKey]; exists && conn.connected {
+		cm.mu.RUnlock()
+		return nil
+	}
+	cm.mu.RUnlock()
+
+	client, err := rtc.NewClient()
+	if err != nil {
+		return err
+	}
+	conn := &DeviceConnection{
+		client:        client,
+		deviceID:      deviceKey,
+		deviceName:    "AI Support",
+		lastUsedAt:    time.Now(),
+		shellRouter:   newChannelRouter(),
+		processRouter: newChannelRouter(),
+		fileRouter:    newFileTransferRouter(),
+	}
+	client.SetOnFrame(func(frameData []byte) {
+		conn.mu.Lock()
+		conn.lastFrame = append(conn.lastFrame[:0], frameData...)
+		conn.lastFrameAt = time.Now()
+		conn.mu.Unlock()
+	})
+	client.SetOnShellMessage(func(data []byte) { conn.shellRouter.Dispatch(data) })
+	client.SetOnProcessMessage(func(data []byte) { conn.processRouter.Dispatch(data) })
+	client.SetOnFileMessage(func(data []byte) { conn.fileRouter.Dispatch(data) })
+	connectedCh := make(chan bool, 1)
+	client.SetOnConnected(func() {
+		conn.mu.Lock()
+		conn.connected = true
+		conn.mu.Unlock()
+		select {
+		case connectedCh <- true:
+		default:
+		}
+	})
+	client.SetOnDisconnected(func() {
+		conn.mu.Lock()
+		conn.connected = false
+		conn.mu.Unlock()
+	})
+
+	token := cm.auth.GetToken()
+	iceServers, err := fetchSupportICEServers(cm.cfg.SupabaseURL, cm.cfg.SupabaseAnonKey, token)
+	if err != nil {
+		client.Close()
+		return err
+	}
+	if err := client.CreatePeerConnectionWithPolicy(iceServers, webrtc.ICETransportPolicyRelay); err != nil {
+		client.Close()
+		return err
+	}
+	signaling := rtc.NewSignalingClient(cm.cfg.SupabaseURL, cm.cfg.SupabaseAnonKey, token)
+	conn.signaling = signaling
+	offerJSON, err := client.CreateOffer()
+	if err != nil {
+		client.Close()
+		return err
+	}
+	var offer map[string]interface{}
+	if err := json.Unmarshal([]byte(offerJSON), &offer); err != nil {
+		client.Close()
+		return err
+	}
+	offerID := fmt.Sprintf("support-offer-%d", time.Now().UnixNano())
+	offer["offer_id"] = offerID
+	if err := signaling.SendSupportSignal(supportSessionID, "offer", offer); err != nil {
+		client.Close()
+		return err
+	}
+	conn.sessionID = supportSessionID
+	deadline := time.Now().Add(60 * time.Second)
+	answerReceived := false
+	processedSignals := make(map[int]bool)
+	for time.Now().Before(deadline) {
+		signals, pollErr := signaling.GetSupportSignals(supportSessionID)
+		if pollErr == nil {
+			for _, signal := range signals {
+				if processedSignals[signal.ID] {
+					continue
+				}
+				processedSignals[signal.ID] = true
+				switch signal.MsgType {
+				case "answer":
+					if answerReceived || signal.Payload["type"] != "answer" {
+						continue
+					}
+					answerID, ok := signal.Payload["offer_id"].(string)
+					if !ok || answerID != offerID {
+						continue
+					}
+					answerJSON, _ := json.Marshal(signal.Payload)
+					if err := client.SetAnswer(string(answerJSON)); err != nil {
+						client.Close()
+						return err
+					}
+					answerReceived = true
+				case "ice":
+					candidate, ok := signal.Payload["candidate"].(string)
+					if !ok || candidate == "" || !answerReceived {
+						continue
+					}
+					init := webrtc.ICECandidateInit{Candidate: candidate}
+					if mid, ok := signal.Payload["sdpMid"].(string); ok {
+						init.SDPMid = &mid
+					}
+					if index, ok := signal.Payload["sdpMLineIndex"].(float64); ok {
+						value := uint16(index)
+						init.SDPMLineIndex = &value
+					}
+					_ = client.AddRemoteICECandidate(init)
+				}
+			}
+		}
+		if answerReceived {
+			select {
+			case <-connectedCh:
+				goto supportConnected
+			default:
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	client.Close()
+	if !answerReceived {
+		return fmt.Errorf("timeout waiting for support answer")
+	}
+	return fmt.Errorf("timeout waiting for support connection")
+
+supportConnected:
+	cm.mu.Lock()
+	cm.connections[deviceKey] = conn
+	cm.mu.Unlock()
+	return nil
+}
+
+func (cm *ConnectionManager) AuditSupportAction(deviceID, actionType, status, summary, target string, details map[string]interface{}) error {
+	if !strings.HasPrefix(deviceID, "support:") {
+		return nil
+	}
+	body, err := json.Marshal(map[string]interface{}{
+		"action":         "record-admin-action",
+		"session_id":     strings.TrimPrefix(deviceID, "support:"),
+		"action_type":    actionType,
+		"action_status":  status,
+		"action_summary": summary,
+		"action_target":  target,
+		"action_details": details,
+	})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("POST", cm.cfg.SupabaseURL+"/functions/v1/support-signal", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+cm.auth.GetToken())
+	req.Header.Set("apikey", cm.cfg.SupabaseAnonKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("support audit failed (%d): %s", resp.StatusCode, string(data))
+	}
+	return nil
+}
+
 func forceRelayEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("RD_FORCE_RELAY"))) {
 	case "1", "true", "yes", "y", "on", "relay":
@@ -402,4 +583,54 @@ func fetchICEServers(supabaseURL, anonKey, authToken string) []webrtc.ICEServer 
 		})
 	}
 	return servers
+}
+
+func fetchSupportICEServers(supabaseURL, anonKey, authToken string) ([]webrtc.ICEServer, error) {
+	req, err := http.NewRequest("POST", supabaseURL+"/functions/v1/turn-credentials", strings.NewReader(`{"require_relay":true}`))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+authToken)
+	req.Header.Set("apikey", anonKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("Cloudflare TURN unavailable (%d): %s", resp.StatusCode, string(body))
+	}
+	var result struct {
+		ICEServers []struct {
+			URLs       interface{} `json:"urls"`
+			Username   string      `json:"username"`
+			Credential string      `json:"credential"`
+		} `json:"iceServers"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	servers := make([]webrtc.ICEServer, 0, len(result.ICEServers))
+	for _, item := range result.ICEServers {
+		var urls []string
+		switch value := item.URLs.(type) {
+		case string:
+			urls = []string{value}
+		case []interface{}:
+			for _, raw := range value {
+				if text, ok := raw.(string); ok {
+					urls = append(urls, text)
+				}
+			}
+		}
+		if len(urls) > 0 && item.Username != "" {
+			servers = append(servers, webrtc.ICEServer{URLs: urls, Username: item.Username, Credential: item.Credential})
+		}
+	}
+	if len(servers) == 0 {
+		return nil, fmt.Errorf("Cloudflare TURN response contained no relay server")
+	}
+	return servers, nil
 }

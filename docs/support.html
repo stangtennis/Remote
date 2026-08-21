@@ -230,6 +230,25 @@
         <i class="fa-solid fa-display"></i> Del din skærm
       </button>
 
+      <!-- AI support consent -->
+      <div id="consentSection" style="display: none; text-align: left; margin-top: 1rem;">
+        <p style="margin-bottom: 0.75rem;">En administrator har oprettet en AI-supportsession. Vælg hvad supporten må gøre på denne PC.</p>
+        <p style="font-size: 0.85rem; color: #fbbf24;">Denne webklient kan i øjeblikket kun dele skærm. Mus, filer, terminal og systemhandlinger kræver den native supportklient.</p>
+        <div id="consentScopes" style="display: grid; gap: 0.5rem; margin-bottom: 1rem;">
+          <label><input type="checkbox" data-scope="screen" checked disabled> Se skærmen</label>
+          <label><input type="checkbox" data-scope="input"> Styre mus og tastatur</label>
+          <label><input type="checkbox" data-scope="files"> Læse og ændre filer</label>
+          <label><input type="checkbox" data-scope="terminal"> Køre terminalkommandoer</label>
+          <label><input type="checkbox" data-scope="admin"> System-/administratorhandlinger</label>
+        </div>
+        <button id="consentBtn" class="btn btn-primary" style="width: 100%;" onclick="grantSupportConsent()">
+          Jeg accepterer og fortsætter
+        </button>
+        <button class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem;" onclick="stopSharing()">
+          Afvis
+        </button>
+      </div>
+
       <!-- Connecting spinner -->
       <div id="connectingSpinner" class="connecting-spinner">
         <div class="spinner"></div>

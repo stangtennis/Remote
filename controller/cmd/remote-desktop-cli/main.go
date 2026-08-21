@@ -23,6 +23,12 @@ func main() {
 		cmdList()
 	case "connect":
 		cmdConnect()
+	case "support-connect":
+		cmdSupportConnect()
+	case "support-watch":
+		cmdSupportWatch()
+	case "support-list":
+		cmdSupportList()
 	case "disconnect":
 		cmdDisconnect()
 	case "screenshot":
@@ -64,6 +70,9 @@ func printUsage() {
 Commands:
   list                              List available devices
   connect <device_id>               Connect to a device (starts daemon)
+  support-connect <key|session_id>  Connect AI support to a client PIN session
+  support-watch                     Watch dashboard and auto-connect AI sessions
+  support-list                      List AI clients and their short keys
   disconnect                        Disconnect and stop daemon
   screenshot [-o file.jpg]          Take screenshot and save to file
   click <x> <y> [--right|--double]  Click at coordinates
@@ -194,7 +203,184 @@ func cmdConnect() {
 	fmt.Printf("Connected to %s (%s). Daemon running (PID %d).\n", deviceName, deviceID, pid)
 }
 
+func cmdSupportConnect() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, "Usage: remote-desktop-cli support-connect <support_session_id>")
+		os.Exit(1)
+	}
+	auth, cfg, err := getAuthAndConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	sessionID, err := resolveSupportSessionKey(cfg, auth, os.Args[2])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	controllerID := supportControllerID()
+	if resp, statusErr := sendDaemonRequest(daemonRequest{Cmd: "status"}); statusErr == nil && resp.OK {
+		if current, ok := resp.Data["device_id"].(string); ok && strings.HasPrefix(current, "support:") {
+			currentSessionID := strings.TrimPrefix(current, "support:")
+			if currentSessionID != sessionID {
+				_, _ = updateSupportControllerClaim(cfg, auth, currentSessionID, controllerID, "release-controller")
+			}
+		}
+	}
+	claimed, err := updateSupportControllerClaim(cfg, auth, sessionID, controllerID, "claim-controller")
+	if err != nil || !claimed {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		} else {
+			fmt.Fprintln(os.Stderr, "Error: client is already selected by another Ubuntu controller")
+		}
+		os.Exit(1)
+	}
+	if resp, err := sendDaemonRequest(daemonRequest{Cmd: "status"}); err == nil && resp.OK {
+		if current, ok := resp.Data["device_id"].(string); ok && current == "support:"+sessionID {
+			if connected, ok := resp.Data["connected"].(bool); ok && connected {
+				fmt.Println("Already connected to support session.")
+				return
+			}
+			stopExistingDaemon()
+			time.Sleep(500 * time.Millisecond)
+		}
+		sendDaemonRequest(daemonRequest{Cmd: "disconnect"})
+		time.Sleep(500 * time.Millisecond)
+	}
+	pid, err := startDaemon(cfg, auth, "support:"+sessionID, "AI Support")
+	if err != nil {
+		_, _ = updateSupportControllerClaim(cfg, auth, sessionID, controllerID, "release-controller")
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("AI support connected to session %s (daemon PID %d).\n", sessionID, pid)
+}
+
+func cmdSupportList() {
+	auth, cfg, err := getAuthAndConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	sessions, err := fetchOwnedAISupportSessions(cfg, auth, "in.(pending,active)")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	if len(sessions) == 0 {
+		fmt.Println("No active AI support clients.")
+		return
+	}
+	for _, session := range sessions {
+		fmt.Printf("Key %s  %-7s expires %s  session %s\n",
+			session.PIN, session.Status, session.ExpiresAt.Local().Format("15:04"), session.ID)
+	}
+}
+
+func cmdSupportWatch() {
+	auth, cfg, err := getAuthAndConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Watching dashboard for active AI support sessions...")
+	handled := make(map[string]bool)
+	controllerID := supportControllerID()
+	lookupFailures := 0
+	var nextRetry time.Time
+	for {
+		if time.Now().Before(nextRetry) {
+			time.Sleep(time.Second)
+			continue
+		}
+
+		sessions, lookupErr := fetchActiveSupportSessions(cfg, auth)
+		if lookupErr != nil {
+			lookupFailures++
+			fmt.Fprintf(os.Stderr, "Support watcher: %v\n", lookupErr)
+			if lookupFailures >= 10 {
+				_, _ = sendDaemonRequest(daemonRequest{Cmd: "disconnect"})
+				lookupFailures = 0
+			}
+			nextRetry = time.Now().Add(10 * time.Second)
+			continue
+		}
+		lookupFailures = 0
+
+		connectedSupportID := ""
+		if resp, statusErr := sendDaemonRequest(daemonRequest{Cmd: "status"}); statusErr == nil && resp.OK {
+			if connected, ok := resp.Data["connected"].(bool); ok && connected {
+				if deviceID, ok := resp.Data["device_id"].(string); ok && strings.HasPrefix(deviceID, "support:") {
+					connectedSupportID = strings.TrimPrefix(deviceID, "support:")
+				}
+			}
+		}
+
+		currentIsRequested := false
+		for _, session := range sessions {
+			if session.ID == connectedSupportID {
+				claimed, claimErr := updateSupportControllerClaim(cfg, auth, session.ID, controllerID, "claim-controller")
+				if claimErr != nil || !claimed {
+					if claimErr != nil {
+						fmt.Fprintf(os.Stderr, "Support watcher heartbeat failed: %v\n", claimErr)
+					}
+					break
+				}
+				currentIsRequested = true
+				break
+			}
+		}
+		if connectedSupportID != "" && !currentIsRequested {
+			_, _ = sendDaemonRequest(daemonRequest{Cmd: "disconnect"})
+			_, _ = updateSupportControllerClaim(cfg, auth, connectedSupportID, controllerID, "release-controller")
+			connectedSupportID = ""
+		}
+
+		if connectedSupportID == "" && len(sessions) == 1 {
+			for _, session := range sessions {
+				if handled[session.ID] {
+					delete(handled, session.ID)
+				}
+				if handled[session.ID] || session.ExpiresAt.Before(time.Now()) {
+					continue
+				}
+				fmt.Printf("Dashboard AI session ready: %s\n", session.ID)
+				controllerID := supportControllerID()
+				claimed, claimErr := updateSupportControllerClaim(cfg, auth, session.ID, controllerID, "claim-controller")
+				if claimErr != nil || !claimed {
+					if claimErr != nil {
+						fmt.Fprintf(os.Stderr, "Support watcher claim failed: %v\n", claimErr)
+					}
+					continue
+				}
+				if _, startErr := startDaemon(cfg, auth, "support:"+session.ID, "AI Support"); startErr != nil {
+					fmt.Fprintf(os.Stderr, "Support watcher connect failed: %v\n", startErr)
+					_, _ = updateSupportControllerClaim(cfg, auth, session.ID, controllerID, "release-controller")
+					nextRetry = time.Now().Add(10 * time.Second)
+					break
+				}
+				handled[session.ID] = true
+				fmt.Printf("AI support connected automatically: %s\n", session.ID)
+				break
+			}
+		} else if connectedSupportID == "" && len(sessions) > 1 {
+			fmt.Println("Multiple AI clients are active. Use 'remote-desktop-cli support-list' and 'support-connect <key>'.")
+		}
+
+		time.Sleep(2 * time.Second)
+	}
+}
+
 func cmdDisconnect() {
+	if status, statusErr := sendDaemonRequest(daemonRequest{Cmd: "status"}); statusErr == nil && status.OK {
+		if deviceID, ok := status.Data["device_id"].(string); ok && strings.HasPrefix(deviceID, "support:") {
+			if auth, cfg, authErr := getAuthAndConfig(); authErr == nil {
+				_, _ = updateSupportControllerClaim(cfg, auth, strings.TrimPrefix(deviceID, "support:"), supportControllerID(), "release-controller")
+			}
+		}
+	}
 	resp, err := sendDaemonRequest(daemonRequest{Cmd: "disconnect"})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

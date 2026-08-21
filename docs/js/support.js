@@ -4,11 +4,13 @@
 let supportState = 'INIT';
 let supportSession = null;
 let supportToken = null;
+let supportInviteToken = null;
 let peerConnection = null;
 let mediaStream = null;
 let signalingChannel = null;
 let pollingInterval = null;
 let processedSignalIds = new Set();
+let pendingRemoteIceCandidates = [];
 let sharingStartTime = null;
 let durationInterval = null;
 
@@ -23,6 +25,8 @@ const sessionInfo = document.getElementById('sessionInfo');
 const stopBtn = document.getElementById('stopBtn');
 const connectingSpinner = document.getElementById('connectingSpinner');
 const supportDesc = document.getElementById('supportDesc');
+const consentSection = document.getElementById('consentSection');
+const consentBtn = document.getElementById('consentBtn');
 
 // Step indicators
 const steps = [
@@ -51,6 +55,24 @@ function hideStatus() {
 function setState(newState) {
   supportState = newState;
   debug('Support state:', newState);
+}
+
+async function supportSignalRequest(action, extra = {}) {
+  const auth = supportSession?.support_mode === 'ai'
+    ? { client_grant_token: supportToken }
+    : { token: supportToken };
+  const response = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/support-signal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_CONFIG.anonKey },
+    body: JSON.stringify({ action, ...auth, ...extra }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.error) {
+    const error = new Error(data.error || `Support request failed: ${action}`);
+    error.status = response.status;
+    throw error;
+  }
+  return data;
 }
 
 // Check for token or public mode in URL
@@ -91,7 +113,7 @@ const isPublicMode = new URLSearchParams(window.location.search).has('public');
     }
   } else if (urlToken) {
     // Token provided in URL - validate it
-    supportToken = urlToken;
+    supportInviteToken = urlToken;
     pinSection.style.display = 'none';
     showStatus('Validerer session...', 'info');
     validateToken(urlToken);
@@ -122,7 +144,11 @@ async function validatePin() {
         'Content-Type': 'application/json',
         'apikey': SUPABASE_CONFIG.anonKey,
       },
-      body: JSON.stringify({ action: 'validate', pin }),
+      body: JSON.stringify({
+        action: 'validate',
+        pin,
+        ...(supportInviteToken ? { token: supportInviteToken } : {}),
+      }),
     });
 
     const data = await response.json();
@@ -131,7 +157,7 @@ async function validatePin() {
     }
 
     supportSession = data;
-    supportToken = data.token;
+    supportToken = data.client_grant_token || data.token;
     onSessionValidated();
   } catch (error) {
     showStatus(error.message, 'error');
@@ -155,6 +181,14 @@ async function validateToken(token) {
     }
 
     supportSession = data;
+    if (data.code_required) {
+      pinSection.style.display = 'block';
+      setState('TOKEN_ENTRY');
+      setStep(1);
+      showStatus('Indtast koden fra administratoren for at fortsætte.', 'info');
+      return;
+    }
+    supportToken = data.client_grant_token || data.token;
     onSessionValidated();
   } catch (error) {
     showStatus(error.message, 'error');
@@ -170,9 +204,61 @@ function onSessionValidated() {
   setStep(2);
   pinSection.style.display = 'none';
   hideStatus();
+  if (supportSession?.support_mode === 'ai' && supportSession?.requires_consent) {
+    supportDesc.textContent = 'Koden er godkendt. Vælg tilladelser for AI-support.';
+    consentSection.style.display = 'block';
+    renderConsentScopes(supportSession.requested_scopes || ['screen']);
+    consentBtn?.focus();
+    return;
+  }
   supportDesc.textContent = 'Session bekræftet! Klik for at dele din skærm.';
   shareBtn.style.display = 'inline-flex';
   shareBtn.focus();
+}
+
+function renderConsentScopes(requestedScopes) {
+  document.querySelectorAll('#consentScopes [data-scope]').forEach((input) => {
+    // The browser sharer has no input/file/terminal channel. Those scopes are
+    // reserved for the native support client and must not be presented as active here.
+    const allowed = input.dataset.scope === 'screen' && requestedScopes.includes(input.dataset.scope);
+    input.closest('label').style.display = allowed ? 'block' : 'none';
+    if (!allowed) input.checked = false;
+  });
+}
+
+async function grantSupportConsent() {
+  if (!supportToken || supportSession?.support_mode !== 'ai') return;
+  const scopes = [...document.querySelectorAll('#consentScopes [data-scope]:checked')]
+    .map((input) => input.dataset.scope);
+  if (!scopes.includes('screen')) {
+    showStatus('Skærmadgang skal være accepteret.', 'error');
+    return;
+  }
+
+  consentBtn.disabled = true;
+  try {
+    const response = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/support-signal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_CONFIG.anonKey },
+      body: JSON.stringify({
+        action: 'consent',
+        client_grant_token: supportToken,
+        approved: true,
+        scopes,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || 'Consent blev afvist');
+    supportSession.client_consent_scopes = data.scopes;
+    consentSection.style.display = 'none';
+    supportDesc.textContent = 'Tilladelser godkendt. Klik for at starte support.';
+    shareBtn.style.display = 'inline-flex';
+    shareBtn.focus();
+  } catch (error) {
+    showStatus(error.message, 'error');
+  } finally {
+    consentBtn.disabled = false;
+  }
 }
 
 async function startSharing() {
@@ -217,25 +303,10 @@ async function startSharing() {
     };
 
     // Notify backend that sharer is ready
-    await fetch(`${SUPABASE_CONFIG.url}/functions/v1/support-signal`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_CONFIG.anonKey,
-      },
-      body: JSON.stringify({ action: 'ready', token: supportToken }),
-    });
+    await supportSignalRequest('ready');
 
     // Fetch TURN credentials
-    const turnResponse = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/support-signal`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_CONFIG.anonKey,
-      },
-      body: JSON.stringify({ action: 'turn', token: supportToken }),
-    });
-    const turnData = await turnResponse.json();
+    const turnData = await supportSignalRequest('turn');
 
     setState('SHARING');
     setStep(3);
@@ -248,6 +319,14 @@ async function startSharing() {
     // Start signaling - listen for offer from dashboard
     startSignaling(turnData);
   } catch (error) {
+    if (mediaStream) {
+      mediaStream.getTracks().forEach((track) => track.stop());
+      mediaStream = null;
+      localPreview.srcObject = null;
+    }
+    if (supportToken) {
+      try { await supportSignalRequest('end'); } catch (endError) { console.error('Failed to end support session:', endError); }
+    }
     connectingSpinner.classList.remove('visible');
     if (error.name === 'NotAllowedError') {
       showStatus('Skærmdeling blev afvist. Prøv igen.', 'error');
@@ -261,46 +340,39 @@ async function startSharing() {
   }
 }
 
-function startSignaling(turnData) {
-  const sessionId = supportSession.session_id;
+window.addEventListener('pagehide', () => {
+  if (!supportToken || !supportSession) return;
+  const auth = supportSession.support_mode === 'ai'
+    ? { client_grant_token: supportToken }
+    : { token: supportToken };
+  const body = JSON.stringify({ action: 'end', ...auth });
+  navigator.sendBeacon(
+    `${SUPABASE_CONFIG.url}/functions/v1/support-signal`,
+    new Blob([body], { type: 'text/plain;charset=UTF-8' }),
+  );
+});
 
+function startSignaling(turnData) {
   // Store turn data for when we create the peer connection
   window._turnData = turnData;
 
-  // Subscribe to signaling via Realtime
-  signalingChannel = supabase
-    .channel(`support_${sessionId}`)
-    .on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'session_signaling',
-      filter: `session_id=eq.${sessionId}`,
-    }, async (payload) => {
-      debug('Realtime signal received:', payload.new.msg_type);
-      await handleSignal(payload.new);
-    })
-    .subscribe();
-
-  // Start polling fallback
+  // Private support signaling goes through the Edge Function so the browser
+  // never needs anonymous RLS access to session_signaling.
   pollingInterval = setInterval(async () => {
     try {
-      const { data, error } = await supabase
-        .from('session_signaling')
-        .select('*')
-        .eq('session_id', sessionId)
-        .eq('from_side', 'dashboard')
-        .order('created_at', { ascending: true });
+      const { signals } = await supportSignalRequest('signal-read');
 
-      if (error || !data) return;
-
-      for (const signal of data) {
+      for (const signal of signals || []) {
         if (processedSignalIds.has(signal.id)) continue;
-        processedSignalIds.add(signal.id);
         debug('Polled signal:', signal.msg_type);
         await handleSignal(signal);
       }
     } catch (err) {
       console.error('Polling error:', err);
+      if ([400, 401, 403, 404].includes(err.status) || String(err.message).includes('no longer active')) {
+        await stopSharing();
+        return;
+      }
     }
   }, 500);
 }
@@ -337,7 +409,6 @@ async function handleSignal(signal) {
 }
 
 async function handleOffer(payload) {
-  const sessionId = supportSession.session_id;
   const turnData = window._turnData;
 
   // Check for relay mode
@@ -374,18 +445,14 @@ async function handleOffer(payload) {
         pendingCandidates.push(event.candidate);
         return;
       }
-      await supabase
-        .from('session_signaling')
-        .insert({
-          session_id: sessionId,
-          from_side: 'support',
-          msg_type: 'ice',
-          payload: {
-            candidate: event.candidate.candidate,
-            sdpMid: event.candidate.sdpMid || '0',
-            sdpMLineIndex: event.candidate.sdpMLineIndex || 0,
-          },
-        });
+      await supportSignalRequest('signal-write', {
+        signal_type: 'ice',
+        signal_payload: {
+          candidate: event.candidate.candidate,
+          sdpMid: event.candidate.sdpMid || '0',
+          sdpMLineIndex: event.candidate.sdpMLineIndex || 0,
+        },
+      });
     }
   };
 
@@ -433,23 +500,23 @@ async function handleOffer(payload) {
   await peerConnection.setRemoteDescription(offer);
   debug('Remote description set (dashboard offer)');
 
+  for (const candidate of pendingRemoteIceCandidates.splice(0)) {
+    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+  }
+
   // Create answer
   const answer = await peerConnection.createAnswer();
   await peerConnection.setLocalDescription(answer);
   debug('Sending answer to dashboard');
 
   // Send answer via signaling
-  const { error: answerError } = await supabase
-    .from('session_signaling')
-    .insert({
-      session_id: sessionId,
-      from_side: 'support',
-      msg_type: 'answer',
-      payload: { type: 'answer', sdp: answer.sdp },
+  try {
+    await supportSignalRequest('signal-write', {
+      signal_type: 'answer',
+      signal_payload: { type: 'answer', sdp: answer.sdp },
     });
-
-  if (answerError) {
-    console.error('Failed to send answer:', answerError);
+  } catch (error) {
+    console.error('Failed to send answer:', error);
     return;
   }
 
@@ -458,18 +525,14 @@ async function handleOffer(payload) {
   if (pendingCandidates.length > 0) {
     debug(`Flushing ${pendingCandidates.length} buffered ICE candidates`);
     for (const candidate of pendingCandidates) {
-      await supabase
-        .from('session_signaling')
-        .insert({
-          session_id: sessionId,
-          from_side: 'support',
-          msg_type: 'ice',
-          payload: {
-            candidate: candidate.candidate,
-            sdpMid: candidate.sdpMid || '0',
-            sdpMLineIndex: candidate.sdpMLineIndex || 0,
-          },
-        });
+      await supportSignalRequest('signal-write', {
+        signal_type: 'ice',
+        signal_payload: {
+          candidate: candidate.candidate,
+          sdpMid: candidate.sdpMid || '0',
+          sdpMLineIndex: candidate.sdpMLineIndex || 0,
+        },
+      });
     }
     pendingCandidates = [];
   }
@@ -478,11 +541,6 @@ async function handleOffer(payload) {
 }
 
 async function handleIceCandidate(payload) {
-  if (!peerConnection) {
-    debug('No peer connection, ignoring ICE candidate');
-    return;
-  }
-
   let iceCandidate;
   if (payload.candidate && typeof payload.candidate === 'object') {
     iceCandidate = payload.candidate;
@@ -491,8 +549,14 @@ async function handleIceCandidate(payload) {
   }
 
   if (iceCandidate && iceCandidate.candidate) {
+    if (!peerConnection) {
+      debug('Buffering ICE candidate until offer creates peer connection');
+      pendingRemoteIceCandidates.push(iceCandidate);
+      return;
+    }
     if (!peerConnection.remoteDescription) {
       debug('Buffering ICE candidate (remote description not set)');
+      pendingRemoteIceCandidates.push(iceCandidate);
       return;
     }
     await peerConnection.addIceCandidate(
@@ -513,6 +577,43 @@ function updateDuration() {
   const secs = elapsed % 60;
   const el = document.getElementById('sharingDuration');
   if (el) el.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+async function terminateSupportRemotely() {
+  if (!supportSession || !supportToken) return true;
+  const auth = supportSession.support_mode === 'ai'
+    ? { client_grant_token: supportToken }
+    : { token: supportToken };
+  const endBody = JSON.stringify({ action: 'end', ...auth });
+
+  try {
+    await supportSignalRequest('signal-write', {
+      signal_type: 'bye',
+      signal_payload: { reason: 'sharer_stopped' },
+    });
+  } catch (error) {
+    console.warn('Support bye signal failed; retrying end:', error);
+  }
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/support-signal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_CONFIG.anonKey },
+        body: endBody,
+      });
+      if (response.ok) return true;
+    } catch (error) {
+      console.warn('Support end attempt failed:', error);
+    }
+    await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+  }
+
+  navigator.sendBeacon(
+    `${SUPABASE_CONFIG.url}/functions/v1/support-signal`,
+    new Blob([endBody], { type: 'text/plain;charset=UTF-8' }),
+  );
+  return false;
 }
 
 async function stopSharing() {
@@ -548,26 +649,21 @@ async function stopSharing() {
     signalingChannel = null;
   }
 
-  // Send bye signal
-  if (supportSession) {
-    try {
-      await supabase
-        .from('session_signaling')
-        .insert({
-          session_id: supportSession.session_id,
-          from_side: 'support',
-          msg_type: 'bye',
-          payload: { reason: 'sharer_stopped' },
-        });
-    } catch (e) {}
-  }
+  const endedRemotely = await terminateSupportRemotely();
 
   // Update UI
   previewSection.classList.remove('visible');
   stopBtn.classList.remove('visible');
   sessionInfo.style.display = 'none';
   localPreview.srcObject = null;
+  if (consentSection) consentSection.style.display = 'none';
   supportDesc.textContent = 'Skærmdelingen er afsluttet';
-  showStatus('Skærmdelingen er stoppet.', 'info');
+  showStatus(endedRemotely ? 'Skærmdelingen er stoppet.' : 'Skærmdelingen er stoppet lokalt; serveren prøver stadig at afslutte sessionen.', 'info');
+  supportSession = null;
+  supportToken = null;
+  supportInviteToken = null;
+  window._turnData = null;
+  processedSignalIds.clear();
+  pendingRemoteIceCandidates = [];
   setStep(1);
 }

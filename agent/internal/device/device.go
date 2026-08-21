@@ -1,6 +1,8 @@
 package device
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -104,6 +106,27 @@ func New(cfg *config.Config, tokenProvider *auth.TokenProvider) (*Device, error)
 	dev.RAMBytes = getRAMBytes()
 
 	return dev, nil
+}
+
+// NewEphemeral creates a temporary device identity for portable support. It
+// deliberately does not read or write the installed agent's device files.
+func NewEphemeral(cfg *config.Config) (*Device, error) {
+	var randomID [16]byte
+	if _, err := rand.Read(randomID[:]); err != nil {
+		return nil, fmt.Errorf("failed to create temporary device id: %w", err)
+	}
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "Windows PC"
+	}
+	return &Device{
+		ID:       "support-" + hex.EncodeToString(randomID[:]),
+		Name:     hostname,
+		Platform: runtime.GOOS,
+		Arch:     runtime.GOARCH,
+		CPUCount: runtime.NumCPU(),
+		cfg:      cfg,
+	}, nil
 }
 
 func (d *Device) Register() error {

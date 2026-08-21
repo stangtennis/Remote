@@ -385,6 +385,15 @@ func (c *Client) SetAnswer(answerJSON string) error {
 	return nil
 }
 
+// AddRemoteICECandidate adds a trickled candidate received from a support
+// session after the SDP answer has been applied.
+func (c *Client) AddRemoteICECandidate(candidate webrtc.ICECandidateInit) error {
+	if c.peerConnection == nil {
+		return fmt.Errorf("peer connection not initialized")
+	}
+	return c.peerConnection.AddICECandidate(candidate)
+}
+
 // SendInput sends mouse/keyboard input to the agent via control channel (low latency)
 func (c *Client) SendInput(inputJSON string) error {
 	// Prefer control channel for low-latency input

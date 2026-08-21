@@ -2,9 +2,11 @@ package webrtc
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	pionwebrtc "github.com/pion/webrtc/v3"
 	"github.com/stangtennis/remote-agent/internal/process"
@@ -18,6 +20,10 @@ func (m *Manager) setupProcessChannelHandlers(dc *pionwebrtc.DataChannel) {
 	})
 
 	dc.OnMessage(func(msg pionwebrtc.DataChannelMessage) {
+		if m.supportIsActive() && !m.supportAllows("process") {
+			sendProcessError(dc, "process scope denied")
+			return
+		}
 		var message map[string]interface{}
 		if err := json.Unmarshal(msg.Data, &message); err != nil {
 			log.Printf("⚠️ Invalid process message: %v", err)
@@ -25,25 +31,45 @@ func (m *Manager) setupProcessChannelHandlers(dc *pionwebrtc.DataChannel) {
 		}
 
 		op, _ := message["op"].(string)
+		actionType := "PROCESS_" + strings.ToUpper(op)
+		var opErr error
+		if m.supportIsActive() {
+			if err := m.recordSupportAction(actionType, "started", "Started process operation", op, map[string]interface{}{}); err != nil {
+				sendProcessError(dc, err.Error())
+				return
+			}
+		}
 		switch op {
 		case "ps":
-			m.handleProcessList(dc)
+			opErr = m.handleProcessList(dc)
 		case "kill":
+			if m.supportIsActive() && !m.supportAllows("admin") {
+				sendProcessError(dc, "admin scope required to kill processes")
+				return
+			}
 			pidVal, _ := message["pid"].(float64) // JSON numbers are float64
-			m.handleProcessKill(dc, int(pidVal))
+			opErr = m.handleProcessKill(dc, int(pidVal))
 		case "sysinfo":
-			m.handleSysinfo(dc)
+			opErr = m.handleSysinfo(dc)
 		default:
-			sendProcessError(dc, "unknown op: "+op)
+			opErr = fmt.Errorf("unknown op: %s", op)
+			sendProcessError(dc, opErr.Error())
+		}
+		if m.supportIsActive() {
+			status := "succeeded"
+			if opErr != nil {
+				status = "failed"
+			}
+			_ = m.recordSupportAction(actionType, status, "Finished process operation", op, map[string]interface{}{})
 		}
 	})
 }
 
-func (m *Manager) handleProcessList(dc *pionwebrtc.DataChannel) {
+func (m *Manager) handleProcessList(dc *pionwebrtc.DataChannel) error {
 	procs, err := process.List()
 	if err != nil {
 		sendProcessError(dc, err.Error())
-		return
+		return err
 	}
 
 	resp := map[string]interface{}{
@@ -55,22 +81,23 @@ func (m *Manager) handleProcessList(dc *pionwebrtc.DataChannel) {
 	data, err := json.Marshal(resp)
 	if err != nil {
 		sendProcessError(dc, err.Error())
-		return
+		return err
 	}
 	dc.Send(data)
+	return nil
 }
 
-func (m *Manager) handleProcessKill(dc *pionwebrtc.DataChannel, pid int) {
+func (m *Manager) handleProcessKill(dc *pionwebrtc.DataChannel, pid int) error {
 	if pid <= 0 {
 		sendProcessError(dc, "invalid PID")
-		return
+		return fmt.Errorf("invalid PID")
 	}
 
 	// Refuse to kill the agent itself to prevent a connected client from
 	// remotely disabling the agent.
 	if pid == os.Getpid() {
 		sendProcessError(dc, "refusing to kill agent process")
-		return
+		return fmt.Errorf("refusing to kill agent process")
 	}
 
 	log.Printf("⚙️ Killing process PID %d", pid)
@@ -87,13 +114,14 @@ func (m *Manager) handleProcessKill(dc *pionwebrtc.DataChannel, pid int) {
 
 	data, _ := json.Marshal(resp)
 	dc.Send(data)
+	return err
 }
 
-func (m *Manager) handleSysinfo(dc *pionwebrtc.DataChannel) {
+func (m *Manager) handleSysinfo(dc *pionwebrtc.DataChannel) error {
 	info, err := sysinfo.Collect()
 	if err != nil {
 		sendProcessError(dc, err.Error())
-		return
+		return err
 	}
 
 	// Inline assemble so we can include the literal op tag.
@@ -112,9 +140,10 @@ func (m *Manager) handleSysinfo(dc *pionwebrtc.DataChannel) {
 	data, err := json.Marshal(resp)
 	if err != nil {
 		sendProcessError(dc, err.Error())
-		return
+		return err
 	}
 	dc.Send(data)
+	return nil
 }
 
 func sendProcessError(dc *pionwebrtc.DataChannel, msg string) {

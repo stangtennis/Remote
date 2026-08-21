@@ -14,13 +14,13 @@ Du skal udføre en fuld build+deploy cycle for version `$ARGUMENTS`.
 
 ## Trin (udfør i rækkefølge)
 
-### 1. Byg alle 3 exe-filer
+### 1. Byg alle Windows-filer og supportklienten
 Version injiceres automatisk via `-ldflags -X` i build-scriptet — ingen source-code ændringer nødvendige.
 Kør build-scriptet fra projekt-root:
 ```bash
 ./build-local.sh $ARGUMENTS
 ```
-Timeout: 10 minutter. Vis resultatet og bekræft alle 3 filer er bygget.
+Timeout: 10 minutter. Vis resultatet og bekræft controller, agent GUI, agent console, portable support og installere er bygget.
 
 ### 2. Deploy til Caddy
 Kopiér builds til Caddy downloads-mappen:
@@ -29,11 +29,13 @@ Kopiér builds til Caddy downloads-mappen:
 cp builds/remote-agent-$ARGUMENTS.exe ~/caddy/downloads/remote-agent.exe
 cp builds/remote-agent-console-$ARGUMENTS.exe ~/caddy/downloads/remote-agent-console.exe
 cp builds/controller-$ARGUMENTS.exe ~/caddy/downloads/controller.exe
+cp builds/remote-support-$ARGUMENTS.exe ~/caddy/downloads/remote-support.exe
 
 # Behold også versionerede kopier
 cp builds/remote-agent-$ARGUMENTS.exe ~/caddy/downloads/
 cp builds/remote-agent-console-$ARGUMENTS.exe ~/caddy/downloads/
 cp builds/controller-$ARGUMENTS.exe ~/caddy/downloads/
+cp builds/remote-support-$ARGUMENTS.exe ~/caddy/downloads/
 
 # Deploy installere (generiske navne til download-links)
 cp builds/RemoteDesktopAgent-$ARGUMENTS-Setup.exe ~/caddy/downloads/RemoteDesktopAgent-Setup.exe
@@ -49,7 +51,8 @@ cat > ~/caddy/downloads/version.json << EOF
   "agent_version": "$ARGUMENTS",
   "controller_version": "$ARGUMENTS",
   "agent_url": "https://updates.hawkeye123.dk/remote-agent.exe",
-  "controller_url": "https://updates.hawkeye123.dk/controller.exe"
+  "controller_url": "https://updates.hawkeye123.dk/controller.exe",
+  "support_url": "https://updates.hawkeye123.dk/remote-support.exe"
 }
 EOF
 ```

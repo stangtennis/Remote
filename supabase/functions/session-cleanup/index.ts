@@ -139,21 +139,33 @@ serve(async (req) => {
       console.error('Error expiring support sessions:', supportExpireError)
     } else {
       console.log(`✅ Expired ${expiredSupportSessions?.length || 0} old support sessions`)
+      for (const expired of expiredSupportSessions || []) {
+        await supabase.from('session_signaling').insert({
+          session_id: expired.id,
+          from_side: 'dashboard',
+          msg_type: 'bye',
+          payload: { reason: 'support_session_expired' },
+        })
+      }
     }
 
-    // 6. Delete old support sessions (older than 24 hours)
+    // 6. Retain support history for 90 days, then remove audit rows before
+    // sessions because the audit foreign key intentionally prevents cascade.
+    const supportAuditRetention = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+    const { data: deletedSupportAudit, error: supportAuditDeleteError } = await supabase
+      .from('support_action_audit')
+      .delete()
+      .lt('created_at', supportAuditRetention.toISOString())
+      .select('id')
+    if (supportAuditDeleteError) console.error('Error deleting old support audit:', supportAuditDeleteError)
+
     const { data: deletedSupportSessions, error: supportDeleteError } = await supabase
       .from('support_sessions')
       .delete()
       .in('status', ['expired', 'ended'])
-      .lt('created_at', twentyFourHoursAgo.toISOString())
+      .lt('created_at', supportAuditRetention.toISOString())
       .select('id')
-
-    if (supportDeleteError) {
-      console.error('Error deleting old support sessions:', supportDeleteError)
-    } else {
-      console.log(`✅ Deleted ${deletedSupportSessions?.length || 0} old support sessions`)
-    }
+    if (supportDeleteError) console.error('Error deleting old support sessions:', supportDeleteError)
 
     const summary = {
       timestamp: now.toISOString(),
@@ -161,6 +173,7 @@ serve(async (req) => {
       sessions_expired: expiredSessions?.length || 0,
       sessions_deleted: deletedSessions?.length || 0,
       support_sessions_expired: expiredSupportSessions?.length || 0,
+      support_audit_deleted: deletedSupportAudit?.length || 0,
       support_sessions_deleted: deletedSupportSessions?.length || 0,
       devices_offline: offlineDevices?.length || 0
     }

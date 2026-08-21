@@ -8,6 +8,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -128,6 +131,7 @@ func supabaseSignIn(supabaseURL, anonKey, email, password string) (*authInfo, er
 
 // getAuthAndConfig loads config and authenticates from env vars
 func getAuthAndConfig() (*authInfo, *config.Config, error) {
+	loadRemoteCredentials()
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load config: %w", err)
@@ -136,7 +140,7 @@ func getAuthAndConfig() (*authInfo, *config.Config, error) {
 	email := os.Getenv("RD_EMAIL")
 	password := os.Getenv("RD_PASSWORD")
 	if email == "" || password == "" {
-		return nil, nil, fmt.Errorf("RD_EMAIL and RD_PASSWORD environment variables required")
+		return nil, nil, fmt.Errorf("RD_EMAIL/RD_PASSWORD or ~/.config/remote-desktop/credentials.env required")
 	}
 
 	auth, err := supabaseSignIn(cfg.SupabaseURL, cfg.SupabaseAnonKey, email, password)
@@ -145,4 +149,42 @@ func getAuthAndConfig() (*authInfo, *config.Config, error) {
 	}
 
 	return auth, cfg, nil
+}
+
+// loadRemoteCredentials lets the Ubuntu/OpenCode launcher use a mode-600
+// credential file instead of putting the password in shell history.
+func loadRemoteCredentials() {
+	if os.Getenv("RD_EMAIL") != "" && os.Getenv("RD_PASSWORD") != "" {
+		return
+	}
+	path := os.Getenv("RD_CREDENTIALS_FILE")
+	if path == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return
+		}
+		path = filepath.Join(home, ".config", "remote-desktop", "credentials.env")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	if runtime.GOOS != "windows" {
+		if info, statErr := os.Stat(path); statErr != nil || info.Mode().Perm()&0o077 != 0 {
+			return
+		}
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 || (parts[0] != "RD_EMAIL" && parts[0] != "RD_PASSWORD") {
+			continue
+		}
+		if os.Getenv(parts[0]) == "" {
+			os.Setenv(parts[0], strings.Trim(strings.TrimSpace(parts[1]), "\"'"))
+		}
+	}
 }

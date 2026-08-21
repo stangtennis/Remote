@@ -3,9 +3,12 @@
 
 let supportViewerPC = null;
 let supportSignalingChannel = null;
+let supportControllerChannel = null;
+let supportControllerPollInterval = null;
 let supportPollingInterval = null;
 let supportProcessedIds = new Set();
 let supportPendingIce = [];
+let supportReadyHandled = false;
 let currentSupportSession = null;
 let supportInPreview = false;
 
@@ -21,13 +24,21 @@ async function createSupportSession() {
   }
 
   try {
+    const modeSelect = document.getElementById('supportMode');
+    const supportMode = modeSelect?.value === 'screen' ? 'screen' : 'ai';
+    const requestedScopes = [...document.querySelectorAll('[data-support-scope]:checked')]
+      .map((input) => input.dataset.supportScope);
+
     const response = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/create-support-session`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${session.access_token}`,
         'Content-Type': 'application/json',
       },
-      body: '{}',
+      body: JSON.stringify({
+        support_mode: supportMode,
+        requested_scopes: supportMode === 'ai' ? requestedScopes : ['screen'],
+      }),
     });
 
     const data = await response.json();
@@ -53,12 +64,25 @@ function showSupportModal() {
   if (modal) {
     modal.style.display = 'flex';
     showSupportStep('create');
+    const modeSelect = document.getElementById('supportMode');
+    const scopes = document.getElementById('aiSupportScopes');
+    if (modeSelect && !modeSelect.dataset.bound) {
+      modeSelect.dataset.bound = 'true';
+      modeSelect.addEventListener('change', () => {
+        if (scopes) scopes.style.display = modeSelect.value === 'ai' ? 'block' : 'none';
+      });
+    }
+    if (modeSelect && scopes) scopes.style.display = modeSelect.value === 'ai' ? 'block' : 'none';
     loadPublicSupportState();
   }
 }
 
 function closeSupportModal() {
   const modal = document.getElementById('supportModal');
+  if (currentSupportSession && !supportInPreview) {
+    endSupportSession();
+    return;
+  }
   if (modal) modal.style.display = 'none';
   if (!supportInPreview) {
     cleanupSupportViewer();
@@ -91,14 +115,103 @@ async function onCreateSupportSession() {
   showSupportStep('share');
   document.getElementById('supportPin').textContent = session.pin;
   document.getElementById('supportLink').value = session.share_url;
+  const sessionIdEl = document.getElementById('supportSessionId');
+  if (sessionIdEl) sessionIdEl.textContent = session.session_id;
+  const aiRevokeBtn = document.getElementById('supportAiRevokeBtn');
+  if (aiRevokeBtn) aiRevokeBtn.style.display = session.support_mode === 'ai' ? 'block' : 'none';
+  const ubuntuBtn = document.getElementById('supportUbuntuConnectBtn');
+  if (ubuntuBtn) ubuntuBtn.style.display = session.support_mode === 'ai' ? 'block' : 'none';
 
   // Calculate expiry time
   const expiresAt = new Date(session.expires_at);
   document.getElementById('supportExpiry').textContent =
     `Udløber kl. ${expiresAt.toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })}`;
 
-  // Subscribe for sharer ready signal
+  if (session.support_mode === 'ai') {
+    watchUbuntuController(session.session_id);
+    document.getElementById('supportShareStatus').textContent =
+      'AI-session klar. Klik "Forbind Ubuntu AI", når klienten har accepteret PIN og scopes.';
+    return;
+  }
+
+  // Browser screen-share sessions use the dashboard viewer.
   waitForSharerReady(session.session_id);
+}
+
+async function requestUbuntuAI() {
+  const sessionId = currentSupportSession?.session_id;
+  const button = document.getElementById('supportUbuntuConnectBtn');
+  const status = document.getElementById('supportShareStatus');
+  if (!sessionId) return;
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Forbinder Ubuntu AI...';
+  }
+
+  const { data: authData } = await supabase.auth.getSession();
+  const authSession = authData?.session;
+  if (!authSession) {
+    if (status) status.textContent = 'Du skal være logget ind for at forbinde Ubuntu AI.';
+    return;
+  }
+  const response = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/support-signal`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_CONFIG.anonKey,
+      'Authorization': `Bearer ${authSession.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'request-controller', session_id: sessionId }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result.error) {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Forbind Ubuntu AI';
+    }
+    if (status) status.textContent = `Kunne ikke vælge Ubuntu AI-target: ${result.error || response.status}`;
+    return;
+  }
+  if (status) status.textContent = 'Ubuntu AI er valgt. Venter på forbindelse fra Ubuntu...';
+}
+
+function watchUbuntuController(sessionId) {
+  if (supportControllerChannel) supabase.removeChannel(supportControllerChannel);
+  if (supportControllerPollInterval) clearInterval(supportControllerPollInterval);
+  const applyControllerState = (session) => {
+    const status = document.getElementById('supportShareStatus');
+    const button = document.getElementById('supportUbuntuConnectBtn');
+    if (!session) return;
+    if (session.controller_claimed_by) {
+      if (status) status.textContent = 'Ubuntu AI er forbundet til denne client.';
+      if (button) {
+        button.disabled = true;
+        button.textContent = 'Ubuntu AI forbundet';
+      }
+    } else if (session.status === 'ended' || session.status === 'expired') {
+      if (status) status.textContent = 'Supportsessionen er afsluttet.';
+    }
+  };
+  const refreshControllerState = async () => {
+    const { data } = await supabase
+      .from('support_sessions')
+      .select('status, controller_requested, controller_claimed_by')
+      .eq('id', sessionId)
+      .maybeSingle();
+    applyControllerState(data);
+  };
+  supportControllerChannel = supabase
+    .channel(`support-controller-${sessionId}`)
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'support_sessions',
+      filter: `id=eq.${sessionId}`,
+    }, (payload) => applyControllerState(payload.new))
+    .subscribe();
+  refreshControllerState();
+  supportControllerPollInterval = setInterval(refreshControllerState, 3000);
 }
 
 function copySupportLink() {
@@ -120,6 +233,7 @@ function copySupportLink() {
 
 function waitForSharerReady(sessionId) {
   const statusEl = document.getElementById('supportShareStatus');
+  supportReadyHandled = false;
   if (statusEl) statusEl.textContent = 'Venter på at personen deler sin skærm...';
 
   // Subscribe to session_signaling for ready signal from support
@@ -133,6 +247,8 @@ function waitForSharerReady(sessionId) {
     }, async (payload) => {
       const signal = payload.new;
       if (signal.from_side === 'support' && signal.msg_type === 'answer' && signal.payload?.type === 'ready') {
+        if (supportReadyHandled) return;
+        supportReadyHandled = true;
         debug('Sharer is ready!');
         if (statusEl) statusEl.textContent = 'Personen er klar! Starter forbindelse...';
         connectToSupport(sessionId);
@@ -156,6 +272,8 @@ function waitForSharerReady(sessionId) {
       supportProcessedIds.add(signal.id);
 
       if (signal.msg_type === 'answer' && signal.payload?.type === 'ready') {
+        if (supportReadyHandled) continue;
+        supportReadyHandled = true;
         debug('Polled: Sharer is ready!');
         if (statusEl) statusEl.textContent = 'Personen er klar! Starter forbindelse...';
         connectToSupport(sessionId);
@@ -181,6 +299,7 @@ async function connectToSupport(sessionId) {
   try {
     // Fetch TURN credentials
     const { data: { session: authSession } } = await supabase.auth.getSession();
+    const requireRelay = currentSupportSession?.support_mode === 'ai';
     let iceServers = [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
@@ -193,16 +312,19 @@ async function connectToSupport(sessionId) {
           'Authorization': `Bearer ${authSession.access_token}`,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ require_relay: requireRelay }),
       });
+      if (!turnResp.ok && requireRelay) throw new Error('Cloudflare TURN relay unavailable');
       if (turnResp.ok) {
         const turnData = await turnResp.json();
         iceServers = turnData.iceServers;
       }
     } catch (e) {
+      if (requireRelay) throw e;
       console.warn('Failed to fetch TURN credentials:', e);
     }
 
-    const forceRelay = new URLSearchParams(window.location.search).get('relay') === 'true';
+    const forceRelay = requireRelay || new URLSearchParams(window.location.search).get('relay') === 'true';
     const configuration = {
       iceServers,
       ...(forceRelay && { iceTransportPolicy: 'relay' }),
@@ -259,8 +381,9 @@ async function connectToSupport(sessionId) {
         case 'disconnected':
         case 'failed':
           if (statusEl) statusEl.textContent = 'Afbrudt';
-          // Auto-cleanup from preview
-          cleanupSupportViewer();
+          // Revoke server-side before local cleanup so the sharer also stops.
+          if (currentSupportSession) void endSupportSession();
+          else cleanupSupportViewer();
           break;
       }
     };
@@ -626,6 +749,15 @@ function cleanupSupportViewer() {
     supportSignalingChannel = null;
   }
 
+  if (supportControllerChannel) {
+    supabase.removeChannel(supportControllerChannel);
+    supportControllerChannel = null;
+  }
+  if (supportControllerPollInterval) {
+    clearInterval(supportControllerPollInterval);
+    supportControllerPollInterval = null;
+  }
+
   if (supportViewerPC) {
     try { supportViewerPC.close(); } catch (e) {}
     supportViewerPC = null;
@@ -636,19 +768,78 @@ function cleanupSupportViewer() {
   currentSupportSession = null;
 }
 
-function endSupportSession() {
-  if (currentSupportSession) {
-    // Send bye signal
-    supabase.from('session_signaling').insert({
-      session_id: currentSupportSession.session_id,
-      from_side: 'dashboard',
-      msg_type: 'bye',
-      payload: { reason: 'viewer_closed' },
-    });
-  }
-  cleanupSupportViewer(); // includes removeSupportFromPreview
+async function endSupportSession() {
+  const sessionId = currentSupportSession?.session_id;
   const modal = document.getElementById('supportModal');
-  if (modal) modal.style.display = 'none';
+  if (!sessionId) {
+    cleanupSupportViewer();
+    if (modal) modal.style.display = 'none';
+    return;
+  }
+
+  try {
+    const { data: { session: authSession } } = await supabase.auth.getSession();
+    if (!authSession) throw new Error('Administrator session expired');
+    const revokeResponse = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/support-signal`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${authSession.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'revoke',
+        session_id: sessionId,
+        reason: 'Ended by administrator',
+      }),
+    });
+    if (!revokeResponse.ok) throw new Error(`Revoke failed (${revokeResponse.status})`);
+  } catch (error) {
+    console.error('Failed to revoke support session:', error);
+    const statusEl = document.getElementById('supportShareStatus') || document.getElementById('supportViewerStatus');
+    if (statusEl) statusEl.textContent = `Kunne ikke afslutte sikkert: ${error.message}`;
+    const revokeButton = document.getElementById('supportAiRevokeBtn');
+    if (revokeButton) {
+      revokeButton.disabled = false;
+      revokeButton.textContent = 'Prøv at afslutte igen';
+    }
+    return;
+  }
+
+  cleanupSupportViewer(); // includes removeSupportFromPreview
+  const aiRevokeBtn = document.getElementById('supportAiRevokeBtn');
+  if (aiRevokeBtn) aiRevokeBtn.style.display = 'none';
+  if (modal) modal.style.display = 'flex';
+  showSupportStep('audit');
+  await loadSupportAudit(sessionId);
+}
+
+async function loadSupportAudit(sessionId) {
+  const list = document.getElementById('supportAuditList');
+  if (!list) return;
+  list.textContent = 'Henter supportoversigt...';
+
+  const { data, error } = await supabase
+    .from('support_action_audit')
+    .select('created_at, actor_type, action_type, status, summary, target, details, completed_at, verified')
+    .eq('support_session_id', sessionId)
+    .order('created_at', { ascending: true });
+  if (error) {
+    list.textContent = `Kunne ikke hente oversigten: ${error.message}`;
+    return;
+  }
+  if (!data?.length) {
+    list.textContent = 'Der blev ikke registreret nogen handlinger.';
+    return;
+  }
+
+  list.replaceChildren(...data.map((entry) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'padding: 0.65rem 0; border-bottom: 1px solid var(--border);';
+    const time = new Date(entry.created_at).toLocaleString('da-DK');
+    const verification = entry.verified ? 'verified' : 'reported';
+    row.textContent = `${time} | ${entry.actor_type} | ${entry.action_type} | ${entry.status} | ${verification} | ${entry.summary}`;
+    return row;
+  }));
 }
 
 // ============================================================================
@@ -690,7 +881,7 @@ function startPublicSupportListener() {
       table: 'support_sessions',
       filter: 'is_public=eq.true',
     }, (payload) => {
-      if (payload.new.status === 'active' && payload.old.status === 'pending') {
+      if (payload.new.status === 'active' && !currentSupportSession) {
         debug('Public support session became active:', payload.new.id);
         handleIncomingPublicSession(payload.new);
       }

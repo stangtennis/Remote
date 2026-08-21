@@ -2,7 +2,7 @@
 <html lang="da">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://supabase.hawkeye123.dk wss://supabase.hawkeye123.dk; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://supabase.hawkeye123.dk wss://supabase.hawkeye123.dk https://updates.hawkeye123.dk; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fjernskrivebord - Kontrolpanel</title>
   <meta name="referrer" content="strict-origin-when-cross-origin">
@@ -204,32 +204,46 @@
             <a href="#" id="agentRunOnceBtn" class="btn btn-secondary" style="text-decoration: none; text-align: center;">
               <i class="fas fa-play"></i> Quick Connect
             </a>
+            <a href="#" id="supportClientDownloadBtn" class="btn btn-secondary" style="text-decoration: none; text-align: center;">
+              <i class="fas fa-life-ring"></i> AI Supportklient
+            </a>
             <a href="agent.html" class="btn btn-secondary" style="text-decoration: none; text-align: center;">
               <i class="fas fa-globe"></i> Web Agent
             </a>
             <!-- Controller link added dynamically for admins -->
           </div>
           <p id="downloadsDescription" style="margin-top: 0.5rem; font-size: 0.875rem; color: #888; text-align: center;">
-            Agent Installer: permanent installation med service + tray • Quick Connect: kør én gang uden installation
+             Agent Installer: permanent installation med service + tray • Quick Connect: kør én gang uden installation • AI Supportklient: midlertidig PIN-godkendt support
           </p>
           <p id="latestVersionInfo" style="margin-top: 0.35rem; font-size: 0.82rem; color: #9ca3af; text-align: center;">
             Nyeste version: henter...
           </p>
           <script>
             (function() {
-              var isMac = /Mac/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent);
-              window._isMacPlatform = isMac;
-              // Agent installer
-              var agentBtn = document.getElementById('agentDownloadBtn');
-              if (agentBtn) {
-                agentBtn.onclick = function() { signedDownload(isMac ? 'RemoteDesktopAgent-macOS-v3.1.97.tar.gz' : 'RemoteDesktopAgent-v3.1.97-Setup.exe'); return false; };
+               var isMac = /Mac/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent);
+               window._isMacPlatform = isMac;
+               var downloadVersion = '';
+               var agentInstallerName = isMac ? 'RemoteDesktopAgent-macOS.tar.gz' : 'RemoteDesktopAgent-Setup.exe';
+               var agentRunOnceName = isMac ? 'RemoteDesktopAgent-macOS.tar.gz' : 'RemoteDesktopAgent-RunOnce-Setup.exe';
+               // Agent installer
+               var agentBtn = document.getElementById('agentDownloadBtn');
+               if (agentBtn) {
+                 agentBtn.onclick = function() { signedDownload(agentInstallerName); return false; };
                 if (isMac) agentBtn.innerHTML = '<i class="fas fa-apple-alt"></i> Agent (macOS)';
               }
               // Quick Connect (run once)
-              var runOnceBtn = document.getElementById('agentRunOnceBtn');
-              if (runOnceBtn) {
-                runOnceBtn.onclick = function() { signedDownload(isMac ? 'RemoteDesktopAgent-macOS-v3.1.97.tar.gz' : 'RemoteDesktopAgent-RunOnce-v3.1.97-Setup.exe'); return false; };
+               var runOnceBtn = document.getElementById('agentRunOnceBtn');
+               if (runOnceBtn) {
+                 runOnceBtn.onclick = function() { signedDownload(agentRunOnceName); return false; };
                 if (isMac) runOnceBtn.innerHTML = '<i class="fas fa-play"></i> Quick Connect (macOS)';
+              }
+               var supportBtn = document.getElementById('supportClientDownloadBtn');
+               if (supportBtn) {
+                 var supportDownloadName = 'remote-support-v3.1.121.exe';
+                 supportBtn.onclick = function() { signedDownload(supportDownloadName); return false; };
+                if (isMac) {
+                  supportBtn.style.display = 'none';
+                }
               }
               var versionInfo = document.getElementById('latestVersionInfo');
               if (versionInfo) {
@@ -238,10 +252,18 @@
                     if (!res.ok) throw new Error('HTTP ' + res.status);
                     return res.json();
                   })
-                  .then(function(data) {
-                    var agentVersion = data.agent_version || data.version || '-';
-                    var controllerVersion = data.controller_version || data.version || '-';
-                    versionInfo.textContent = 'Nyeste version: Agent ' + agentVersion + ' • Controller ' + controllerVersion;
+                   .then(function(data) {
+                     var agentVersion = data.agent_version || data.version || '-';
+                     var controllerVersion = data.controller_version || data.version || '-';
+                     if (data.agent_version) {
+                       downloadVersion = data.agent_version;
+                       agentInstallerName = isMac ? 'RemoteDesktopAgent-macOS-' + downloadVersion + '.tar.gz' : 'RemoteDesktopAgent-' + downloadVersion + '-Setup.exe';
+                       agentRunOnceName = isMac ? 'RemoteDesktopAgent-macOS-' + downloadVersion + '.tar.gz' : 'RemoteDesktopAgent-RunOnce-' + downloadVersion + '-Setup.exe';
+                     }
+                     if (data.support_url) {
+                       supportDownloadName = data.support_url.split('/').pop().split('?')[0];
+                     }
+                     versionInfo.textContent = 'Nyeste version: Agent ' + agentVersion + ' • Controller ' + controllerVersion;
                   })
                   .catch(function() {
                     versionInfo.textContent = 'Nyeste version: kunne ikke hentes lige nu';
@@ -290,9 +312,9 @@
                   <div class="step-title">Hent og installér agenten</div>
                   <div class="step-desc">På den computer du vil styre — vælg din platform:</div>
                   <div class="quickstart-platforms" id="quickstartPlatforms">
-                    <a href="#" data-platform="windows" onclick="signedDownload('RemoteDesktopAgent-v3.1.97-Setup.exe'); return false;"
+                    <a href="#" data-platform="windows" onclick="signedLatestDownload('agent-installer'); return false;"
                        class="platform-btn" title="Windows installer"><i class="fab fa-windows"></i> Windows</a>
-                    <a href="#" data-platform="macos" onclick="signedDownload('RemoteDesktopAgent-macOS.tar.gz'); return false;"
+                    <a href="#" data-platform="macos" onclick="signedLatestDownload('agent-macos'); return false;"
                        class="platform-btn" title="macOS agent"><i class="fab fa-apple"></i> macOS</a>
                     <a href="#" data-platform="quick" onclick="signedDownload('remote-agent.exe'); return false;"
                        class="platform-btn" title="Quick Connect (Windows, ingen installation)"><i class="fas fa-bolt"></i> Quick Connect</a>
@@ -482,6 +504,23 @@
       <!-- Step: Create -->
       <div id="supportStep_create" class="support-step">
         <p>Opret en support session og del linket med den person der har brug for hjælp.</p>
+        <label for="supportMode" style="font-size: 0.85rem; color: #888; display: block; margin-bottom: 0.25rem;">Sessionstype</label>
+        <select id="supportMode" class="input" style="width: 100%; margin-bottom: 0.75rem;">
+          <option value="ai">AI-support med klientkode og samtykke</option>
+          <option value="screen">Kun skærmdeling</option>
+        </select>
+        <p style="margin: -0.35rem 0 0.75rem; font-size: 0.8rem; color: #fbbf24;">
+          AI-control kræver den native supportklient. Webklienten kan i denne fase kun dele skærm.
+        </p>
+        <div id="aiSupportScopes" style="margin-bottom: 1rem;">
+          <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.35rem;">Tilladelser som klienten kan acceptere</div>
+          <label style="display: block;"><input type="checkbox" data-support-scope="screen" checked disabled> Skærm</label>
+          <label style="display: block;"><input type="checkbox" data-support-scope="input" checked> Mus og tastatur</label>
+          <label style="display: block;"><input type="checkbox" data-support-scope="files"> Filer</label>
+          <label style="display: block;"><input type="checkbox" data-support-scope="terminal"> Terminal</label>
+          <label style="display: block;"><input type="checkbox" data-support-scope="process"> Processer/systeminfo</label>
+          <label style="display: block;"><input type="checkbox" data-support-scope="admin"> System/admin</label>
+        </div>
         <button id="supportCreateBtn" class="btn btn-primary" onclick="onCreateSupportSession()" style="width: 100%;">
           Opret support session
         </button>
@@ -501,9 +540,18 @@
           </div>
         </div>
         <div id="supportExpiry" style="font-size: 0.8rem; color: #888; text-align: center; margin-bottom: 1rem;"></div>
-        <div id="supportShareStatus" style="text-align: center; color: var(--text-muted); padding: 1rem 0;">
-          Venter på at personen deler sin skærm...
+        <div style="font-size: 0.75rem; color: #888; text-align: center; margin-bottom: 0.75rem;">
+          Session-ID til AI-klienten: <code id="supportSessionId"></code>
         </div>
+         <div id="supportShareStatus" style="text-align: center; color: var(--text-muted); padding: 1rem 0;">
+           Venter på at personen deler sin skærm...
+         </div>
+         <button id="supportUbuntuConnectBtn" class="btn btn-primary btn-sm" style="display: none; width: 100%; margin-bottom: 0.75rem;" onclick="requestUbuntuAI()">
+           Forbind Ubuntu AI
+         </button>
+         <button id="supportAiRevokeBtn" class="btn btn-danger btn-sm" style="display: none; width: 100%; margin-bottom: 0.75rem;" onclick="endSupportSession()">
+          Afslut AI-supportsession
+        </button>
         <div style="text-align: center;">
           <div class="spinner" style="width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto;"></div>
         </div>
@@ -525,6 +573,16 @@
             <button class="btn btn-danger btn-sm" onclick="endSupportSession()">Afslut</button>
           </div>
         </div>
+      </div>
+
+      <!-- Step: Audit overview -->
+      <div id="supportStep_audit" class="support-step" style="display: none;">
+        <h4 style="margin-top: 0;">Supportoversigt</h4>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">
+          Her vises registrerede handlinger fra sessionen. “Reported” betyder klientrapporteret; “verified” kræver native executor-bevis. Hemmelige værdier skal ikke gemmes i loggen.
+        </p>
+        <div id="supportAuditList" style="max-height: 360px; overflow: auto;"></div>
+        <button class="btn btn-secondary" style="width: 100%; margin-top: 1rem;" onclick="closeSupportModal()">Luk</button>
       </div>
     </div>
   </div>
@@ -628,6 +686,22 @@
 
   <!-- Signed Download Helper -->
   <script>
+    async function signedLatestDownload(kind) {
+      try {
+        const response = await fetch('https://updates.hawkeye123.dk/version.json', { cache: 'no-store' });
+        if (!response.ok) throw new Error('version lookup failed');
+        const data = await response.json();
+        const version = data.agent_version || data.version || 'v3.1.121';
+        const filename = kind === 'agent-macos'
+          ? 'RemoteDesktopAgent-macOS-' + version + '.tar.gz'
+          : 'RemoteDesktopAgent-' + version + '-Setup.exe';
+        await signedDownload(filename);
+      } catch (error) {
+        console.error('Versioneret download fejlede:', error);
+        await signedDownload(kind === 'agent-macos' ? 'RemoteDesktopAgent-macOS.tar.gz' : 'RemoteDesktopAgent-Setup.exe');
+      }
+    }
+
     async function signedDownload(filename) {
       try {
         const { data: { session } } = await window.supabase.auth.getSession();

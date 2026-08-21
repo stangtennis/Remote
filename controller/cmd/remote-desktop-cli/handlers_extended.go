@@ -11,9 +11,9 @@ import (
 // streamMsg is the wire format used by streaming daemon → CLI commands. The
 // CLI reads JSON messages in a loop and stops once it sees Type=="end".
 type streamMsg struct {
-	Type    string  `json:"type"`              // "started" | "stdout" | "stderr" | "exit" | "progress" | "end" | "error"
+	Type    string  `json:"type"` // "started" | "stdout" | "stderr" | "exit" | "progress" | "end" | "error"
 	PID     int     `json:"pid,omitempty"`
-	Code    int     `json:"code"`              // populated on "exit"
+	Code    int     `json:"code"` // populated on "exit"
 	Data    string  `json:"data,omitempty"`
 	Bytes   int64   `json:"bytes,omitempty"`
 	Total   int64   `json:"total,omitempty"`
@@ -38,12 +38,12 @@ func (sw *streamWriter) Send(msg streamMsg) error {
 }
 
 // handleExecStream streams a remote PowerShell/bash command back to the CLI.
-func handleExecStream(conn net.Conn, req daemonRequest, connMgr *ConnectionManager, deviceID string) {
+func handleExecStream(conn net.Conn, req daemonRequest, connMgr *ConnectionManager, deviceID string) error {
 	sw := newStreamWriter(conn)
 	deviceConn, err := connMgr.GetConnection(deviceID)
 	if err != nil {
 		sw.Send(streamMsg{Type: "error", Error: err.Error()})
-		return
+		return err
 	}
 
 	cmd, _ := req.Args["cmd"].(string)
@@ -52,7 +52,7 @@ func handleExecStream(conn net.Conn, req daemonRequest, connMgr *ConnectionManag
 	timeoutSec := int(timeoutF)
 	if cmd == "" {
 		sw.Send(streamMsg{Type: "error", Error: "empty cmd"})
-		return
+		return fmt.Errorf("empty cmd")
 	}
 
 	exitCode, durationMs, runErr := execRemoteCommand(deviceConn, cmd, asUser, timeoutSec,
@@ -65,22 +65,23 @@ func handleExecStream(conn net.Conn, req daemonRequest, connMgr *ConnectionManag
 		exitMsg.Error = runErr.Error()
 	}
 	sw.Send(exitMsg)
+	return runErr
 }
 
 // handleFileStream handles upload/download with periodic progress messages.
-func handleFileStream(conn net.Conn, req daemonRequest, connMgr *ConnectionManager, deviceID string) {
+func handleFileStream(conn net.Conn, req daemonRequest, connMgr *ConnectionManager, deviceID string) error {
 	sw := newStreamWriter(conn)
 	deviceConn, err := connMgr.GetConnection(deviceID)
 	if err != nil {
 		sw.Send(streamMsg{Type: "error", Error: err.Error()})
-		return
+		return err
 	}
 
 	local, _ := req.Args["local"].(string)
 	remote, _ := req.Args["remote"].(string)
 	if local == "" || remote == "" {
 		sw.Send(streamMsg{Type: "error", Error: "missing local or remote path"})
-		return
+		return fmt.Errorf("missing local or remote path")
 	}
 
 	// 10 minute timeout for large files; chunk-level acks already provide
@@ -95,6 +96,7 @@ func handleFileStream(conn net.Conn, req daemonRequest, connMgr *ConnectionManag
 			msg.Error = err.Error()
 		}
 		sw.Send(msg)
+		return err
 	case "download":
 		bytes, err := downloadRemoteFile(deviceConn, remote, local, opTimeout)
 		msg := streamMsg{Type: "end", Bytes: bytes}
@@ -102,8 +104,10 @@ func handleFileStream(conn net.Conn, req daemonRequest, connMgr *ConnectionManag
 			msg.Error = err.Error()
 		}
 		sw.Send(msg)
+		return err
 	default:
 		sw.Send(streamMsg{Type: "error", Error: fmt.Sprintf("unknown file cmd: %s", req.Cmd)})
+		return fmt.Errorf("unknown file cmd: %s", req.Cmd)
 	}
 }
 

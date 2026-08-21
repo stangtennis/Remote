@@ -8,7 +8,7 @@ VERSION=${1:-"dev"}
 BUILD_DATE=$(date +%Y-%m-%d)
 TIMEOUT=300  # 5 minute timeout per build
 
-echo "🔨 Building Remote Desktop v$VERSION (date: $BUILD_DATE)"
+echo "🔨 Building Remote Desktop $VERSION (date: $BUILD_DATE)"
 echo "=================================="
 
 # Create output directory
@@ -23,7 +23,8 @@ CONTROLLER_LDFLAGS="-s -w -H windowsgui -X 'main.Version=$VERSION' -X 'main.Buil
 echo ""
 echo "📦 Building Controller (Windows)..."
 cd controller
-timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -tags desktop,production -ldflags \"$CONTROLLER_LDFLAGS\" -o ../builds/controller-$VERSION.exe ." && echo "✅ Controller built" || echo "❌ Controller build failed"
+timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -tags desktop,production -ldflags \"$CONTROLLER_LDFLAGS\" -o ../builds/controller-$VERSION.exe ."
+echo "✅ Controller built"
 cd ..
 
 # Build Agent (Windows) with libjpeg-turbo SIMD encoding
@@ -38,17 +39,25 @@ echo "   If this fails, build on Windows instead"
 # Bug oplevet: v3.1.10/11 manifest havde PerMonitorV2, men .syso var fra
 # marts uden flaget, så DPI-virtualisering blev ved til v3.1.12.
 echo "   🔧 Re-compiling manifest resource (.syso)..."
-(cd agent/cmd/remote-agent && x86_64-w64-mingw32-windres -i versioninfo.rc -o resource_windows_amd64.syso -O coff) || echo "⚠️  windres failed — manifest may be stale"
+(cd agent/cmd/remote-agent && x86_64-w64-mingw32-windres -i versioninfo.rc -o resource_windows_amd64.syso -O coff)
 
 cd agent
-timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -tags turbo -ldflags \"$AGENT_LDFLAGS\" -o ../builds/remote-agent-$VERSION.exe ./cmd/remote-agent" 2>&1 && echo "✅ Agent built (turbo JPEG)" || echo "⚠️  Agent build failed (try on Windows)"
+timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -tags turbo -ldflags \"$AGENT_LDFLAGS\" -o ../builds/remote-agent-$VERSION.exe ./cmd/remote-agent" 2>&1
+echo "✅ Agent built (turbo JPEG)"
+# Portable AI support client. The executable switches to temporary support mode
+# when named remote-support.exe; it never installs a service or firewall rule.
+timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -tags turbo -ldflags \"$AGENT_LDFLAGS\" -o ../builds/remote-support-$VERSION.exe ./cmd/remote-agent" 2>&1
+cp ../builds/remote-support-$VERSION.exe ../builds/remote-support.exe
+printf '%s  builds/remote-support.exe\n' "$(sha256sum ../builds/remote-support.exe | awk '{print $1}')" > ../builds/remote-support.exe.sha256
+echo "✅ Portable AI support client built"
 cd ..
 
 # Build Agent Console version
 echo ""
 echo "📦 Building Agent Console (Windows) with turbo JPEG..."
 cd agent
-timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -tags turbo -ldflags \"$AGENT_CONSOLE_LDFLAGS\" -o ../builds/remote-agent-console-$VERSION.exe ./cmd/remote-agent" 2>&1 && echo "✅ Agent Console built (turbo JPEG)" || echo "⚠️  Agent Console build failed (try on Windows)"
+timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -tags turbo -ldflags \"$AGENT_CONSOLE_LDFLAGS\" -o ../builds/remote-agent-console-$VERSION.exe ./cmd/remote-agent" 2>&1
+echo "✅ Agent Console built (turbo JPEG)"
 cd ..
 
 # =============================================================================
@@ -181,13 +190,9 @@ cp "builds/remote-agent-${VERSION}.exe" "$STAGING/remote-agent.exe"
 cp "builds/remote-agent-console-${VERSION}.exe" "$STAGING/remote-agent-console.exe"
 cp "installer/openh264-2.1.1-win64.dll" "$STAGING/"
 cp "deps/libjpeg-turbo-win64/bin/libturbojpeg.dll" "$STAGING/"
-if makensis -V2 "$STAGING/agent-installer.nsi" >/dev/null 2>&1; then
-    mv "$STAGING/RemoteDesktopAgent-${VERSION}-Setup.exe" "builds/"
-    echo "  ✅ RemoteDesktopAgent-${VERSION}-Setup.exe"
-else
-    echo "  ❌ Agent installer build failed"
-    makensis -V2 "$STAGING/agent-installer.nsi" 2>&1 | tail -5
-fi
+makensis -V2 "$STAGING/agent-installer.nsi" >/dev/null
+mv "$STAGING/RemoteDesktopAgent-${VERSION}-Setup.exe" "builds/"
+echo "  ✅ RemoteDesktopAgent-${VERSION}-Setup.exe"
 rm -rf "$STAGING"
 
 # --- Agent Console installer (Console + OpenH264 + TurboJPEG) ---
@@ -196,13 +201,9 @@ STAGING="installer/staging-agentconsole"
 cp "builds/remote-agent-console-${VERSION}.exe" "$STAGING/remote-agent-console.exe"
 cp "installer/openh264-2.1.1-win64.dll" "$STAGING/"
 cp "deps/libjpeg-turbo-win64/bin/libturbojpeg.dll" "$STAGING/"
-if makensis -V2 "$STAGING/agent-console-installer.nsi" >/dev/null 2>&1; then
-    mv "$STAGING/RemoteDesktopAgentConsole-${VERSION}-Setup.exe" "builds/"
-    echo "  ✅ RemoteDesktopAgentConsole-${VERSION}-Setup.exe"
-else
-    echo "  ❌ Agent Console installer build failed"
-    makensis -V2 "$STAGING/agent-console-installer.nsi" 2>&1 | tail -5
-fi
+makensis -V2 "$STAGING/agent-console-installer.nsi" >/dev/null
+mv "$STAGING/RemoteDesktopAgentConsole-${VERSION}-Setup.exe" "builds/"
+echo "  ✅ RemoteDesktopAgentConsole-${VERSION}-Setup.exe"
 rm -rf "$STAGING"
 
 # --- Agent Run Once installer (Portable, no service) ---
@@ -211,13 +212,9 @@ STAGING="installer/staging-agentrunonce"
 cp "builds/remote-agent-console-${VERSION}.exe" "$STAGING/remote-agent-console.exe"
 cp "installer/openh264-2.1.1-win64.dll" "$STAGING/"
 cp "deps/libjpeg-turbo-win64/bin/libturbojpeg.dll" "$STAGING/"
-if makensis -V2 "$STAGING/agent-runonce-installer.nsi" >/dev/null 2>&1; then
-    mv "$STAGING/RemoteDesktopAgent-RunOnce-${VERSION}-Setup.exe" "builds/"
-    echo "  ✅ RemoteDesktopAgent-RunOnce-${VERSION}-Setup.exe"
-else
-    echo "  ❌ Agent Run Once installer build failed"
-    makensis -V2 "$STAGING/agent-runonce-installer.nsi" 2>&1 | tail -5
-fi
+makensis -V2 "$STAGING/agent-runonce-installer.nsi" >/dev/null
+mv "$STAGING/RemoteDesktopAgent-RunOnce-${VERSION}-Setup.exe" "builds/"
+echo "  ✅ RemoteDesktopAgent-RunOnce-${VERSION}-Setup.exe"
 rm -rf "$STAGING"
 
 # --- Controller installer (Controller + FFmpeg) ---
@@ -225,13 +222,9 @@ build_installer "Controller" "controller-installer.nsi" "RemoteDesktopController
 STAGING="installer/staging-controller"
 cp "builds/controller-${VERSION}.exe" "$STAGING/controller.exe"
 cp "installer/ffmpeg.exe" "$STAGING/"
-if makensis -V2 "$STAGING/controller-installer.nsi" >/dev/null 2>&1; then
-    mv "$STAGING/RemoteDesktopController-${VERSION}-Setup.exe" "builds/"
-    echo "  ✅ RemoteDesktopController-${VERSION}-Setup.exe"
-else
-    echo "  ❌ Controller installer build failed"
-    makensis -V2 "$STAGING/controller-installer.nsi" 2>&1 | tail -5
-fi
+makensis -V2 "$STAGING/controller-installer.nsi" >/dev/null
+mv "$STAGING/RemoteDesktopController-${VERSION}-Setup.exe" "builds/"
+echo "  ✅ RemoteDesktopController-${VERSION}-Setup.exe"
 rm -rf "$STAGING"
 
 # =============================================================================

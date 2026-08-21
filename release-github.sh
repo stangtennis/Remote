@@ -43,11 +43,14 @@ fi
 # Define versioned file names
 AGENT_GUI="remote-agent-${VERSION}.exe"
 AGENT_CONSOLE="remote-agent-console-${VERSION}.exe"
+SUPPORT="remote-support-${VERSION}.exe"
 CONTROLLER="controller-${VERSION}.exe"
+AGENT_MAC="RemoteDesktopAgent-macOS-${VERSION}.tar.gz"
+CONTROLLER_MAC="RemoteDesktopController-macOS-${VERSION}.tar.gz"
 
 # Check if executables exist
 MISSING_FILES=0
-for FILE in "$AGENT_GUI" "$AGENT_CONSOLE" "$CONTROLLER"; do
+for FILE in "$AGENT_GUI" "$AGENT_CONSOLE" "$SUPPORT" "$CONTROLLER" "$AGENT_MAC" "$CONTROLLER_MAC"; do
     if [ ! -f "$BUILD_DIR/$FILE" ]; then
         echo -e "${RED}❌ Missing: $BUILD_DIR/$FILE${NC}"
         MISSING_FILES=1
@@ -63,7 +66,7 @@ fi
 echo -e "${YELLOW}Generating SHA256 checksums...${NC}"
 cd "$BUILD_DIR"
 
-for FILE in "$AGENT_GUI" "$AGENT_CONSOLE" "$CONTROLLER"; do
+for FILE in "$AGENT_GUI" "$AGENT_CONSOLE" "$SUPPORT" "$CONTROLLER" "$AGENT_MAC" "$CONTROLLER_MAC"; do
     SHA256_FILE="${FILE}.sha256"
     sha256sum "$FILE" > "$SHA256_FILE"
     echo "  ✅ $SHA256_FILE"
@@ -84,7 +87,10 @@ RELEASE_NOTES="## Remote Desktop $VERSION
 |------|-------------|
 | \`$AGENT_GUI\` | Windows Agent (GUI mode) |
 | \`$AGENT_CONSOLE\` | Windows Agent (Console mode) |
+| \`$SUPPORT\` | Portable AI Support client |
 | \`$CONTROLLER\` | Windows Controller |
+| \`$AGENT_MAC\` | macOS Agent |
+| \`$CONTROLLER_MAC\` | macOS Controller |
 | \`*.sha256\` | SHA256 checksums for verification |
 
 ### Auto-Update
@@ -116,16 +122,25 @@ gh release create "$VERSION" \
     --notes "$RELEASE_NOTES" \
     "$BUILD_DIR/$AGENT_GUI" \
     "$BUILD_DIR/$AGENT_CONSOLE" \
+    "$BUILD_DIR/$SUPPORT" \
     "$BUILD_DIR/$CONTROLLER" \
+    "$BUILD_DIR/$AGENT_MAC" \
+    "$BUILD_DIR/$CONTROLLER_MAC" \
     "$BUILD_DIR/${AGENT_GUI}.sha256" \
     "$BUILD_DIR/${AGENT_CONSOLE}.sha256" \
-    "$BUILD_DIR/${CONTROLLER}.sha256"
+    "$BUILD_DIR/${SUPPORT}.sha256" \
+    "$BUILD_DIR/${CONTROLLER}.sha256" \
+    "$BUILD_DIR/${AGENT_MAC}.sha256" \
+    "$BUILD_DIR/${CONTROLLER_MAC}.sha256"
 
 echo -e "\n${GREEN}✅ Release $VERSION created successfully!${NC}"
 echo ""
 echo "Assets uploaded:"
 echo "  - $AGENT_GUI + .sha256"
 echo "  - $AGENT_CONSOLE + .sha256"
+echo "  - $SUPPORT + .sha256"
 echo "  - $CONTROLLER + .sha256"
+echo "  - $AGENT_MAC + .sha256"
+echo "  - $CONTROLLER_MAC + .sha256"
 echo ""
 echo "View release: https://github.com/stangtennis/Remote/releases/tag/$VERSION"

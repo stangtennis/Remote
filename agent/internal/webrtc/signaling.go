@@ -1015,6 +1015,14 @@ func (m *Manager) sendAnswer(sessionID, sdp string) {
 }
 
 func (m *Manager) updateSessionStatus(status string) {
+	if m.supportIsActive() {
+		if status == "ended" {
+			if _, err := m.supportRequest("end", nil); err != nil {
+				log.Printf("Failed to end portable support session: %v", err)
+			}
+		}
+		return
+	}
 	if m.sessionID == "" {
 		return
 	}
@@ -1065,6 +1073,25 @@ func (m *Manager) updateSessionStatus(status string) {
 }
 
 func (m *Manager) sendICECandidate(candidate *webrtc.ICECandidate) {
+	if m.supportIsActive() {
+		candidateInit := candidate.ToJSON()
+		sdpMid := "0"
+		sdpMLineIndex := uint16(0)
+		if candidateInit.SDPMid != nil && *candidateInit.SDPMid != "" {
+			sdpMid = *candidateInit.SDPMid
+		}
+		if candidateInit.SDPMLineIndex != nil {
+			sdpMLineIndex = *candidateInit.SDPMLineIndex
+		}
+		if err := m.supportWriteSignal("ice", map[string]interface{}{
+			"candidate":     candidateInit.Candidate,
+			"sdpMid":        sdpMid,
+			"sdpMLineIndex": sdpMLineIndex,
+		}); err != nil {
+			log.Printf("❌ Failed to send support ICE candidate: %v", err)
+		}
+		return
+	}
 	if m.sessionID == "" {
 		return
 	}

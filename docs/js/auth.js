@@ -264,11 +264,25 @@ if (document.getElementById('logoutBtn')) {
       const downloadsGrid = document.getElementById('downloadsGrid');
       if (downloadsGrid && isAdmin) {
         const isMac = window._isMacPlatform || /Mac/i.test(navigator.platform);
-        const controllerFile = isMac ? 'RemoteDesktopController-macOS-v3.1.120.tar.gz' : 'RemoteDesktopController-v3.1.120-Setup.exe';
+        const controllerFile = isMac ? 'RemoteDesktopController-macOS.tar.gz' : 'RemoteDesktopController-Setup.exe';
         const controllerLabel = isMac ? '<i class="fas fa-gamepad"></i> Controller (macOS)' : '<i class="fas fa-gamepad"></i> Controller';
         const controllerLink = document.createElement('a');
         controllerLink.href = '#';
-        controllerLink.onclick = function() { signedDownload(controllerFile); return false; };
+        controllerLink.onclick = async function() {
+          try {
+            const response = await fetch('https://updates.hawkeye123.dk/version.json', { cache: 'no-store' });
+            const data = await response.json();
+            const version = data.controller_version || data.version || '';
+            const versionedFile = isMac
+              ? `RemoteDesktopController-macOS-${version}.tar.gz`
+              : `RemoteDesktopController-${version}-Setup.exe`;
+            await signedDownload(version ? versionedFile : controllerFile);
+          } catch (error) {
+            console.error('Controller version lookup failed:', error);
+            await signedDownload(controllerFile);
+          }
+          return false;
+        };
         controllerLink.className = 'btn btn-secondary';
         controllerLink.style.cssText = 'text-decoration: none; text-align: center;';
         controllerLink.innerHTML = controllerLabel;

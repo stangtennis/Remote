@@ -18,6 +18,15 @@ func (m *Manager) handleInputEvent(event map[string]interface{}) {
 	if !ok {
 		return
 	}
+	if m.supportIsActive() && eventType != "ping" && !m.supportAllows("input") {
+		log.Printf("🚫 Support input scope denied event: %s", eventType)
+		return
+	}
+	if m.supportIsActive() && eventType != "mouse_move" {
+		go func() {
+			_ = m.recordSupportAction("INPUT_"+strings.ToUpper(eventType), "started", "Remote input event received", eventType, map[string]interface{}{})
+		}()
+	}
 
 	switch eventType {
 	case "mouse_move", "mouse_click", "mouse_scroll", "key":
@@ -354,6 +363,28 @@ func (m *Manager) handleControlEvent(event map[string]interface{}) {
 			}
 			if m.dataChannel != nil && m.dataChannel.ReadyState() == pionwebrtc.DataChannelStateOpen {
 				_ = m.dataChannel.Send(data)
+			}
+		}
+	}
+
+	if m.supportIsActive() {
+		msgType := getMsgType(event)
+		switch msgType {
+		case "set_mode", "stream_pause", "stream_resume":
+			if !m.supportAllows("screen") {
+				return
+			}
+		case "switch_monitor", "clipboard_text", "clipboard_image", "release_all_keys":
+			if !m.supportAllows("input") {
+				return
+			}
+		case "remote_login", "force_update":
+			if !m.supportAllows("admin") {
+				return
+			}
+		case "dir_list", "drives_list", "file_request", "file_transfer_start", "file_chunk", "file_transfer_complete":
+			if !m.supportAllows("files") {
+				return
 			}
 		}
 	}

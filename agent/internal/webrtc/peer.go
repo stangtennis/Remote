@@ -146,6 +146,15 @@ type Manager struct {
 	pollingHealthy  atomic.Bool  // true = polling is working
 	lastPollSuccess atomic.Int64 // Unix timestamp of last successful poll
 
+	// Portable AI support authorization. These fields are only populated by
+	// --support; normal installed sessions keep the existing behavior.
+	supportMode      bool
+	supportSessionID string
+	supportGrant     string
+	supportScopes    map[string]bool
+	supportExpiresAt time.Time
+	supportAuthMu    sync.RWMutex
+
 	// Shared HTTP client with connection pooling (reused across all requests)
 	httpClient *http.Client
 }
@@ -369,8 +378,8 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 	config := pionwebrtc.Configuration{
 		ICEServers: iceServers,
 	}
-	if forceRelayEnabled() {
-		log.Println("🔒 RD_FORCE_RELAY enabled — agent using TURN relay-only ICE policy")
+	if m.supportIsActive() || forceRelayEnabled() {
+		log.Println("🔒 Relay-only ICE policy enabled")
 		config.ICETransportPolicy = pionwebrtc.ICETransportPolicyRelay
 	}
 
@@ -584,6 +593,11 @@ func (m *Manager) CreatePeerConnection(iceServers []pionwebrtc.ICEServer) error 
 	// Set up data channel handler
 	pc.OnDataChannel(func(dc *pionwebrtc.DataChannel) {
 		log.Printf("📡 Data channel opened: %s", dc.Label())
+		if m.supportIsActive() && !m.supportChannelAllowed(dc.Label()) {
+			log.Printf("🚫 Support scope denied data channel: %s", dc.Label())
+			_ = dc.Close()
+			return
+		}
 
 		// Route to appropriate handler based on channel label
 		switch dc.Label() {
@@ -664,9 +678,10 @@ func (m *Manager) setupDataChannelHandlers(dc *pionwebrtc.DataChannel) {
 		// NOTE: File transfer callback is set in setupFileChannelHandlers
 		// Do NOT set it here as it would override the file channel callback
 
-		// Start clipboard monitoring
-		log.Println("📋 Starting clipboard monitoring...")
-		m.startClipboardMonitoring()
+		if !m.supportIsActive() || m.supportAllows("input") {
+			log.Println("📋 Starting clipboard monitoring...")
+			m.startClipboardMonitoring()
+		}
 	})
 
 	dc.OnClose(func() {
@@ -707,6 +722,15 @@ func (m *Manager) setupFileChannelHandlers(dc *pionwebrtc.DataChannel) {
 	})
 
 	dc.OnMessage(func(msg pionwebrtc.DataChannelMessage) {
+		if m.supportIsActive() && !m.supportAllows("files") {
+			log.Println("🚫 Support file scope expired or denied")
+			return
+		}
+		if m.supportIsActive() {
+			go func(size int) {
+				_ = m.recordSupportAction("FILE_OPERATION", "started", "File channel operation received", "file", map[string]interface{}{"bytes": size})
+			}(len(msg.Data))
+		}
 		// Handle file transfer messages
 		if m.fileTransferHandler != nil {
 			if err := m.fileTransferHandler.HandleIncomingData(msg.Data); err != nil {
@@ -731,6 +755,10 @@ func (m *Manager) setupTerminalChannelHandlers(dc *pionwebrtc.DataChannel) {
 	})
 
 	dc.OnMessage(func(msg pionwebrtc.DataChannelMessage) {
+		if m.supportIsActive() && (!m.supportAllows("terminal") || !m.supportAllows("admin")) {
+			log.Println("🚫 Support terminal scope denied")
+			return
+		}
 		var termMsg struct {
 			Type string `json:"type"`
 			Data string `json:"data"`
@@ -740,10 +768,18 @@ func (m *Manager) setupTerminalChannelHandlers(dc *pionwebrtc.DataChannel) {
 		}
 		switch termMsg.Type {
 		case "input":
+			if m.supportIsActive() {
+				go func() {
+					_ = m.recordSupportAction("TERMINAL_INPUT", "succeeded", "Terminal input received", "terminal", nil)
+				}()
+			}
 			if m.terminal != nil {
 				m.terminal.Write([]byte(termMsg.Data))
 			}
 		case "start":
+			if m.supportIsActive() {
+				_ = m.recordSupportAction("TERMINAL_START", "started", "Terminal session started", "terminal", nil)
+			}
 			// Start new terminal session
 			if m.terminal != nil {
 				m.terminal.Close()
@@ -757,14 +793,25 @@ func (m *Manager) setupTerminalChannelHandlers(dc *pionwebrtc.DataChannel) {
 			m.terminal = term
 			// Forward output to data channel
 			go term.ReadOutput(func(data []byte) {
+				if m.supportIsActive() && !m.supportAllows("terminal") {
+					return
+				}
 				outMsg, _ := json.Marshal(map[string]string{"type": "output", "data": string(data)})
 				dc.Send(outMsg)
 			})
 			go term.ReadStderr(func(data []byte) {
+				if m.supportIsActive() && !m.supportAllows("terminal") {
+					return
+				}
 				outMsg, _ := json.Marshal(map[string]string{"type": "output", "data": string(data)})
 				dc.Send(outMsg)
 			})
 		case "close":
+			if m.supportIsActive() {
+				go func() {
+					_ = m.recordSupportAction("TERMINAL_CLOSE", "succeeded", "Terminal session closed", "terminal", nil)
+				}()
+			}
 			if m.terminal != nil {
 				m.terminal.Close()
 				m.terminal = nil
@@ -786,8 +833,10 @@ func (m *Manager) setupControlChannelHandlers(dc *pionwebrtc.DataChannel) {
 		// this the agent would never push clipboard updates to the
 		// dashboard. setupDataChannelHandlers also calls this, but only
 		// if a separate "data" channel is opened (controller path).
-		log.Println("📋 Starting clipboard monitoring (via control channel)...")
-		m.startClipboardMonitoring()
+		if !m.supportIsActive() || m.supportAllows("input") {
+			log.Println("📋 Starting clipboard monitoring (via control channel)...")
+			m.startClipboardMonitoring()
+		}
 	})
 
 	dc.OnClose(func() {
@@ -813,18 +862,27 @@ func (m *Manager) setupControlChannelHandlers(dc *pionwebrtc.DataChannel) {
 		if msgType != "" {
 			switch msgType {
 			case "clipboard_text":
+				if m.supportIsActive() && !m.supportAllows("input") {
+					return
+				}
 				if content, ok := event["content"].(string); ok {
 					log.Printf("📋 Received clipboard text from controller (%d bytes)", len(content))
 					m.handleClipboardText(content)
 				}
 				return
 			case "clipboard_image":
+				if m.supportIsActive() && !m.supportAllows("input") {
+					return
+				}
 				if contentB64, ok := event["content"].(string); ok {
 					log.Printf("📋 Received clipboard image from controller")
 					m.handleClipboardImage(contentB64)
 				}
 				return
 			case "set_stream_params":
+				if m.supportIsActive() && !m.supportAllows("screen") {
+					return
+				}
 				m.handleSetStreamParams(event)
 				return
 			case "set_mode", "switch_monitor", "force_update", "remote_login", "release_all_keys":

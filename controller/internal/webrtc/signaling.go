@@ -30,6 +30,14 @@ type Session struct {
 	Answer    string `json:"answer,omitempty"`
 }
 
+type SupportSignal struct {
+	ID        int                    `json:"id"`
+	SessionID string                 `json:"session_id"`
+	FromSide  string                 `json:"from_side"`
+	MsgType   string                 `json:"msg_type"`
+	Payload   map[string]interface{} `json:"payload"`
+}
+
 // NewSignalingClient creates a new signaling client
 func NewSignalingClient(supabaseURL, anonKey, authToken string) *SignalingClient {
 	return &SignalingClient{
@@ -45,8 +53,8 @@ func (s *SignalingClient) ClaimDeviceConnection(deviceID, controllerID string) (
 	url := fmt.Sprintf("%s/rest/v1/rpc/claim_device_connection", s.supabaseURL)
 
 	payload := map[string]string{
-		"p_device_id":      deviceID,
-		"p_controller_id":  controllerID,
+		"p_device_id":       deviceID,
+		"p_controller_id":   controllerID,
 		"p_controller_type": "controller",
 	}
 
@@ -101,13 +109,13 @@ func (s *SignalingClient) CreateSession(deviceID, userID string) (*Session, erro
 	// First try to claim the device (kicks existing sessions)
 	controllerID := fmt.Sprintf("controller-%s-%d", userID, time.Now().UnixNano())
 	sessionID, _, err := s.ClaimDeviceConnection(deviceID, controllerID)
-	
+
 	if err != nil {
 		// Fallback to old method if claim_device_connection doesn't exist
 		log.Printf("⚠️ Using fallback session creation: %v", err)
 		sessionID = uuid.New().String()
 	}
-	
+
 	session := &Session{
 		SessionID: sessionID,
 		DeviceID:  deviceID,
@@ -151,7 +159,7 @@ func (s *SignalingClient) CreateSession(deviceID, userID string) (*Session, erro
 // SendOffer sends the WebRTC offer to the session
 func (s *SignalingClient) SendOffer(sessionID, offer string) error {
 	url := fmt.Sprintf("%s/rest/v1/webrtc_sessions?session_id=eq.%s", s.supabaseURL, sessionID)
-	
+
 	// Store offer directly in the offer column
 	payload := map[string]interface{}{
 		"offer":  offer,
@@ -271,4 +279,60 @@ func (s *SignalingClient) DeleteSession(sessionID string) error {
 	}
 
 	return nil
+}
+
+// SendSupportSignal uses the authenticated admin's owner policy for a
+// support_sessions signaling row. It never opens a listener or inbound port.
+func (s *SignalingClient) SendSupportSignal(sessionID, msgType string, payload map[string]interface{}) error {
+	body, err := json.Marshal(map[string]interface{}{
+		"session_id": sessionID,
+		"from_side":  "dashboard",
+		"msg_type":   msgType,
+		"payload":    payload,
+	})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPost, s.supabaseURL+"/rest/v1/session_signaling", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("apikey", s.anonKey)
+	req.Header.Set("Authorization", "Bearer "+s.authToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=minimal")
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("support signaling failed (%d): %s", resp.StatusCode, string(data))
+	}
+	return nil
+}
+
+func (s *SignalingClient) GetSupportSignals(sessionID string) ([]SupportSignal, error) {
+	url := fmt.Sprintf("%s/rest/v1/session_signaling?session_id=eq.%s&from_side=eq.support&order=created_at.asc", s.supabaseURL, sessionID)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("apikey", s.anonKey)
+	req.Header.Set("Authorization", "Bearer "+s.authToken)
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("support signaling read failed (%d): %s", resp.StatusCode, string(data))
+	}
+	var signals []SupportSignal
+	if err := json.NewDecoder(resp.Body).Decode(&signals); err != nil {
+		return nil, err
+	}
+	return signals, nil
 }

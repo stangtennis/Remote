@@ -329,6 +329,18 @@ func main() {
 		return
 	}
 
+	// Portable support is an explicit, temporary mode. It may elevate via UAC
+	// for approved admin actions, but it never installs a service or firewall rule.
+	programName := strings.ToLower(filepath.Base(os.Args[0]))
+	if hasArgument("--support") || programName == "remote-support.exe" || strings.HasPrefix(programName, "remote-support-") {
+		if !isAdmin() {
+			relaunchAsAdmin()
+			return
+		}
+		runPortableSupportMode()
+		return
+	}
+
 	// (DPI awareness sat allerede øverst i main() før args-tjek)
 
 	// Check if running from Program Files install directory (autostart mode)
@@ -456,6 +468,43 @@ func main() {
 
 	log.Println("🔧 Kører i interaktiv tilstand")
 	runInteractive()
+}
+
+func hasArgument(wanted string) bool {
+	for _, arg := range os.Args[1:] {
+		if arg == wanted {
+			return true
+		}
+	}
+	return false
+}
+
+func runPortableSupportMode() {
+	cfg, err := config.Load()
+	if err != nil {
+		messageBox("Remote Support", "Kunne ikke indlæse konfiguration: "+err.Error(), MB_OK|MB_ICONERROR)
+		return
+	}
+	pin := showTextInputDialog("Remote Support", "Indtast den 6-cifrede kode fra administratoren:")
+	if pin == "" {
+		return
+	}
+	dev, err := device.NewEphemeral(cfg)
+	if err != nil {
+		messageBox("Remote Support", "Kunne ikke oprette midlertidig supportidentitet: "+err.Error(), MB_OK|MB_ICONERROR)
+		return
+	}
+
+	err = webrtc.RunPortableSupport(cfg, dev, pin, func(scopes []string) bool {
+		message := "Administratorens tilladelser:\n\n• " + strings.Join(scopes, "\n• ") +
+			"\n\nAccepter kun hvis du ønsker at give denne supportsession adgang."
+		return askYesNo(message)
+	})
+	if err != nil {
+		messageBox("Remote Support", "Supportsessionen blev ikke startet:\n"+err.Error(), MB_OK|MB_ICONERROR)
+		return
+	}
+	messageBox("Remote Support", "Supportsessionen er afsluttet.", MB_OK|MB_ICONINFORMATION)
 }
 
 // showStartupDialog shows the main startup dialog with options
