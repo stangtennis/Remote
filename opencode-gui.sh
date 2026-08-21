@@ -2,7 +2,7 @@
 set -euo pipefail
 
 cli="${REMOTE_DESKTOP_CLI:-$HOME/.local/bin/remote-desktop-cli}"
-opencode_bin="${OPENCODE_BIN:-$(command -v opencode || true)}"
+opencode_bin="${OPENCODE_BIN:-$HOME/.local/bin/opencode}"
 state_dir="$HOME/.local/state/remote-desktop"
 watch_log="$state_dir/support-watch.log"
 
@@ -18,7 +18,7 @@ if [[ -x "$cli" ]]; then
     echo "Remote support watcher startet. Log: $watch_log"
   fi
 else
-  echo "Remote support watcher ikke startet: RD_EMAIL/RD_PASSWORD mangler eller CLI mangler." >&2
+  echo "Remote support CLI blev ikke fundet: $cli" >&2
 fi
 
 exec "$opencode_bin" "$@"
