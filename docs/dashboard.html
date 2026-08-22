@@ -709,7 +709,10 @@
           await showAlert('Du skal være logget ind for at downloade.', { title: 'Adgang nægtet', type: 'warning' });
           return;
         }
-        window.location.href = 'https://downloads.hawkeye123.dk/' + filename + '?token=' + session.access_token;
+        const host = filename.startsWith('remote-support-')
+          ? 'https://updates.hawkeye123.dk/'
+          : 'https://downloads.hawkeye123.dk/';
+        window.location.href = host + filename + '?token=' + session.access_token;
       } catch (e) {
         console.error('Download fejl:', e);
         await showAlert('Kunne ikke starte download. Prøv at genindlæse siden.', { title: 'Download mislykkedes', type: 'error' });
