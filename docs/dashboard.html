@@ -709,7 +709,8 @@
           await showAlert('Du skal være logget ind for at downloade.', { title: 'Adgang nægtet', type: 'warning' });
           return;
         }
-        const host = filename.startsWith('remote-support-')
+        const immutable = filename.startsWith('remote-support-') || /-v\d+\.\d+\.\d+/.test(filename);
+        const host = immutable
           ? 'https://updates.hawkeye123.dk/'
           : 'https://downloads.hawkeye123.dk/';
         window.location.href = host + filename + '?token=' + session.access_token;
