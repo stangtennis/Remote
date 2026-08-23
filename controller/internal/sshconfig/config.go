@@ -28,7 +28,16 @@ func Default() *Config {
 	home, _ := os.UserHomeDir()
 	keyPath := ""
 	if home != "" {
-		keyPath = filepath.Join(home, ".ssh", "id_ed25519")
+		for _, name := range []string{"id_ed25519", "id_rsa"} {
+			candidate := filepath.Join(home, ".ssh", name)
+			if _, err := os.Stat(candidate); err == nil {
+				keyPath = candidate
+				break
+			}
+			if keyPath == "" {
+				keyPath = candidate
+			}
+		}
 	}
 	if configuredKey := strings.TrimSpace(os.Getenv("RD_AI_SSH_KEY")); configuredKey != "" {
 		keyPath = configuredKey
