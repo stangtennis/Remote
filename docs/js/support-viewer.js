@@ -11,6 +11,15 @@ let supportPendingIce = [];
 let supportReadyHandled = false;
 let currentSupportSession = null;
 let supportInPreview = false;
+const ACTIVE_AI_SUPPORT_STORAGE_KEY = 'remoteDesktopActiveAISupport';
+
+function rememberActiveAISupportSession(sessionId, userId) {
+  localStorage.setItem(ACTIVE_AI_SUPPORT_STORAGE_KEY, JSON.stringify({ session_id: sessionId, user_id: userId }));
+}
+
+function forgetActiveAISupportSession() {
+  localStorage.removeItem(ACTIVE_AI_SUPPORT_STORAGE_KEY);
+}
 
 // ============================================================================
 // Session Creation
@@ -47,6 +56,12 @@ async function createSupportSession() {
     }
 
     currentSupportSession = data;
+    if (data.support_mode === 'ai') {
+      const { data: authData } = await supabase.auth.getSession();
+      if (authData?.session?.user?.id) {
+        rememberActiveAISupportSession(data.session_id, authData.session.user.id);
+      }
+    }
     return data;
   } catch (error) {
     console.error('Create support session error:', error);
@@ -769,6 +784,7 @@ function cleanupSupportViewer() {
   supportProcessedIds.clear();
   supportPendingIce = [];
   currentSupportSession = null;
+  forgetActiveAISupportSession();
 }
 
 async function endSupportSession() {
@@ -911,6 +927,9 @@ async function handleIncomingPublicSession(session) {
 
   showToast('Indkommende support session...', 'info');
 
+  const supportSiteBase = window.location.pathname.startsWith('/Remote/')
+    ? `${window.location.origin}/Remote`
+    : window.location.origin;
   currentSupportSession = {
     session_id: session.id,
     token: session.token,
@@ -998,12 +1017,63 @@ function copyPublicLink() {
   });
 }
 
+async function restoreActiveAISupportSession(user) {
+  let saved;
+  try {
+    saved = JSON.parse(localStorage.getItem(ACTIVE_AI_SUPPORT_STORAGE_KEY) || 'null');
+  } catch (_) {
+    forgetActiveAISupportSession();
+    return;
+  }
+  if (!saved?.session_id || saved.user_id !== user.id) return;
+
+  const { data: session, error } = await supabase
+    .from('support_sessions')
+    .select('id, pin, token, status, support_mode, requested_scopes, expires_at')
+    .eq('id', saved.session_id)
+    .eq('support_mode', 'ai')
+    .in('status', ['pending', 'active'])
+    .maybeSingle();
+  if (error || !session) {
+    forgetActiveAISupportSession();
+    return;
+  }
+
+  currentSupportSession = {
+    session_id: session.id,
+    pin: session.pin,
+    token: session.token,
+    share_url: `${supportSiteBase}/support.html?token=${encodeURIComponent(session.token)}`,
+    expires_at: session.expires_at,
+    support_mode: session.support_mode,
+    requested_scopes: session.requested_scopes,
+  };
+  const modal = document.getElementById('supportModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  showSupportStep('share');
+  document.getElementById('supportPin').textContent = session.pin || '';
+  document.getElementById('supportLink').value = currentSupportSession.share_url;
+  document.getElementById('supportSessionId').textContent = session.id;
+  document.getElementById('supportExpiry').textContent =
+    `Udløber kl. ${new Date(session.expires_at).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })}`;
+  document.getElementById('supportShareStatus').textContent =
+    'AI-session gendannet efter genindlæsning. Venter på klient/Ubuntu AI...';
+  const revokeButton = document.getElementById('supportAiRevokeBtn');
+  if (revokeButton) revokeButton.style.display = 'block';
+  const ubuntuButton = document.getElementById('supportUbuntuConnectBtn');
+  if (ubuntuButton) ubuntuButton.style.display = 'block';
+  watchUbuntuController(session.id);
+  requestUbuntuAI();
+}
+
 // Auto-start listener on page load if public support is enabled
 document.addEventListener('DOMContentLoaded', () => {
   // Delay slightly to ensure auth is ready
   setTimeout(async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
+      await restoreActiveAISupportSession(session.user);
       const enabled = await loadPublicSupportState();
       if (enabled) startPublicSupportListener();
     }
