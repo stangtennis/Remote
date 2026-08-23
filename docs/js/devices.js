@@ -279,6 +279,17 @@ function createDeviceCard(device) {
       startSession(device);
     });
     actions.appendChild(connectBtn);
+
+    const aiViewBtn = document.createElement('button');
+    aiViewBtn.className = 'btn btn-secondary btn-sm';
+    aiViewBtn.style.cssText = 'padding: 0.2rem 0.6rem; font-size: 0.75rem;';
+    aiViewBtn.textContent = 'AI view';
+    aiViewBtn.title = 'Vis live-skærmen fra en aktiv trusted AI-session';
+    aiViewBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      attachTrustedAIViewer(device);
+    });
+    actions.appendChild(aiViewBtn);
   }
 
   if (!device.owner_id) {

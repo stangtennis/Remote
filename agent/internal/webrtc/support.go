@@ -117,7 +117,7 @@ func RunPortableSupportWithCallbacks(cfg *config.Config, dev *device.Device, pin
 	m.enableSupportAuthorization(session.SessionID, grant, effectiveScopes, expiresAt)
 	m.sessionID = session.SessionID
 	defer func() {
-		if m.peerConnection != nil {
+		if m.peerConnection != nil || m.supportViewerPresent() {
 			m.cleanupConnection("portable support ended")
 		} else {
 			_, _ = m.supportRequest("end", nil)
@@ -136,6 +136,7 @@ func RunPortableSupportWithCallbacks(cfg *config.Config, dev *device.Device, pin
 	if err := m.CreatePeerConnection(iceServers); err != nil {
 		return err
 	}
+	m.supportAIOfferID = ""
 	if _, err := m.supportRequest("ready", nil); err != nil {
 		m.cleanupConnection("support ready failed")
 		return err
@@ -143,7 +144,7 @@ func RunPortableSupportWithCallbacks(cfg *config.Config, dev *device.Device, pin
 
 	log.Printf("Portable support waiting for admin offer: session=%s", session.SessionID)
 	setStatus("Support aktiv. Venter på forbindelse fra administrator...")
-	return m.pollPortableSupport(stop, setStatus)
+	return m.pollPortableSupport(stop, setStatus, iceServers)
 }
 
 func supportStopped(stop <-chan struct{}) bool {
@@ -204,6 +205,19 @@ func (m *Manager) supportWriteSignal(signalType string, payload interface{}) err
 	return err
 }
 
+// Legacy portable AI signaling did not identify its peer. Treat only missing
+// peer_id as AI; viewer messages must opt into the explicit viewer route.
+func supportSignalRouting(payload json.RawMessage) (peerID, offerID string) {
+	var route struct {
+		PeerID  string `json:"peer_id"`
+		OfferID string `json:"offer_id"`
+	}
+	if json.Unmarshal(payload, &route) != nil || route.PeerID == "" {
+		return "ai", route.OfferID
+	}
+	return route.PeerID, route.OfferID
+}
+
 func decodeSupportICEServers(data []byte) ([]pionwebrtc.ICEServer, error) {
 	var raw struct {
 		ICEServers []struct {
@@ -243,11 +257,12 @@ func decodeSupportICEServers(data []byte) ([]pionwebrtc.ICEServer, error) {
 	return servers, nil
 }
 
-func (m *Manager) pollPortableSupport(stop <-chan struct{}, status SupportStatusFunc) error {
+func (m *Manager) pollPortableSupport(stop <-chan struct{}, status SupportStatusFunc, iceServers []pionwebrtc.ICEServer) error {
 	processed := make(map[int]bool)
 	var pendingICE []pionwebrtc.ICECandidateInit
 	remoteDescriptionSet := false
 	offerHandled := false
+	aiOfferID := ""
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -283,13 +298,32 @@ func (m *Manager) pollPortableSupport(stop <-chan struct{}, status SupportStatus
 					continue
 				}
 				processed[signal.ID] = true
+				peerID, offerID := supportSignalRouting(signal.Payload)
 				switch signal.MsgType {
 				case "bye":
-					return nil
+					if peerID == "ai" {
+						return nil
+					}
 				case "offer":
+					if peerID == supportViewerPeerID {
+						if err := m.handleSupportViewerOffer(signal, iceServers); err != nil {
+							log.Printf("Support viewer offer failed: %v", err)
+						}
+						continue
+					}
+					if peerID != "ai" {
+						continue
+					}
 					candidate := signal
 					latestOffer = &candidate
 				case "ice":
+					if peerID == supportViewerPeerID {
+						m.handleSupportViewerICE(signal)
+						continue
+					}
+					if peerID != "ai" || (aiOfferID != "" && offerID != "" && offerID != aiOfferID) {
+						continue
+					}
 					var candidate ICEPayload
 					if json.Unmarshal(signal.Payload, &candidate) != nil || candidate.Candidate == "" {
 						continue
@@ -313,6 +347,11 @@ func (m *Manager) pollPortableSupport(stop <-chan struct{}, status SupportStatus
 				if err := m.handlePortableSupportOffer(*latestOffer, &remoteDescriptionSet, &pendingICE); err != nil {
 					return err
 				}
+				var offerPayload struct {
+					OfferID string `json:"offer_id"`
+				}
+				_ = json.Unmarshal(latestOffer.Payload, &offerPayload)
+				aiOfferID = offerPayload.OfferID
 				offerHandled = true
 				if status != nil {
 					status("AI-support er forbundet.")
@@ -326,14 +365,19 @@ func (m *Manager) handlePortableSupportOffer(signal SignalMessage, remoteSet *bo
 	var offerPayload struct {
 		Type    string `json:"type"`
 		SDP     string `json:"sdp"`
+		PeerID  string `json:"peer_id"`
 		OfferID string `json:"offer_id"`
 	}
 	if err := json.Unmarshal(signal.Payload, &offerPayload); err != nil {
 		return err
 	}
+	if offerPayload.PeerID != "" && offerPayload.PeerID != "ai" {
+		return fmt.Errorf("support offer is for another peer")
+	}
 	if strings.TrimSpace(offerPayload.OfferID) == "" {
 		return fmt.Errorf("support offer is missing offer_id")
 	}
+	m.supportAIOfferID = offerPayload.OfferID
 	if err := m.peerConnection.SetRemoteDescription(pionwebrtc.SessionDescription{
 		Type: pionwebrtc.SDPTypeOffer,
 		SDP:  offerPayload.SDP,
@@ -355,6 +399,7 @@ func (m *Manager) handlePortableSupportOffer(signal SignalMessage, remoteSet *bo
 	if err := m.supportWriteSignal("answer", map[string]interface{}{
 		"type":     "answer",
 		"sdp":      answer.SDP,
+		"peer_id":  "ai",
 		"offer_id": offerPayload.OfferID,
 	}); err != nil {
 		return err

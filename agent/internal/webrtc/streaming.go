@@ -633,8 +633,15 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			}
 		}
 
-		// H.264 mode: encode and send via video track
-		if m.useH264.Load() && m.videoTrack != nil && m.videoEncoder != nil {
+		// Encode once for the primary AI peer and, when present, the separate
+		// read-only dashboard viewer peer. The viewer may require H.264 while
+		// the AI peer remains on JPEG/data-channel output.
+		primaryH264 := m.useH264.Load() && m.videoTrack != nil
+		// Start encoding as soon as the viewer peer exists so its first keyframe
+		// is available during ICE negotiation instead of waiting for a state
+		// callback that may arrive after the capture tick.
+		viewerH264 := m.supportViewerPresent()
+		if (primaryH264 || viewerH264) && m.videoEncoder != nil {
 			h264PaceCounter++
 			curLossPct := m.getLossPct()
 			curRTT := m.getLastRTT()
@@ -644,6 +651,10 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 				h264SkipEvery = 3
 			case curLossPct > 5 || curRTT > 250*time.Millisecond:
 				h264SkipEvery = 2
+			}
+			if !primaryH264 {
+				// Do not let viewer pacing suppress the AI peer's JPEG path.
+				h264SkipEvery = 0
 			}
 			if h264SkipEvery > 0 && h264PaceCounter%h264SkipEvery != 0 {
 				skippedFrames++
@@ -694,14 +705,26 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 							nalUnits[0], nalUnits[1], nalUnits[2], nalUnits[3], nalUnits[4])
 					}
 
-					// Write H.264 NAL units to video track
+					// Write the encoded frame to each active H.264 peer. The encoder
+					// and capture are shared; there is no second streaming loop.
 					frameDuration := time.Second / time.Duration(fps)
-					if writeErr := m.videoTrack.WriteFrame(nalUnits, frameDuration); writeErr != nil {
-						errorCount++
-						if errorCount%100 == 1 {
-							log.Printf("⚠️ Video track write fejl: %v", writeErr)
+					if primaryH264 {
+						if writeErr := m.videoTrack.WriteFrame(nalUnits, frameDuration); writeErr != nil {
+							errorCount++
+							if errorCount%100 == 1 {
+								log.Printf("⚠️ Video track write fejl: %v", writeErr)
+							}
 						}
-					} else {
+					}
+					if viewerH264 {
+						if writeErr := m.writeSupportViewerFrame(nalUnits, frameDuration); writeErr != nil {
+							errorCount++
+							if errorCount%100 == 1 {
+								log.Printf("⚠️ Support viewer video track write fejl: %v", writeErr)
+							}
+						}
+					}
+					if primaryH264 || viewerH264 {
 						frameCount++
 						bytesSent += int64(len(nalUnits))
 						// Log every 100th frame to track H.264 streaming
@@ -711,8 +734,8 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 					}
 				}
 			}()
-			hybridRefreshDue := m.h264JpegRefreshes.Load() > 0
-			if !hybridRefreshDue && m.currentDesktop == desktop.DesktopWinlogon && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
+			hybridRefreshDue := primaryH264 && m.h264JpegRefreshes.Load() > 0
+			if primaryH264 && !hybridRefreshDue && m.currentDesktop == desktop.DesktopWinlogon && m.screenCapturer != nil && m.screenCapturer.HasInputForwarder() {
 				lastHybrid := time.Unix(0, m.lastH264HybridAt.Load())
 				hybridRefreshDue = time.Since(lastHybrid) >= 350*time.Millisecond
 			}
@@ -741,7 +764,9 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 					}
 				}
 			}
-			continue
+			if primaryH264 {
+				continue
+			}
 		}
 
 		// BANDWIDTH OPTIMIZATION: Skip frame if no change detected (except forced refresh)

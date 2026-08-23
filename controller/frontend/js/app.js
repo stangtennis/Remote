@@ -2,6 +2,9 @@
 // Communicates with Go backend via window.go.main.App.*
 
 const App = {
+  _isAdmin: false,
+  _localAITerminal: null,
+  _localAITerminalFit: null,
   // ==================== INITIALIZATION ====================
   async init() {
     // Set version
@@ -99,6 +102,10 @@ const App = {
         return;
       }
 
+      this._isAdmin = result.role === 'admin' || result.role === 'super_admin';
+      const aiTerminalTabBtn = document.getElementById('aiTerminalTabBtn');
+      if (aiTerminalTabBtn) aiTerminalTabBtn.style.display = this._isAdmin ? '' : 'none';
+
       // Success — switch to main view
       document.getElementById('userEmail').querySelector('span').textContent = result.email;
       this.showMainView();
@@ -173,7 +180,11 @@ const App = {
   // ==================== HEADER BUTTONS ====================
   setupHeader() {
     document.getElementById('logoutBtn').addEventListener('click', async () => {
+      this.stopLocalAITerminal();
       await window.go.main.App.Logout();
+      this._isAdmin = false;
+      const aiTerminalTabBtn = document.getElementById('aiTerminalTabBtn');
+      if (aiTerminalTabBtn) aiTerminalTabBtn.style.display = 'none';
       this.showLoginView();
     });
 
@@ -1130,7 +1141,64 @@ const App = {
           }
         }
       });
+
+      window.runtime.EventsOn('local-ai-terminal-output', (data) => {
+        if (this._localAITerminal) this._localAITerminal.write(String(data || ''));
+      });
+      window.runtime.EventsOn('local-ai-terminal-started', (cwd) => {
+        const status = document.getElementById('localAITerminalStatus');
+        if (status) status.textContent = `Kører i ${cwd}`;
+      });
+      window.runtime.EventsOn('local-ai-terminal-exit', () => {
+        const status = document.getElementById('localAITerminalStatus');
+        if (status) status.textContent = 'AI-terminalen er stoppet.';
+      });
     }
+  },
+
+  async ensureLocalAITerminal() {
+    if (this._localAITerminal) return;
+    const target = document.getElementById('localAITerminal');
+    if (!target || !window.Terminal) throw new Error('xterm er ikke loaded');
+    this._localAITerminal = new window.Terminal({
+      cursorBlink: true,
+      fontSize: 14,
+      fontFamily: 'Consolas, "Courier New", monospace',
+      convertEol: true,
+      theme: { background: '#0d1117', foreground: '#c9d1d9', cursor: '#58a6ff' },
+    });
+    if (window.FitAddon?.FitAddon) {
+      this._localAITerminalFit = new window.FitAddon.FitAddon();
+      this._localAITerminal.loadAddon(this._localAITerminalFit);
+    }
+    this._localAITerminal.open(target);
+    this._localAITerminalFit?.fit();
+    this._localAITerminal.onData((data) => {
+      window.go.main.App.WriteLocalAITerminal(data).catch((err) => {
+        const status = document.getElementById('localAITerminalStatus');
+        if (status) status.textContent = String(err?.message || err);
+      });
+    });
+    window.addEventListener('resize', () => this._localAITerminalFit?.fit(), { passive: true });
+  },
+
+  async startLocalAITerminal() {
+    if (!this._isAdmin) return;
+    try {
+      await this.ensureLocalAITerminal();
+      const cwd = await window.go.main.App.GetLocalAITerminalDirectory();
+      const pathEl = document.getElementById('localAITerminalPath');
+      if (pathEl) pathEl.textContent = cwd;
+      await window.go.main.App.StartLocalAITerminal();
+      this._localAITerminal?.focus();
+    } catch (err) {
+      const status = document.getElementById('localAITerminalStatus');
+      if (status) status.textContent = 'Fejl: ' + (err?.message || err);
+    }
+  },
+
+  stopLocalAITerminal() {
+    try { window.go?.main?.App?.StopLocalAITerminal?.(); } catch (_) {}
   },
 
   // ==================== DEVICE COMMANDS ====================

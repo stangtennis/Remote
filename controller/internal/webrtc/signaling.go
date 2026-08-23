@@ -156,6 +156,48 @@ func (s *SignalingClient) CreateSession(deviceID, userID string) (*Session, erro
 	return session, nil
 }
 
+// CreateAISession creates a normal WebRTC session marked as an AI connection.
+// The Edge Function validates the separate trusted AI capability before the
+// session is inserted, so callers cannot opt into this type via JSON alone.
+func (s *SignalingClient) CreateAISession(baseURL, deviceID, userID, aiKey string) (*Session, error) {
+	if aiKey == "" {
+		return nil, fmt.Errorf("RD_AI_CONTROLLER_KEY is required")
+	}
+	controllerID := fmt.Sprintf("ai-%s-%d", userID, time.Now().UnixNano())
+	payload, err := json.Marshal(map[string]string{
+		"device_id":     deviceID,
+		"controller_id": controllerID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal AI session: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/functions/v1/ai-connect", bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AI session request: %w", err)
+	}
+	req.Header.Set("apikey", s.anonKey)
+	req.Header.Set("Authorization", "Bearer "+s.authToken)
+	req.Header.Set("x-ai-controller-key", aiKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AI session: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("AI session failed (%d): %s", resp.StatusCode, string(body))
+	}
+	var result struct {
+		SessionID string `json:"session_id"`
+		DeviceID  string `json:"device_id"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil || result.SessionID == "" {
+		return nil, fmt.Errorf("invalid AI session response: %s", string(body))
+	}
+	return &Session{SessionID: result.SessionID, DeviceID: result.DeviceID, UserID: userID, Status: "pending"}, nil
+}
+
 // SendOffer sends the WebRTC offer to the session
 func (s *SignalingClient) SendOffer(sessionID, offer string) error {
 	url := fmt.Sprintf("%s/rest/v1/webrtc_sessions?session_id=eq.%s", s.supabaseURL, sessionID)

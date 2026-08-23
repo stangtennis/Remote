@@ -114,8 +114,23 @@ func NewConnectionManager(cfg *config.Config, auth *authInfo) *ConnectionManager
 
 // Connect establishes a WebRTC connection to a device
 func (cm *ConnectionManager) Connect(deviceID, deviceName string) error {
+	return cm.connectDevice(deviceID, deviceName, false)
+}
+
+// ConnectAI establishes a trusted AI WebRTC connection to a registered device.
+// It uses the same normal agent channels as a controller, but its session is
+// issued by the protected AI Edge Function.
+func (cm *ConnectionManager) ConnectAI(deviceID, deviceName string) error {
+	return cm.connectDevice(deviceID, deviceName, true)
+}
+
+func (cm *ConnectionManager) connectDevice(deviceID, deviceName string, ai bool) error {
+	connectionKey := deviceID
+	if ai {
+		connectionKey = "ai:" + deviceID
+	}
 	cm.mu.Lock()
-	if conn, exists := cm.connections[deviceID]; exists && conn.connected {
+	if conn, exists := cm.connections[connectionKey]; exists && conn.connected {
 		cm.mu.Unlock()
 		conn.mu.Lock()
 		conn.lastUsedAt = time.Now()
@@ -124,7 +139,7 @@ func (cm *ConnectionManager) Connect(deviceID, deviceName string) error {
 	}
 	cm.mu.Unlock()
 
-	log.Printf("[cli] Connecting to device %s (%s)...", deviceName, deviceID)
+	log.Printf("[cli] Connecting to device %s (%s, ai=%v)...", deviceName, deviceID, ai)
 
 	client, err := rtc.NewClient()
 	if err != nil {
@@ -133,7 +148,7 @@ func (cm *ConnectionManager) Connect(deviceID, deviceName string) error {
 
 	conn := &DeviceConnection{
 		client:        client,
-		deviceID:      deviceID,
+		deviceID:      connectionKey,
 		deviceName:    deviceName,
 		lastUsedAt:    time.Now(),
 		shellRouter:   newChannelRouter(),
@@ -193,7 +208,12 @@ func (cm *ConnectionManager) Connect(deviceID, deviceName string) error {
 	signalingClient := rtc.NewSignalingClient(cm.cfg.SupabaseURL, cm.cfg.SupabaseAnonKey, token)
 	conn.signaling = signalingClient
 
-	session, err := signalingClient.CreateSession(deviceID, cm.auth.userID)
+	var session *rtc.Session
+	if ai {
+		session, err = signalingClient.CreateAISession(cm.cfg.SupabaseURL, deviceID, cm.auth.userID, os.Getenv("RD_AI_CONTROLLER_KEY"))
+	} else {
+		session, err = signalingClient.CreateSession(deviceID, cm.auth.userID)
+	}
 	if err != nil {
 		client.Close()
 		return fmt.Errorf("failed to create session: %w", err)
@@ -236,7 +256,7 @@ func (cm *ConnectionManager) Connect(deviceID, deviceName string) error {
 	}
 
 	cm.mu.Lock()
-	cm.connections[deviceID] = conn
+	cm.connections[connectionKey] = conn
 	cm.mu.Unlock()
 
 	return nil
@@ -315,6 +335,7 @@ func (cm *ConnectionManager) ConnectSupport(supportSessionID string) error {
 		return err
 	}
 	offerID := fmt.Sprintf("support-offer-%d", time.Now().UnixNano())
+	offer["peer_id"] = "ai"
 	offer["offer_id"] = offerID
 	if err := signaling.SendSupportSignal(supportSessionID, "offer", offer); err != nil {
 		client.Close()
@@ -337,6 +358,9 @@ func (cm *ConnectionManager) ConnectSupport(supportSessionID string) error {
 					if answerReceived || signal.Payload["type"] != "answer" {
 						continue
 					}
+					if peerID, ok := signal.Payload["peer_id"].(string); ok && peerID != "ai" {
+						continue
+					}
 					answerID, ok := signal.Payload["offer_id"].(string)
 					if !ok || answerID != offerID {
 						continue
@@ -348,6 +372,13 @@ func (cm *ConnectionManager) ConnectSupport(supportSessionID string) error {
 					}
 					answerReceived = true
 				case "ice":
+					if peerID, ok := signal.Payload["peer_id"].(string); ok && peerID != "ai" {
+						continue
+					}
+					iceOfferID, ok := signal.Payload["offer_id"].(string)
+					if !ok || iceOfferID != offerID {
+						continue
+					}
 					candidate, ok := signal.Payload["candidate"].(string)
 					if !ok || candidate == "" || !answerReceived {
 						continue

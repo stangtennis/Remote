@@ -156,7 +156,9 @@ func runDaemon(deviceID, deviceName string) {
 	connMgr.StartIdleChecker()
 
 	var connectErr error
-	if strings.HasPrefix(deviceID, "support:") {
+	if strings.HasPrefix(deviceID, "ai:") {
+		connectErr = connMgr.ConnectAI(strings.TrimPrefix(deviceID, "ai:"), deviceName)
+	} else if strings.HasPrefix(deviceID, "support:") {
 		connectErr = connMgr.ConnectSupport(strings.TrimPrefix(deviceID, "support:"))
 	} else {
 		connectErr = connMgr.Connect(deviceID, deviceName)

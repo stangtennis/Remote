@@ -72,6 +72,7 @@
       <button class="tab-btn active" data-tab="devices"><i class="fas fa-laptop"></i> Mine enheder</button>
       <button class="tab-btn" data-tab="pending"><i class="fas fa-clock"></i> Ventende</button>
       <button class="tab-btn" data-tab="viewer"><i class="fas fa-tv"></i> Fjernsession</button>
+      <button class="tab-btn" data-tab="ai-terminal" id="aiTerminalTabBtn" style="display:none;"><i class="fas fa-terminal"></i> AI Terminal</button>
       <button class="tab-btn" data-tab="settings"><i class="fas fa-sliders-h"></i> Indstillinger</button>
       <button class="tab-btn" data-tab="admin" id="adminTabBtn" style="display:none;"><i class="fas fa-shield-alt"></i> Admin</button>
     </nav>
@@ -158,6 +159,22 @@
           <!-- Session wrappers are dynamically added here -->
           <div id="sessionContainer" class="session-container"></div>
         </div>
+      </section>
+
+      <!-- LOCAL AI TERMINAL TAB -->
+      <section id="ai-terminalTab" class="tab-pane">
+        <div class="section-header">
+          <div>
+            <h2><i class="fas fa-terminal"></i> AI Terminal</h2>
+            <p id="localAITerminalPath" class="settings-info">Indlæser arbejdsmappe...</p>
+          </div>
+          <div style="display:flex;gap:0.5rem;">
+            <button class="btn btn-sm btn-primary" onclick="App.startLocalAITerminal()" id="localAITerminalStartBtn"><i class="fas fa-play"></i> Start</button>
+            <button class="btn btn-sm btn-danger" onclick="App.stopLocalAITerminal()" id="localAITerminalStopBtn"><i class="fas fa-stop"></i> Stop</button>
+          </div>
+        </div>
+        <p id="localAITerminalStatus" class="status-text"></p>
+        <div id="localAITerminal" class="terminal-container" style="display:flex; min-height:480px; background:#0d1117; border:1px solid var(--border); border-radius:8px; padding:0.5rem;"></div>
       </section>
 
       <!-- SETTINGS TAB -->

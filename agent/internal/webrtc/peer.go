@@ -55,18 +55,19 @@ type Manager struct {
 	clipboardReceiver      *clipboard.Receiver
 	clipboardSessionHelper *clipboard.SessionHelper // Set when running as Session 0 service on Windows
 
-	sessionID          string
-	isStreaming        atomic.Bool
-	isSession0         bool         // Running in Session 0 (before user login)
-	startedInSession0  bool         // Process was started in Session 0 (never changes)
-	inputPriorityUntil atomic.Int64 // UnixNano deadline where Session0 pipe input gets capture priority
-	inputEvents        atomic.Uint64
-	inputForwarded     atomic.Uint64
-	inputForwardErrors atomic.Uint64
-	lastInputStatusAt  atomic.Int64
-	lastH264RefreshAt  atomic.Int64
-	lastH264HybridAt   atomic.Int64
-	h264JpegRefreshes  atomic.Int64
+	sessionID             string
+	sessionControllerType string
+	isStreaming           atomic.Bool
+	isSession0            bool         // Running in Session 0 (before user login)
+	startedInSession0     bool         // Process was started in Session 0 (never changes)
+	inputPriorityUntil    atomic.Int64 // UnixNano deadline where Session0 pipe input gets capture priority
+	inputEvents           atomic.Uint64
+	inputForwarded        atomic.Uint64
+	inputForwardErrors    atomic.Uint64
+	lastInputStatusAt     atomic.Int64
+	lastH264RefreshAt     atomic.Int64
+	lastH264HybridAt      atomic.Int64
+	h264JpegRefreshes     atomic.Int64
 
 	// Concurrency control
 	mu                sync.Mutex         // Protects peerConnection, dataChannel, controlChannel
@@ -154,6 +155,18 @@ type Manager struct {
 	supportScopes    map[string]bool
 	supportExpiresAt time.Time
 	supportAuthMu    sync.RWMutex
+
+	// The portable AI peer and dashboard viewer peer are intentionally separate.
+	// The viewer must not use CreatePeerConnection, which owns peerConnection and
+	// closes the AI control/data peer when called a second time.
+	supportAIOfferID               string
+	supportViewerMu                sync.RWMutex
+	supportViewerPC                *pionwebrtc.PeerConnection
+	supportViewerTrack             *video.Track
+	supportViewerOfferID           string
+	supportViewerAnswerSent        bool
+	supportViewerPendingCandidates []*pionwebrtc.ICECandidate
+	supportViewerPendingRemote     map[string][]pionwebrtc.ICECandidateInit
 
 	// Shared HTTP client with connection pooling (reused across all requests)
 	httpClient *http.Client
@@ -965,6 +978,7 @@ func (m *Manager) closeIceStopCh() {
 
 func (m *Manager) cleanupConnection(reason string) {
 	log.Printf("🧹 Cleaning up connection (reason: %s)", reason)
+	m.closeSupportViewerPeer(reason)
 
 	// Stop streaming
 	m.isStreaming.Store(false)
@@ -1021,6 +1035,7 @@ func (m *Manager) cleanupConnection(reason string) {
 
 	// Reset session ID for next connection
 	m.sessionID = ""
+	m.sessionControllerType = ""
 
 	log.Println("✅ Connection cleaned up - ready for new connections")
 }
@@ -1082,6 +1097,7 @@ func (m *Manager) getLastInputTime() time.Time {
 
 func (m *Manager) Close() {
 	m.isStreaming.Store(false)
+	m.closeSupportViewerPeer("manager closed")
 
 	// Stop audio capture
 	if m.audioCapturer != nil {

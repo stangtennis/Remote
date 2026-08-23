@@ -23,6 +23,19 @@ remote-desktop-cli connect $ARGUMENTS
 
 Vent på "Connected" besked. Daemon kører i baggrunden med auto-reconnect.
 
+## Trusted AI til en registreret agent
+
+Ubuntu AI bruger den normale installerede agent, men opretter en separat
+server-valideret AI-session:
+
+```bash
+export RD_AI_CONTROLLER_KEY='(AI_CONTROLLER_KEY fra Supabase secrets)'
+remote-desktop-cli ai-connect $ARGUMENTS
+```
+
+`ai-connect` kræver både en godkendt admin-login og `RD_AI_CONTROLLER_KEY`.
+Almindelige `connect`-sessioner og browser-support ændres ikke.
+
 ## AI Quick Support uden installeret agent
 
 Ubuntu/OpenCode skal have watcher-processen kørende én gang:

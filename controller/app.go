@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -19,13 +20,15 @@ import (
 
 // App struct — methods are exposed to frontend via Wails bindings
 type App struct {
-	ctx            context.Context
-	cfg            *config.Config
-	supabase       *supabase.Client
-	currentUser    *supabase.User
-	appSettings    *settings.Settings
-	deviceTicker   *time.Ticker
-	deviceTickStop chan bool
+	ctx             context.Context
+	cfg             *config.Config
+	supabase        *supabase.Client
+	currentUser     *supabase.User
+	appSettings     *settings.Settings
+	deviceTicker    *time.Ticker
+	deviceTickStop  chan bool
+	localTerminalMu sync.Mutex
+	localTerminal   localTerminalSession
 }
 
 // NewApp creates a new App instance
@@ -71,6 +74,7 @@ func (a *App) startup(ctx context.Context) {
 // shutdown is called when the app closes
 func (a *App) shutdown(ctx context.Context) {
 	a.stopDeviceRefresh()
+	a.closeLocalAITerminal()
 	if a.appSettings != nil {
 		settings.Save(a.appSettings)
 	}
@@ -129,6 +133,7 @@ func (a *App) Login(email, password string) (*AuthResult, error) {
 // Logout signs out the current user
 func (a *App) Logout() {
 	a.stopDeviceRefresh()
+	a.closeLocalAITerminal()
 	if a.supabase != nil {
 		if err := a.supabase.SignOut(); err != nil {
 			logger.Error("SignOut failed: %v", err)

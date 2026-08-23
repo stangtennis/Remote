@@ -11,6 +11,8 @@ let supportPendingIce = [];
 let supportReadyHandled = false;
 let currentSupportSession = null;
 let supportInPreview = false;
+let supportViewerOfferId = null;
+let supportViewerConnecting = false;
 const ACTIVE_AI_SUPPORT_STORAGE_KEY = 'remoteDesktopActiveAISupport';
 
 function rememberActiveAISupportSession(sessionId, userId) {
@@ -102,6 +104,41 @@ function closeSupportModal() {
   if (!supportInPreview) {
     cleanupSupportViewer();
   }
+}
+
+async function attachTrustedAIViewer(device) {
+  if (currentSupportSession) {
+    showToast('Der vises allerede en live-viewer', 'warning');
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from('webrtc_sessions')
+    .select('session_id, device_id, status, controller_type')
+    .eq('device_id', device.device_id)
+    .eq('controller_type', 'ai')
+    .in('status', ['pending', 'offer_sent', 'answered', 'connected'])
+    .is('kicked_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) {
+    showToast('Ingen aktiv trusted AI-session fundet på enheden', 'warning');
+    return;
+  }
+
+  currentSupportSession = {
+    session_id: data.session_id,
+    support_mode: 'ai',
+    trusted_ai_device: true,
+    device_id: device.device_id,
+    device_name: device.device_name,
+  };
+  showSupportModal();
+  showSupportStep('viewer');
+  const status = document.getElementById('supportViewerStatus');
+  if (status) status.textContent = 'Forbinder til trusted AI live-view...';
+  await connectToSupport(data.session_id);
 }
 
 function showSupportStep(step) {
@@ -201,6 +238,10 @@ function watchUbuntuController(sessionId) {
     const status = document.getElementById('supportShareStatus');
     const button = document.getElementById('supportUbuntuConnectBtn');
     if (!session) return;
+    if (currentSupportSession?.support_mode === 'ai' && session.status === 'active' &&
+        !supportViewerPC && !supportViewerConnecting) {
+      void connectToSupport(sessionId);
+    }
     if (session.controller_claimed_by) {
       if (status) status.textContent = 'Ubuntu AI er forbundet til denne client.';
       if (button) {
@@ -314,10 +355,18 @@ async function connectToSupport(sessionId) {
   // Show viewer step
   showSupportStep('viewer');
 
+  const isAISupport = currentSupportSession?.support_mode === 'ai';
+  const isTrustedAIDevice = currentSupportSession?.trusted_ai_device === true;
+  if (isAISupport && (supportViewerPC || supportViewerConnecting)) return;
+  supportViewerConnecting = true;
+  supportViewerOfferId = isAISupport
+    ? (crypto.randomUUID ? crypto.randomUUID() : `viewer-${Date.now()}-${Math.random()}`)
+    : null;
+
   try {
     // Fetch TURN credentials
     const { data: { session: authSession } } = await supabase.auth.getSession();
-    const requireRelay = currentSupportSession?.support_mode === 'ai';
+    const requireRelay = isAISupport && !isTrustedAIDevice;
     let iceServers = [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
@@ -350,35 +399,46 @@ async function connectToSupport(sessionId) {
 
     debug('Support viewer: creating peer connection');
     supportViewerPC = new RTCPeerConnection(configuration);
+    const viewerPC = supportViewerPC;
 
     // Handle remote video track - pipe to both modal video and main preview
     supportViewerPC.ontrack = (event) => {
+      if (supportViewerPC !== viewerPC) return;
       debug('Support viewer: received remote track', event.track.kind);
       const supportVideo = document.getElementById('supportVideo');
       const previewVideo = document.getElementById('previewVideo');
       if (event.streams[0]) {
-        if (supportVideo) supportVideo.srcObject = event.streams[0];
-        if (previewVideo) previewVideo.srcObject = event.streams[0];
+        for (const video of [supportVideo, previewVideo]) {
+          if (!video) continue;
+          video.srcObject = event.streams[0];
+          video.muted = true;
+          video.play().catch((error) => debug('Support viewer autoplay deferred:', error.message));
+        }
       }
     };
 
     // Send ICE candidates
-    supportViewerPC.onicecandidate = async (event) => {
+    viewerPC.onicecandidate = async (event) => {
       if (event.candidate) {
+        const payload = {
+          ...event.candidate.toJSON(),
+          ...(isAISupport && { peer_id: 'viewer', offer_id: supportViewerOfferId }),
+        };
         await supabase
           .from('session_signaling')
           .insert({
             session_id: sessionId,
             from_side: 'dashboard',
             msg_type: 'ice',
-            payload: event.candidate,
+            payload,
           });
       }
     };
 
     // Connection state
-    supportViewerPC.onconnectionstatechange = () => {
-      const state = supportViewerPC.connectionState;
+    viewerPC.onconnectionstatechange = () => {
+      if (supportViewerPC !== viewerPC) return;
+      const state = viewerPC.connectionState;
       debug('Support viewer connection state:', state);
       const statusEl = document.getElementById('supportViewerStatus');
 
@@ -387,6 +447,7 @@ async function connectToSupport(sessionId) {
           if (statusEl) statusEl.textContent = 'Forbinder...';
           break;
         case 'connected':
+          supportViewerConnecting = false;
           if (statusEl) statusEl.textContent = 'Forbundet';
           // Stop signaling polling
           if (supportPollingInterval) {
@@ -398,20 +459,23 @@ async function connectToSupport(sessionId) {
           break;
         case 'disconnected':
         case 'failed':
+          supportViewerConnecting = false;
           if (statusEl) statusEl.textContent = 'Afbrudt';
-          // Revoke server-side before local cleanup so the sharer also stops.
-          if (currentSupportSession) void endSupportSession();
+          // A dashboard viewer is auxiliary to AI control. Its disconnect must
+          // not revoke the grant or close the Ubuntu control peer.
+          if (isAISupport) cleanupSupportViewerPeer();
+          else if (currentSupportSession) void endSupportSession();
           else cleanupSupportViewer();
           break;
       }
     };
 
     // Create offer (receive video only, no data channel)
-    const offer = await supportViewerPC.createOffer({
+    const offer = await viewerPC.createOffer({
       offerToReceiveVideo: true,
       offerToReceiveAudio: false,
     });
-    await supportViewerPC.setLocalDescription(offer);
+    await viewerPC.setLocalDescription(offer);
 
     // Send offer to sharer
     await supabase
@@ -420,7 +484,11 @@ async function connectToSupport(sessionId) {
         session_id: sessionId,
         from_side: 'dashboard',
         msg_type: 'offer',
-        payload: { type: 'offer', sdp: offer.sdp },
+        payload: {
+          type: 'offer',
+          sdp: offer.sdp,
+          ...(isAISupport && { peer_id: 'viewer', offer_id: supportViewerOfferId }),
+        },
       });
 
     debug('Support viewer: offer sent');
@@ -429,6 +497,7 @@ async function connectToSupport(sessionId) {
     subscribeToSupportSignaling(sessionId);
 
   } catch (error) {
+    supportViewerConnecting = false;
     console.error('Support connection error:', error);
     const statusEl = document.getElementById('supportViewerStatus');
     if (statusEl) statusEl.textContent = 'Forbindelsesfejl: ' + error.message;
@@ -443,6 +512,7 @@ function subscribeToSupportSignaling(sessionId) {
   // We already have the realtime channel from waitForSharerReady
   // Just reset the polling for answer/ice signals
   supportProcessedIds.clear();
+  const signalSide = currentSupportSession?.trusted_ai_device ? 'agent' : 'support';
 
   supportPollingInterval = setInterval(async () => {
     try {
@@ -450,7 +520,7 @@ function subscribeToSupportSignaling(sessionId) {
         .from('session_signaling')
         .select('*')
         .eq('session_id', sessionId)
-        .eq('from_side', 'support')
+        .eq('from_side', signalSide)
         .order('created_at', { ascending: true });
 
       if (!data) return;
@@ -467,8 +537,18 @@ function subscribeToSupportSignaling(sessionId) {
 }
 
 async function handleSupportViewerSignal(signal) {
-  if (signal.from_side !== 'support') return;
+  const expectedSide = currentSupportSession?.trusted_ai_device ? 'agent' : 'support';
+  if (signal.from_side !== expectedSide) return;
   if (!supportViewerPC) return;
+
+  const isAISupport = currentSupportSession?.support_mode === 'ai';
+  const signalPeerID = signal.payload?.peer_id;
+  const signalOfferID = signal.payload?.offer_id;
+  if (isAISupport) {
+    if (signalPeerID !== 'viewer' || signalOfferID !== supportViewerOfferId) return;
+  } else if (signalPeerID && signalPeerID !== 'viewer') {
+    return;
+  }
 
   debug('Support viewer: processing signal', signal.msg_type);
 
@@ -528,7 +608,8 @@ async function handleSupportViewerSignal(signal) {
 
       case 'bye':
         debug('Support sharer disconnected');
-        cleanupSupportViewer();
+        if (isAISupport) cleanupSupportViewerPeer();
+        else cleanupSupportViewer();
         const statusEl = document.getElementById('supportViewerStatus');
         if (statusEl) statusEl.textContent = 'Personen stoppede deling';
         break;
@@ -663,9 +744,13 @@ requestAnimationFrame(updateSupportResolution);
 
 function showSupportInPreview() {
   supportInPreview = true;
+  const trustedAIDevice = currentSupportSession?.trusted_ai_device === true;
+  const viewerLabel = trustedAIDevice
+    ? `AI Live View - ${currentSupportSession.device_name || currentSupportSession.device_id}`
+    : 'Quick Support';
 
   // Create session tab
-  SessionManager.createSession('quick-support', '🆘 Quick Support');
+  SessionManager.createSession('quick-support', trustedAIDevice ? '🤖 ' + viewerLabel : '🆘 Quick Support');
   SessionManager.updateSessionStatus('quick-support', 'connected');
 
   // Show video element, hide canvas (support uses WebRTC video track, not canvas)
@@ -676,7 +761,7 @@ function showSupportInPreview() {
 
   // Update device name in toolbar
   const connectedDeviceName = document.getElementById('connectedDeviceName');
-  if (connectedDeviceName) connectedDeviceName.textContent = '🆘 Quick Support';
+  if (connectedDeviceName) connectedDeviceName.textContent = trustedAIDevice ? '🤖 ' + viewerLabel : '🆘 Quick Support';
 
   // Hide toolbar center buttons (view-only, no remote control)
   const toolbarCenter = document.querySelector('.toolbar-center');
@@ -781,16 +866,43 @@ function cleanupSupportViewer() {
     supportViewerPC = null;
   }
 
+  supportViewerOfferId = null;
+  supportViewerConnecting = false;
+
   supportProcessedIds.clear();
   supportPendingIce = [];
   currentSupportSession = null;
   forgetActiveAISupportSession();
 }
 
+function cleanupSupportViewerPeer() {
+  const trustedAIDevice = currentSupportSession?.trusted_ai_device === true;
+  removeSupportFromPreview();
+  if (supportPollingInterval) {
+    clearInterval(supportPollingInterval);
+    supportPollingInterval = null;
+  }
+  if (supportViewerPC) {
+    try { supportViewerPC.close(); } catch (e) {}
+    supportViewerPC = null;
+  }
+  supportPendingIce = [];
+  supportViewerOfferId = null;
+  supportViewerConnecting = false;
+  if (trustedAIDevice) currentSupportSession = null;
+}
+
 async function endSupportSession() {
   const sessionId = currentSupportSession?.session_id;
+  const trustedAIDevice = currentSupportSession?.trusted_ai_device === true;
   const modal = document.getElementById('supportModal');
   if (!sessionId) {
+    cleanupSupportViewer();
+    if (modal) modal.style.display = 'none';
+    return;
+  }
+
+  if (trustedAIDevice) {
     cleanupSupportViewer();
     if (modal) modal.style.display = 'none';
     return;

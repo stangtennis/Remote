@@ -112,12 +112,13 @@ func (m *Manager) getICEServers() []webrtc.ICEServer {
 }
 
 type Session struct {
-	ID         string                 `json:"session_id"`
-	Token      string                 `json:"token"`
-	PIN        string                 `json:"pin"`
-	ExpiresAt  string                 `json:"expires_at"`
-	Offer      string                 `json:"offer"`
-	TurnConfig map[string]interface{} `json:"turn_config"`
+	ID             string                 `json:"session_id"`
+	Token          string                 `json:"token"`
+	PIN            string                 `json:"pin"`
+	ExpiresAt      string                 `json:"expires_at"`
+	Offer          string                 `json:"offer"`
+	ControllerType string                 `json:"controller_type"`
+	TurnConfig     map[string]interface{} `json:"turn_config"`
 }
 
 type SignalMessage struct {
@@ -130,8 +131,10 @@ type SignalMessage struct {
 
 // OfferPayload for offer/answer messages
 type OfferPayload struct {
-	Type string `json:"type"`
-	SDP  string `json:"sdp"`
+	Type    string `json:"type"`
+	SDP     string `json:"sdp"`
+	PeerID  string `json:"peer_id"`
+	OfferID string `json:"offer_id"`
 }
 
 // ICEPayload for ICE candidate messages - dashboard sends candidate directly in payload
@@ -140,6 +143,8 @@ type ICEPayload struct {
 	SDPMid           string `json:"sdpMid"`
 	SDPMLineIndex    *int   `json:"sdpMLineIndex"`
 	UsernameFragment string `json:"usernameFragment"`
+	PeerID           string `json:"peer_id"`
+	OfferID          string `json:"offer_id"`
 }
 
 func (m *Manager) ListenForSessions() {
@@ -438,6 +443,7 @@ func (m *Manager) handleWebSession(session Session) {
 
 	// NOW set the new session ID (after cleanup marked the OLD session as ended)
 	m.sessionID = session.ID
+	m.sessionControllerType = "dashboard"
 
 	// Stop previous ICE polling goroutine and create new stop channel
 	m.closeIceStopCh()
@@ -621,9 +627,11 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 		// Get offer (SDP) from the session
 		offer, _ := s["offer"].(string)
 
+		controllerType, _ := s["controller_type"].(string)
 		session := Session{
-			ID:    sessionID,
-			Offer: offer, // Store offer in the Offer field
+			ID:             sessionID,
+			Offer:          offer, // Store offer in the Offer field
+			ControllerType: controllerType,
 		}
 
 		result = append(result, session)
@@ -633,7 +641,11 @@ func (m *Manager) fetchPendingSessions() ([]Session, error) {
 }
 
 func (m *Manager) handleSession(session Session) {
-	log.Println("🔧 Setting up WebRTC connection...")
+	controllerType := session.ControllerType
+	if controllerType == "" {
+		controllerType = "controller"
+	}
+	log.Printf("🔧 Setting up WebRTC connection (controller_type=%s)...", controllerType)
 
 	// Ensure previous connection is fully cleaned up
 	// IMPORTANT: Set sessionID AFTER cleanup so cleanup marks the OLD session as ended
@@ -644,10 +656,14 @@ func (m *Manager) handleSession(session Session) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	m.sessionID = session.ID
+	m.sessionControllerType = controllerType
 
 	if err := m.CreatePeerConnection(m.getICEServers()); err != nil {
 		log.Printf("Failed to create peer connection: %v", err)
 		return
+	}
+	if controllerType == "ai" {
+		go m.listenForInstalledViewer(session.ID)
 	}
 
 	// Extract offer from session
@@ -666,6 +682,45 @@ func (m *Manager) handleSession(session Session) {
 	// Process the offer immediately
 	log.Println("📨 Processing offer from controller...")
 	m.handleOfferDirect(session.ID, sessionDesc.SDP)
+}
+
+// listenForInstalledViewer handles a dashboard read-only peer on the active
+// trusted AI session without touching the primary control peer.
+func (m *Manager) listenForInstalledViewer(sessionID string) {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	processedIDs := make(map[int]bool)
+
+	for range ticker.C {
+		if m.sessionID != sessionID || m.sessionControllerType != "ai" || m.peerConnection == nil {
+			return
+		}
+		signals, err := m.fetchSignalingMessages(sessionID, "dashboard")
+		if err != nil {
+			continue
+		}
+		for _, signal := range signals {
+			if processedIDs[signal.ID] {
+				continue
+			}
+			processedIDs[signal.ID] = true
+
+			var route struct {
+				PeerID string `json:"peer_id"`
+			}
+			if json.Unmarshal(signal.Payload, &route) != nil || route.PeerID != supportViewerPeerID {
+				continue
+			}
+			switch signal.MsgType {
+			case "offer":
+				if err := m.handleSupportViewerOffer(signal, m.getICEServers()); err != nil {
+					log.Printf("⚠️ Installed AI viewer offer failed: %v", err)
+				}
+			case "ice":
+				m.handleSupportViewerICE(signal)
+			}
+		}
+	}
 }
 
 func (m *Manager) waitForOffer(sessionID string) {
@@ -1072,6 +1127,47 @@ func (m *Manager) updateSessionStatus(status string) {
 	log.Printf("✅ Session %s marked as %s", m.sessionID, status)
 }
 
+// writeViewerSignal uses the portable support grant when present, otherwise
+// writes the installed-agent viewer signal into the active AI session.
+func (m *Manager) writeViewerSignal(signalType string, payload interface{}) error {
+	if m.supportIsActive() {
+		return m.supportWriteSignal(signalType, payload)
+	}
+	if m.sessionControllerType != "ai" || m.sessionID == "" {
+		return fmt.Errorf("installed viewer requires an active AI session")
+	}
+
+	body := map[string]interface{}{
+		"session_id": m.sessionID,
+		"from_side":  "agent",
+		"msg_type":   signalType,
+		"payload":    payload,
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPost, m.cfg.SupabaseURL+"/rest/v1/session_signaling", bytes.NewReader(encoded))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=minimal")
+	if err := m.setAuthHeaders(req); err != nil {
+		return err
+	}
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		responseBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("viewer signal failed: HTTP %d: %s", resp.StatusCode, string(responseBody))
+	}
+	return nil
+}
+
 func (m *Manager) sendICECandidate(candidate *webrtc.ICECandidate) {
 	if m.supportIsActive() {
 		candidateInit := candidate.ToJSON()
@@ -1087,6 +1183,8 @@ func (m *Manager) sendICECandidate(candidate *webrtc.ICECandidate) {
 			"candidate":     candidateInit.Candidate,
 			"sdpMid":        sdpMid,
 			"sdpMLineIndex": sdpMLineIndex,
+			"peer_id":       "ai",
+			"offer_id":      m.supportAIOfferID,
 		}); err != nil {
 			log.Printf("❌ Failed to send support ICE candidate: %v", err)
 		}

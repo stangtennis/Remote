@@ -5,6 +5,14 @@ cli="${REMOTE_DESKTOP_CLI:-$HOME/.local/bin/remote-desktop-cli}"
 opencode_bin="${OPENCODE_BIN:-$HOME/.local/bin/opencode}"
 state_dir="$HOME/.local/state/remote-desktop"
 watch_log="$state_dir/support-watch.log"
+ai_env="$HOME/projekter/aisupport/ai-controller.env"
+
+if [[ -r "$ai_env" ]]; then
+  set -a
+  # The key is kept outside the repository and inherited only by this AI shell.
+  source "$ai_env"
+  set +a
+fi
 
 if [[ -z "$opencode_bin" ]]; then
   echo "OpenCode blev ikke fundet. Sæt OPENCODE_BIN eller installer opencode." >&2

@@ -6,6 +6,13 @@ cli="${REMOTE_DESKTOP_CLI:-$HOME/.local/bin/remote-desktop-cli}"
 state_dir="$HOME/.local/state/remote-desktop"
 watch_log="$state_dir/support-watch.log"
 real_opencode="${OPENCODE_REAL:-$HOME/.local/lib/node_modules/opencode-ai/bin/opencode.exe}"
+ai_env="$HOME/projekter/aisupport/ai-controller.env"
+
+if [[ -r "$ai_env" ]]; then
+  set -a
+  source "$ai_env"
+  set +a
+fi
 
 if [[ ! -x "$real_opencode" ]]; then
   echo "OpenCode blev ikke fundet: $real_opencode" >&2
