@@ -33,6 +33,48 @@ DEVICE_NAME=My Remote Device
 **Location**: `agent/.env`  
 **Example**: See `agent/.env.example`
 
+### Controller AI SSH Bridge
+
+The controller AI terminal can open a key-based SSH session directly on the
+Ubuntu AI host. Configure it from the **AI Terminal** tab after logging in as
+an approved administrator. The controller stores only the SSH settings in:
+
+```text
+%APPDATA%\RemoteDesktopController\ssh.json       (Windows)
+~/.config/RemoteDesktopController/ssh.json       (Linux)
+```
+
+The private key itself is never copied into the controller or frontend. The
+configured SSH command starts in the remote AI workdir, loads
+`ai-controller.env`, and then opens an interactive shell. This makes commands
+such as `remote-desktop-cli ai-connect` and `remote-desktop-cli support-watch`
+run on Ubuntu regardless of where the Windows controller is running.
+
+Required SSH setup:
+
+1. Create or use an SSH key on the controller computer.
+2. Add the public key to the Ubuntu user's `~/.ssh/authorized_keys`.
+3. Configure the Ubuntu hostname or reachable VPN/DNS endpoint, SSH port,
+   username, private key path, and `/home/dennis/projekter/aisupport` as the
+   remote workdir in the controller UI.
+4. Keep `ai-controller.env` on Ubuntu with `RD_AI_CONTROLLER_KEY`.
+
+OpenSSH must be available as `ssh.exe` on Windows or `ssh` on Linux. Host-key
+verification remains enabled; the controller does not disable SSH host-key
+checking.
+
+Optional environment defaults for a new controller installation:
+
+```env
+RD_AI_SSH_HOST=ubuntu.example.com
+RD_AI_SSH_USER=dennis
+RD_AI_SSH_KEY=~/.ssh/id_ed25519
+RD_AI_SSH_WORKDIR=/home/dennis/projekter/aisupport
+```
+
+The controller does not change the Ubuntu host or `SERVER`; the SSH endpoint
+and any VPN/firewall access must already be available.
+
 ## How It Works
 
 ### Controller

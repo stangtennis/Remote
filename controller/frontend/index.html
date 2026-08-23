@@ -173,6 +173,22 @@
             <button class="btn btn-sm btn-danger" onclick="App.stopLocalAITerminal()" id="localAITerminalStopBtn"><i class="fas fa-stop"></i> Stop</button>
           </div>
         </div>
+        <div class="settings-card" style="margin-bottom:1rem;">
+          <h3><i class="fas fa-shield-alt"></i> Ubuntu SSH-bridge</h3>
+          <p class="settings-info">Terminalen kan køre direkte på Ubuntu-hostens AI-folder. Private key-indhold gemmes aldrig i controlleren.</p>
+          <label class="checkbox-label"><input type="checkbox" id="aiSSHEnabled" onchange="App.updateSSHFields()"> <span>Brug SSH til AI-terminalen</span></label>
+          <div class="settings-grid" id="aiSSHFields">
+            <div class="form-group"><label for="aiSSHHost">Ubuntu host</label><input id="aiSSHHost" type="text" placeholder="ai.example.com"></div>
+            <div class="form-group"><label for="aiSSHPort">SSH port</label><input id="aiSSHPort" type="number" min="1" max="65535" value="22"></div>
+            <div class="form-group"><label for="aiSSHUser">Bruger</label><input id="aiSSHUser" type="text" placeholder="dennis"></div>
+            <div class="form-group"><label for="aiSSHKeyPath">Private key sti</label><input id="aiSSHKeyPath" type="text" placeholder="C:\\Users\\me\\.ssh\\id_ed25519"></div>
+            <div class="form-group" style="grid-column:1/-1;"><label for="aiSSHWorkdir">Remote AI-folder</label><input id="aiSSHWorkdir" type="text" value="/home/dennis/projekter/aisupport"></div>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <button class="btn btn-sm btn-secondary" onclick="App.saveSSHConfig()"><i class="fas fa-save"></i> Gem SSH-konfiguration</button>
+            <span id="aiSSHStatus" class="status-text"></span>
+          </div>
+        </div>
         <p id="localAITerminalStatus" class="status-text"></p>
         <div id="localAITerminal" class="terminal-container" style="display:flex; min-height:480px; background:#0d1117; border:1px solid var(--border); border-radius:8px; padding:0.5rem;"></div>
       </section>

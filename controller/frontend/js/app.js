@@ -112,6 +112,7 @@ const App = {
       this.loadDevices();
       this.loadPendingDevices();
       this.loadSettings();
+      this.loadSSHConfig();
       this.checkForUpdateNow();
 
       // Load favorites
@@ -564,6 +565,46 @@ const App = {
         `${s.max_resolution} @ ${s.target_fps} FPS | ${s.codec} | Kvalitet: ${s.video_quality}% | Bitrate: ${s.max_bitrate} Mbps`;
     } catch (err) {
       console.error('Failed to load settings:', err);
+    }
+  },
+
+  async loadSSHConfig() {
+    if (!this._isAdmin) return;
+    try {
+      const c = await window.go.main.App.GetSSHConfig();
+      document.getElementById('aiSSHEnabled').checked = !!c?.enabled;
+      document.getElementById('aiSSHHost').value = c?.host || '';
+      document.getElementById('aiSSHPort').value = c?.port || 22;
+      document.getElementById('aiSSHUser').value = c?.user || '';
+      document.getElementById('aiSSHKeyPath').value = c?.key_path || '';
+      document.getElementById('aiSSHWorkdir').value = c?.workdir || '/home/dennis/projekter/aisupport';
+      this.updateSSHFields();
+    } catch (err) {
+      const status = document.getElementById('aiSSHStatus');
+      if (status) status.textContent = 'SSH-konfiguration kunne ikke indlæses: ' + (err?.message || err);
+    }
+  },
+
+  updateSSHFields() {
+    const enabled = document.getElementById('aiSSHEnabled')?.checked;
+    document.querySelectorAll('#aiSSHFields input').forEach((el) => { el.disabled = !enabled; });
+  },
+
+  async saveSSHConfig() {
+    if (!this._isAdmin) return;
+    const status = document.getElementById('aiSSHStatus');
+    try {
+      await window.go.main.App.SaveSSHConfig({
+        enabled: document.getElementById('aiSSHEnabled').checked,
+        host: document.getElementById('aiSSHHost').value.trim(),
+        port: parseInt(document.getElementById('aiSSHPort').value, 10) || 22,
+        user: document.getElementById('aiSSHUser').value.trim(),
+        key_path: document.getElementById('aiSSHKeyPath').value.trim(),
+        workdir: document.getElementById('aiSSHWorkdir').value.trim(),
+      });
+      if (status) status.textContent = 'SSH-konfiguration gemt. Start terminalen for at teste forbindelsen.';
+    } catch (err) {
+      if (status) status.textContent = 'Fejl: ' + (err?.message || err);
     }
   },
 

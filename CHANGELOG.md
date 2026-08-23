@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.1.129 - 2026-08-23
+- Add trusted AI device sessions with a separate dashboard live viewer.
+- Add an approved-admin AI terminal to the native controller.
+- Add a key-based SSH bridge from the controller to the Ubuntu AI workdir.
+- Keep AI controller credentials on Ubuntu and out of controller settings.
+
 ## v3.1.128 - 2026-08-23
 - Add a one-click per-user AI support launcher that extracts and starts the client.
 - Keep ZIP and raw EXE support downloads available as fallback options.

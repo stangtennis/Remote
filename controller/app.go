@@ -14,6 +14,7 @@ import (
 	"github.com/stangtennis/Remote/controller/internal/credentials"
 	"github.com/stangtennis/Remote/controller/internal/logger"
 	"github.com/stangtennis/Remote/controller/internal/settings"
+	"github.com/stangtennis/Remote/controller/internal/sshconfig"
 	"github.com/stangtennis/Remote/controller/internal/supabase"
 	"github.com/stangtennis/Remote/controller/internal/updater"
 )
@@ -29,6 +30,8 @@ type App struct {
 	deviceTickStop  chan bool
 	localTerminalMu sync.Mutex
 	localTerminal   localTerminalSession
+	sshConfigMu     sync.RWMutex
+	sshConfig       *sshconfig.Config
 }
 
 // NewApp creates a new App instance
@@ -54,6 +57,11 @@ func (a *App) startup(ctx context.Context) {
 	if err != nil {
 		logger.Error("Failed to load settings, using defaults: %v", err)
 		a.appSettings = settings.Default()
+	}
+	a.sshConfig, err = sshconfig.Load()
+	if err != nil {
+		logger.Error("Failed to load SSH AI terminal config: %v", err)
+		a.sshConfig = sshconfig.Default()
 	}
 
 	// Load config

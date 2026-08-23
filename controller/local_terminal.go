@@ -7,6 +7,7 @@ import (
 	stdruntime "runtime"
 	"strings"
 
+	"github.com/stangtennis/Remote/controller/internal/sshconfig"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -36,21 +37,31 @@ func (a *App) StartLocalAITerminal() error {
 		return nil
 	}
 	cwd, err := localAITerminalDirectory()
-	if err != nil {
-		return err
-	}
+	a.sshConfigMu.RLock()
+	configuredSSH := cloneSSHConfig(a.sshConfig)
+	a.sshConfigMu.RUnlock()
+	onOutput := func(data []byte) { runtime.EventsEmit(a.ctx, "local-ai-terminal-output", string(data)) }
 	var session localTerminalSession
-	session, err = startLocalTerminal(cwd,
-		func(data []byte) { runtime.EventsEmit(a.ctx, "local-ai-terminal-output", string(data)) },
-		func() {
-			a.localTerminalMu.Lock()
-			if a.localTerminal == session {
-				a.localTerminal = nil
-			}
-			a.localTerminalMu.Unlock()
-			runtime.EventsEmit(a.ctx, "local-ai-terminal-exit")
-		},
-	)
+	onExit := func() {
+		a.localTerminalMu.Lock()
+		if a.localTerminal == session {
+			a.localTerminal = nil
+		}
+		a.localTerminalMu.Unlock()
+		runtime.EventsEmit(a.ctx, "local-ai-terminal-exit")
+	}
+	if configuredSSH != nil && configuredSSH.Enabled {
+		if err := configuredSSH.Validate(); err != nil {
+			return err
+		}
+		cwd = configuredSSH.Workdir
+		session, err = startSSHTerminal(configuredSSH, onOutput, onExit)
+	} else {
+		if err != nil {
+			return err
+		}
+		session, err = startLocalTerminal(cwd, onOutput, onExit)
+	}
 	if err != nil {
 		return err
 	}
@@ -86,7 +97,47 @@ func (a *App) GetLocalAITerminalDirectory() (string, error) {
 	if !a.isApprovedAdmin() {
 		return "", fmt.Errorf("approved admin access required")
 	}
+	a.sshConfigMu.RLock()
+	configuredSSH := cloneSSHConfig(a.sshConfig)
+	a.sshConfigMu.RUnlock()
+	if configuredSSH != nil && configuredSSH.Enabled {
+		return fmt.Sprintf("ssh://%s@%s:%d%s", configuredSSH.User, configuredSSH.Host, configuredSSH.Port, configuredSSH.Workdir), nil
+	}
 	return localAITerminalDirectory()
+}
+
+func (a *App) GetSSHConfig() (*sshconfig.Config, error) {
+	if !a.isApprovedAdmin() {
+		return nil, fmt.Errorf("approved admin access required")
+	}
+	a.sshConfigMu.RLock()
+	defer a.sshConfigMu.RUnlock()
+	return cloneSSHConfig(a.sshConfig), nil
+}
+
+func (a *App) SaveSSHConfig(c *sshconfig.Config) error {
+	if !a.isApprovedAdmin() {
+		return fmt.Errorf("approved admin access required")
+	}
+	if c == nil {
+		return fmt.Errorf("SSH configuration is missing")
+	}
+	copyConfig := *c
+	if err := sshconfig.Save(&copyConfig); err != nil {
+		return err
+	}
+	a.sshConfigMu.Lock()
+	a.sshConfig = &copyConfig
+	a.sshConfigMu.Unlock()
+	return nil
+}
+
+func cloneSSHConfig(c *sshconfig.Config) *sshconfig.Config {
+	if c == nil {
+		return sshconfig.Default()
+	}
+	copyConfig := *c
+	return &copyConfig
 }
 
 func (a *App) isApprovedAdmin() bool {
