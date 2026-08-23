@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.1.127 - 2026-08-23
+- Publish the portable AI support client inside a ZIP for smoother Edge downloads.
+- Keep the raw EXE URL available separately for advanced/manual use.
+
+## v3.1.126 - 2026-08-23
+- Fix Ubuntu AI controller claim failures caused by the complex PostgREST lease filter.
+- Prevent duplicate portable support clients with a Windows single-instance mutex.
+
+## v3.1.125 - 2026-08-23
+- Show a visible Windows AI support window with live status and an explicit
+  close button for portable support sessions.
+- Stop portable signaling/WebRTC cleanly when the user closes the support UI.
+
+## v3.1.124 - 2026-08-23
+- Build the portable AI support client without a libturbojpeg.dll dependency.
+- Keep turbo JPEG enabled for installed agent and console builds.
+
 ## v3.1.123 - 2026-08-22
 - Add dashboard-equivalent AI Quick Support flow to the native controller.
 - Add selectable AI scopes, PIN/share session details, Ubuntu AI request,

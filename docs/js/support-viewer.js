@@ -130,7 +130,10 @@ async function onCreateSupportSession() {
   if (session.support_mode === 'ai') {
     watchUbuntuController(session.session_id);
     document.getElementById('supportShareStatus').textContent =
-      'AI-session klar. Klik "Forbind Ubuntu AI", når klienten har accepteret PIN og scopes.';
+      'AI-session klar. Venter på at klienten accepterer PIN og scopes...';
+    // Queue the Ubuntu watcher immediately. It only claims the session after
+    // the native client has completed consent and marked itself ready.
+    requestUbuntuAI();
     return;
   }
 

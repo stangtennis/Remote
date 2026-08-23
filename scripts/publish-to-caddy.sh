@@ -26,6 +26,7 @@ mkdir -p "$DOWNLOADS_DIR"
 
 AGENT_EXE="$BUILDS_DIR/remote-agent-${VERSION}.exe"
 SUPPORT_EXE="$BUILDS_DIR/remote-support-${VERSION}.exe"
+SUPPORT_ZIP="$BUILDS_DIR/RemoteSupport-${VERSION}.zip"
 AGENT_CONSOLE_EXE="$BUILDS_DIR/remote-agent-console-${VERSION}.exe"
 CONTROLLER_EXE="$BUILDS_DIR/controller-${VERSION}.exe"
 AGENT_MAC="$BUILDS_DIR/remote-agent-macos-universal-${VERSION}"
@@ -40,6 +41,7 @@ CONTROLLER_SETUP="$BUILDS_DIR/RemoteDesktopController-${VERSION}-Setup.exe"
 
 require_file "$AGENT_EXE"
 require_file "$SUPPORT_EXE"
+require_file "$SUPPORT_ZIP"
 require_file "$AGENT_CONSOLE_EXE"
 require_file "$CONTROLLER_EXE"
 require_file "$AGENT_MAC"
@@ -54,6 +56,7 @@ require_file "$CONTROLLER_SETUP"
 # Versioned binaries (used by updater/version.json)
 copy_file "$AGENT_EXE" "$DOWNLOADS_DIR/remote-agent-${VERSION}.exe"
 copy_file "$SUPPORT_EXE" "$DOWNLOADS_DIR/remote-support-${VERSION}.exe"
+copy_file "$SUPPORT_ZIP" "$DOWNLOADS_DIR/RemoteSupport-${VERSION}.zip"
 copy_file "$AGENT_CONSOLE_EXE" "$DOWNLOADS_DIR/remote-agent-console-${VERSION}.exe"
 copy_file "$CONTROLLER_EXE" "$DOWNLOADS_DIR/controller-${VERSION}.exe"
 copy_file "$AGENT_MAC" "$DOWNLOADS_DIR/remote-agent-macos-${VERSION}"
@@ -70,6 +73,7 @@ copy_file "$CONTROLLER_SETUP" "$DOWNLOADS_DIR/RemoteDesktopController-${VERSION}
 # Stable aliases (used by dashboard/manual download buttons)
 copy_file "$AGENT_EXE" "$DOWNLOADS_DIR/remote-agent.exe"
 copy_file "$SUPPORT_EXE" "$DOWNLOADS_DIR/remote-support.exe"
+copy_file "$SUPPORT_ZIP" "$DOWNLOADS_DIR/RemoteSupport.zip"
 copy_file "$AGENT_CONSOLE_EXE" "$DOWNLOADS_DIR/remote-agent-console.exe"
 copy_file "$CONTROLLER_EXE" "$DOWNLOADS_DIR/controller.exe"
 copy_file "$AGENT_MAC" "$DOWNLOADS_DIR/remote-agent-macos"
@@ -85,6 +89,9 @@ AGENT_SHA256="$(sha256sum "$DOWNLOADS_DIR/remote-agent-${VERSION}.exe" | awk '{p
 SUPPORT_SHA256="$(sha256sum "$DOWNLOADS_DIR/remote-support-${VERSION}.exe" | awk '{print $1}')"
 SUPPORT_IMMUTABLE="remote-support-${VERSION}-${SUPPORT_SHA256:0:8}.exe"
 copy_file "$SUPPORT_EXE" "$DOWNLOADS_DIR/$SUPPORT_IMMUTABLE"
+SUPPORT_ZIP_SHA256="$(sha256sum "$DOWNLOADS_DIR/RemoteSupport-${VERSION}.zip" | awk '{print $1}')"
+SUPPORT_ZIP_IMMUTABLE="RemoteSupport-${VERSION}-${SUPPORT_ZIP_SHA256:0:8}.zip"
+copy_file "$SUPPORT_ZIP" "$DOWNLOADS_DIR/$SUPPORT_ZIP_IMMUTABLE"
 printf '%s  remote-support.exe\n' "$SUPPORT_SHA256" > "$DOWNLOADS_DIR/remote-support.exe.sha256"
 AGENT_MAC_SHA256="$(sha256sum "$DOWNLOADS_DIR/remote-agent-macos-${VERSION}" | awk '{print $1}')"
 CONTROLLER_SHA256="$(sha256sum "$DOWNLOADS_DIR/controller-${VERSION}.exe" | awk '{print $1}')"
@@ -95,12 +102,14 @@ cat > "$DOWNLOADS_DIR/version.json" <<EOF
   "agent_version": "${VERSION}",
   "controller_version": "${VERSION}",
   "agent_url": "https://updates.hawkeye123.dk/remote-agent-${VERSION}.exe",
-  "support_url": "https://updates.hawkeye123.dk/${SUPPORT_IMMUTABLE}",
+  "support_url": "https://updates.hawkeye123.dk/${SUPPORT_ZIP_IMMUTABLE}",
+  "support_exe_url": "https://updates.hawkeye123.dk/${SUPPORT_IMMUTABLE}",
   "agent_url_macos": "https://updates.hawkeye123.dk/remote-agent-macos-${VERSION}",
   "controller_url": "https://updates.hawkeye123.dk/controller-${VERSION}.exe",
   "controller_url_macos": "https://updates.hawkeye123.dk/controller-macos-${VERSION}",
   "agent_sha256": "${AGENT_SHA256}",
   "support_sha256": "${SUPPORT_SHA256}",
+  "support_zip_sha256": "${SUPPORT_ZIP_SHA256}",
   "agent_sha256_macos": "${AGENT_MAC_SHA256}",
   "controller_sha256": "${CONTROLLER_SHA256}",
   "controller_sha256_macos": "${CONTROLLER_MAC_SHA256}"
@@ -110,4 +119,5 @@ EOF
 echo "Published ${VERSION} to ${DOWNLOADS_DIR}"
 echo "agent_sha256=${AGENT_SHA256}"
 echo "support_sha256=${SUPPORT_SHA256}"
+echo "support_zip_sha256=${SUPPORT_ZIP_SHA256}"
 echo "controller_sha256=${CONTROLLER_SHA256}"

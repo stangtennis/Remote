@@ -65,8 +65,8 @@ func updateSupportControllerClaim(cfg *config.Config, auth *authInfo, sessionID,
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, resp.Body)
-		return false, fmt.Errorf("controller claim failed (HTTP %d)", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("controller claim failed (HTTP %d): %s", resp.StatusCode, string(body))
 	}
 	var result struct {
 		Claimed bool `json:"claimed"`

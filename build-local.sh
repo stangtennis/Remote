@@ -44,11 +44,12 @@ echo "   🔧 Re-compiling manifest resource (.syso)..."
 cd agent
 timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -tags turbo -ldflags \"$AGENT_LDFLAGS\" -o ../builds/remote-agent-$VERSION.exe ./cmd/remote-agent" 2>&1
 echo "✅ Agent built (turbo JPEG)"
-# Portable AI support client. The executable switches to temporary support mode
-# when named remote-support.exe; it never installs a service or firewall rule.
-timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -tags turbo -ldflags \"$AGENT_LDFLAGS\" -o ../builds/remote-support-$VERSION.exe ./cmd/remote-agent" 2>&1
+# Portable AI support client. Keep this build self-contained: the dashboard
+# downloads only the EXE, so it must not import libturbojpeg.dll.
+timeout $TIMEOUT bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ go build -ldflags \"$AGENT_LDFLAGS\" -o ../builds/remote-support-$VERSION.exe ./cmd/remote-agent" 2>&1
 cp ../builds/remote-support-$VERSION.exe ../builds/remote-support.exe
 printf '%s  builds/remote-support.exe\n' "$(sha256sum ../builds/remote-support.exe | awk '{print $1}')" > ../builds/remote-support.exe.sha256
+(cd ../builds && zip -q -j "RemoteSupport-${VERSION}.zip" "remote-support-${VERSION}.exe")
 echo "✅ Portable AI support client built"
 cd ..
 

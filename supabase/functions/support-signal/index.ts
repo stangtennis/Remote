@@ -503,20 +503,44 @@ serve(async (req) => {
         return response({ ok: true, session_id: requestedSessionId, released: true })
       }
 
-      const leaseCutoff = new Date(Date.now() - 120000).toISOString()
-      const { data: claimed, error } = await supabase
+      const controllerID = requestedControllerID.trim()
+      const leaseCutoff = new Date(Date.now() - 120000)
+      const { data: current, error: lookupError } = await supabase
         .from('support_sessions')
-        .update({ controller_claimed_by: requestedControllerID.trim(), controller_claimed_at: new Date().toISOString() })
+        .select('id, controller_claimed_by, controller_claimed_at')
         .eq('id', requestedSessionId)
         .eq('created_by', user.id)
         .in('status', ['pending', 'active'])
         .eq('support_mode', 'ai')
         .not('client_consent_at', 'is', null)
         .eq('controller_requested', true)
-        .or(`controller_claimed_by.is.null,controller_claimed_by.eq.${requestedControllerID.trim()},controller_claimed_at.lt.${leaseCutoff}`)
-        .select('id')
         .maybeSingle()
-      if (error) throw error
+      if (lookupError) throw lookupError
+      if (!current) return response({ ok: true, session_id: requestedSessionId, claimed: false })
+
+      const existingController = typeof current.controller_claimed_by === 'string'
+        ? current.controller_claimed_by.trim()
+        : ''
+      const existingClaimAt = current.controller_claimed_at ? new Date(current.controller_claimed_at) : null
+      const leaseActive = existingController && existingController !== controllerID &&
+        existingClaimAt && existingClaimAt > leaseCutoff
+      if (leaseActive) return response({ ok: true, session_id: requestedSessionId, claimed: false })
+
+      let claimQuery = supabase
+        .from('support_sessions')
+        .update({ controller_claimed_by: controllerID, controller_claimed_at: new Date().toISOString() })
+        .eq('id', requestedSessionId)
+        .eq('created_by', user.id)
+        .eq('controller_requested', true)
+      if (!existingController) {
+        claimQuery = claimQuery.is('controller_claimed_by', null)
+      } else if (existingController === controllerID) {
+        claimQuery = claimQuery.eq('controller_claimed_by', controllerID)
+      } else {
+        claimQuery = claimQuery.eq('controller_claimed_by', existingController).lt('controller_claimed_at', leaseCutoff.toISOString())
+      }
+      const { data: claimed, error: claimError } = await claimQuery.select('id').maybeSingle()
+      if (claimError) throw claimError
       return response({ ok: true, session_id: requestedSessionId, claimed: !!claimed })
     }
 

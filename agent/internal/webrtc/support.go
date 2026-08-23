@@ -19,6 +19,9 @@ import (
 // any native control channel is enabled.
 type SupportConsentFunc func(scopes []string) bool
 
+// SupportStatusFunc reports portable support progress to the visible client UI.
+type SupportStatusFunc func(message string)
+
 type supportSessionResponse struct {
 	SessionID       string   `json:"session_id"`
 	Token           string   `json:"token"`
@@ -32,16 +35,31 @@ type supportSessionResponse struct {
 // RunPortableSupport runs a temporary, non-installed support agent. It never
 // registers a device, creates a service, or opens a listener.
 func RunPortableSupport(cfg *config.Config, dev *device.Device, pin string, consent SupportConsentFunc) error {
+	return RunPortableSupportWithCallbacks(cfg, dev, pin, consent, nil, nil)
+}
+
+// RunPortableSupportWithCallbacks runs portable support with user-visible
+// status updates and an optional stop channel controlled by the support window.
+func RunPortableSupportWithCallbacks(cfg *config.Config, dev *device.Device, pin string, consent SupportConsentFunc, status SupportStatusFunc, stop <-chan struct{}) error {
+	setStatus := func(message string) {
+		if status != nil {
+			status(message)
+		}
+	}
 	if strings.TrimSpace(pin) == "" {
 		return fmt.Errorf("support PIN is required")
 	}
 
+	setStatus("Validerer PIN...")
 	validated, err := supportRequest(cfg, map[string]interface{}{
 		"action": "validate",
 		"pin":    strings.TrimSpace(pin),
 	})
 	if err != nil {
 		return err
+	}
+	if supportStopped(stop) {
+		return fmt.Errorf("support session ended by user")
 	}
 
 	var session supportSessionResponse
@@ -57,6 +75,7 @@ func RunPortableSupport(cfg *config.Config, dev *device.Device, pin string, cons
 	}
 	effectiveScopes := session.RequestedScopes
 	if session.SupportMode == "ai" {
+		setStatus("PIN accepteret. Venter på samtykke...")
 		if consent == nil || !consent(session.RequestedScopes) {
 			_, _ = supportRequest(cfg, map[string]interface{}{
 				"action":             "end",
@@ -82,7 +101,11 @@ func RunPortableSupport(cfg *config.Config, dev *device.Device, pin string, cons
 		}
 		effectiveScopes = consentResult.Scopes
 	}
+	if supportStopped(stop) {
+		return fmt.Errorf("support session ended by user")
+	}
 
+	setStatus("Samtykke godkendt. Henter TURN-forbindelse...")
 	m, err := New(cfg, dev, nil)
 	if err != nil {
 		return err
@@ -105,6 +128,7 @@ func RunPortableSupport(cfg *config.Config, dev *device.Device, pin string, cons
 	if err != nil {
 		return err
 	}
+	setStatus("TURN-forbindelse klar. Venter på AI-forbindelse...")
 	iceServers, err := decodeSupportICEServers(turnData)
 	if err != nil {
 		return err
@@ -118,7 +142,20 @@ func RunPortableSupport(cfg *config.Config, dev *device.Device, pin string, cons
 	}
 
 	log.Printf("Portable support waiting for admin offer: session=%s", session.SessionID)
-	return m.pollPortableSupport()
+	setStatus("Support aktiv. Venter på forbindelse fra administrator...")
+	return m.pollPortableSupport(stop, setStatus)
+}
+
+func supportStopped(stop <-chan struct{}) bool {
+	if stop == nil {
+		return false
+	}
+	select {
+	case <-stop:
+		return true
+	default:
+		return false
+	}
 }
 
 func supportRequest(cfg *config.Config, body map[string]interface{}) ([]byte, error) {
@@ -206,7 +243,7 @@ func decodeSupportICEServers(data []byte) ([]pionwebrtc.ICEServer, error) {
 	return servers, nil
 }
 
-func (m *Manager) pollPortableSupport() error {
+func (m *Manager) pollPortableSupport(stop <-chan struct{}, status SupportStatusFunc) error {
 	processed := make(map[int]bool)
 	var pendingICE []pionwebrtc.ICECandidateInit
 	remoteDescriptionSet := false
@@ -216,6 +253,8 @@ func (m *Manager) pollPortableSupport() error {
 
 	for {
 		select {
+		case <-stop:
+			return fmt.Errorf("support session ended by user")
 		case <-ticker.C:
 			if m.peerConnection == nil {
 				return nil
@@ -268,10 +307,16 @@ func (m *Manager) pollPortableSupport() error {
 				}
 			}
 			if latestOffer != nil && !offerHandled {
+				if status != nil {
+					status("Forbinder til administrator...")
+				}
 				if err := m.handlePortableSupportOffer(*latestOffer, &remoteDescriptionSet, &pendingICE); err != nil {
 					return err
 				}
 				offerHandled = true
+				if status != nil {
+					status("AI-support er forbundet.")
+				}
 			}
 		}
 	}

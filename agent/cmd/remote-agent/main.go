@@ -337,6 +337,11 @@ func main() {
 			relaunchAsAdmin()
 			return
 		}
+		if !acquirePortableSupportMutex() {
+			messageBox("Remote Support", "AI-supportklienten kører allerede.", MB_OK|MB_ICONINFORMATION)
+			return
+		}
+		defer releasePortableSupportMutex()
 		runPortableSupportMode()
 		return
 	}
@@ -495,16 +500,31 @@ func runPortableSupportMode() {
 		return
 	}
 
-	err = webrtc.RunPortableSupport(cfg, dev, pin, func(scopes []string) bool {
-		message := "Administratorens tilladelser:\n\n• " + strings.Join(scopes, "\n• ") +
-			"\n\nAccepter kun hvis du ønsker at give denne supportsession adgang."
-		return askYesNo(message)
-	})
+	stop := make(chan struct{})
+	window, err := newSupportWindow(stop)
+	if err != nil {
+		messageBox("Remote Support", "Kunne ikke vise supportvinduet: "+err.Error(), MB_OK|MB_ICONERROR)
+		return
+	}
+
+	supportDone := make(chan error, 1)
+	go func() {
+		supportDone <- webrtc.RunPortableSupportWithCallbacks(cfg, dev, pin, func(scopes []string) bool {
+			message := "Administratorens tilladelser:\n\n• " + strings.Join(scopes, "\n• ") +
+				"\n\nAccepter kun hvis du ønsker at give denne supportsession adgang."
+			return askYesNo(message)
+		}, window.setStatus, stop)
+		if activeSupportWindow != nil {
+			supportPostMessage.Call(activeSupportWindow.hwnd, wmClose, 0, 0)
+		}
+	}()
+
+	window.run()
+	err = <-supportDone
 	if err != nil {
 		messageBox("Remote Support", "Supportsessionen blev ikke startet:\n"+err.Error(), MB_OK|MB_ICONERROR)
 		return
 	}
-	messageBox("Remote Support", "Supportsessionen er afsluttet.", MB_OK|MB_ICONINFORMATION)
 }
 
 // showStartupDialog shows the main startup dialog with options

@@ -20,7 +20,7 @@ var assets embed.FS
 
 // Version information - injected at build time via -ldflags -X
 var (
-	Version     = "v3.1.123"
+	Version     = "v3.1.127"
 	BuildDate   = "2026-08-22"
 	VersionInfo = ""
 )
