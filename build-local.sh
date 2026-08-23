@@ -228,6 +228,15 @@ mv "$STAGING/RemoteDesktopController-${VERSION}-Setup.exe" "builds/"
 echo "  ✅ RemoteDesktopController-${VERSION}-Setup.exe"
 rm -rf "$STAGING"
 
+# --- Portable AI support launcher (per-user, no service install) ---
+build_installer "Support" "portable-support-installer.nsi" "RemoteDesktopSupport"
+STAGING="installer/staging-support"
+cp "builds/remote-support-${VERSION}.exe" "$STAGING/remote-support.exe"
+makensis -V2 "$STAGING/portable-support-installer.nsi" >/dev/null
+mv "$STAGING/RemoteDesktopSupport-${VERSION}-Setup.exe" "builds/"
+echo "  ✅ RemoteDesktopSupport-${VERSION}-Setup.exe"
+rm -rf "$STAGING"
+
 # =============================================================================
 # Generate SHA256 sidecars for ALL build artifacts
 # =============================================================================

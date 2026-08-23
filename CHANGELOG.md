@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.1.128 - 2026-08-23
+- Add a one-click per-user AI support launcher that extracts and starts the client.
+- Keep ZIP and raw EXE support downloads available as fallback options.
+
 ## v3.1.127 - 2026-08-23
 - Publish the portable AI support client inside a ZIP for smoother Edge downloads.
 - Keep the raw EXE URL available separately for advanced/manual use.
