@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.1.123 - 2026-08-22
+- Add dashboard-equivalent AI Quick Support flow to the native controller.
+- Add selectable AI scopes, PIN/share session details, Ubuntu AI request,
+  connection status polling, and safe session revoke on close.
+- Publish matching Windows/macOS controller, agent, and installer artifacts.
+
 ## v3.1.120 - 2026-08-11
 - SECURITY (critical): rotate Supabase JWT_SECRET away from the public demo
   value. The live instance previously accepted the well-known demo

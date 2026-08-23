@@ -550,10 +550,12 @@ func (a *App) RestartApp() {
 
 // SupportInfo holds support session info
 type SupportInfo struct {
-	SessionID string `json:"session_id"`
-	PIN       string `json:"pin"`
-	ShareURL  string `json:"share_url"`
-	ExpiresAt string `json:"expires_at"`
+	SessionID       string   `json:"session_id"`
+	PIN             string   `json:"pin"`
+	ShareURL        string   `json:"share_url"`
+	ExpiresAt       string   `json:"expires_at"`
+	SupportMode     string   `json:"support_mode"`
+	RequestedScopes []string `json:"requested_scopes"`
 }
 
 // CreateSupportSession creates a Quick Support session
@@ -566,11 +568,65 @@ func (a *App) CreateSupportSession() (*SupportInfo, error) {
 		return nil, err
 	}
 	return &SupportInfo{
-		SessionID: session.SessionID,
-		PIN:       session.PIN,
-		ShareURL:  session.ShareURL,
-		ExpiresAt: session.ExpiresAt,
+		SessionID:       session.SessionID,
+		PIN:             session.PIN,
+		ShareURL:        session.ShareURL,
+		ExpiresAt:       session.ExpiresAt,
+		SupportMode:     session.SupportMode,
+		RequestedScopes: session.RequestedScopes,
 	}, nil
+}
+
+// CreateAISupportSession creates a consent-gated AI Quick Support session.
+func (a *App) CreateAISupportSession(scopes []string) (*SupportInfo, error) {
+	if a.currentUser == nil || a.supabase == nil {
+		return nil, fmt.Errorf("not logged in")
+	}
+	session, err := a.supabase.CreateAISupportSession(scopes)
+	if err != nil {
+		return nil, err
+	}
+	return &SupportInfo{
+		SessionID:       session.SessionID,
+		PIN:             session.PIN,
+		ShareURL:        session.ShareURL,
+		ExpiresAt:       session.ExpiresAt,
+		SupportMode:     session.SupportMode,
+		RequestedScopes: session.RequestedScopes,
+	}, nil
+}
+
+// RequestAIController asks the Ubuntu AI watcher to connect to a session.
+func (a *App) RequestAIController(sessionID string) error {
+	if a.currentUser == nil || a.supabase == nil {
+		return fmt.Errorf("not logged in")
+	}
+	if sessionID == "" {
+		return fmt.Errorf("session_id mangler")
+	}
+	return a.supabase.RequestAIController(sessionID)
+}
+
+// GetAISupportSessionState returns the current Ubuntu AI connection state.
+func (a *App) GetAISupportSessionState(sessionID string) (*supabase.AISupportSessionState, error) {
+	if a.currentUser == nil || a.supabase == nil {
+		return nil, fmt.Errorf("not logged in")
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("session_id mangler")
+	}
+	return a.supabase.GetAISupportSessionState(sessionID)
+}
+
+// RevokeSupportSession ends an owned support session.
+func (a *App) RevokeSupportSession(sessionID string) error {
+	if a.currentUser == nil || a.supabase == nil {
+		return fmt.Errorf("not logged in")
+	}
+	if sessionID == "" {
+		return fmt.Errorf("session_id mangler")
+	}
+	return a.supabase.RevokeSupportSession(sessionID, "Ended by controller administrator")
 }
 
 // JoinSupportInfo holds the result of looking up a support session by PIN

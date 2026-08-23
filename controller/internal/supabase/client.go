@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -697,15 +698,27 @@ func (c *Client) DeleteDevice(deviceID string) error {
 
 // SupportSession represents a Quick Support session response
 type SupportSession struct {
-	SessionID string `json:"session_id"`
-	PIN       string `json:"pin"`
-	Token     string `json:"token"`
-	ShareURL  string `json:"share_url"`
-	ExpiresAt string `json:"expires_at"`
+	SessionID          string   `json:"session_id"`
+	PIN                string   `json:"pin"`
+	Token              string   `json:"token"`
+	ShareURL           string   `json:"share_url"`
+	ExpiresAt          string   `json:"expires_at"`
+	SupportMode        string   `json:"support_mode"`
+	RequestedScopes    []string `json:"requested_scopes"`
+	RequiresClientCode bool     `json:"requires_client_code"`
 }
 
 // CreateSupportSession calls the create-support-session Edge Function
 func (c *Client) CreateSupportSession() (*SupportSession, error) {
+	return c.createSupportSession("screen", []string{"screen"})
+}
+
+// CreateAISupportSession creates a consent-gated AI support session.
+func (c *Client) CreateAISupportSession(scopes []string) (*SupportSession, error) {
+	return c.createSupportSession("ai", scopes)
+}
+
+func (c *Client) createSupportSession(mode string, scopes []string) (*SupportSession, error) {
 	logger.Debug("[CreateSupportSession] Creating support session")
 	c.ensureValidToken()
 
@@ -715,7 +728,16 @@ func (c *Client) CreateSupportSession() (*SupportSession, error) {
 
 	url := fmt.Sprintf("%s/functions/v1/create-support-session", c.URL)
 
-	req, err := http.NewRequest("POST", url, bytes.NewBufferString("{}"))
+	payload := map[string]interface{}{
+		"support_mode":     mode,
+		"requested_scopes": scopes,
+	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -744,8 +766,143 @@ func (c *Client) CreateSupportSession() (*SupportSession, error) {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	logger.Info("[CreateSupportSession] Session created: PIN=%s, URL=%s", session.PIN, session.ShareURL)
+	logger.Info("[CreateSupportSession] Session created: ID=%s, mode=%s", session.SessionID, session.SupportMode)
 	return &session, nil
+}
+
+// RequestAIController asks the Ubuntu watcher to claim an AI support session.
+func (c *Client) RequestAIController(sessionID string) error {
+	logger.Debug("[RequestAIController] Requesting Ubuntu AI for session %s", sessionID)
+	c.ensureValidToken()
+	if c.AuthToken == "" {
+		return fmt.Errorf("not authenticated")
+	}
+
+	payload := map[string]string{
+		"action":     "request-controller",
+		"session_id": sessionID,
+	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+	url := fmt.Sprintf("%s/functions/v1/support-signal", c.URL)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
+			return fmt.Errorf("%s", errResp.Error)
+		}
+		return fmt.Errorf("failed to request Ubuntu AI (status: %d)", resp.StatusCode)
+	}
+	return nil
+}
+
+// AISupportSessionState contains the controller lease state visible to the owner.
+type AISupportSessionState struct {
+	Status              string `json:"status"`
+	ControllerRequested bool   `json:"controller_requested"`
+	ControllerClaimedBy string `json:"controller_claimed_by"`
+}
+
+// GetAISupportSessionState returns the current AI support controller state.
+func (c *Client) GetAISupportSessionState(sessionID string) (*AISupportSessionState, error) {
+	c.ensureValidToken()
+	if c.AuthToken == "" {
+		return nil, fmt.Errorf("not authenticated")
+	}
+	requestURL := fmt.Sprintf(
+		"%s/rest/v1/support_sessions?select=status,controller_requested,controller_claimed_by&id=eq.%s",
+		c.URL, url.QueryEscape(sessionID),
+	)
+	req, err := http.NewRequest("GET", requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to read AI support state: %s (status: %d)", string(body), resp.StatusCode)
+	}
+	var states []AISupportSessionState
+	if err := json.Unmarshal(body, &states); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal AI support state: %w", err)
+	}
+	if len(states) == 0 {
+		return nil, fmt.Errorf("AI support session not found")
+	}
+	return &states[0], nil
+}
+
+// RevokeSupportSession safely ends an owned support session.
+func (c *Client) RevokeSupportSession(sessionID, reason string) error {
+	c.ensureValidToken()
+	if c.AuthToken == "" {
+		return fmt.Errorf("not authenticated")
+	}
+	payload := map[string]string{
+		"action":     "revoke",
+		"session_id": sessionID,
+		"reason":     reason,
+	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+	requestURL := fmt.Sprintf("%s/functions/v1/support-signal", c.URL)
+	req, err := http.NewRequest("POST", requestURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("apikey", c.AnonKey)
+	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
+			return fmt.Errorf("%s", errResp.Error)
+		}
+		return fmt.Errorf("failed to revoke support session (status: %d)", resp.StatusCode)
+	}
+	return nil
 }
 
 // JoinSupportSessionResult holds the info needed to view a support session

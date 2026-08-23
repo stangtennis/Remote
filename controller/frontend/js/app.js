@@ -187,6 +187,43 @@ const App = {
     document.getElementById('refreshPendingBtn').addEventListener('click', () => this.loadPendingDevices());
   },
 
+  _supportAIStatusTimer: null,
+  _supportSessionID: '',
+
+  stopSupportAIStatusPolling() {
+    if (this._supportAIStatusTimer) {
+      clearInterval(this._supportAIStatusTimer);
+      this._supportAIStatusTimer = null;
+    }
+  },
+
+  startSupportAIStatusPolling(sessionId) {
+    this.stopSupportAIStatusPolling();
+    this._supportSessionID = sessionId;
+    const refresh = async () => {
+      if (!this._supportSessionID) return;
+      try {
+        const state = await window.go.main.App.GetAISupportSessionState(this._supportSessionID);
+        const status = document.getElementById('controllerAIStatus');
+        const button = document.getElementById('controllerUbuntuBtn');
+        if (state.controller_claimed_by) {
+          if (status) status.textContent = 'Ubuntu AI er forbundet til denne client.';
+          if (button) {
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-check"></i> Ubuntu AI forbundet';
+          }
+        } else if (state.status === 'ended' || state.status === 'expired') {
+          if (status) status.textContent = 'Support-sessionen er afsluttet.';
+          if (button) button.disabled = true;
+        }
+      } catch (err) {
+        console.warn('AI support status check failed:', err);
+      }
+    };
+    refresh();
+    this._supportAIStatusTimer = setInterval(refresh, 3000);
+  },
+
   // ==================== DEVICES ====================
   _allDevices: [],  // cached for search/filter
   _favorites: [],   // favorite device_ids
@@ -617,7 +654,12 @@ const App = {
     // Close modal on backdrop click
     document.querySelectorAll('.modal').forEach(modal => {
       modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.style.display = 'none';
+        if (e.target !== modal) return;
+        if (modal.id === 'supportModal') {
+          this.closeSupportModal();
+        } else {
+          modal.style.display = 'none';
+        }
       });
     });
 
@@ -626,7 +668,10 @@ const App = {
       if (e.key === 'Escape') {
         const visibleModals = document.querySelectorAll('.modal[style*="display: flex"], .modal[style*="display:flex"]');
         if (visibleModals.length > 0) {
-          visibleModals.forEach(m => m.style.display = 'none');
+          visibleModals.forEach(m => {
+            if (m.id === 'supportModal') this.closeSupportModal();
+            else m.style.display = 'none';
+          });
         }
       }
     });
@@ -644,10 +689,35 @@ const App = {
   },
 
   async showSupportModal() {
+    this.stopSupportAIStatusPolling();
+    this._supportSessionID = '';
     const modal = document.getElementById('supportModal');
     const body = document.getElementById('supportModalBody');
     modal.style.display = 'flex';
-    body.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Opretter support session...</p>';
+    body.innerHTML = `
+      <p>Opret en support-session og del linket med den person, der har brug for hjælp.</p>
+      <label for="controllerSupportMode" style="font-size:0.85rem;color:var(--text-muted);display:block;margin-bottom:0.25rem;">Sessionstype</label>
+      <select id="controllerSupportMode" class="support-mode-select">
+        <option value="ai">AI-support med klientkode og samtykke</option>
+        <option value="screen">Kun skærmdeling</option>
+      </select>
+      <p class="support-ai-note">AI-control kræver den native supportklient. Webklienten kan kun dele skærm.</p>
+      <div id="controllerAIScopes" class="support-ai-scopes">
+        <div class="support-scope-heading">Tilladelser som klienten kan acceptere</div>
+        <label><input type="checkbox" data-controller-scope="screen" checked disabled> Skærm</label>
+        <label><input type="checkbox" data-controller-scope="input" checked> Mus og tastatur</label>
+        <label><input type="checkbox" data-controller-scope="files"> Filer</label>
+        <label><input type="checkbox" data-controller-scope="terminal"> Terminal</label>
+        <label><input type="checkbox" data-controller-scope="process"> Processer/systeminfo</label>
+        <label><input type="checkbox" data-controller-scope="admin"> System/admin</label>
+      </div>
+      <button id="controllerSupportCreateBtn" class="btn btn-primary btn-block" onclick="App.createControllerSupportSession()">
+        <i class="fas fa-plus"></i> Opret support-session
+      </button>
+    `;
+    const mode = document.getElementById('controllerSupportMode');
+    const scopes = document.getElementById('controllerAIScopes');
+    mode.addEventListener('change', () => { scopes.style.display = mode.value === 'ai' ? '' : 'none'; });
 
     // Clear previous join state
     const pinInput = document.getElementById('supportPinInput');
@@ -655,13 +725,27 @@ const App = {
     if (pinInput) pinInput.value = '';
     if (joinStatus) { joinStatus.textContent = ''; joinStatus.className = 'status-text'; }
 
+  },
+
+  async createControllerSupportSession() {
+    const body = document.getElementById('supportModalBody');
+    const mode = document.getElementById('controllerSupportMode')?.value || 'screen';
+    const btn = document.getElementById('controllerSupportCreateBtn');
+    const scopes = mode === 'ai'
+      ? [...document.querySelectorAll('[data-controller-scope]:checked')].map((input) => input.dataset.controllerScope)
+      : ['screen'];
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opretter...'; }
+
     try {
-      const info = await window.go.main.App.CreateSupportSession();
+      const info = mode === 'ai'
+        ? await window.go.main.App.CreateAISupportSession(scopes)
+        : await window.go.main.App.CreateSupportSession();
       const pin = this.escHtml(info.pin);
       const shareUrl = this.escHtml(info.share_url);
       const expires = this.escHtml(info.expires_at);
+      const ai = info.support_mode === 'ai';
       body.innerHTML = `
-        <p>Del denne PIN eller link med personen der skal hjælpe dig:</p>
+        <p>Del denne PIN eller link med personen, der skal have hjælp:</p>
         <div class="pin-display">${pin}</div>
         <div class="form-group">
           <label>Delelink</label>
@@ -673,9 +757,71 @@ const App = {
           </button>
         </div>
         <p style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-muted)">Udløber: ${expires}</p>
+        ${ai ? `
+          <div class="support-ai-session-info">
+            <p><strong>AI-session klar</strong></p>
+            <p>Session-ID: <code>${this.escHtml(info.session_id)}</code></p>
+            <p id="controllerAIStatus">Vent på at klienten indtaster PIN og accepterer scopes.</p>
+            <button class="btn btn-primary btn-block" id="controllerUbuntuBtn" onclick="App.requestUbuntuAI('${this.jsEsc(info.session_id)}')">
+              <i class="fas fa-robot"></i> Forbind Ubuntu AI
+            </button>
+            <button class="btn btn-danger btn-block" id="controllerRevokeBtn" onclick="App.revokeSupportSession('${this.jsEsc(info.session_id)}')">
+              <i class="fas fa-stop"></i> Afslut AI-supportsession
+            </button>
+          </div>
+        ` : ''}
       `;
+      if (ai) this.startSupportAIStatusPolling(info.session_id);
     } catch (err) {
       body.innerHTML = `<p style="color:var(--danger)">Fejl: ${this.escHtml(err?.message || err)}</p>`;
+    }
+  },
+
+  async closeSupportModal() {
+    const sessionId = this._supportSessionID;
+    if (sessionId) {
+      try {
+        await window.go.main.App.RevokeSupportSession(sessionId);
+      } catch (err) {
+        showToast('Kunne ikke afslutte AI-sessionen: ' + (err?.message || err), 'error');
+        return;
+      }
+    }
+    this.stopSupportAIStatusPolling();
+    this._supportSessionID = '';
+    const modal = document.getElementById('supportModal');
+    if (modal) modal.style.display = 'none';
+  },
+
+  async requestUbuntuAI(sessionId) {
+    const btn = document.getElementById('controllerUbuntuBtn');
+    const status = document.getElementById('controllerAIStatus');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Forbinder Ubuntu AI...'; }
+    try {
+      await window.go.main.App.RequestAIController(sessionId);
+      if (status) status.textContent = 'Ubuntu AI er valgt. Venter på forbindelse fra Ubuntu...';
+      if (btn) btn.innerHTML = '<i class="fas fa-check"></i> Ubuntu AI valgt';
+    } catch (err) {
+      if (status) status.textContent = 'Fejl: ' + (err?.message || err);
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-robot"></i> Forbind Ubuntu AI'; }
+    }
+  },
+
+  async revokeSupportSession(sessionId) {
+    const button = document.getElementById('controllerRevokeBtn');
+    const status = document.getElementById('controllerAIStatus');
+    if (button) { button.disabled = true; button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Afslutter...'; }
+    try {
+      await window.go.main.App.RevokeSupportSession(sessionId);
+      this.stopSupportAIStatusPolling();
+      this._supportSessionID = '';
+      if (status) status.textContent = 'AI-supportsessionen er afsluttet.';
+      const connectButton = document.getElementById('controllerUbuntuBtn');
+      if (connectButton) connectButton.disabled = true;
+      if (button) button.innerHTML = '<i class="fas fa-check"></i> Session afsluttet';
+    } catch (err) {
+      if (status) status.textContent = 'Kunne ikke afslutte sessionen: ' + (err?.message || err);
+      if (button) { button.disabled = false; button.innerHTML = '<i class="fas fa-stop"></i> Afslut AI-supportsession'; }
     }
   },
 
@@ -1229,6 +1375,10 @@ function showToast(message, type = 'info', duration = 4000) {
 }
 
 function closeModal(id) {
+  if (id === 'supportModal' && window.App) {
+    App.stopSupportAIStatusPolling();
+    App._supportSessionID = '';
+  }
   document.getElementById(id).style.display = 'none';
 }
 

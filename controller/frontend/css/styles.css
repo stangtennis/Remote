@@ -100,6 +100,48 @@ html, body {
   -webkit-backdrop-filter: var(--glass-blur);
 }
 
+.support-mode-select {
+  width: 100%;
+  margin-bottom: 0.75rem;
+}
+
+.support-ai-note {
+  margin: -0.35rem 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--warning);
+}
+
+.support-ai-scopes {
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.support-ai-scopes label {
+  display: block;
+}
+
+.support-scope-heading {
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.support-ai-session-info {
+  margin-top: 1rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--primary-light);
+}
+
+.support-ai-session-info p {
+  font-size: 0.8rem;
+  margin-bottom: 0.35rem;
+}
+
+.support-ai-session-info .btn + .btn {
+  margin-top: 0.5rem;
+}
+
 /* ===== VIEWS ===== */
 .view { height: 100vh; display: flex; flex-direction: column; }
 
