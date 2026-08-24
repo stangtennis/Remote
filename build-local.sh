@@ -245,9 +245,11 @@ echo "🔐 Genererer SHA256 checksums..."
 SHA_MANIFEST="builds/SHA256SUMS-${VERSION}.txt"
 > "$SHA_MANIFEST"
 for f in builds/*${VERSION}*; do
-    # Skip .sha256 files and the manifest itself
+    # Skip sidecars, the manifest itself, and release notes. Release notes
+    # embed this manifest, so hashing them would create a self-referential
+    # checksum that changes every time the notes are regenerated.
     case "$f" in
-        *.sha256|*SHA256SUMS*) continue ;;
+        *.sha256|*SHA256SUMS*|*RELEASE_NOTES*) continue ;;
     esac
     [ -f "$f" ] || continue
     HASH=$(sha256sum "$f" | awk '{print $1}')

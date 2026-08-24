@@ -46,6 +46,18 @@ func (m *Manager) supportSession() (string, string) {
 	return m.supportSessionID, m.supportGrant
 }
 
+func (m *Manager) setSupportAIOfferID(offerID string) {
+	m.supportOfferMu.Lock()
+	m.supportAIOfferID = offerID
+	m.supportOfferMu.Unlock()
+}
+
+func (m *Manager) supportAIOfferIDValue() string {
+	m.supportOfferMu.RLock()
+	defer m.supportOfferMu.RUnlock()
+	return m.supportAIOfferID
+}
+
 func (m *Manager) supportChannelAllowed(label string) bool {
 	switch label {
 	case "file":

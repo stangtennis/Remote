@@ -633,15 +633,9 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 			}
 		}
 
-		// Encode once for the primary AI peer and, when present, the separate
-		// read-only dashboard viewer peer. The viewer may require H.264 while
-		// the AI peer remains on JPEG/data-channel output.
+		// Encode H.264 for the primary peer when enabled.
 		primaryH264 := m.useH264.Load() && m.videoTrack != nil
-		// Start encoding as soon as the viewer peer exists so its first keyframe
-		// is available during ICE negotiation instead of waiting for a state
-		// callback that may arrive after the capture tick.
-		viewerH264 := m.supportViewerPresent()
-		if (primaryH264 || viewerH264) && m.videoEncoder != nil {
+		if primaryH264 && m.videoEncoder != nil {
 			h264PaceCounter++
 			curLossPct := m.getLossPct()
 			curRTT := m.getLastRTT()
@@ -651,10 +645,6 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 				h264SkipEvery = 3
 			case curLossPct > 5 || curRTT > 250*time.Millisecond:
 				h264SkipEvery = 2
-			}
-			if !primaryH264 {
-				// Do not let viewer pacing suppress the AI peer's JPEG path.
-				h264SkipEvery = 0
 			}
 			if h264SkipEvery > 0 && h264PaceCounter%h264SkipEvery != 0 {
 				skippedFrames++
@@ -705,32 +695,19 @@ func (m *Manager) startScreenStreaming(ctx context.Context) {
 							nalUnits[0], nalUnits[1], nalUnits[2], nalUnits[3], nalUnits[4])
 					}
 
-					// Write the encoded frame to each active H.264 peer. The encoder
-					// and capture are shared; there is no second streaming loop.
+					// Write the encoded frame to the active H.264 peer.
 					frameDuration := time.Second / time.Duration(fps)
-					if primaryH264 {
-						if writeErr := m.videoTrack.WriteFrame(nalUnits, frameDuration); writeErr != nil {
-							errorCount++
-							if errorCount%100 == 1 {
-								log.Printf("⚠️ Video track write fejl: %v", writeErr)
-							}
+					if writeErr := m.videoTrack.WriteFrame(nalUnits, frameDuration); writeErr != nil {
+						errorCount++
+						if errorCount%100 == 1 {
+							log.Printf("⚠️ Video track write fejl: %v", writeErr)
 						}
 					}
-					if viewerH264 {
-						if writeErr := m.writeSupportViewerFrame(nalUnits, frameDuration); writeErr != nil {
-							errorCount++
-							if errorCount%100 == 1 {
-								log.Printf("⚠️ Support viewer video track write fejl: %v", writeErr)
-							}
-						}
-					}
-					if primaryH264 || viewerH264 {
-						frameCount++
-						bytesSent += int64(len(nalUnits))
-						// Log every 100th frame to track H.264 streaming
-						if frameCount%100 == 0 {
-							log.Printf("🎬 H.264: %d frames sendt, %d bytes total", frameCount, bytesSent)
-						}
+					frameCount++
+					bytesSent += int64(len(nalUnits))
+					// Log every 100th frame to track H.264 streaming
+					if frameCount%100 == 0 {
+						log.Printf("🎬 H.264: %d frames sendt, %d bytes total", frameCount, bytesSent)
 					}
 				}
 			}()

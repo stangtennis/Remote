@@ -218,6 +218,19 @@
           <p id="latestVersionInfo" style="margin-top: 0.35rem; font-size: 0.82rem; color: #9ca3af; text-align: center;">
             Nyeste version: henter...
           </p>
+          <div id="aiSupportStatus" style="display: none; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.75rem; padding: 0.75rem 0.9rem; border: 1px solid rgba(34,197,94,0.35); border-radius: 8px; background: rgba(34,197,94,0.08);">
+            <div style="min-width: 0;">
+              <div style="display: flex; align-items: center; gap: 0.45rem; font-weight: 600;">
+                <span id="aiSupportStatusDot" style="width: 9px; height: 9px; border-radius: 50%; background: #22c55e; flex: 0 0 auto;"></span>
+                <span id="aiSupportStatusTitle">AI-klient forbundet</span>
+              </div>
+              <div id="aiSupportStatusText" style="margin-top: 0.2rem; color: var(--text-muted, #9ca3af); font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+            </div>
+            <div style="display: flex; gap: 0.4rem; flex: 0 0 auto;">
+              <button id="aiSupportStatusOpenBtn" class="btn btn-secondary btn-sm" type="button" onclick="showSupportModal()">Vis status</button>
+              <button id="aiSupportStatusEndBtn" class="btn btn-danger btn-sm" type="button" onclick="endSupportSession()">Afslut</button>
+            </div>
+          </div>
           <script>
             (function() {
                var isMac = /Mac/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent);
@@ -239,7 +252,7 @@
               }
                var supportBtn = document.getElementById('supportClientDownloadBtn');
                if (supportBtn) {
-                 var supportDownloadName = 'RemoteDesktopSupport-v3.1.128-Setup.exe';
+                  var supportDownloadName = 'RemoteDesktopSupport-v3.1.130-Setup.exe';
                  supportBtn.onclick = function() { signedDownload(supportDownloadName); return false; };
                 if (isMac) {
                   supportBtn.style.display = 'none';
@@ -691,7 +704,7 @@
         const response = await fetch('https://updates.hawkeye123.dk/version.json', { cache: 'no-store' });
         if (!response.ok) throw new Error('version lookup failed');
         const data = await response.json();
-        const version = data.agent_version || data.version || 'v3.1.123';
+       const version = data.agent_version || data.version || 'v3.1.130';
         const filename = kind === 'agent-macos'
           ? 'RemoteDesktopAgent-macOS-' + version + '.tar.gz'
           : 'RemoteDesktopAgent-' + version + '-Setup.exe';
@@ -729,14 +742,14 @@
   <script src="js/config.js?v=6"></script>
   <script src="js/auth.js?v=9"></script>
   <script src="js/app.js?v=10"></script>
-  <script src="js/devices.js?v=16"></script>
+  <script src="js/devices.js?v=17"></script>
   <script src="js/sessions.js?v=8"></script>
   <script src="js/webrtc.js?v=40"></script>
   <script src="js/signaling.js?v=103"></script>
   <script src="js/notifications.js?v=1"></script>
   <script src="js/activity-log.js?v=2"></script>
   <script src="js/file-transfer.js?v=1"></script>
-  <script src="js/support-viewer.js?v=5"></script>
+  <script src="js/support-viewer.js?v=7"></script>
   
   <!-- Fullscreen Preview Script -->
   <script>

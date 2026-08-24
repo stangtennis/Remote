@@ -11,8 +11,6 @@ let supportPendingIce = [];
 let supportReadyHandled = false;
 let currentSupportSession = null;
 let supportInPreview = false;
-let supportViewerOfferId = null;
-let supportViewerConnecting = false;
 const ACTIVE_AI_SUPPORT_STORAGE_KEY = 'remoteDesktopActiveAISupport';
 
 function rememberActiveAISupportSession(sessionId, userId) {
@@ -21,6 +19,28 @@ function rememberActiveAISupportSession(sessionId, userId) {
 
 function forgetActiveAISupportSession() {
   localStorage.removeItem(ACTIVE_AI_SUPPORT_STORAGE_KEY);
+}
+
+function setAISupportStatus(state, message) {
+  const container = document.getElementById('aiSupportStatus');
+  if (!container) return;
+  if (state === 'hidden') {
+    container.style.display = 'none';
+    return;
+  }
+
+  const dot = document.getElementById('aiSupportStatusDot');
+  const title = document.getElementById('aiSupportStatusTitle');
+  const text = document.getElementById('aiSupportStatusText');
+  const connected = state === 'connected';
+  const ended = state === 'ended';
+  const color = connected ? '#22c55e' : ended ? '#f59e0b' : '#60a5fa';
+  container.style.display = 'flex';
+  container.style.borderColor = `${color}59`;
+  container.style.background = `${color}14`;
+  if (dot) dot.style.background = color;
+  if (title) title.textContent = connected ? 'AI-klient forbundet' : ended ? 'AI-support afsluttet' : 'AI-klient venter';
+  if (text) text.textContent = message || '';
 }
 
 // ============================================================================
@@ -80,7 +100,9 @@ function showSupportModal() {
   const modal = document.getElementById('supportModal');
   if (modal) {
     modal.style.display = 'flex';
-    showSupportStep('create');
+    const hasActiveAISession = currentSupportSession?.support_mode === 'ai';
+    showSupportStep(hasActiveAISession ? 'share' : 'create');
+    if (hasActiveAISession) return;
     const modeSelect = document.getElementById('supportMode');
     const scopes = document.getElementById('aiSupportScopes');
     if (modeSelect && !modeSelect.dataset.bound) {
@@ -96,6 +118,10 @@ function showSupportModal() {
 
 function closeSupportModal() {
   const modal = document.getElementById('supportModal');
+  if (currentSupportSession?.support_mode === 'ai' && !supportInPreview) {
+    if (modal) modal.style.display = 'none';
+    return;
+  }
   if (currentSupportSession && !supportInPreview) {
     endSupportSession();
     return;
@@ -104,41 +130,6 @@ function closeSupportModal() {
   if (!supportInPreview) {
     cleanupSupportViewer();
   }
-}
-
-async function attachTrustedAIViewer(device) {
-  if (currentSupportSession) {
-    showToast('Der vises allerede en live-viewer', 'warning');
-    return;
-  }
-
-  const { data, error } = await supabase
-    .from('webrtc_sessions')
-    .select('session_id, device_id, status, controller_type')
-    .eq('device_id', device.device_id)
-    .eq('controller_type', 'ai')
-    .in('status', ['pending', 'offer_sent', 'answered', 'connected'])
-    .is('kicked_at', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error || !data) {
-    showToast('Ingen aktiv trusted AI-session fundet på enheden', 'warning');
-    return;
-  }
-
-  currentSupportSession = {
-    session_id: data.session_id,
-    support_mode: 'ai',
-    trusted_ai_device: true,
-    device_id: device.device_id,
-    device_name: device.device_name,
-  };
-  showSupportModal();
-  showSupportStep('viewer');
-  const status = document.getElementById('supportViewerStatus');
-  if (status) status.textContent = 'Forbinder til trusted AI live-view...';
-  await connectToSupport(data.session_id);
 }
 
 function showSupportStep(step) {
@@ -180,6 +171,7 @@ async function onCreateSupportSession() {
     `Udløber kl. ${expiresAt.toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })}`;
 
   if (session.support_mode === 'ai') {
+    setAISupportStatus('waiting', 'Venter på PIN-godkendelse og forbindelse fra Ubuntu AI...');
     watchUbuntuController(session.session_id);
     document.getElementById('supportShareStatus').textContent =
       'AI-session klar. Venter på at klienten accepterer PIN og scopes...';
@@ -229,6 +221,7 @@ async function requestUbuntuAI() {
     return;
   }
   if (status) status.textContent = 'Ubuntu AI er valgt. Venter på forbindelse fra Ubuntu...';
+  setAISupportStatus('waiting', 'Ubuntu AI er valgt. Venter på forbindelse...');
 }
 
 function watchUbuntuController(sessionId) {
@@ -238,18 +231,18 @@ function watchUbuntuController(sessionId) {
     const status = document.getElementById('supportShareStatus');
     const button = document.getElementById('supportUbuntuConnectBtn');
     if (!session) return;
-    if (currentSupportSession?.support_mode === 'ai' && session.status === 'active' &&
-        !supportViewerPC && !supportViewerConnecting) {
-      void connectToSupport(sessionId);
-    }
     if (session.controller_claimed_by) {
       if (status) status.textContent = 'Ubuntu AI er forbundet til denne client.';
+      setAISupportStatus('connected', `Session ${sessionId} er forbundet til Ubuntu AI.`);
       if (button) {
         button.disabled = true;
         button.textContent = 'Ubuntu AI forbundet';
       }
     } else if (session.status === 'ended' || session.status === 'expired') {
       if (status) status.textContent = 'Supportsessionen er afsluttet.';
+      setAISupportStatus('ended', 'Supportsessionen er afsluttet.');
+    } else if (currentSupportSession?.support_mode === 'ai') {
+      setAISupportStatus('waiting', 'AI-klienten er godkendt. Venter på Ubuntu AI...');
     }
   };
   const refreshControllerState = async () => {
@@ -355,18 +348,10 @@ async function connectToSupport(sessionId) {
   // Show viewer step
   showSupportStep('viewer');
 
-  const isAISupport = currentSupportSession?.support_mode === 'ai';
-  const isTrustedAIDevice = currentSupportSession?.trusted_ai_device === true;
-  if (isAISupport && (supportViewerPC || supportViewerConnecting)) return;
-  supportViewerConnecting = true;
-  supportViewerOfferId = isAISupport
-    ? (crypto.randomUUID ? crypto.randomUUID() : `viewer-${Date.now()}-${Math.random()}`)
-    : null;
-
   try {
     // Fetch TURN credentials
     const { data: { session: authSession } } = await supabase.auth.getSession();
-    const requireRelay = isAISupport && !isTrustedAIDevice;
+    const requireRelay = false;
     let iceServers = [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
@@ -422,7 +407,6 @@ async function connectToSupport(sessionId) {
       if (event.candidate) {
         const payload = {
           ...event.candidate.toJSON(),
-          ...(isAISupport && { peer_id: 'viewer', offer_id: supportViewerOfferId }),
         };
         await supabase
           .from('session_signaling')
@@ -437,7 +421,6 @@ async function connectToSupport(sessionId) {
 
     // Connection state
     viewerPC.onconnectionstatechange = () => {
-      if (supportViewerPC !== viewerPC) return;
       const state = viewerPC.connectionState;
       debug('Support viewer connection state:', state);
       const statusEl = document.getElementById('supportViewerStatus');
@@ -447,7 +430,6 @@ async function connectToSupport(sessionId) {
           if (statusEl) statusEl.textContent = 'Forbinder...';
           break;
         case 'connected':
-          supportViewerConnecting = false;
           if (statusEl) statusEl.textContent = 'Forbundet';
           // Stop signaling polling
           if (supportPollingInterval) {
@@ -459,12 +441,8 @@ async function connectToSupport(sessionId) {
           break;
         case 'disconnected':
         case 'failed':
-          supportViewerConnecting = false;
           if (statusEl) statusEl.textContent = 'Afbrudt';
-          // A dashboard viewer is auxiliary to AI control. Its disconnect must
-          // not revoke the grant or close the Ubuntu control peer.
-          if (isAISupport) cleanupSupportViewerPeer();
-          else if (currentSupportSession) void endSupportSession();
+          if (currentSupportSession) void endSupportSession();
           else cleanupSupportViewer();
           break;
       }
@@ -487,7 +465,6 @@ async function connectToSupport(sessionId) {
         payload: {
           type: 'offer',
           sdp: offer.sdp,
-          ...(isAISupport && { peer_id: 'viewer', offer_id: supportViewerOfferId }),
         },
       });
 
@@ -497,7 +474,6 @@ async function connectToSupport(sessionId) {
     subscribeToSupportSignaling(sessionId);
 
   } catch (error) {
-    supportViewerConnecting = false;
     console.error('Support connection error:', error);
     const statusEl = document.getElementById('supportViewerStatus');
     if (statusEl) statusEl.textContent = 'Forbindelsesfejl: ' + error.message;
@@ -512,7 +488,7 @@ function subscribeToSupportSignaling(sessionId) {
   // We already have the realtime channel from waitForSharerReady
   // Just reset the polling for answer/ice signals
   supportProcessedIds.clear();
-  const signalSide = currentSupportSession?.trusted_ai_device ? 'agent' : 'support';
+  const signalSide = 'support';
 
   supportPollingInterval = setInterval(async () => {
     try {
@@ -537,18 +513,9 @@ function subscribeToSupportSignaling(sessionId) {
 }
 
 async function handleSupportViewerSignal(signal) {
-  const expectedSide = currentSupportSession?.trusted_ai_device ? 'agent' : 'support';
+  const expectedSide = 'support';
   if (signal.from_side !== expectedSide) return;
   if (!supportViewerPC) return;
-
-  const isAISupport = currentSupportSession?.support_mode === 'ai';
-  const signalPeerID = signal.payload?.peer_id;
-  const signalOfferID = signal.payload?.offer_id;
-  if (isAISupport) {
-    if (signalPeerID !== 'viewer' || signalOfferID !== supportViewerOfferId) return;
-  } else if (signalPeerID && signalPeerID !== 'viewer') {
-    return;
-  }
 
   debug('Support viewer: processing signal', signal.msg_type);
 
@@ -608,8 +575,7 @@ async function handleSupportViewerSignal(signal) {
 
       case 'bye':
         debug('Support sharer disconnected');
-        if (isAISupport) cleanupSupportViewerPeer();
-        else cleanupSupportViewer();
+        cleanupSupportViewer();
         const statusEl = document.getElementById('supportViewerStatus');
         if (statusEl) statusEl.textContent = 'Personen stoppede deling';
         break;
@@ -744,13 +710,9 @@ requestAnimationFrame(updateSupportResolution);
 
 function showSupportInPreview() {
   supportInPreview = true;
-  const trustedAIDevice = currentSupportSession?.trusted_ai_device === true;
-  const viewerLabel = trustedAIDevice
-    ? `AI Live View - ${currentSupportSession.device_name || currentSupportSession.device_id}`
-    : 'Quick Support';
 
   // Create session tab
-  SessionManager.createSession('quick-support', trustedAIDevice ? '🤖 ' + viewerLabel : '🆘 Quick Support');
+  SessionManager.createSession('quick-support', '🆘 Quick Support');
   SessionManager.updateSessionStatus('quick-support', 'connected');
 
   // Show video element, hide canvas (support uses WebRTC video track, not canvas)
@@ -761,7 +723,7 @@ function showSupportInPreview() {
 
   // Update device name in toolbar
   const connectedDeviceName = document.getElementById('connectedDeviceName');
-  if (connectedDeviceName) connectedDeviceName.textContent = trustedAIDevice ? '🤖 ' + viewerLabel : '🆘 Quick Support';
+  if (connectedDeviceName) connectedDeviceName.textContent = '🆘 Quick Support';
 
   // Hide toolbar center buttons (view-only, no remote control)
   const toolbarCenter = document.querySelector('.toolbar-center');
@@ -866,43 +828,17 @@ function cleanupSupportViewer() {
     supportViewerPC = null;
   }
 
-  supportViewerOfferId = null;
-  supportViewerConnecting = false;
-
   supportProcessedIds.clear();
   supportPendingIce = [];
   currentSupportSession = null;
   forgetActiveAISupportSession();
-}
-
-function cleanupSupportViewerPeer() {
-  const trustedAIDevice = currentSupportSession?.trusted_ai_device === true;
-  removeSupportFromPreview();
-  if (supportPollingInterval) {
-    clearInterval(supportPollingInterval);
-    supportPollingInterval = null;
-  }
-  if (supportViewerPC) {
-    try { supportViewerPC.close(); } catch (e) {}
-    supportViewerPC = null;
-  }
-  supportPendingIce = [];
-  supportViewerOfferId = null;
-  supportViewerConnecting = false;
-  if (trustedAIDevice) currentSupportSession = null;
+  setAISupportStatus('hidden');
 }
 
 async function endSupportSession() {
   const sessionId = currentSupportSession?.session_id;
-  const trustedAIDevice = currentSupportSession?.trusted_ai_device === true;
   const modal = document.getElementById('supportModal');
   if (!sessionId) {
-    cleanupSupportViewer();
-    if (modal) modal.style.display = 'none';
-    return;
-  }
-
-  if (trustedAIDevice) {
     cleanupSupportViewer();
     if (modal) modal.style.display = 'none';
     return;
@@ -1162,7 +1098,7 @@ async function restoreActiveAISupportSession(user) {
   };
   const modal = document.getElementById('supportModal');
   if (!modal) return;
-  modal.style.display = 'flex';
+  modal.style.display = 'none';
   showSupportStep('share');
   document.getElementById('supportPin').textContent = session.pin || '';
   document.getElementById('supportLink').value = currentSupportSession.share_url;
@@ -1171,6 +1107,7 @@ async function restoreActiveAISupportSession(user) {
     `Udløber kl. ${new Date(session.expires_at).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })}`;
   document.getElementById('supportShareStatus').textContent =
     'AI-session gendannet efter genindlæsning. Venter på klient/Ubuntu AI...';
+  setAISupportStatus('waiting', 'AI-session gendannet. Venter på klient/Ubuntu AI...');
   const revokeButton = document.getElementById('supportAiRevokeBtn');
   if (revokeButton) revokeButton.style.display = 'block';
   const ubuntuButton = document.getElementById('supportUbuntuConnectBtn');

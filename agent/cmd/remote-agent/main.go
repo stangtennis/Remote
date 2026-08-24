@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -485,6 +486,13 @@ func hasArgument(wanted string) bool {
 }
 
 func runPortableSupportMode() {
+	if err := setupLogging(); err != nil {
+		messageBox("Remote Support", "Kunne ikke opsætte logging: "+err.Error(), MB_OK|MB_ICONERROR)
+		return
+	}
+	defer flushLog()
+	log.Println("🔧 Starter portable AI-supportklient")
+
 	cfg, err := config.Load()
 	if err != nil {
 		messageBox("Remote Support", "Kunne ikke indlæse konfiguration: "+err.Error(), MB_OK|MB_ICONERROR)
@@ -509,21 +517,34 @@ func runPortableSupportMode() {
 
 	supportDone := make(chan error, 1)
 	go func() {
-		supportDone <- webrtc.RunPortableSupportWithCallbacks(cfg, dev, pin, func(scopes []string) bool {
-			message := "Administratorens tilladelser:\n\n• " + strings.Join(scopes, "\n• ") +
-				"\n\nAccepter kun hvis du ønsker at give denne supportsession adgang."
-			return askYesNo(message)
-		}, window.setStatus, stop)
-		if activeSupportWindow != nil {
-			supportPostMessage.Call(activeSupportWindow.hwnd, wmClose, 0, 0)
+		var err error
+		func() {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					log.Printf("🔥 Portable AI-support panic: %v\n%s", recovered, string(debug.Stack()))
+					err = fmt.Errorf("portable support crashed: %v", recovered)
+				}
+			}()
+			err = webrtc.RunPortableSupportWithCallbacks(cfg, dev, pin, func(scopes []string) bool {
+				message := "Administratorens tilladelser:\n\n• " + strings.Join(scopes, "\n• ") +
+					"\n\nAccepter kun hvis du ønsker at give denne supportsession adgang."
+				return askYesNo(message)
+			}, window.setStatus, stop)
+		}()
+		if err != nil {
+			log.Printf("❌ Portable AI-support stoppede: %v", err)
+			window.setStatus("Support stoppet: " + err.Error() + "\nLuk vinduet manuelt for at afslutte.")
+		} else {
+			log.Println("ℹ️ Portable AI-support afsluttet")
+			window.setStatus("Supportsessionen er afsluttet. Luk vinduet manuelt for at afslutte.")
 		}
+		supportDone <- err
 	}()
 
 	window.run()
 	err = <-supportDone
 	if err != nil {
-		messageBox("Remote Support", "Supportsessionen blev ikke startet:\n"+err.Error(), MB_OK|MB_ICONERROR)
-		return
+		log.Printf("ℹ️ Supportvinduet blev lukket efter fejlstatus: %v", err)
 	}
 }
 
