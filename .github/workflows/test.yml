@@ -91,5 +91,6 @@ jobs:
       - name: Run tests
         working-directory: controller
         run: |
-          # Viewer + updater have unit tests — skip the full app (Wails build-tagged)
-          go test -count=1 -v ./internal/updater/... ./internal/viewer/...
+          # The Wails viewer package was removed; test the existing controller
+          # packages that have platform-independent unit coverage.
+          go test -count=1 -v ./internal/updater/... ./internal/sshconfig/... ./internal/supabase/... ./internal/webrtc/...
