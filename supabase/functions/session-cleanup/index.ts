@@ -132,6 +132,7 @@ serve(async (req) => {
         ended_at: now.toISOString()
       })
       .in('status', ['pending', 'active'])
+      .or('support_mode.is.null,support_mode.neq.ai')
       .lt('created_at', thirtyMinutesAgo.toISOString())
       .select('id')
 

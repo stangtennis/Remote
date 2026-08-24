@@ -43,6 +43,17 @@ function setAISupportStatus(state, message) {
   if (text) text.textContent = message || '';
 }
 
+function setSupportExpiry(session) {
+  const expiry = document.getElementById('supportExpiry');
+  if (!expiry) return;
+  if (session.support_mode === 'ai') {
+    expiry.textContent = 'Ingen automatisk udløb — afsluttes manuelt';
+    return;
+  }
+  const expiresAt = new Date(session.expires_at);
+  expiry.textContent = `Udløber kl. ${expiresAt.toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
 // ============================================================================
 // Session Creation
 // ============================================================================
@@ -166,9 +177,7 @@ async function onCreateSupportSession() {
   if (ubuntuBtn) ubuntuBtn.style.display = session.support_mode === 'ai' ? 'block' : 'none';
 
   // Calculate expiry time
-  const expiresAt = new Date(session.expires_at);
-  document.getElementById('supportExpiry').textContent =
-    `Udløber kl. ${expiresAt.toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })}`;
+  setSupportExpiry(session);
 
   if (session.support_mode === 'ai') {
     setAISupportStatus('waiting', 'Venter på PIN-godkendelse og forbindelse fra Ubuntu AI...');
@@ -1103,8 +1112,7 @@ async function restoreActiveAISupportSession(user) {
   document.getElementById('supportPin').textContent = session.pin || '';
   document.getElementById('supportLink').value = currentSupportSession.share_url;
   document.getElementById('supportSessionId').textContent = session.id;
-  document.getElementById('supportExpiry').textContent =
-    `Udløber kl. ${new Date(session.expires_at).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })}`;
+  setSupportExpiry(session);
   document.getElementById('supportShareStatus').textContent =
     'AI-session gendannet efter genindlæsning. Venter på klient/Ubuntu AI...';
   setAISupportStatus('waiting', 'AI-session gendannet. Venter på klient/Ubuntu AI...');

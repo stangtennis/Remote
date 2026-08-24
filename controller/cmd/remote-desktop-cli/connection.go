@@ -17,8 +17,6 @@ import (
 	rtc "github.com/stangtennis/Remote/controller/internal/webrtc"
 )
 
-const idleTimeout = 5 * time.Minute
-
 // DeviceConnection holds an active WebRTC connection to a device
 type DeviceConnection struct {
 	client      *rtc.Client
@@ -531,31 +529,6 @@ func (dc *DeviceConnection) ShellReady() bool { return dc.client.ShellChannelRea
 
 // ProcessReady reports whether the process channel is open.
 func (dc *DeviceConnection) ProcessReady() bool { return dc.client.ProcessChannelReady() }
-
-// StartIdleChecker starts a goroutine that disconnects idle connections
-func (cm *ConnectionManager) StartIdleChecker() {
-	go func() {
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
-			cm.mu.RLock()
-			var toDisconnect []string
-			for id, conn := range cm.connections {
-				conn.mu.RLock()
-				if time.Since(conn.lastUsedAt) > idleTimeout {
-					toDisconnect = append(toDisconnect, id)
-				}
-				conn.mu.RUnlock()
-			}
-			cm.mu.RUnlock()
-
-			for _, id := range toDisconnect {
-				log.Printf("[cli] Idle timeout: disconnecting %s", id)
-				cm.Disconnect(id)
-			}
-		}
-	}()
-}
 
 // fetchICEServers gets TURN/STUN servers
 func fetchICEServers(supabaseURL, anonKey, authToken string) []webrtc.ICEServer {

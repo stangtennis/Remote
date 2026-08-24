@@ -75,8 +75,11 @@ serve(async (req) => {
     // Generate UUID token
     const token = crypto.randomUUID()
 
-    // Session expires in 30 minutes
-    const expires_at = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+    // AI support stays active until an administrator explicitly ends it.
+    // Browser-only screen sharing keeps the existing 30-minute safety limit.
+    const expires_at = supportMode === 'ai'
+      ? '9999-12-31T23:59:59.999Z'
+      : new Date(Date.now() + 30 * 60 * 1000).toISOString()
 
     // Create support session
     const { data: session, error: sessionError } = await supabaseClient

@@ -11,13 +11,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/stangtennis/Remote/controller/internal/config"
 )
-
-const daemonIdleTimeout = 10 * time.Minute
 
 // daemonRequest is the JSON protocol for CLI → daemon communication
 type daemonRequest struct {
@@ -153,8 +150,6 @@ func runDaemon(deviceID, deviceName string) {
 
 	// Create connection manager and connect
 	connMgr := NewConnectionManager(cfg, auth)
-	connMgr.StartIdleChecker()
-
 	var connectErr error
 	if strings.HasPrefix(deviceID, "ai:") {
 		connectErr = connMgr.ConnectAI(strings.TrimPrefix(deviceID, "ai:"), deviceName)
@@ -185,28 +180,6 @@ func runDaemon(deviceID, deviceName string) {
 	log.Printf("[daemon] Listening on %s", socketPath)
 
 	startTime := time.Now()
-	lastActivity := time.Now()
-	var activityMu sync.Mutex
-
-	// Idle timeout checker
-	go func() {
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
-			activityMu.Lock()
-			idle := time.Since(lastActivity)
-			activityMu.Unlock()
-			if idle > daemonIdleTimeout {
-				log.Printf("[daemon] Idle timeout (%s), shutting down", idle.Round(time.Second))
-				connMgr.Disconnect(deviceID)
-				listener.Close()
-				os.Remove(socketPath)
-				os.Remove(getPIDPath())
-				os.Exit(0)
-			}
-		}
-	}()
-
 	// Accept connections
 	for {
 		conn, err := listener.Accept()
@@ -214,10 +187,6 @@ func runDaemon(deviceID, deviceName string) {
 			log.Printf("[daemon] Accept error: %v", err)
 			break
 		}
-
-		activityMu.Lock()
-		lastActivity = time.Now()
-		activityMu.Unlock()
 
 		go handleDaemonConnection(conn, connMgr, deviceID, deviceName, startTime)
 	}
