@@ -34,7 +34,7 @@ func Default() *Config {
 	home, _ := os.UserHomeDir()
 	keyPath := ""
 	if home != "" {
-		for _, name := range []string{"id_ed25519", "id_rsa"} {
+		for _, name := range []string{"id_rsa", "id_ed25519"} {
 			candidate := filepath.Join(home, ".ssh", name)
 			if _, err := os.Stat(candidate); err == nil {
 				keyPath = candidate

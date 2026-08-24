@@ -112,7 +112,10 @@ const App = {
       this.loadDevices();
       this.loadPendingDevices();
       this.loadSettings();
-      this.loadSSHConfig();
+      const sshConfig = await this.loadSSHConfig();
+      if (this._isAdmin && sshConfig?.enabled) {
+        setTimeout(() => this.startLocalAITerminal(), 400);
+      }
       this.checkForUpdateNow();
 
       // Load favorites
@@ -569,7 +572,7 @@ const App = {
   },
 
   async loadSSHConfig() {
-    if (!this._isAdmin) return;
+    if (!this._isAdmin) return null;
     try {
       const c = await window.go.main.App.GetSSHConfig();
       document.getElementById('aiSSHEnabled').checked = !!c?.enabled;
@@ -580,9 +583,11 @@ const App = {
       document.getElementById('aiSSHWorkdir').value = c?.workdir || '/home/dennis/projekter/aisupport';
       document.getElementById('aiSSHCloudflare').checked = c?.cloudflare_access !== false;
       this.updateSSHFields();
+      return c;
     } catch (err) {
       const status = document.getElementById('aiSSHStatus');
       if (status) status.textContent = 'SSH-konfiguration kunne ikke indlæses: ' + (err?.message || err);
+      return null;
     }
   },
 
