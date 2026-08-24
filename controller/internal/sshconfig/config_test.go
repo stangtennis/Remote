@@ -3,6 +3,7 @@ package sshconfig
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -17,7 +18,16 @@ func TestDefaultUsesCloudflareAIEndpoint(t *testing.T) {
 		t.Setenv(name, "")
 	}
 	c := Default()
-	if c.Host != "ssh.hawkeye123.dk" || c.User != "dennis" || c.Workdir != "/home/dennis/projekter/aisupport" || !c.CloudflareAccess {
+	expectedHost := "ssh.hawkeye123.dk"
+	expectedCloudflare := true
+	if runtime.GOOS == "windows" {
+		expectedHost = "192.168.1.92"
+		expectedCloudflare = false
+	} else if runtime.GOOS == "linux" {
+		expectedHost = "localhost"
+		expectedCloudflare = false
+	}
+	if c.Host != expectedHost || c.User != "dennis" || c.Workdir != "/home/dennis/projekter/aisupport" || c.CloudflareAccess != expectedCloudflare {
 		t.Fatalf("unexpected defaults: %+v", c)
 	}
 }

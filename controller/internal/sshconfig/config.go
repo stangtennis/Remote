@@ -12,6 +12,7 @@ import (
 
 const (
 	defaultHost    = "ssh.hawkeye123.dk"
+	defaultWinHost = "192.168.1.92"
 	defaultUser    = "dennis"
 	defaultWorkdir = "/home/dennis/projekter/aisupport"
 )
@@ -48,8 +49,16 @@ func Default() *Config {
 		keyPath = configuredKey
 	}
 	host := strings.TrimSpace(os.Getenv("RD_AI_SSH_HOST"))
+	cloudflare := runtime.GOOS != "windows" && runtime.GOOS != "linux"
 	if host == "" {
-		host = defaultHost
+		switch runtime.GOOS {
+		case "windows":
+			host = defaultWinHost
+		case "linux":
+			host = "localhost"
+		default:
+			host = defaultHost
+		}
 	}
 	user := strings.TrimSpace(os.Getenv("RD_AI_SSH_USER"))
 	if user == "" {
@@ -59,7 +68,6 @@ func Default() *Config {
 	if workdir == "" {
 		workdir = defaultWorkdir
 	}
-	cloudflare := true
 	if configured := strings.TrimSpace(os.Getenv("RD_AI_SSH_CLOUDFLARE")); configured != "" {
 		cloudflare = configured != "0" && strings.ToLower(configured) != "false" && strings.ToLower(configured) != "no"
 	}

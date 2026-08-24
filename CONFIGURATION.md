@@ -73,11 +73,16 @@ RD_AI_SSH_WORKDIR=/home/dennis/projekter/aisupport
 RD_AI_SSH_CLOUDFLARE=true
 ```
 
-The default route is `dennis@ssh.hawkeye123.dk` through Cloudflare Access. The
-controller invokes `cloudflared access ssh --hostname %h` as OpenSSH's proxy
-command, so `cloudflared` must be installed and authenticated on the computer
-running the controller. Disable the Cloudflare checkbox only when using a
-direct/VPN-reachable SSH endpoint.
+When the controller runs on the Windows `SERVER`, the default route is the
+existing direct LAN endpoint `dennis@192.168.1.92` using the installed
+`C:\Users\server\.ssh\id_rsa`. When it runs on Ubuntu, it defaults to
+`dennis@localhost`. On other platforms, the default is
+`dennis@ssh.hawkeye123.dk` through Cloudflare Access.
+
+The Cloudflare option invokes `cloudflared access ssh --hostname %h` as
+OpenSSH's proxy command. Enable it when the controller is outside the LAN;
+`cloudflared` must then be installed and authenticated on that controller
+computer. Disable it for the direct/VPN-reachable route.
 
 The controller does not change the Ubuntu host or `SERVER`; the SSH endpoint
 and any VPN/firewall access must already be available.
