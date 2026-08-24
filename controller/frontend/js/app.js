@@ -578,6 +578,7 @@ const App = {
       document.getElementById('aiSSHUser').value = c?.user || '';
       document.getElementById('aiSSHKeyPath').value = c?.key_path || '';
       document.getElementById('aiSSHWorkdir').value = c?.workdir || '/home/dennis/projekter/aisupport';
+      document.getElementById('aiSSHCloudflare').checked = c?.cloudflare_access !== false;
       this.updateSSHFields();
     } catch (err) {
       const status = document.getElementById('aiSSHStatus');
@@ -601,6 +602,7 @@ const App = {
         user: document.getElementById('aiSSHUser').value.trim(),
         key_path: document.getElementById('aiSSHKeyPath').value.trim(),
         workdir: document.getElementById('aiSSHWorkdir').value.trim(),
+        cloudflare_access: document.getElementById('aiSSHCloudflare').checked,
       });
       if (status) status.textContent = 'SSH-konfiguration gemt. Start terminalen for at teste forbindelsen.';
     } catch (err) {

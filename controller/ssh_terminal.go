@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -19,16 +20,28 @@ func buildSSHArgs(cfg *sshconfig.Config) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []string{
+	args := []string{
 		"-tt",
 		"-i", filepath.Clean(keyPath),
 		"-p", fmt.Sprintf("%d", cfg.Port),
 		"-o", "ConnectTimeout=15",
 		"-o", "ServerAliveInterval=30",
 		"-o", "ServerAliveCountMax=3",
-		fmt.Sprintf("%s@%s", cfg.User, cfg.Host),
-		remoteShellCommand(cfg.Workdir),
-	}, nil
+	}
+	if cfg.CloudflareAccess {
+		args = append(args, "-o", "ProxyCommand=cloudflared access ssh --hostname %h")
+	}
+	args = append(args, fmt.Sprintf("%s@%s", cfg.User, cfg.Host), remoteShellCommand(cfg.Workdir))
+	return args, nil
+}
+
+func validateSSHRuntime(cfg *sshconfig.Config) error {
+	if cfg.CloudflareAccess {
+		if _, err := exec.LookPath("cloudflared"); err != nil {
+			return fmt.Errorf("cloudflared is required for the Cloudflare SSH bridge: %w", err)
+		}
+	}
+	return nil
 }
 
 func remoteShellCommand(workdir string) string {

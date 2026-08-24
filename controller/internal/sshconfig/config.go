@@ -10,18 +10,23 @@ import (
 	"unicode"
 )
 
-const defaultWorkdir = "/home/dennis/projekter/aisupport"
+const (
+	defaultHost    = "ssh.hawkeye123.dk"
+	defaultUser    = "dennis"
+	defaultWorkdir = "/home/dennis/projekter/aisupport"
+)
 
 // Config describes the Ubuntu host used by the controller's AI terminal.
 // Only the private-key path is persisted; the key contents never enter the UI
 // or controller settings file.
 type Config struct {
-	Enabled bool   `json:"enabled"`
-	Host    string `json:"host"`
-	Port    int    `json:"port"`
-	User    string `json:"user"`
-	KeyPath string `json:"key_path"`
-	Workdir string `json:"workdir"`
+	Enabled          bool   `json:"enabled"`
+	Host             string `json:"host"`
+	Port             int    `json:"port"`
+	User             string `json:"user"`
+	KeyPath          string `json:"key_path"`
+	Workdir          string `json:"workdir"`
+	CloudflareAccess bool   `json:"cloudflare_access"`
 }
 
 func Default() *Config {
@@ -42,12 +47,29 @@ func Default() *Config {
 	if configuredKey := strings.TrimSpace(os.Getenv("RD_AI_SSH_KEY")); configuredKey != "" {
 		keyPath = configuredKey
 	}
+	host := strings.TrimSpace(os.Getenv("RD_AI_SSH_HOST"))
+	if host == "" {
+		host = defaultHost
+	}
+	user := strings.TrimSpace(os.Getenv("RD_AI_SSH_USER"))
+	if user == "" {
+		user = defaultUser
+	}
+	workdir := strings.TrimSpace(os.Getenv("RD_AI_SSH_WORKDIR"))
+	if workdir == "" {
+		workdir = defaultWorkdir
+	}
+	cloudflare := true
+	if configured := strings.TrimSpace(os.Getenv("RD_AI_SSH_CLOUDFLARE")); configured != "" {
+		cloudflare = configured != "0" && strings.ToLower(configured) != "false" && strings.ToLower(configured) != "no"
+	}
+	enabled := keyPath != ""
+	if _, err := os.Stat(keyPath); err != nil {
+		enabled = false
+	}
 	return &Config{
-		Host:    strings.TrimSpace(os.Getenv("RD_AI_SSH_HOST")),
-		Port:    22,
-		User:    strings.TrimSpace(os.Getenv("RD_AI_SSH_USER")),
-		KeyPath: keyPath,
-		Workdir: strings.TrimSpace(os.Getenv("RD_AI_SSH_WORKDIR")),
+		Enabled: enabled, Host: host, Port: 22, User: user, KeyPath: keyPath,
+		Workdir: workdir, CloudflareAccess: cloudflare,
 	}
 }
 

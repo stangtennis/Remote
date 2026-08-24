@@ -184,6 +184,7 @@
             <div class="form-group"><label for="aiSSHKeyPath">Private key sti</label><input id="aiSSHKeyPath" type="text" placeholder="C:\\Users\\me\\.ssh\\id_ed25519"></div>
             <div class="form-group" style="grid-column:1/-1;"><label for="aiSSHWorkdir">Remote AI-folder</label><input id="aiSSHWorkdir" type="text" value="/home/dennis/projekter/aisupport"></div>
           </div>
+          <label class="checkbox-label"><input type="checkbox" id="aiSSHCloudflare"> <span>Brug Cloudflare Access via ssh.hawkeye123.dk</span></label>
           <div style="display:flex;gap:0.5rem;align-items:center;">
             <button class="btn btn-sm btn-secondary" onclick="App.saveSSHConfig()"><i class="fas fa-save"></i> Gem SSH-konfiguration</button>
             <span id="aiSSHStatus" class="status-text"></span>

@@ -12,6 +12,16 @@ func TestValidateDisabledDoesNotRequireKey(t *testing.T) {
 	}
 }
 
+func TestDefaultUsesCloudflareAIEndpoint(t *testing.T) {
+	for _, name := range []string{"RD_AI_SSH_HOST", "RD_AI_SSH_USER", "RD_AI_SSH_WORKDIR", "RD_AI_SSH_KEY", "RD_AI_SSH_CLOUDFLARE"} {
+		t.Setenv(name, "")
+	}
+	c := Default()
+	if c.Host != "ssh.hawkeye123.dk" || c.User != "dennis" || c.Workdir != "/home/dennis/projekter/aisupport" || !c.CloudflareAccess {
+		t.Fatalf("unexpected defaults: %+v", c)
+	}
+}
+
 func TestValidateEnabledConfig(t *testing.T) {
 	dir := t.TempDir()
 	key := filepath.Join(dir, "id_ed25519")

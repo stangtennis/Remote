@@ -26,6 +26,9 @@ func startSSHTerminal(cfg *sshconfig.Config, onOutput func([]byte), onExit func(
 	if err != nil {
 		return nil, err
 	}
+	if err := validateSSHRuntime(cfg); err != nil {
+		return nil, err
+	}
 	cmd := exec.Command(sshPath, args...)
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=true")
 	ptmx, err := pty.Start(cmd)

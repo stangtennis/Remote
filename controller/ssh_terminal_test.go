@@ -33,3 +33,25 @@ func TestBuildSSHArgsEscapesRemoteWorkdir(t *testing.T) {
 		t.Fatalf("remote environment bootstrap missing: %q", remote)
 	}
 }
+
+func TestBuildSSHArgsUsesCloudflareProxy(t *testing.T) {
+	dir := t.TempDir()
+	key := filepath.Join(dir, "id_ed25519")
+	if err := os.WriteFile(key, []byte("key"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	args, err := buildSSHArgs(&sshconfig.Config{
+		Enabled: true, Host: "ssh.hawkeye123.dk", Port: 22, User: "dennis",
+		KeyPath: key, Workdir: "/home/dennis/projekter/aisupport", CloudflareAccess: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "ProxyCommand=cloudflared access ssh --hostname %h") {
+		t.Fatalf("Cloudflare proxy missing from SSH args: %#v", args)
+	}
+	if !strings.Contains(joined, "dennis@ssh.hawkeye123.dk") {
+		t.Fatalf("SSH target missing from args: %#v", args)
+	}
+}

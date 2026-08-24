@@ -70,7 +70,14 @@ RD_AI_SSH_HOST=ubuntu.example.com
 RD_AI_SSH_USER=dennis
 RD_AI_SSH_KEY=~/.ssh/id_ed25519
 RD_AI_SSH_WORKDIR=/home/dennis/projekter/aisupport
+RD_AI_SSH_CLOUDFLARE=true
 ```
+
+The default route is `dennis@ssh.hawkeye123.dk` through Cloudflare Access. The
+controller invokes `cloudflared access ssh --hostname %h` as OpenSSH's proxy
+command, so `cloudflared` must be installed and authenticated on the computer
+running the controller. Disable the Cloudflare checkbox only when using a
+direct/VPN-reachable SSH endpoint.
 
 The controller does not change the Ubuntu host or `SERVER`; the SSH endpoint
 and any VPN/firewall access must already be available.
