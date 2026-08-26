@@ -11,7 +11,13 @@ let supportPendingIce = [];
 let supportReadyHandled = false;
 let currentSupportSession = null;
 let supportInPreview = false;
+let supportCreationPending = false;
+let resolveSupportRestore;
+const supportRestoreReady = new Promise((resolve) => { resolveSupportRestore = resolve; });
 const ACTIVE_AI_SUPPORT_STORAGE_KEY = 'remoteDesktopActiveAISupport';
+const SUPPORT_SITE_BASE = window.location.pathname.startsWith('/Remote/')
+  ? `${window.location.origin}/Remote`
+  : window.location.origin;
 
 function rememberActiveAISupportSession(sessionId, userId) {
   localStorage.setItem(ACTIVE_AI_SUPPORT_STORAGE_KEY, JSON.stringify({ session_id: sessionId, user_id: userId }));
@@ -120,11 +126,34 @@ function showSupportModal() {
       modeSelect.dataset.bound = 'true';
       modeSelect.addEventListener('change', () => {
         if (scopes) scopes.style.display = modeSelect.value === 'ai' ? 'block' : 'none';
+        updateSupportCreateButton();
       });
     }
     if (modeSelect && scopes) scopes.style.display = modeSelect.value === 'ai' ? 'block' : 'none';
+    updateSupportCreateButton();
     loadPublicSupportState();
   }
+}
+
+function updateSupportCreateButton() {
+  const button = document.getElementById('supportCreateBtn');
+  const mode = document.getElementById('supportMode')?.value;
+  if (button && !supportCreationPending) {
+    button.textContent = mode === 'screen' ? 'Opret skærmdelingssession' : 'Generér AI-supportkode';
+  }
+}
+
+async function generateAISupportCode() {
+  await supportRestoreReady;
+  showSupportModal();
+  if (currentSupportSession?.support_mode === 'ai' || supportCreationPending) return;
+
+  const modeSelect = document.getElementById('supportMode');
+  if (modeSelect) modeSelect.value = 'ai';
+  const scopes = document.getElementById('aiSupportScopes');
+  if (scopes) scopes.style.display = 'block';
+  updateSupportCreateButton();
+  await onCreateSupportSession();
 }
 
 function closeSupportModal() {
@@ -150,20 +179,40 @@ function showSupportStep(step) {
 }
 
 async function onCreateSupportSession() {
+  await supportRestoreReady;
+  if (currentSupportSession?.support_mode === 'ai') {
+    showSupportStep('share');
+    return currentSupportSession;
+  }
+  if (supportCreationPending) return null;
+  supportCreationPending = true;
   const btn = document.getElementById('supportCreateBtn');
+  const quickBtn = document.getElementById('aiSupportCodeBtn');
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Opretter...';
   }
-
-  const session = await createSupportSession();
-
-  if (btn) {
-    btn.disabled = false;
-    btn.textContent = 'Opret ny session';
+  if (quickBtn) {
+    quickBtn.disabled = true;
+    quickBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opretter...';
   }
 
-  if (!session) return;
+  let session;
+  try {
+    session = await createSupportSession();
+  } finally {
+    supportCreationPending = false;
+    if (btn) {
+      btn.disabled = false;
+      updateSupportCreateButton();
+    }
+    if (quickBtn) {
+      quickBtn.disabled = false;
+      quickBtn.innerHTML = '<i class="fas fa-robot"></i> Generér AI-kode';
+    }
+  }
+
+  if (!session) return null;
 
   // Show share step with PIN and link
   showSupportStep('share');
@@ -183,15 +232,16 @@ async function onCreateSupportSession() {
     setAISupportStatus('waiting', 'Venter på PIN-godkendelse og forbindelse fra Ubuntu AI...');
     watchUbuntuController(session.session_id);
     document.getElementById('supportShareStatus').textContent =
-      'AI-session klar. Venter på at klienten accepterer PIN og scopes...';
+      'Send koden til personen. De åbner AI Supportklient, indtaster koden og accepterer tilladelserne.';
     // Queue the Ubuntu watcher immediately. It only claims the session after
     // the native client has completed consent and marked itself ready.
     requestUbuntuAI();
-    return;
+    return session;
   }
 
   // Browser screen-share sessions use the dashboard viewer.
   waitForSharerReady(session.session_id);
+  return session;
 }
 
 async function requestUbuntuAI() {
@@ -285,6 +335,16 @@ function copySupportLink() {
       btn.textContent = 'Kopieret!';
       setTimeout(() => btn.textContent = orig, 2000);
     }
+  });
+}
+
+function copySupportPin() {
+  const pin = document.getElementById('supportPin')?.textContent?.trim();
+  if (!pin) return;
+  navigator.clipboard.writeText(pin).then(() => {
+    showToast('AI-supportkoden er kopieret', 'success');
+  }).catch(() => {
+    showToast('Kunne ikke kopiere koden', 'error');
   });
 }
 
@@ -984,9 +1044,6 @@ async function handleIncomingPublicSession(session) {
 
   showToast('Indkommende support session...', 'info');
 
-  const supportSiteBase = window.location.pathname.startsWith('/Remote/')
-    ? `${window.location.origin}/Remote`
-    : window.location.origin;
   currentSupportSession = {
     session_id: session.id,
     token: session.token,
@@ -1100,7 +1157,7 @@ async function restoreActiveAISupportSession(user) {
     session_id: session.id,
     pin: session.pin,
     token: session.token,
-    share_url: `${supportSiteBase}/support.html?token=${encodeURIComponent(session.token)}`,
+    share_url: `${SUPPORT_SITE_BASE}/support.html?token=${encodeURIComponent(session.token)}`,
     expires_at: session.expires_at,
     support_mode: session.support_mode,
     requested_scopes: session.requested_scopes,
@@ -1124,17 +1181,20 @@ async function restoreActiveAISupportSession(user) {
   requestUbuntuAI();
 }
 
-// Auto-start listener on page load if public support is enabled
-document.addEventListener('DOMContentLoaded', () => {
-  // Delay slightly to ensure auth is ready
-  setTimeout(async () => {
+// Restore any active AI session before allowing a new one to be created.
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
       await restoreActiveAISupportSession(session.user);
       const enabled = await loadPublicSupportState();
       if (enabled) startPublicSupportListener();
     }
-  }, 1000);
+  } catch (error) {
+    console.error('Support session restore failed:', error);
+  } finally {
+    resolveSupportRestore();
+  }
 });
 
 // Export
@@ -1142,6 +1202,8 @@ window.showSupportModal = showSupportModal;
 window.closeSupportModal = closeSupportModal;
 window.onCreateSupportSession = onCreateSupportSession;
 window.copySupportLink = copySupportLink;
+window.copySupportPin = copySupportPin;
+window.generateAISupportCode = generateAISupportCode;
 window.endSupportSession = endSupportSession;
 window.toggleSupportFullscreen = toggleSupportFullscreen;
 window.togglePublicSupport = togglePublicSupport;

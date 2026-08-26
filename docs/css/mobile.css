@@ -1,5 +1,7 @@
 /* Mobile layout fixes */
 
+.admin-only-action:not(.is-visible) { display: none !important; }
+
 @media (max-width: 768px) {
   /* iOS zoom prevention */
   input, select, textarea { font-size: 16px !important; }
@@ -20,6 +22,7 @@
   .header-actions > * {
     width: 30px !important; height: 30px !important;
     min-width: 30px !important; max-width: 30px !important;
+    margin-right: 0 !important;
     padding: 0 !important;
     font-size: 0 !important;
     display: inline-flex !important;

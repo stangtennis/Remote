@@ -10,7 +10,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
   <link rel="stylesheet" href="css/styles.css?v=10">
   <link rel="stylesheet" href="css/loading-states.css?v=6">
-  <link rel="stylesheet" href="css/mobile.css?v=12">
+  <link rel="stylesheet" href="css/mobile.css?v=13">
   <link rel="stylesheet" href="css/accessibility.css?v=6">
   <link rel="stylesheet" href="css/empty-states.css?v=8">
   <link rel="stylesheet" href="css/modern.css?v=6">
@@ -47,9 +47,10 @@
       <h1><i class="fas fa-satellite-dish"></i> Fjernskrivebord</h1>
       <div class="header-actions">
         <button id="notificationToggleBtn" class="btn btn-icon" onclick="BrowserNotifications.toggle()" title="Notifikationer"><i class="fas fa-bell"></i></button>
-        <button id="quickSupportBtn" class="btn btn-secondary" style="margin-right: 10px; display: none;" onclick="showSupportModal()"><i class="fas fa-life-ring"></i> Quick Support</button>
+        <button id="aiSupportCodeBtn" class="btn btn-primary admin-only-action" style="margin-right: 10px; display: none;" onclick="generateAISupportCode()" title="Generér AI-supportkode"><i class="fas fa-robot"></i> Generér AI-kode</button>
+        <button id="quickSupportBtn" class="btn btn-secondary admin-only-action" style="margin-right: 10px; display: none;" onclick="showSupportModal()"><i class="fas fa-life-ring"></i> Quick Support</button>
         <a href="history.html" class="btn btn-secondary" style="margin-right: 10px;" title="Session-historik"><i class="fas fa-clock-rotate-left"></i> Historik</a>
-        <a href="admin.html" id="adminLink" class="btn btn-secondary" style="margin-right: 10px; display: none;"><i class="fas fa-shield-halved"></i> Admin</a>
+        <a href="admin.html" id="adminLink" class="btn btn-secondary admin-only-action" style="margin-right: 10px; display: none;"><i class="fas fa-shield-halved"></i> Admin</a>
         <span id="userEmail" class="user-info"></span>
         <button id="logoutBtn" class="btn btn-secondary">Log ud</button>
       </div>
@@ -535,7 +536,7 @@
           <label style="display: block;"><input type="checkbox" data-support-scope="admin"> System/admin</label>
         </div>
         <button id="supportCreateBtn" class="btn btn-primary" onclick="onCreateSupportSession()" style="width: 100%;">
-          Opret support session
+          Generér AI-supportkode
         </button>
       </div>
 
@@ -544,6 +545,7 @@
         <div style="text-align: center; margin-bottom: 1rem;">
           <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.25rem;">PIN kode</div>
           <div id="supportPin" style="font-size: 2.5rem; font-weight: bold; letter-spacing: 0.3em; font-family: monospace;"></div>
+          <button id="supportCopyPinBtn" class="btn btn-secondary btn-sm" type="button" onclick="copySupportPin()" style="margin-top: 0.6rem;">Kopiér kode</button>
         </div>
         <div style="margin-bottom: 1rem;">
           <label style="font-size: 0.85rem; color: #888; display: block; margin-bottom: 0.25rem;">Delelink</label>
@@ -749,7 +751,7 @@
   <script src="js/notifications.js?v=1"></script>
   <script src="js/activity-log.js?v=2"></script>
   <script src="js/file-transfer.js?v=1"></script>
-  <script src="js/support-viewer.js?v=7"></script>
+  <script src="js/support-viewer.js?v=8"></script>
   
   <!-- Fullscreen Preview Script -->
   <script>

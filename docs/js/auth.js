@@ -252,12 +252,19 @@ if (document.getElementById('logoutBtn')) {
       
       // Show admin link and Quick Support button if user is admin
       if (adminLink && isAdmin) {
+        adminLink.classList.add('is-visible');
         adminLink.style.display = 'inline-flex';
       }
-
       const quickSupportBtn = document.getElementById('quickSupportBtn');
       if (quickSupportBtn && isAdmin) {
+        quickSupportBtn.classList.add('is-visible');
         quickSupportBtn.style.display = 'inline-flex';
+      }
+
+      const aiSupportCodeBtn = document.getElementById('aiSupportCodeBtn');
+      if (aiSupportCodeBtn && isAdmin) {
+        aiSupportCodeBtn.classList.add('is-visible');
+        aiSupportCodeBtn.style.display = 'inline-flex';
       }
       
       // Add controller download for admins (platform-aware)
