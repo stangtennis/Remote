@@ -291,9 +291,14 @@
         <section class="devices-section">
           <div class="section-header">
             <h2>Dine enheder</h2>
-            <button id="refreshDevicesBtn" class="btn btn-icon" title="Opdater">
-              <i class="fas fa-sync-alt"></i>
-            </button>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <button id="addDeviceBtn" class="btn btn-primary btn-sm" title="Tilføj klient">
+                <i class="fas fa-plus"></i> Tilføj klient
+              </button>
+              <button id="refreshDevicesBtn" class="btn btn-icon" title="Opdater">
+                <i class="fas fa-sync-alt"></i>
+              </button>
+            </div>
           </div>
 
           <!-- Search & Filter Bar -->
@@ -391,6 +396,28 @@
           </div>
         </section>
 
+        <!-- AI-support Clients Section (admin only, separate from Dine enheder and Quick Support) -->
+        <section id="aiSupportClientsSection" class="devices-section admin-only-action" style="display: none; margin-top: 1.5rem;">
+          <div class="section-header">
+            <h2><i class="fas fa-robot"></i> AI-support klienter</h2>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <button id="addAISupportClientBtn" class="btn btn-primary btn-sm" title="Tilføj AI-support klient (Windows → Ubuntu SSH)">
+                <i class="fas fa-plus"></i> Tilføj klient
+              </button>
+              <button id="refreshAISupportClientsBtn" class="btn btn-icon" title="Opdater AI-support klienter">
+                <i class="fas fa-sync-alt"></i>
+              </button>
+            </div>
+          </div>
+          <p style="margin: 0 0 0.75rem 0; font-size: 0.78rem; color: var(--text-muted, #888);">
+            Windows-PC'er der forbinder ud til Ubuntu AI-support-værten over SSH. Retning er altid Windows → Ubuntu — der åbnes ingen inbound porte på Windows. Adskilt fra almindelige fjernskrivebords-agenter og Quick Support.
+          </p>
+          <div id="aiSupportClientsList"></div>
+          <div id="aiSupportClientsEmpty" style="display: none; text-align: center; padding: 1.25rem; color: var(--text-muted, #888); font-size: 0.85rem; border: 1px dashed var(--border, #333); border-radius: var(--radius-sm, 6px);">
+            Ingen AI-support klienter endnu. Tryk "Tilføj klient" for at generere en PowerShell-kommando.
+          </div>
+        </section>
+
         <!-- Activity Log Section -->
         <section id="activityLogSection" class="activity-log-section" style="margin-top: 1.5rem;">
           <div class="section-header" style="cursor: pointer;">
@@ -403,7 +430,7 @@
                 <option value="all">Alle</option>
                 <option value="sessions">Sessions</option>
                 <option value="devices">Enheder</option>
-                <option value="support">Support</option>
+                <option value="support">AI-support</option>
               </select>
               <button id="activityExportCsv" class="btn btn-sm btn-secondary" title="Eksporter aktuelt filter som CSV" style="padding: 0.3rem 0.55rem; font-size: 0.75rem;"><i class="fas fa-file-csv"></i></button>
             </div>
@@ -742,9 +769,9 @@
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js?v=6"></script>
-  <script src="js/auth.js?v=9"></script>
+  <script src="js/auth.js?v=11"></script>
   <script src="js/app.js?v=10"></script>
-  <script src="js/devices.js?v=17"></script>
+  <script src="js/devices.js?v=19"></script>
   <script src="js/sessions.js?v=8"></script>
   <script src="js/webrtc.js?v=40"></script>
   <script src="js/signaling.js?v=103"></script>

@@ -74,3 +74,9 @@ verify_jwt = true
 
 [functions.send-welcome-email]
 verify_jwt = true
+
+[functions.readonly-mcp]
+verify_jwt = true
+
+[functions.device-enrollment]
+verify_jwt = false

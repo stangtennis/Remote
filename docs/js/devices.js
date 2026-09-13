@@ -11,11 +11,52 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 
+// Single deployment constant for downloadable setup scripts (enrollment
+// one-liners download from here). Change this if the updates host moves.
+const UPDATES_HOST = 'https://updates.hawkeye123.dk';
+
 // Cached data for client-side filtering
 let _allDevices = [];
 let _deviceTags = {};     // { device_id: ['tag1', 'tag2'] }
 let _userFavorites = {};  // { device_id: true }
 let _currentUserId = null;
+
+// Single cached role lookup shared by devices.js and auth.js so admin-gated
+// UI (including the AI-support client list) can never run before the role is
+// known. Without this, loadAISupportClients() silently no-opped whenever it
+// ran before loadDevices() had set window.__rdIsAdmin.
+let _dashboardRolePromise = null;
+function fetchDashboardRole() {
+  if (!_dashboardRolePromise) {
+    _dashboardRolePromise = (async () => {
+      let role = null;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { data: approval } = await supabase
+            .from('user_approvals')
+            .select('role')
+            .eq('user_id', session.user.id)
+            .single();
+          role = approval ? approval.role : null;
+        }
+      } catch (error) {
+        console.warn('Role lookup failed:', error.message);
+      }
+      const roleInfo = {
+        role,
+        isAdmin: role === 'admin' || role === 'super_admin',
+        isSuperAdmin: role === 'super_admin',
+      };
+      window.__rdRole = roleInfo.role;
+      window.__rdIsAdmin = roleInfo.isAdmin;
+      window.__rdIsSuperAdmin = roleInfo.isSuperAdmin;
+      return roleInfo;
+    })();
+  }
+  return _dashboardRolePromise;
+}
+window.fetchDashboardRole = fetchDashboardRole;
 
 async function initDevices() {
   if (window.BrowserNotifications) BrowserNotifications.init();
@@ -25,8 +66,15 @@ async function initDevices() {
   const statusFilter = document.getElementById('deviceStatusFilter');
   if (searchInput) searchInput.addEventListener('input', applyDeviceFilters);
   if (statusFilter) statusFilter.addEventListener('change', applyDeviceFilters);
+  const addDeviceBtn = document.getElementById('addDeviceBtn');
+  if (addDeviceBtn) addDeviceBtn.addEventListener('click', createDeviceEnrollment);
+  const addAISupportClientBtn = document.getElementById('addAISupportClientBtn');
+  if (addAISupportClientBtn) addAISupportClientBtn.addEventListener('click', createAISupportEnrollment);
+  const refreshAISupportClientsBtn = document.getElementById('refreshAISupportClientsBtn');
+  if (refreshAISupportClientsBtn) refreshAISupportClientsBtn.addEventListener('click', () => loadAISupportClients());
 
   await loadDevices();
+  loadAISupportClients();
   subscribeToDeviceUpdates();
 }
 
@@ -45,19 +93,11 @@ async function loadDevices() {
     if (!session) return;
     _currentUserId = session.user.id;
 
-    // Check if user is admin/super_admin
-    const { data: approval } = await supabase
-      .from('user_approvals')
-      .select('role')
-      .eq('user_id', session.user.id)
-      .single();
-
-    const isAdmin = approval && (approval.role === 'admin' || approval.role === 'super_admin');
-    const isSuperAdmin = approval && approval.role === 'super_admin';
-    // Expose role for downstream UI helpers (showDeviceMenu, assignDeviceUI)
-    window.__rdRole = approval ? approval.role : null;
-    window.__rdIsAdmin = !!isAdmin;
-    window.__rdIsSuperAdmin = !!isSuperAdmin;
+    // Check if user is admin/super_admin (cached shared lookup so every
+    // consumer agrees on the role before admin-gated UI renders)
+    const roleInfo = await fetchDashboardRole();
+    const isAdmin = roleInfo.isAdmin;
+    const isSuperAdmin = roleInfo.isSuperAdmin;
 
     // Load devices, tags, and favorites in parallel
     // super_admin: sees ALL devices
@@ -234,6 +274,9 @@ function createDeviceCard(device) {
   subtitle.style.cssText = 'font-size: 0.7rem; color: var(--text-muted, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
   const parts = [device.platform || 'Unknown'];
   if (device.agent_version) parts.push(device.agent_version);
+  if (device.last_seen) {
+    parts.push(`Set ${new Date(device.last_seen).toLocaleString('da-DK', { dateStyle: 'short', timeStyle: 'short' })}`);
+  }
   if (device.public_ip) parts.push(device.public_ip);
   if (device.isp) parts.push(device.isp);
   if (device.connection_type) {
@@ -319,12 +362,14 @@ function showDeviceMenu(anchor, device) {
   menu.style.cssText = 'position: absolute; z-index: 100; background: var(--surface, #1e1e2e); border: 1px solid var(--border, #333); border-radius: 6px; padding: 0.25rem 0; min-width: 120px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);';
 
   const items = [
+    { label: '📋 Historik', action: () => { window.location.href = `history.html?device=${encodeURIComponent(device.device_id)}&type=all`; } },
     { label: '🏷️ Tag', action: () => addTagPrompt(device.device_id) },
     { label: '✏️ Omdøb', action: () => renameDevice(device) },
     { label: '🔄 Opdater agent', action: () => forceUpdateDevice(device), show: device.is_online },
+    { label: '🗑️ Fjern agent remote', action: () => requestRemoteUninstall(device), show: !device.lifecycle_status || device.lifecycle_status === 'active', danger: true },
     // Admin-only — assign / transfer device ownership
     { label: '👥 Tildel adgang', action: () => assignDevicePrompt(device), show: !!window.__rdIsAdmin },
-    { label: '🗑️ Slet', action: () => deleteDevice(device), danger: true }
+    { label: 'Slet historisk enhed', action: () => deleteDevice(device), danger: true, show: device.lifecycle_status === 'uninstalled' ? false : true }
   ].filter(i => i.show !== false);
 
   for (const item of items) {
@@ -547,6 +592,10 @@ async function renameDevice(device) {
 }
 
 async function deleteDevice(device) {
+  if (device.lifecycle_status === 'uninstall_pending' || device.lifecycle_status === 'uninstalled') {
+    showToast('Enheden kan ikke slettes mens uninstall-historikken bevares.', 'warning');
+    return;
+  }
   if (!await showConfirm(`Slet enhed "${device.device_name || device.device_id}"?\n\nDette kan ikke fortrydes.`, { title: 'Slet enhed', confirmText: 'Slet', type: 'danger', icon: '🗑️' })) {
     return;
   }
@@ -576,6 +625,284 @@ async function deleteDevice(device) {
   } catch (error) {
     console.error('Failed to delete device:', error);
     showToast('Kunne ikke slette enhed: ' + error.message, 'error');
+  }
+}
+
+// ==================== ENROLLMENT ====================
+
+async function createDeviceEnrollment() {
+  const requestedName = window.prompt('Navn på den nye klient (fx Kontor-PC):', 'Ny klient');
+  if (requestedName === null) return;
+  const deviceName = requestedName.trim();
+  if (!deviceName || deviceName.length > 64) {
+    showToast('Klientnavnet skal være mellem 1 og 64 tegn.', 'error');
+    return;
+  }
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const response = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/device-enrollment`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: SUPABASE_CONFIG.anonKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'create', device_name: deviceName }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.enrollment_token) throw new Error(data.error || 'Kunne ikke oprette enrollment');
+    showEnrollmentCommand(data.enrollment_token, data.device_name, data.expires_at);
+  } catch (error) {
+    console.error('Create device enrollment failed:', error);
+    showToast('Kunne ikke oprette klient-enrollment: ' + error.message, 'error');
+  }
+}
+
+function showEnrollmentCommand(token, deviceName, expiresAt) {
+  const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
+  const command = `$ProgressPreference = 'SilentlyContinue'; $dir = Join-Path $env:TEMP 'RemoteDesktopAgent'; New-Item -ItemType Directory -Force -Path $dir | Out-Null; Invoke-WebRequest -UseBasicParsing -Uri '${UPDATES_HOST}/remote-agent.exe' -OutFile (Join-Path $dir 'remote-agent.exe'); Start-Process -FilePath (Join-Path $dir 'remote-agent.exe') -Verb RunAs -Wait -ArgumentList '--enroll-token', ${quote(token)}, '--device-name', ${quote(deviceName)}, '--install', '--start'`;
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `
+    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="enroll-title">
+      <div class="confirm-icon">🖥️</div>
+      <h3 id="enroll-title" class="confirm-title">Tilføj klient: ${escapeHtml(deviceName)}</h3>
+      <p class="confirm-message">Kør kommandoen på klientens Windows-computer. Den bruger et engangstoken, installerer agenten som service og starter den efter reboot.</p>
+      <textarea readonly aria-label="PowerShell enrollment-kommando" style="width: 100%; min-height: 130px; box-sizing: border-box; font-family: monospace; font-size: 0.75rem; padding: 0.6rem; background: var(--background-secondary, #111); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: 6px;">${escapeHtml(command)}</textarea>
+      <p class="confirm-message" style="font-size: 0.75rem;">Token udløber: ${escapeHtml(new Date(expiresAt).toLocaleString('da-DK'))}</p>
+      <div class="confirm-actions">
+        <button class="btn btn-ghost enroll-close">Luk</button>
+        <button class="btn btn-primary enroll-copy">Kopiér kommando</button>
+      </div>
+    </div>`;
+  const close = () => overlay.remove();
+  overlay.querySelector('.enroll-close').addEventListener('click', close);
+  overlay.querySelector('.enroll-copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      showToast('PowerShell-kommando kopieret.', 'success');
+    } catch (_) {
+      const textarea = overlay.querySelector('textarea');
+      textarea.focus();
+      textarea.select();
+      showToast('Kopiér kommandoen manuelt med Ctrl+C.', 'info');
+    }
+  });
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  document.body.appendChild(overlay);
+  overlay.querySelector('.enroll-copy').focus();
+}
+
+async function requestRemoteUninstall(device) {
+  const name = device.device_name || device.device_id;
+  const confirmation = window.prompt(`Dette fjerner Remote Desktop Agent fra "${name}" og kan ikke fortrydes.\n\nSkriv REMOVE for at bekræfte:`);
+  if (confirmation !== 'REMOVE') return;
+
+  try {
+    const { data, error } = await supabase.rpc('enqueue_device_command', {
+      p_device_id: device.device_id,
+      p_command_type: 'uninstall',
+      p_payload: { confirmation: 'REMOVE' },
+    });
+    if (error) throw error;
+    showToast(`Remote uninstall sat i kø for ${name}. Kommando-id: ${data}`, 'info');
+    await loadDevices();
+  } catch (error) {
+    console.error('Remote uninstall request failed:', error);
+    showToast('Kunne ikke sætte remote uninstall i kø: ' + error.message, 'error');
+  }
+}
+
+// ==================== AI-SUPPORT CLIENTS (admin) ====================
+//
+// Dedicated Windows->Ubuntu SSH clients for AI support. This is separate
+// from the normal Remote Desktop agent enrollment ("Dine enheder") and
+// from Quick Support sessions: no agent is installed, no inbound Windows
+// port is opened, and only public SSH metadata is registered.
+
+async function createAISupportEnrollment() {
+  if (!window.__rdIsAdmin) {
+    showToast('Kun admin/super_admin kan oprette AI-support klienter.', 'error');
+    return;
+  }
+  const requestedName = window.prompt('Navn på Windows-PC der skal tilføjes AI-support (fx Kontor-PC):', 'AI-support PC');
+  if (requestedName === null) return;
+  const clientName = requestedName.trim();
+  if (!clientName || clientName.length > 64) {
+    showToast('Klientnavnet skal være mellem 1 og 64 tegn.', 'error');
+    return;
+  }
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const response = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/device-enrollment`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: SUPABASE_CONFIG.anonKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'create', purpose: 'ai_support', device_name: clientName }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.enrollment_token) throw new Error(data.error || 'Kunne ikke oprette enrollment');
+    showAISupportEnrollmentCommand(data.enrollment_token, data.device_name, data.expires_at);
+  } catch (error) {
+    // Do not log the token; error messages only.
+    console.error('Create AI-support enrollment failed:', error.message);
+    showToast('Kunne ikke oprette AI-support enrollment: ' + error.message, 'error');
+  }
+}
+
+function showAISupportEnrollmentCommand(token, clientName, expiresAt) {
+  const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
+  const enrollmentUrl = `${SUPABASE_CONFIG.url}/functions/v1/device-enrollment`;
+  const command = `$ProgressPreference = 'SilentlyContinue'; $dir = Join-Path $env:TEMP 'RemoteDesktopAISupport'; New-Item -ItemType Directory -Force -Path $dir | Out-Null; Invoke-WebRequest -UseBasicParsing -Uri '${UPDATES_HOST}/setup-ai-support-windows.ps1' -OutFile (Join-Path $dir 'setup-ai-support-windows.ps1'); powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir 'setup-ai-support-windows.ps1') -EnrollmentUrl ${quote(enrollmentUrl)} -EnrollmentToken ${quote(token)} -ClientName ${quote(clientName)}`;
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `
+    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="ai-enroll-title">
+      <div class="confirm-icon">🤖</div>
+      <h3 id="ai-enroll-title" class="confirm-title">AI-support klient: ${escapeHtml(clientName)}</h3>
+      <p class="confirm-message">Kør kommandoen på Windows-PC'en. Den opsætter SSH mod Ubuntu (Windows → Ubuntu, ingen inbound porte på Windows), verificerer forbindelsen og registrerer klienten i AI-support-listen. Kør i en Administrator-PowerShell hvis OpenSSH Client mangler.</p>
+      <textarea readonly aria-label="PowerShell AI-support enrollment-kommando" style="width: 100%; min-height: 130px; box-sizing: border-box; font-family: monospace; font-size: 0.75rem; padding: 0.6rem; background: var(--background-secondary, #111); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: 6px;">${escapeHtml(command)}</textarea>
+      <p class="confirm-message" style="font-size: 0.75rem;">⚠️ Engangstoken — kan kun bruges én gang. Udløber: ${escapeHtml(new Date(expiresAt).toLocaleString('da-DK'))} (30 minutter)</p>
+      <div class="confirm-actions">
+        <button class="btn btn-ghost ai-enroll-close">Luk</button>
+        <button class="btn btn-primary ai-enroll-copy">Kopiér kommando</button>
+      </div>
+    </div>`;
+  const close = () => overlay.remove();
+  overlay.querySelector('.ai-enroll-close').addEventListener('click', close);
+  overlay.querySelector('.ai-enroll-copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      showToast('PowerShell-kommando kopieret.', 'success');
+    } catch (_) {
+      const textarea = overlay.querySelector('textarea');
+      textarea.focus();
+      textarea.select();
+      showToast('Kopiér kommandoen manuelt med Ctrl+C.', 'info');
+    }
+  });
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  document.body.appendChild(overlay);
+  overlay.querySelector('.ai-enroll-copy').focus();
+}
+
+async function loadAISupportClients() {
+  const list = document.getElementById('aiSupportClientsList');
+  const empty = document.getElementById('aiSupportClientsEmpty');
+  if (!list) return;
+
+  // Await the cached role lookup instead of trusting a global flag that may
+  // not be set yet — avoids a silent pre-role no-op and empty admin lists.
+  const roleInfo = await fetchDashboardRole();
+  if (!roleInfo.isAdmin) return;
+
+  try {
+    const { data, error } = await supabase
+      .from('ai_support_clients')
+      .select('client_id, client_name, hostname, platform, ssh_host, ssh_port, ssh_user, ssh_key_fingerprint, status, last_seen, created_at')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    list.innerHTML = '';
+    if (!data || data.length === 0) {
+      if (empty) empty.style.display = 'block';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+
+    for (const client of data) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); margin-bottom: 0.4rem;';
+
+      const dot = document.createElement('span');
+      dot.title = client.status === 'ready' ? 'Klar' : 'Revokeret';
+      dot.style.cssText = `width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: ${client.status === 'ready' ? '#22c55e' : '#ef4444'};`;
+
+      const nameCol = document.createElement('div');
+      nameCol.style.cssText = 'flex: 1; min-width: 0; overflow: hidden;';
+      const nameEl = document.createElement('div');
+      nameEl.style.cssText = 'font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem;';
+      nameEl.textContent = client.client_name || client.client_id;
+      const subtitle = document.createElement('div');
+      subtitle.style.cssText = 'font-size: 0.7rem; color: var(--text-muted, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+      const parts = [];
+      if (client.hostname) parts.push(client.hostname);
+      if (client.platform) parts.push(client.platform);
+      parts.push(`ssh ${client.ssh_user}@${client.ssh_host}:${client.ssh_port}`);
+      if (client.ssh_key_fingerprint) parts.push(client.ssh_key_fingerprint);
+      if (client.last_seen) {
+        parts.push(`Set ${new Date(client.last_seen).toLocaleString('da-DK', { dateStyle: 'short', timeStyle: 'short' })}`);
+      }
+      subtitle.title = parts.join(' · ');
+      subtitle.textContent = parts.join(' · ');
+      nameCol.append(nameEl, subtitle);
+
+      const badge = document.createElement('span');
+      badge.style.cssText = `padding: 0.05rem 0.35rem; border-radius: 9999px; font-size: 0.65rem; flex-shrink: 0; background: ${client.status === 'ready' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}; color: ${client.status === 'ready' ? '#22c55e' : '#ef4444'};`;
+      badge.textContent = client.status === 'ready' ? 'Klar' : 'Revokeret';
+
+      row.append(dot, nameCol, badge);
+
+      // Terminal revoke action with explicit confirmation. Rows are built
+      // with DOM APIs (textContent), so client metadata is never injected
+      // as HTML, and no secrets exist in this table.
+      if (client.status === 'ready') {
+        const revokeBtn = document.createElement('button');
+        revokeBtn.type = 'button';
+        revokeBtn.className = 'btn btn-danger btn-sm';
+        revokeBtn.style.flexShrink = '0';
+        revokeBtn.title = 'Revokér AI-support klient (kan ikke fortrydes)';
+        revokeBtn.textContent = 'Revokér';
+        revokeBtn.addEventListener('click', () => revokeAISupportClient(client));
+        row.appendChild(revokeBtn);
+      }
+
+      list.appendChild(row);
+    }
+  } catch (error) {
+    console.error('Failed to load AI-support clients:', error.message);
+    showToast('Kunne ikke indlæse AI-support klienter: ' + error.message, 'error');
+  }
+}
+
+// Terminal revoke of an AI-support client via the SECURITY DEFINER RPC.
+// Requires an explicit confirm() and refreshes the list afterwards.
+async function revokeAISupportClient(client) {
+  if (!client || typeof client.client_id !== 'string' || !client.client_id) return;
+  const roleInfo = await fetchDashboardRole();
+  if (!roleInfo.isAdmin) {
+    showToast('Kun admin/super_admin kan revokere AI-support klienter.', 'error');
+    return;
+  }
+  if (client.status !== 'ready') return;
+
+  const displayName = client.client_name || client.client_id;
+  const confirmed = window.confirm(
+    `Revokér AI-support klienten "${displayName}"?\n\n` +
+    'Dette er permanent: klienten kan ikke genaktiveres, og SSH-metadata beholdes kun som historik med status "Revokeret".\n' +
+    'PC\'en skal tilmeldes igen med et nyt klient-ID for at få AI-support.'
+  );
+  if (!confirmed) return;
+
+  try {
+    const { error } = await supabase.rpc('revoke_ai_support_client', {
+      p_client_id: client.client_id,
+    });
+    if (error) throw error;
+    showToast(`AI-support klient "${displayName}" er revokeret.`, 'success');
+  } catch (error) {
+    console.error('Revoke AI-support client failed:', error.message);
+    showToast('Kunne ikke revokere AI-support klient: ' + error.message, 'error');
+  } finally {
+    // Always refresh so the list reflects the server's authoritative status.
+    await loadAISupportClients();
   }
 }
 
@@ -795,3 +1122,6 @@ async function assignDevicePrompt(device) {
 window.initDevices = initDevices;
 window.loadDevices = loadDevices;
 window.assignDevicePrompt = assignDevicePrompt;
+window.createAISupportEnrollment = createAISupportEnrollment;
+window.loadAISupportClients = loadAISupportClients;
+window.revokeAISupportClient = revokeAISupportClient;

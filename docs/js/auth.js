@@ -7,23 +7,23 @@
 // Check if user is already logged in
 async function checkAuth() {
   const { data: { session } } = await supabase.auth.getSession();
-  
+
   const isLoginPage = window.location.pathname.endsWith('login.html');
-  const isIndexPage = window.location.pathname.endsWith('index.html') || 
+  const isIndexPage = window.location.pathname.endsWith('index.html') ||
                       window.location.pathname.endsWith('/') ||
                       window.location.pathname.endsWith('/Remote/');
   const isAdminPage = window.location.pathname.endsWith('admin.html');
-  
+
   // Index page handles routing, skip auth check there
   if (isIndexPage) {
     return;
   }
-  
+
   if (session && isLoginPage) {
     // Check for redirect target
     const redirectTarget = sessionStorage.getItem('loginRedirect');
     sessionStorage.removeItem('loginRedirect');
-    
+
     if (redirectTarget === 'agent') {
       window.location.href = 'agent.html';
     } else {
@@ -40,7 +40,7 @@ async function checkAuth() {
       .select('approved')
       .eq('user_id', session.user.id)
       .single();
-    
+
     if (error) {
       console.error('Error checking approval status:', error);
     } else if (approval && !approval.approved) {
@@ -50,7 +50,7 @@ async function checkAuth() {
       return null;
     }
   }
-  
+
   return session;
 }
 
@@ -240,16 +240,17 @@ if (document.getElementById('logoutBtn')) {
   checkAuth().then(async (session) => {
     if (session && session.user) {
       userEmail.textContent = session.user.email;
-      
-      // Check if user is admin or super_admin
-      const { data: approval } = await supabase
-        .from('user_approvals')
-        .select('role')
-        .eq('user_id', session.user.id)
-        .single();
-      
-      const isAdmin = approval && (approval.role === 'admin' || approval.role === 'super_admin');
-      
+
+      // Shared cached role lookup (devices.js). Using it here instead of a
+      // separate query guarantees window.__rdIsAdmin/__rdRole are set from
+      // the same result before any admin-gated UI runs, and
+      // loadAISupportClients() can await the role instead of silently
+      // no-opping when it wins the race against initDevices().
+      const roleInfo = typeof fetchDashboardRole === 'function'
+        ? await fetchDashboardRole()
+        : { role: null, isAdmin: false, isSuperAdmin: false };
+      const isAdmin = roleInfo.isAdmin;
+
       // Show admin link and Quick Support button if user is admin
       if (adminLink && isAdmin) {
         adminLink.classList.add('is-visible');
@@ -266,7 +267,14 @@ if (document.getElementById('logoutBtn')) {
         aiSupportCodeBtn.classList.add('is-visible');
         aiSupportCodeBtn.style.display = 'inline-flex';
       }
-      
+
+      // AI-support clients section (Windows -> Ubuntu SSH enrollment list)
+      const aiSupportClientsSection = document.getElementById('aiSupportClientsSection');
+      if (aiSupportClientsSection && isAdmin) {
+        aiSupportClientsSection.style.display = 'block';
+        if (typeof loadAISupportClients === 'function') loadAISupportClients();
+      }
+
       // Add controller download for admins (platform-aware)
       const downloadsGrid = document.getElementById('downloadsGrid');
       if (downloadsGrid && isAdmin) {
