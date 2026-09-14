@@ -257,6 +257,20 @@ function Set-LocalAccountTokenFilterPolicy {
     }
 }
 
+function Get-SshdStartFailureDetails([string]$SshdConfig) {
+    $details = @()
+    $service = Get-Service -Name sshd -ErrorAction SilentlyContinue
+    if ($service) { $details += "service_state=$($service.Status) service_name=$($service.Name)" }
+    try {
+        $events = Get-WinEvent -FilterHashtable @{ LogName = 'OpenSSH/Operational'; StartTime = (Get-Date).AddMinutes(-5) } -MaxEvents 5 -ErrorAction Stop |
+            ForEach-Object { $_.Message }
+        if ($events) { $details += ('events=' + (($events -join ' | ') -replace '\s+', ' ')) }
+    } catch { }
+    $effective = (& (Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe') -T -f $SshdConfig 2>&1 | Out-String).Trim()
+    if ($effective) { $details += ('sshd_effective_config=' + ($effective -replace '\s+', ' ')) }
+    return ($details -join '; ')
+}
+
 function Configure-WindowsSshd {
     $sshdConfig = Join-Path $env:ProgramData 'ssh\sshd_config'
     if (-not (Test-Path $sshdConfig)) {
@@ -319,10 +333,23 @@ Match User $WindowsSshUser
     if ($LASTEXITCODE -ne 0) { throw 'Windows OpenSSH hostkeys kunne ikke oprettes.' }
     $hostKeys = Get-ChildItem -LiteralPath (Join-Path $env:ProgramData 'ssh') -Filter 'ssh_host_*_key' -File -ErrorAction SilentlyContinue
     if (-not $hostKeys) { throw 'Windows OpenSSH hostkeys blev ikke oprettet.' }
-    & (Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe') -t -f $sshdConfig
-    if ($LASTEXITCODE -ne 0) { throw 'OpenSSH Server konfigurationen er ugyldig.' }
+    foreach ($hostKey in $hostKeys) {
+        & icacls.exe $hostKey.FullName /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Kunne ikke beskytte OpenSSH hostkey $($hostKey.Name)." }
+    }
+    $configTest = (& (Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe') -t -f $sshdConfig 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        if ($configTest) { throw "OpenSSH Server konfigurationen er ugyldig: $configTest" }
+        throw 'OpenSSH Server konfigurationen er ugyldig.'
+    }
     Set-Service -Name sshd -StartupType Automatic
-    Restart-Service -Name sshd -Force
+    try {
+        Restart-Service -Name sshd -Force -ErrorAction Stop
+    } catch {
+        $details = Get-SshdStartFailureDetails $sshdConfig
+        if ($details) { throw "OpenSSH Server kunne ikke starte: $details" }
+        throw "OpenSSH Server kunne ikke starte: $($_.Exception.Message)"
+    }
     try {
         Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue | Disable-NetFirewallRule
     } catch { }
