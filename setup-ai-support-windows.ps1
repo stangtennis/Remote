@@ -222,7 +222,12 @@ exit $exitCode
 
 function Configure-WindowsSshd {
     $sshdConfig = Join-Path $env:ProgramData 'ssh\sshd_config'
-    if (-not (Test-Path $sshdConfig)) { throw 'OpenSSH Server konfigurationsfil blev ikke fundet.' }
+    if (-not (Test-Path $sshdConfig)) {
+        $defaultConfig = Join-Path $env:WINDIR 'System32\OpenSSH\sshd_config_default'
+        if (-not (Test-Path $defaultConfig)) { throw 'OpenSSH Server konfigurationsfil blev ikke fundet.' }
+        New-Item -ItemType Directory -Path (Split-Path -Parent $sshdConfig) -Force | Out-Null
+        Copy-Item -LiteralPath $defaultConfig -Destination $sshdConfig -Force
+    }
     if (-not (Test-Path $SshdConfigBackup)) {
         try { Copy-Item -LiteralPath $sshdConfig -Destination $SshdConfigBackup -Force -ErrorAction Stop }
         catch { throw "Kunne ikke sikkerhedskopiere OpenSSH-konfigurationen: $($_.Exception.Message)" }

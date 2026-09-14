@@ -15,6 +15,15 @@ Argumentet er device-navnet (f.eks. `WIN-TEST`). Hvis intet argument er givet, l
 remote-desktop-cli list
 ```
 
+## MCP-kontekst er obligatorisk
+
+Før AI-support starter på en client, brug `remote-desktop-support` MCP til at
+hente `support_context` eller mindst `client_status`, `client_history` og
+relevant `knowledge_search`. Efter hver væsentlig handling skal resultatet
+verificeres og den eksisterende support-audit bruges som historik. MCP er
+kontekst- og læringslaget; rå SSH/WebRTC-transport må ikke erstatte
+client-historikken.
+
 ## Forbind til enheden
 
 ```bash

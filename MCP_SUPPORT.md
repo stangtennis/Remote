@@ -23,6 +23,24 @@ respect to the support data. If tool-call telemetry is required, it must be
 collected by the authenticated gateway or client outside this endpoint; it must
 not be implemented by granting the MCP request path write access.
 
+## Shared AI-support context
+
+Both support paths use the same backend history and MCP context:
+
+- Portable AI-support EXE/WebRTC actions are recorded in `support_action_audit`.
+- Persistent SSH commands are recorded as redacted `AI_SUPPORT_COMMAND` events
+  in `audit_logs` under the AI-support client ID.
+- MCP exposes both client types through `list_clients` and `client_status`,
+  merges bounded history through `client_history`, and provides `support_context`
+  for status, history, and troubleshooting knowledge.
+- Curated, approved lessons belong in `support_knowledge` and are retrieved by
+  `knowledge_search`. Credentials, private keys, screenshots, and unrestricted
+  command output are never learning data.
+
+The Windows EXE and SSH setup do not receive MCP credentials or call MCP
+directly. They report normalized events to authenticated backend endpoints; the
+AI uses MCP as the single context layer before and during support work.
+
 ## Deployment
 
 The function requires the existing Supabase Edge Function deployment flow:
