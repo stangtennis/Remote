@@ -152,7 +152,7 @@ function Invoke-UbuntuPasswordSsh([string]$RemoteCommand) {
 }
 
 function Remove-RemoteKey([string]$IdentityFile, [string]$KeyBase64) {
-    $command = "set -eu; test -f ~/.ssh/authorized_keys || exit 0; tmp=`$(mktemp); awk -v key='$KeyBase64' '`$2 != key { print }' ~/.ssh/authorized_keys > `$tmp; mv `$tmp ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys"
+    $command = "set -eu; test -f ~/.ssh/authorized_keys || exit 0; tmp=`$(mktemp); awk -v target='$KeyBase64' '{ current = 0; for (i=1; i<NF; i++) if (`$i ~ /^(ssh-|ecdsa-)/) { current = `$(i+1); break } } current != target { print }' ~/.ssh/authorized_keys > `$tmp; mv `$tmp ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys"
     $exitCode = Invoke-UbuntuSsh $IdentityFile $command
     if ($exitCode -ne 0) { throw 'Kunne ikke fjerne bootstrap-noeglen fra Ubuntu.' }
 }
@@ -512,7 +512,7 @@ try {
     Write-Step 'Installerer bootstrap- og tunnelnoegler paa Ubuntu'
     $bootstrapLineEncoded = Convert-ToBase64 $bootstrapKeyLine
     # The port-specific tunnel key line is installed inside the retry loop.
-    $remoteInstall = "set -eu; umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; tmp=`$(mktemp); awk -v k='$bootstrapBase64' -v t='$tunnelBase64' '`$2 != k && `$2 != t { print }' ~/.ssh/authorized_keys > `$tmp; printf '%s\n' '$bootstrapLineEncoded' | base64 -d >> `$tmp; mv `$tmp ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys"
+    $remoteInstall = "set -eu; umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; tmp=`$(mktemp); awk -v k='$bootstrapBase64' -v t='$tunnelBase64' '{ current = 0; for (i=1; i<NF; i++) if (`$i ~ /^(ssh-|ecdsa-)/) { current = `$(i+1); break } } current != k && current != t { print }' ~/.ssh/authorized_keys > `$tmp; printf '%s\n' '$bootstrapLineEncoded' | base64 -d >> `$tmp; mv `$tmp ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys"
     if ((Invoke-UbuntuPasswordSsh $remoteInstall) -ne 0) { throw 'Kunne ikke installere bootstrap-noeglen paa Ubuntu.' }
 
     $tunnelVerified = $false
@@ -521,7 +521,7 @@ try {
         $tunnelPort = Get-Random -Minimum $TunnelPortMinimum -Maximum ($TunnelPortMaximum + 1)
         $tunnelKeyLine = "command=`"if [ -n \`"`$SSH_ORIGINAL_COMMAND\`" ]; then exit 1; fi; exec /usr/bin/env AI_SUPPORT_CLIENT_ID=$ClientId /usr/bin/sleep infinity`",no-pty,no-agent-forwarding,no-X11-forwarding,no-user-rc,permitlisten=`"127.0.0.1:$tunnelPort`" $($tunnelParts[0]) $tunnelBase64 $ClientId-tunnel"
         $tunnelLineEncoded = Convert-ToBase64 $tunnelKeyLine
-        $remoteTunnelKey = "set -eu; tmp=`$(mktemp); awk -v key='$tunnelBase64' '`$2 != key { print }' ~/.ssh/authorized_keys > `$tmp; printf '%s\n' '$tunnelLineEncoded' | base64 -d >> `$tmp; mv `$tmp ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys"
+        $remoteTunnelKey = "set -eu; tmp=`$(mktemp); awk -v target='$tunnelBase64' '{ current = 0; for (i=1; i<NF; i++) if (`$i ~ /^(ssh-|ecdsa-)/) { current = `$(i+1); break } } current != target { print }' ~/.ssh/authorized_keys > `$tmp; printf '%s\n' '$tunnelLineEncoded' | base64 -d >> `$tmp; mv `$tmp ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys"
         if ((Invoke-UbuntuSsh $BootstrapKey $remoteTunnelKey) -ne 0) { throw 'Kunne ikke konfigurere den begrænsede tunnelnoegle.' }
 
         Write-Step "Tester reverse SSH tunnel paa port $tunnelPort (forsog $attempt/5)"
