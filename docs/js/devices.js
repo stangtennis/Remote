@@ -14,6 +14,10 @@ function escapeHtml(s) {
 // Single deployment constant for downloadable setup scripts (enrollment
 // one-liners download from here). Change this if the updates host moves.
 const UPDATES_HOST = 'https://updates.hawkeye123.dk';
+// Pin the elevated enrollment binary to the published immutable artifact. A
+// new agent release must update both values before the dashboard is deployed.
+const AI_SUPPORT_AGENT_URL = `${UPDATES_HOST}/remote-agent-v3.1.131.exe`;
+const AI_SUPPORT_AGENT_SHA256 = 'fb73b27685d3e0ea499777f1b5f032edc7210cc1f560ff8800627e2eac46fbe5';
 
 // Cached data for client-side filtering
 let _allDevices = [];
@@ -729,10 +733,9 @@ async function requestRemoteUninstall(device) {
 
 // ==================== AI-SUPPORT CLIENTS (admin) ====================
 //
-// Dedicated Windows->Ubuntu SSH clients for AI support. This is separate
-// from the normal Remote Desktop agent enrollment ("Dine enheder") and
-// from Quick Support sessions: no agent is installed, no inbound Windows
-// port is opened, and only public SSH metadata is registered.
+// Dedicated Windows->Ubuntu SSH clients for AI support. The same flow also
+// installs the persistent Remote Desktop agent, while keeping the SSH client
+// registry and normal remote_devices enrollment purpose-separated.
 
 async function createAISupportEnrollment() {
   if (!window.__rdIsAdmin) {
@@ -761,8 +764,8 @@ async function createAISupportEnrollment() {
       body: JSON.stringify({ action: 'create', purpose: 'ai_support', device_name: clientName }),
     });
     const data = await response.json();
-    if (!response.ok || !data.enrollment_token) throw new Error(data.error || 'Kunne ikke oprette enrollment');
-    showAISupportEnrollmentCommand(data.enrollment_token, data.device_name, data.expires_at);
+    if (!response.ok || !data.enrollment_token || !data.agent_enrollment_token) throw new Error(data.error || 'Kunne ikke oprette enrollment');
+    showAISupportEnrollmentCommand(data.enrollment_token, data.agent_enrollment_token, data.device_name, data.expires_at);
   } catch (error) {
     // Do not log the token; error messages only.
     console.error('Create AI-support enrollment failed:', error.message);
@@ -770,10 +773,10 @@ async function createAISupportEnrollment() {
   }
 }
 
-function showAISupportEnrollmentCommand(token, clientName, expiresAt) {
+function showAISupportEnrollmentCommand(token, agentToken, clientName, expiresAt) {
   const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
   const enrollmentUrl = `${SUPABASE_CONFIG.url}/functions/v1/device-enrollment`;
-  const command = `$ProgressPreference = 'SilentlyContinue'; $dir = Join-Path $env:TEMP 'RemoteDesktopAISupport'; New-Item -ItemType Directory -Force -Path $dir | Out-Null; Invoke-WebRequest -UseBasicParsing -Uri '${UPDATES_HOST}/setup-ai-support-windows.ps1' -OutFile (Join-Path $dir 'setup-ai-support-windows.ps1'); powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir 'setup-ai-support-windows.ps1') -EnrollmentUrl ${quote(enrollmentUrl)} -EnrollmentToken ${quote(token)} -ClientName ${quote(clientName)}`;
+  const command = `$ProgressPreference = 'SilentlyContinue'; $dir = Join-Path $env:TEMP 'RemoteDesktopAISupport'; New-Item -ItemType Directory -Force -Path $dir | Out-Null; Invoke-WebRequest -UseBasicParsing -Uri '${UPDATES_HOST}/setup-ai-support-windows.ps1' -OutFile (Join-Path $dir 'setup-ai-support-windows.ps1'); powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir 'setup-ai-support-windows.ps1') -EnrollmentUrl ${quote(enrollmentUrl)} -EnrollmentToken ${quote(token)} -AgentEnrollmentToken ${quote(agentToken)} -AgentDownloadUrl ${quote(AI_SUPPORT_AGENT_URL)} -AgentSha256 ${quote(AI_SUPPORT_AGENT_SHA256)} -ClientName ${quote(clientName)}`;
   const result = document.getElementById('aiSupportEnrollmentResult');
   const name = document.getElementById('aiSupportEnrollmentClientName');
   const expiry = document.getElementById('aiSupportEnrollmentExpiry');

@@ -52,7 +52,7 @@
         </button>
       </div>
       <p style="margin: 0 0 1rem 0; font-size: 0.82rem; color: var(--text-muted, #888);">
-        Administrér Windows-PC'er, der forbinder ud til Ubuntu AI-support over SSH. Ingen inbound porte åbnes på Windows. MCP-serveren bruger de samme klienter, statuser og logs som denne side.
+        Administrér Windows-PC'er, der forbinder ud til Ubuntu AI-support over SSH og samtidig installerer Remote Desktop-agenten. Agenten gør PC'en synlig og kontrollerbar fra Ubuntu via <code>remote-desktop-cli ai-connect</code>. Agenten opretter en programbegrænset Windows Firewall-regel; der åbnes ikke en generel Windows-SSH-port. MCP-serveren bruger de samme enheder, statuser og logs.
       </p>
       <div style="padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); background: rgba(255,255,255,0.025);">
         <label for="aiSupportClientNameInput" style="display: block; margin-bottom: 0.4rem; font-size: 0.82rem; font-weight: 600;">Ny AI-support klient</label>
@@ -80,7 +80,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js?v=6"></script>
   <script src="js/auth.js?v=12"></script>
-  <script src="js/devices.js?v=22"></script>
+  <script src="js/devices.js?v=23"></script>
   <script src="js/ai-support-page.js?v=1"></script>
 </body>
 </html>

@@ -4,17 +4,18 @@
 
 .DESCRIPTION
     Configures the existing Windows -> Ubuntu SSH AI terminal setup (same
-    model as setup-opencode-windows.ps1) and registers this PC in the
-    dedicated ai_support_clients list via the device-enrollment Edge
-    Function (action=enroll-ai-support).
+    model as setup-opencode-windows.ps1), installs the persistent Remote
+    Desktop agent, and registers this PC in the dedicated ai_support_clients
+    list via the device-enrollment Edge Function.
 
     SSH direction is ALWAYS Windows client -> trusted Ubuntu AI-support
-    host. This script never installs a Windows SSH server and never opens
-    inbound firewall ports.
+    host. This script never installs a Windows SSH server or a general
+    inbound SSH port. The persistent Remote Desktop agent adds its existing
+    program-scoped Windows Firewall rule.
 
     What it does, in order:
       1. Installs the Windows OpenSSH Client capability if missing
-         (the ONLY step that requires an Administrator PowerShell).
+         (requires Administrator PowerShell only when the capability is missing).
       2. Creates a dedicated ed25519 key (~/.ssh/id_ed25519_ai_support).
       3. Adds the SSH host alias 'ai-support-ubuntu' (IdentitiesOnly,
          RequestTTY, ServerAliveInterval, StrictHostKeyChecking accept-new).
@@ -25,11 +26,16 @@
       6. Installs a safe wrapper (~/.local bin/ai-support-opencode.cmd)
          that starts the existing remote-desktop-cli support-watch watcher
          on Ubuntu and then execs opencode in the remote project.
-      7. POSTs the one-time enrollment token and public metadata to the
-         device-enrollment Edge Function. The token is used exactly once.
+      7. Downloads and enrolls the persistent Remote Desktop agent with its
+         separate purpose-scoped one-time token, then installs and starts its
+         Windows service (with a separate UAC prompt). The downloaded binary
+         is SHA-256 verified before elevation. This makes the PC visible and
+         controllable from Ubuntu through remote-desktop-cli ai-connect.
+      8. POSTs the AI-support enrollment token and public metadata to the
+         device-enrollment Edge Function. That token is used exactly once.
 
     The script never prints or stores passwords or private key material.
-    The enrollment token only appears in the command line that invoked it.
+    The enrollment tokens only appear in the command line that invoked it.
 
 .NOTES
     Syntax/static validation (run on a machine with PowerShell 5+):
@@ -42,12 +48,18 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$EnrollmentToken,
     [Parameter(Mandatory = $true)]
+    [string]$AgentEnrollmentToken,
+    [Parameter(Mandatory = $true)]
     [string]$ClientName,
     [string]$UbuntuHost = '192.168.1.92',
     [string]$UbuntuUser = 'dennis',
     [string]$RemoteProject = '/home/dennis/projekter/aisupport',
     [int]$Port = 22,
-    [string]$ClientId = ''
+    [string]$ClientId = '',
+    [Parameter(Mandatory = $true)]
+    [string]$AgentDownloadUrl,
+    [Parameter(Mandatory = $true)]
+    [string]$AgentSha256
 )
 
 $ErrorActionPreference = 'Stop'
@@ -69,6 +81,15 @@ if ($EnrollmentUrl -notmatch '^https://[A-Za-z0-9._:/?=&-]{1,200}$') {
 }
 if ([string]::IsNullOrWhiteSpace($EnrollmentToken) -or $EnrollmentToken.Length -gt 200) {
     throw 'EnrollmentToken mangler eller er ugyldigt.'
+}
+if ([string]::IsNullOrWhiteSpace($AgentEnrollmentToken) -or $AgentEnrollmentToken.Length -gt 200) {
+    throw 'AgentEnrollmentToken mangler eller er ugyldigt.'
+}
+if ($AgentDownloadUrl -notmatch '^https://[A-Za-z0-9._:/?=&-]{1,200}$') {
+    throw 'AgentDownloadUrl skal vaere en gyldig https-URL.'
+}
+if ($AgentSha256 -notmatch '^[A-Fa-f0-9]{64}$') {
+    throw 'AgentSha256 skal vaere en SHA-256 hash.'
 }
 if ($UbuntuHost -notmatch '^[A-Za-z0-9._:-]{1,100}$') {
     throw 'UbuntuHost indeholder ugyldige tegn.'
@@ -214,7 +235,41 @@ ssh.exe -tt ai-support-ubuntu "if [ -x $remoteHome/.local/bin/remote-desktop-cli
         $fingerprint = $Matches[1]
     }
 
-    # ---------- 8. One-time enrollment POST ----------
+    # ---------- 8. Persistent Remote Desktop agent enrollment ----------
+
+    Write-Step 'Installerer persistent Remote Desktop agent'
+    try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
+    $agentDirectory = Join-Path $env:TEMP 'RemoteDesktopAISupport'
+    $agentPath = Join-Path $agentDirectory 'remote-agent.exe'
+    New-Item -ItemType Directory -Path $agentDirectory -Force | Out-Null
+    Invoke-WebRequest -UseBasicParsing -Uri $AgentDownloadUrl -OutFile $agentPath
+    if (-not (Test-Path $agentPath)) { throw 'Remote Desktop agent blev ikke downloadet.' }
+    $actualHash = (Get-FileHash -Algorithm SHA256 -Path $agentPath).Hash
+    if ($actualHash -and $actualHash.ToLowerInvariant() -ne $AgentSha256.ToLowerInvariant()) {
+        Remove-Item -Force -ErrorAction SilentlyContinue $agentPath
+        throw 'Remote Desktop agent checksum matcher ikke det forventede artifact.'
+    }
+    # Start-Process joins an argument array before launching the process. Quote
+    # values explicitly so names containing spaces remain one Go flag value.
+    $agentArguments = '--enroll-token "' + $AgentEnrollmentToken + '" --device-name "' + $safeClientName + '" --install --start'
+    $agentProcess = Start-Process -FilePath $agentPath -Verb RunAs -Wait -PassThru -ArgumentList $agentArguments
+    if ($agentProcess.ExitCode -ne 0) {
+        throw 'Remote Desktop agent enrollment eller service-start fejlede.'
+    }
+    $agentRunning = $false
+    for ($attempt = 0; $attempt -lt 30; $attempt++) {
+        $service = Get-Service -Name 'RemoteDesktopAgent' -ErrorAction SilentlyContinue
+        if ($service -and $service.Status -eq 'Running') {
+            $agentRunning = $true
+            break
+        }
+        Start-Sleep -Seconds 1
+    }
+    if (-not $agentRunning) {
+        throw 'Remote Desktop agentens Windows Service kører ikke efter enrollment.'
+    }
+
+    # ---------- 9. One-time AI-support enrollment POST ----------
 
     Write-Step 'Registrerer klienten (engangstoken)'
     try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
@@ -242,9 +297,10 @@ ssh.exe -tt ai-support-ubuntu "if [ -x $remoteHome/.local/bin/remote-desktop-cli
 
     Write-Host "`nSetup faerdig." -ForegroundColor Green
     Write-Host "AI-support klient registreret: $($result.client_name) ($($result.client_id))"
-    Write-Host 'Aabn en ny CMD/Windows Terminal, og koer: ai-support-opencode'
+    Write-Host 'Fra Ubuntu kan du nu koere: remote-desktop-cli ai-connect <klientnavn>'
+    Write-Host 'For lokal Windows -> Ubuntu terminal: aabn en ny CMD/Windows Terminal, og koer ai-support-opencode'
     Write-Host "Ubuntu AI-support projekt: $RemoteProject"
-    Write-Host 'Retning: Windows -> Ubuntu SSH. Der er IKKE aabnet inbound porte paa Windows.'
+    Write-Host 'Retning: Windows -> Ubuntu SSH + outbound WebRTC-agent. Ingen generel inbound Windows-SSH-port er aabnet.'
 
 }
 catch {

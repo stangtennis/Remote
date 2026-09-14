@@ -1,6 +1,7 @@
 // One-time enrollment for an already approved dashboard user.
-// The raw enrollment token is returned only to the dashboard that created it;
-// the agent exchanges it once for a stable device API key.
+// Raw enrollment tokens are returned only to the dashboard that created them;
+// clients exchange them once for stable device credentials. AI-support
+// enrollment mints a separate agent token so the two purposes remain isolated.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -86,18 +87,36 @@ serve(async (req) => {
     const token = randomToken()
     const tokenHash = await sha256(token)
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString()
-    const { error } = await serviceClient.from('device_enrollment_tokens').insert({
+    const tokens = [{
       token_hash: tokenHash,
       owner_id: auth.user.id,
       device_name: deviceName,
       expires_at: expiresAt,
       purpose: purpose,
-    })
+    }]
+    let agentEnrollmentToken: string | undefined
+    if (purpose === 'ai_support') {
+      agentEnrollmentToken = randomToken()
+      tokens.push({
+        token_hash: await sha256(agentEnrollmentToken),
+        owner_id: auth.user.id,
+        device_name: deviceName,
+        expires_at: expiresAt,
+        purpose: 'agent',
+      })
+    }
+    const { error } = await serviceClient.from('device_enrollment_tokens').insert(tokens)
     if (error) {
       console.error('Enrollment token creation failed:', error)
       return response(req, { error: 'Could not create enrollment' }, 500)
     }
-    return response(req, { enrollment_token: token, device_name: deviceName, expires_at: expiresAt, purpose: purpose })
+    return response(req, {
+      enrollment_token: token,
+      agent_enrollment_token: agentEnrollmentToken,
+      device_name: deviceName,
+      expires_at: expiresAt,
+      purpose: purpose,
+    })
   }
 
   if (body.action === 'enroll') {
