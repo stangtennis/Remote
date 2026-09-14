@@ -50,6 +50,8 @@ $SupportPublicKeyPath = Join-Path $StateDirectory 'support.pub'
 $SupportShellPath = Join-Path $StateDirectory 'ai-support-shell.ps1'
 $ActivityLogPath = Join-Path $StateDirectory 'activity.log'
 $ActivityConfigPath = Join-Path $StateDirectory 'activity-config.json'
+$TunnelRunnerPath = Join-Path $StateDirectory 'run-persistent-tunnel.ps1'
+$TunnelTaskLogPath = Join-Path $StateDirectory 'persistent-tunnel-ssh.log'
 $SshdConfigBackup = Join-Path $StateDirectory 'sshd_config.backup'
 $TokenPolicyBackup = Join-Path $StateDirectory 'token-policy.backup'
 $TunnelPublicKey = "$TunnelKey.pub"
@@ -101,7 +103,7 @@ function Set-StateAcl {
         '*S-1-5-18:(OI)(CI)(F)' `
         '*S-1-5-32-544:(OI)(CI)(F)' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke beskytte AI-support state-mappen.' }
-    foreach ($path in @($TunnelKey, $TunnelPublicKey, $BootstrapKey, $BootstrapPublicKey, $KnownHosts, $SupportPublicKeyPath, $SupportShellPath, $ActivityLogPath, $ActivityConfigPath, $SshdConfigBackup, $TokenPolicyBackup)) {
+    foreach ($path in @($TunnelKey, $TunnelPublicKey, $BootstrapKey, $BootstrapPublicKey, $KnownHosts, $SupportPublicKeyPath, $SupportShellPath, $ActivityLogPath, $ActivityConfigPath, $TunnelRunnerPath, $TunnelTaskLogPath, $SshdConfigBackup, $TokenPolicyBackup)) {
         if (Test-Path $path) {
             $aclArgs = @('/inheritance:r', '/grant:r', '*S-1-5-18:F', '*S-1-5-32-544:F')
             if ($path -in @($SupportShellPath, $ActivityLogPath, $ActivityConfigPath)) {
@@ -445,6 +447,31 @@ function Build-TunnelArguments([int]$Port) {
     )
 }
 
+function Write-TunnelRunner([string]$SshPath, [int]$Port) {
+    $runner = @"
+`$ErrorActionPreference = 'Stop'
+`$sshArgs = @(
+    '-N', '-T',
+    '-o', 'BatchMode=yes',
+    '-o', 'ExitOnForwardFailure=yes',
+    '-o', 'ServerAliveInterval=30',
+    '-o', 'ServerAliveCountMax=3',
+    '-o', 'ConnectTimeout=15',
+    '-o', 'UserKnownHostsFile=$KnownHosts',
+    '-o', 'StrictHostKeyChecking=accept-new',
+    '-o', 'IdentitiesOnly=yes',
+    '-E', '$TunnelTaskLogPath',
+    '-i', '$TunnelKey',
+    '-p', '$UbuntuPort',
+    '-R', '127.0.0.1:${Port}:127.0.0.1:${WindowsSshPort}',
+    '$UbuntuUser@$UbuntuHost'
+)
+& '$SshPath' @sshArgs
+exit `$LASTEXITCODE
+"@
+    Set-Content -LiteralPath $TunnelRunnerPath -Value $runner -Encoding ASCII
+}
+
 if (-not (Test-Administrator)) { throw 'Dette setup skal koeres fra en Administrator-PowerShell.' }
 if ($EnrollmentUrl -notmatch '^https://[A-Za-z0-9._:/?=&-]{1,200}$') { throw 'EnrollmentUrl skal vaere en gyldig https-URL.' }
 if ($SupportPublicKeyUrl -notmatch '^https://[A-Za-z0-9._:/?=&-]{1,200}$') { throw 'SupportPublicKeyUrl skal vaere en gyldig https-URL.' }
@@ -557,8 +584,11 @@ try {
     }
 
     Write-Step 'Installerer persistent tunnel ved Windows-opstart'
-    $taskArgs = (Build-TunnelArguments $tunnelPort) -join ' '
-    $taskAction = New-ScheduledTaskAction -Execute $sshCommand.Source -Argument $taskArgs -WorkingDirectory $StateDirectory
+    Write-TunnelRunner $sshCommand.Source $tunnelPort
+    Set-StateAcl
+    $powershellPath = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $taskArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$TunnelRunnerPath`""
+    $taskAction = New-ScheduledTaskAction -Execute $powershellPath -Argument $taskArgs -WorkingDirectory $StateDirectory
     $taskTrigger = New-ScheduledTaskTrigger -AtStartup
     $taskSettings = New-ScheduledTaskSettingsSet -Hidden -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
     $taskPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
