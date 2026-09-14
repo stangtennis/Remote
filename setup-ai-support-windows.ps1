@@ -163,7 +163,7 @@ function New-WindowsSupportUser {
         $password = ConvertTo-SecureString $passwordText -AsPlainText -Force
         New-LocalUser -Name $WindowsSshUser -Password $password -Description 'SSH-only AI support account' -PasswordNeverExpires | Out-Null
     }
-    $administratorsGroup = ([Security.Principal.SecurityIdentifier]'S-1-5-32-544').Translate([Security.Principal.NTAccount]).Value
+    $administratorsGroup = (Get-LocalGroup -SID ([Security.Principal.SecurityIdentifier]'S-1-5-32-544')).Name
     $isAdministrator = Get-LocalGroupMember -Group $administratorsGroup -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -match "\\$WindowsSshUser$" }
     if (-not $isAdministrator) {
