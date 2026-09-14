@@ -40,6 +40,7 @@ $TunnelPortMinimum = 42000
 $TunnelPortMaximum = 42999
 $WindowsSshUser = 'ai-support'
 $TaskName = 'AI-Support-Persistent-Tunnel'
+$SshdTaskName = 'AI-Support-OpenSSH'
 $StateDirectory = Join-Path $env:ProgramData 'AI-Support'
 $TunnelKey = Join-Path $StateDirectory 'id_ed25519_ai_support_tunnel'
 $BootstrapKey = Join-Path $StateDirectory 'id_ed25519_ai_support_bootstrap'
@@ -284,6 +285,25 @@ function Get-SshdStartFailureDetails([string]$SshdConfig) {
     return ($details -join '; ')
 }
 
+function Start-SshdFallbackTask([string]$SshdConfig) {
+    $sshdPath = Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe'
+    Stop-ScheduledTask -TaskName $SshdTaskName -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $SshdTaskName -Confirm:$false -ErrorAction SilentlyContinue
+    $taskAction = New-ScheduledTaskAction -Execute $sshdPath -Argument "-D -f `"$SshdConfig`""
+    $taskTrigger = New-ScheduledTaskTrigger -AtStartup
+    $taskSettings = New-ScheduledTaskSettingsSet -Hidden -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
+    $taskPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    Register-ScheduledTask -TaskName $SshdTaskName -Action $taskAction -Trigger $taskTrigger -Settings $taskSettings -Principal $taskPrincipal -Force -ErrorAction Stop | Out-Null
+    Start-ScheduledTask -TaskName $SshdTaskName -ErrorAction Stop
+    for ($wait = 0; $wait -lt 10; $wait++) {
+        Start-Sleep -Seconds 1
+        $listener = Get-NetTCPConnection -LocalPort $WindowsSshPort -State Listen -ErrorAction SilentlyContinue |
+            Where-Object { $_.LocalAddress -eq '127.0.0.1' }
+        if ($listener) { return }
+    }
+    throw 'OpenSSH fallback-tasken kunne ikke starte localhost-listeneren.'
+}
+
 function Configure-WindowsSshd {
     $sshdConfig = Join-Path $env:ProgramData 'ssh\sshd_config'
     if (-not (Test-Path $sshdConfig)) {
@@ -374,12 +394,23 @@ Match User $WindowsSshUser
         throw 'OpenSSH Server konfigurationen er ugyldig.'
     }
     Set-Service -Name sshd -StartupType Automatic
+    Stop-ScheduledTask -TaskName $SshdTaskName -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $SshdTaskName -Confirm:$false -ErrorAction SilentlyContinue
+    $serviceStarted = $false
     try {
         Restart-Service -Name sshd -Force -ErrorAction Stop
+        $serviceStarted = $true
     } catch {
-        $details = Get-SshdStartFailureDetails $sshdConfig
-        if ($details) { throw "OpenSSH Server kunne ikke starte: $details" }
-        throw "OpenSSH Server kunne ikke starte: $($_.Exception.Message)"
+        Write-Host 'OpenSSH Windows-servicen kunne ikke starte; bruger SYSTEM fallback-task.' -ForegroundColor Yellow
+    }
+    if (-not $serviceStarted) {
+        try {
+            Start-SshdFallbackTask $sshdConfig
+        } catch {
+            $details = Get-SshdStartFailureDetails $sshdConfig
+            if ($details) { throw "OpenSSH Server kunne ikke starte: $details" }
+            throw "OpenSSH Server kunne ikke starte: $($_.Exception.Message)"
+        }
     }
     try {
         Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue | Disable-NetFirewallRule
@@ -566,6 +597,8 @@ try {
 catch {
     $message = $_.Exception.Message
     if ($null -ne $message -and $message.Length -gt 2000) { $message = $message.Substring(0, 2000) + '...' }
+    Stop-ScheduledTask -TaskName $SshdTaskName -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $SshdTaskName -Confirm:$false -ErrorAction SilentlyContinue
     Write-Host "`nAI-support SSH setup fejlede: $message" -ForegroundColor Red
     Write-Host 'Kør setup igen med et nyt engangstoken fra dashboardet.' -ForegroundColor Yellow
     exit 1

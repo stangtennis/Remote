@@ -85,8 +85,11 @@ helper on the trusted Ubuntu host can work with over SSH.
      - installs the Windows **OpenSSH Client and Server** capabilities;
       - creates the dedicated local `ai-support` account as a local Windows
         Administrator and installs the Ubuntu operator's public key;
-     - configures Windows OpenSSH Server to listen only on `127.0.0.1`;
-     - creates a forwarding-only tunnel key and installs its restricted
+      - configures Windows OpenSSH Server to listen only on `127.0.0.1`;
+      - falls back to a hidden SYSTEM `AI-Support-OpenSSH` scheduled task when
+        the Windows `sshd` service exits unexpectedly, while keeping the same
+        localhost-only OpenSSH configuration;
+      - creates a forwarding-only tunnel key and installs its restricted
        `permitlisten` entry on Ubuntu;
      - starts and verifies `ssh -N -T -R 127.0.0.1:<tunnel-port>:127.0.0.1:22`;
       - installs `AI-Support-Persistent-Tunnel` as a SYSTEM startup task with
