@@ -841,12 +841,25 @@ async function loadAISupportClients() {
       .order('created_at', { ascending: false });
     if (error) throw error;
 
+    const clients = data || [];
+    const clientCount = document.getElementById('aiSupportClientCount');
+    const readyCount = document.getElementById('aiSupportReadyCount');
+    const lastRegistration = document.getElementById('aiSupportLastRegistration');
+    if (clientCount) clientCount.textContent = clients.length;
+    if (readyCount) readyCount.textContent = clients.length;
+    if (lastRegistration) {
+      const latest = clients[0]?.created_at || clients[0]?.last_seen;
+      lastRegistration.textContent = latest
+        ? new Date(latest).toLocaleDateString('da-DK', { day: 'numeric', month: 'short' })
+        : 'Ingen endnu';
+    }
+
     const logsByClient = new Map();
-    if (data && data.length > 0) {
+    if (clients.length > 0) {
       const { data: logs, error: logError } = await supabase
         .from('audit_logs')
         .select('device_id, event, severity, details, created_at')
-        .in('device_id', data.map((client) => client.client_id))
+        .in('device_id', clients.map((client) => client.client_id))
         .order('created_at', { ascending: false })
         .limit(200);
       if (!logError && logs) {
@@ -858,90 +871,91 @@ async function loadAISupportClients() {
     }
 
     list.innerHTML = '';
-    if (!data || data.length === 0) {
+    if (clients.length === 0) {
       if (empty) empty.style.display = 'block';
       return;
     }
     if (empty) empty.style.display = 'none';
 
-    for (const client of data) {
-      const row = document.createElement('details');
-      row.style.cssText = 'padding: 0.35rem 0.75rem; border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); margin-bottom: 0.4rem;';
+    for (const client of clients) {
+      const card = document.createElement('article');
+      card.className = 'ai-support-client-card';
+      card.dataset.clientId = client.client_id;
 
-      const dot = document.createElement('span');
-      dot.title = client.status === 'ready' ? 'Klar' : 'Revokeret';
-      dot.style.cssText = `width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: ${client.status === 'ready' ? '#22c55e' : '#ef4444'};`;
-
-      const summary = document.createElement('summary');
-      summary.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; cursor: pointer; list-style: none;';
+      const cardHead = document.createElement('div');
+      cardHead.className = 'ai-support-client-card-head';
+      const identity = document.createElement('div');
+      identity.className = 'ai-support-client-identity';
+      const avatar = document.createElement('span');
+      avatar.className = 'ai-support-client-avatar';
+      const identitySource = client.client_name || client.hostname || 'AI';
+      avatar.textContent = identitySource.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+      avatar.setAttribute('aria-hidden', 'true');
       const nameCol = document.createElement('div');
-      nameCol.style.cssText = 'flex: 1; min-width: 0; overflow: hidden;';
+      nameCol.style.minWidth = '0';
       const nameEl = document.createElement('div');
-      nameEl.style.cssText = 'font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem;';
-      nameEl.textContent = client.client_name || client.client_id;
-      const subtitle = document.createElement('div');
-      subtitle.style.cssText = 'font-size: 0.7rem; color: var(--text-muted, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
-      const parts = [];
-      if (client.hostname) parts.push(client.hostname);
-      if (client.platform) parts.push(client.platform);
-      parts.push(`tunnel ${client.tunnel_port ? `127.0.0.1:${client.tunnel_port}` : 'ikke konfigureret'}`);
-      if (client.windows_ssh_user) parts.push(`ssh ${client.windows_ssh_user}@127.0.0.1:${client.windows_ssh_port || 22}`);
-      if (client.ssh_key_fingerprint) parts.push(client.ssh_key_fingerprint);
-       if (client.last_seen) {
-         parts.push(`Registreret ${new Date(client.last_seen).toLocaleString('da-DK', { dateStyle: 'short', timeStyle: 'short' })}`);
-      }
-      subtitle.title = parts.join(' · ');
-      subtitle.textContent = parts.join(' · ');
-      nameCol.append(nameEl, subtitle);
+      nameEl.className = 'ai-support-client-name';
+      nameEl.textContent = client.client_name || 'Unavngivet klient';
+      const idEl = document.createElement('div');
+      idEl.className = 'ai-support-client-id';
+      idEl.textContent = client.client_id;
+      nameCol.append(nameEl, idEl);
+      identity.append(avatar, nameCol);
 
       const badge = document.createElement('span');
-      badge.style.cssText = `padding: 0.05rem 0.35rem; border-radius: 9999px; font-size: 0.65rem; flex-shrink: 0; background: ${client.status === 'ready' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}; color: ${client.status === 'ready' ? '#22c55e' : '#ef4444'};`;
-      badge.textContent = client.status === 'ready' ? 'Klar' : 'Revokeret';
+      badge.className = 'ai-support-status-badge';
+      const statusDot = document.createElement('span');
+      statusDot.className = 'ai-support-status-dot';
+      statusDot.setAttribute('aria-hidden', 'true');
+      badge.append(statusDot, document.createTextNode(client.status === 'ready' ? 'Klar' : 'Revokeret'));
+      cardHead.append(identity, badge);
+      card.appendChild(cardHead);
 
-      summary.append(dot, nameCol, badge);
-      row.appendChild(summary);
-
-      const detail = document.createElement('div');
-      detail.style.cssText = 'margin: 0.75rem 0 0.25rem 1.1rem; padding-top: 0.65rem; border-top: 1px solid var(--border, #333); font-size: 0.78rem;';
       const metadata = document.createElement('div');
-      metadata.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.35rem 1rem; color: var(--text-muted, #aaa);';
+      metadata.className = 'ai-support-client-meta';
       const metadataItems = [
-        ['Client-ID', client.client_id],
-        ['Ubuntu SSH', `ssh ${client.ssh_user}@${client.ssh_host}:${client.ssh_port}`],
-        ['Tunnel', client.tunnel_port ? `127.0.0.1:${client.tunnel_port}` : 'Ikke konfigureret'],
-        ['Windows SSH', client.windows_ssh_user ? `ssh ${client.windows_ssh_user}@127.0.0.1:${client.windows_ssh_port || 22}` : 'Ikke konfigureret'],
-        ['Fingerprint', client.ssh_key_fingerprint || 'Ikke registreret'],
-        ['Registreret', client.last_seen ? new Date(client.last_seen).toLocaleString('da-DK') : 'Aldrig'],
+        ['Maskine', client.hostname || 'Ukendt'],
+        ['Platform', client.platform || 'Windows'],
+        ['Reverse tunnel', client.tunnel_port ? `127.0.0.1:${client.tunnel_port}` : 'Ikke konfigureret'],
+        ['Windows SSH', client.windows_ssh_user ? `${client.windows_ssh_user}@127.0.0.1:${client.windows_ssh_port || 22}` : 'Ikke konfigureret'],
       ];
       for (const [label, value] of metadataItems) {
         const item = document.createElement('div');
-        item.textContent = `${label}: ${value}`;
+        item.className = 'ai-support-meta-item';
+        const labelEl = document.createElement('span');
+        labelEl.className = 'ai-support-meta-label';
+        labelEl.textContent = label;
+        const valueEl = document.createElement('span');
+        valueEl.className = 'ai-support-meta-value';
+        valueEl.textContent = value;
+        item.append(labelEl, valueEl);
         metadata.appendChild(item);
       }
-      detail.appendChild(metadata);
+      card.appendChild(metadata);
 
-      const logsTitle = document.createElement('div');
-      logsTitle.style.cssText = 'margin-top: 0.75rem; font-weight: 600;';
-      logsTitle.textContent = 'Log';
-      detail.appendChild(logsTitle);
       const clientLogs = logsByClient.get(client.client_id) || [];
+      const logsDetails = document.createElement('details');
+      logsDetails.className = 'ai-support-log-details';
+      const logsSummary = document.createElement('summary');
+      logsSummary.textContent = `Aktivitetslog (${clientLogs.length})`;
+      logsDetails.appendChild(logsSummary);
       if (clientLogs.length === 0) {
         const noLogs = document.createElement('div');
-        noLogs.style.cssText = 'margin-top: 0.25rem; color: var(--text-muted, #888);';
+        noLogs.className = 'ai-support-log-line';
         noLogs.textContent = 'Ingen loghændelser endnu.';
-        detail.appendChild(noLogs);
+        logsDetails.appendChild(noLogs);
       } else {
         for (const log of clientLogs) {
           const logLine = document.createElement('div');
-          logLine.style.cssText = 'margin-top: 0.25rem; color: var(--text-muted, #aaa);';
-           const detailsText = log.event === 'AI_SUPPORT_COMMAND' && typeof log.details?.command === 'string'
-             ? ` · ${log.details.command}`
-             : log.details && typeof log.details === 'object' ? ` · ${JSON.stringify(log.details)}` : '';
+          logLine.className = 'ai-support-log-line';
+          const detailsText = log.event === 'AI_SUPPORT_COMMAND' && typeof log.details?.command === 'string'
+            ? ` · ${log.details.command}`
+            : log.details && typeof log.details === 'object' ? ` · ${JSON.stringify(log.details)}` : '';
           logLine.textContent = `${new Date(log.created_at).toLocaleString('da-DK')} · ${log.event || 'Hændelse'}${detailsText}`;
-          detail.appendChild(logLine);
+          logsDetails.appendChild(logLine);
         }
       }
-      row.appendChild(detail);
+      card.appendChild(logsDetails);
 
       // Terminal revoke action with explicit confirmation. Rows are built
       // with DOM APIs (textContent), so client metadata is never injected
@@ -950,7 +964,6 @@ async function loadAISupportClients() {
         const revokeBtn = document.createElement('button');
         revokeBtn.type = 'button';
         revokeBtn.className = 'btn btn-danger btn-sm';
-        revokeBtn.style.flexShrink = '0';
         revokeBtn.title = 'Revokér AI-support klient (kan ikke fortrydes)';
         revokeBtn.textContent = 'Revokér';
         revokeBtn.addEventListener('click', (event) => {
@@ -958,10 +971,19 @@ async function loadAISupportClients() {
           event.stopPropagation();
           revokeAISupportClient(client);
         });
-        summary.appendChild(revokeBtn);
+        const footer = document.createElement('div');
+        footer.className = 'ai-support-client-card-footer';
+        const footerNote = document.createElement('span');
+        footerNote.className = 'ai-support-client-footer-note';
+        const registeredAt = client.created_at || client.last_seen;
+        footerNote.textContent = registeredAt
+          ? `Registreret ${new Date(registeredAt).toLocaleString('da-DK', { dateStyle: 'medium', timeStyle: 'short' })}`
+          : 'Registreringstidspunkt ikke tilgængeligt';
+        footer.append(footerNote, revokeBtn);
+        card.appendChild(footer);
       }
 
-      list.appendChild(row);
+      list.appendChild(card);
     }
   } catch (error) {
     console.error('Failed to load AI-support clients:', error.message);

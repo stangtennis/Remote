@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="css/accessibility.css?v=6">
   <link rel="stylesheet" href="css/modern.css?v=6">
   <link rel="stylesheet" href="css/redesign.css?v=5">
+  <link rel="stylesheet" href="css/ai-support.css?v=1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script>
     try {
@@ -24,7 +25,7 @@
     }
   </script>
 </head>
-<body class="dashboard-page">
+<body class="dashboard-page ai-support-page">
   <div class="animated-bg">
     <div class="gradient-orb orb-1"></div>
     <div class="gradient-orb orb-2"></div>
@@ -44,36 +45,63 @@
 
   <main class="dashboard-main">
     <div id="aiSupportAccessError" class="glass-card" style="display: none; max-width: 900px; margin: 0 auto; padding: 1.5rem; color: #f87171;"></div>
-    <section id="aiSupportClientsSection" class="devices-section admin-only-action is-visible" style="display: block; max-width: 900px; margin: 0 auto;">
+    <section id="aiSupportClientsSection" class="devices-section admin-only-action is-visible ai-support-shell" style="display: block;">
       <div class="section-header">
-        <h2><i class="fas fa-robot"></i> AI-support klienter</h2>
-        <button id="refreshAISupportClientsBtn" class="btn btn-icon" title="Opdater AI-support klienter">
+        <div>
+          <span class="ai-support-kicker">SECURE REMOTE OPERATIONS</span>
+          <h2><i class="fas fa-robot"></i> AI-support klienter</h2>
+        </div>
+        <button id="refreshAISupportClientsBtn" class="btn btn-icon ai-support-refresh" title="Opdater AI-support klienter">
           <i class="fas fa-sync-alt"></i>
         </button>
       </div>
-      <p style="margin: 0 0 1rem 0; font-size: 0.82rem; color: var(--text-muted, #888);">
-         Administrér Windows-PC'er med en persistent SSH-only reverse tunnel til Ubuntu. AI-supportkontoen er lokal Windows Administrator med fulde rettigheder, mens OpenSSH kun bindes til localhost. En skjult SYSTEM scheduled task genopretter tunnelen efter genstart eller netværksudfald. Der installeres ingen Remote Desktop-agent, WebRTC eller controller. Kommandoer logges under hver klient.
+      <p class="ai-support-intro">
+         Persistent SSH-only reverse tunnels til Ubuntu. Hver klient kører med lokal Windows-administrator, localhost-only OpenSSH og automatisk genoprettelse efter reboot.
       </p>
-      <div style="padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); background: rgba(255,255,255,0.025);">
-        <label for="aiSupportClientNameInput" style="display: block; margin-bottom: 0.4rem; font-size: 0.82rem; font-weight: 600;">Ny AI-support klient</label>
-        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-          <input id="aiSupportClientNameInput" type="text" maxlength="64" placeholder="fx Dennis-pc" style="flex: 1; min-width: 220px; padding: 0.6rem 0.75rem; background: var(--surface, #1a1a2e); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); font-size: 0.85rem;">
-          <button id="generateAISupportEnrollmentBtn" class="btn btn-primary" type="button"><i class="fas fa-terminal"></i> Generér PowerShell-streng</button>
+      <div class="ai-support-overview-bar" aria-label="AI-support status">
+        <div class="ai-support-stat">
+          <span class="ai-support-stat-label">Klienter</span>
+          <strong id="aiSupportClientCount">0</strong>
+          <span class="ai-support-stat-note">registreret</span>
         </div>
-        <div id="aiSupportEnrollmentError" role="alert" style="display: none; margin-top: 0.5rem; color: #f87171; font-size: 0.78rem;"></div>
-        <div id="aiSupportEnrollmentResult" style="display: none; margin-top: 0.75rem;">
-          <div style="display: flex; justify-content: space-between; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-           <strong>PowerShell-streng til <span id="aiSupportEnrollmentClientName"></span></strong>
-            <span id="aiSupportEnrollmentExpiry" style="font-size: 0.75rem; color: var(--text-muted, #888);"></span>
+        <div class="ai-support-stat ai-support-stat-accent">
+          <span class="ai-support-stat-label">Klar</span>
+          <strong id="aiSupportReadyCount">0</strong>
+          <span class="ai-support-stat-note">tunnel endpoints</span>
+        </div>
+        <div class="ai-support-stat ai-support-stat-wide">
+          <span class="ai-support-stat-label">Seneste registrering</span>
+          <strong id="aiSupportLastRegistration">Ingen endnu</strong>
+        </div>
+      </div>
+      <div class="ai-support-enrollment-panel">
+        <div class="ai-support-enrollment-heading">
+          <div>
+            <span class="ai-support-panel-eyebrow">NEW ENDPOINT</span>
+            <label for="aiSupportClientNameInput">Opret AI-support klient</label>
+            <p>Generér en engangskommando til en ny Windows-PC.</p>
           </div>
-          <textarea id="aiSupportEnrollmentCommand" readonly aria-label="PowerShell AI-support enrollment-kommando" style="width: 100%; min-height: 130px; box-sizing: border-box; margin-top: 0.5rem; font-family: monospace; font-size: 0.75rem; padding: 0.6rem; background: var(--background-secondary, #111); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: 6px;"></textarea>
-           <button id="copyAISupportEnrollmentBtn" class="btn btn-secondary btn-sm" type="button" style="margin-top: 0.5rem;"><i class="fas fa-copy"></i> Kopiér PowerShell-streng</button>
-           <div style="margin-top: 0.4rem; font-size: 0.75rem; color: var(--text-muted, #888);">Kør kommandoen i en Administrator-PowerShell på Windows.</div>
+          <i class="fas fa-terminal" aria-hidden="true"></i>
+        </div>
+        <div class="ai-support-enrollment-form">
+          <input id="aiSupportClientNameInput" type="text" maxlength="64" placeholder="fx WIN-TEST" autocomplete="off">
+          <button id="generateAISupportEnrollmentBtn" class="btn btn-primary" type="button"><i class="fas fa-terminal"></i> Generér kommando</button>
+        </div>
+        <div id="aiSupportEnrollmentError" role="alert" style="display: none;"></div>
+        <div id="aiSupportEnrollmentResult" style="display: none;">
+          <div class="ai-support-command-heading">
+            <strong>PowerShell-kommando til <span id="aiSupportEnrollmentClientName"></span></strong>
+            <span id="aiSupportEnrollmentExpiry"></span>
+          </div>
+          <textarea id="aiSupportEnrollmentCommand" readonly aria-label="PowerShell AI-support enrollment-kommando"></textarea>
+          <button id="copyAISupportEnrollmentBtn" class="btn btn-secondary btn-sm" type="button"><i class="fas fa-copy"></i> Kopiér kommando</button>
+          <div class="ai-support-command-help">Kør kommandoen i en Administrator-PowerShell på Windows.</div>
         </div>
       </div>
       <div id="aiSupportClientsList"></div>
-      <div id="aiSupportClientsEmpty" style="display: none; text-align: center; padding: 1.5rem; color: var(--text-muted, #888); font-size: 0.85rem; border: 1px dashed var(--border, #333); border-radius: var(--radius-sm, 6px);">
-        Ingen AI-support klienter endnu.
+      <div id="aiSupportClientsEmpty" class="ai-support-empty" style="display: none;">
+        <i class="fas fa-satellite-dish" aria-hidden="true"></i>
+         Ingen AI-support klienter endnu.
       </div>
     </section>
   </main>
