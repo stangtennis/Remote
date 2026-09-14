@@ -305,6 +305,10 @@ function Configure-WindowsSshd {
     $config = Get-Content -Path $sshdConfig -Raw
     $config = [regex]::Replace($config, '(?ms)\r?\n?# AI_SUPPORT_GLOBAL_BEGIN\r?\n.*?\r?\n# AI_SUPPORT_GLOBAL_END\r?\n?', "`r`n")
     $config = [regex]::Replace($config, '(?ms)\r?\n?# AI_SUPPORT_MATCH_BEGIN\r?\n.*?\r?\n# AI_SUPPORT_MATCH_END\r?\n?', "`r`n")
+    # The stock config can contain the English group name "administrators".
+    # It is not resolvable on localized Windows installations and can crash
+    # the service even though sshd -t accepts the configuration.
+    $config = [regex]::Replace($config, '(?im)^[ \t]*Match[ \t]+Group[ \t]+administrators[ \t]*\r?\n(?:(?!^[ \t]*Match[ \t]).*(?:\r?\n|$))*', '')
     $config = [regex]::Replace($config, '(?m)^\s*ListenAddress\s+.*\r?\n?', '')
     $config = [regex]::Replace($config, '(?m)^\s*Port\s+.*\r?\n?', '')
     $globalBlock = @"
