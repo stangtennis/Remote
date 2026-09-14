@@ -31,23 +31,26 @@ function fetchDashboardRole() {
   if (!_dashboardRolePromise) {
     _dashboardRolePromise = (async () => {
       let role = null;
+      let approved = false;
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
           const { data: approval } = await supabase
             .from('user_approvals')
-            .select('role')
+            .select('role, approved')
             .eq('user_id', session.user.id)
             .single();
           role = approval ? approval.role : null;
+          approved = approval?.approved === true;
         }
       } catch (error) {
         console.warn('Role lookup failed:', error.message);
       }
       const roleInfo = {
         role,
-        isAdmin: role === 'admin' || role === 'super_admin',
-        isSuperAdmin: role === 'super_admin',
+        approved,
+        isAdmin: approved && (role === 'admin' || role === 'super_admin'),
+        isSuperAdmin: approved && role === 'super_admin',
       };
       window.__rdRole = roleInfo.role;
       window.__rdIsAdmin = roleInfo.isAdmin;
