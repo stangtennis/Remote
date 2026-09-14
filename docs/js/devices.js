@@ -68,8 +68,14 @@ async function initDevices() {
   if (statusFilter) statusFilter.addEventListener('change', applyDeviceFilters);
   const addDeviceBtn = document.getElementById('addDeviceBtn');
   if (addDeviceBtn) addDeviceBtn.addEventListener('click', createDeviceEnrollment);
-  const addAISupportClientBtn = document.getElementById('addAISupportClientBtn');
-  if (addAISupportClientBtn) addAISupportClientBtn.addEventListener('click', createAISupportEnrollment);
+  const generateAISupportEnrollmentBtn = document.getElementById('generateAISupportEnrollmentBtn');
+  if (generateAISupportEnrollmentBtn) generateAISupportEnrollmentBtn.addEventListener('click', createAISupportEnrollment);
+  const aiSupportClientNameInput = document.getElementById('aiSupportClientNameInput');
+  if (aiSupportClientNameInput) aiSupportClientNameInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') createAISupportEnrollment();
+  });
+  const copyAISupportEnrollmentBtn = document.getElementById('copyAISupportEnrollmentBtn');
+  if (copyAISupportEnrollmentBtn) copyAISupportEnrollmentBtn.addEventListener('click', copyAISupportEnrollmentCommand);
   const refreshAISupportClientsBtn = document.getElementById('refreshAISupportClientsBtn');
   if (refreshAISupportClientsBtn) refreshAISupportClientsBtn.addEventListener('click', () => loadAISupportClients());
 
@@ -724,16 +730,17 @@ async function requestRemoteUninstall(device) {
 
 async function createAISupportEnrollment() {
   if (!window.__rdIsAdmin) {
-    showToast('Kun admin/super_admin kan oprette AI-support klienter.', 'error');
+    showAISupportEnrollmentError('Kun admin/super_admin kan oprette AI-support klienter.');
     return;
   }
-  const requestedName = window.prompt('Navn på Windows-PC der skal tilføjes AI-support (fx Kontor-PC):', 'AI-support PC');
-  if (requestedName === null) return;
-  const clientName = requestedName.trim();
+  const input = document.getElementById('aiSupportClientNameInput');
+  const clientName = input ? input.value.trim() : '';
   if (!clientName || clientName.length > 64) {
-    showToast('Klientnavnet skal være mellem 1 og 64 tegn.', 'error');
+    showAISupportEnrollmentError('Klientnavnet skal være mellem 1 og 64 tegn.');
+    if (input) input.focus();
     return;
   }
+  showAISupportEnrollmentError('');
 
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -753,7 +760,7 @@ async function createAISupportEnrollment() {
   } catch (error) {
     // Do not log the token; error messages only.
     console.error('Create AI-support enrollment failed:', error.message);
-    showToast('Kunne ikke oprette AI-support enrollment: ' + error.message, 'error');
+    showAISupportEnrollmentError('Kunne ikke oprette AI-support enrollment: ' + error.message);
   }
 }
 
@@ -761,36 +768,37 @@ function showAISupportEnrollmentCommand(token, clientName, expiresAt) {
   const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
   const enrollmentUrl = `${SUPABASE_CONFIG.url}/functions/v1/device-enrollment`;
   const command = `$ProgressPreference = 'SilentlyContinue'; $dir = Join-Path $env:TEMP 'RemoteDesktopAISupport'; New-Item -ItemType Directory -Force -Path $dir | Out-Null; Invoke-WebRequest -UseBasicParsing -Uri '${UPDATES_HOST}/setup-ai-support-windows.ps1' -OutFile (Join-Path $dir 'setup-ai-support-windows.ps1'); powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir 'setup-ai-support-windows.ps1') -EnrollmentUrl ${quote(enrollmentUrl)} -EnrollmentToken ${quote(token)} -ClientName ${quote(clientName)}`;
-  const overlay = document.createElement('div');
-  overlay.className = 'confirm-overlay';
-  overlay.innerHTML = `
-    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="ai-enroll-title">
-      <div class="confirm-icon">🤖</div>
-      <h3 id="ai-enroll-title" class="confirm-title">AI-support klient: ${escapeHtml(clientName)}</h3>
-      <p class="confirm-message">Kør kommandoen på Windows-PC'en. Den opsætter SSH mod Ubuntu (Windows → Ubuntu, ingen inbound porte på Windows), verificerer forbindelsen og registrerer klienten i AI-support-listen. Kør i en Administrator-PowerShell hvis OpenSSH Client mangler.</p>
-      <textarea readonly aria-label="PowerShell AI-support enrollment-kommando" style="width: 100%; min-height: 130px; box-sizing: border-box; font-family: monospace; font-size: 0.75rem; padding: 0.6rem; background: var(--background-secondary, #111); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: 6px;">${escapeHtml(command)}</textarea>
-      <p class="confirm-message" style="font-size: 0.75rem;">⚠️ Engangstoken — kan kun bruges én gang. Udløber: ${escapeHtml(new Date(expiresAt).toLocaleString('da-DK'))} (30 minutter)</p>
-      <div class="confirm-actions">
-        <button class="btn btn-ghost ai-enroll-close">Luk</button>
-        <button class="btn btn-primary ai-enroll-copy">Kopiér kommando</button>
-      </div>
-    </div>`;
-  const close = () => overlay.remove();
-  overlay.querySelector('.ai-enroll-close').addEventListener('click', close);
-  overlay.querySelector('.ai-enroll-copy').addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-      showToast('PowerShell-kommando kopieret.', 'success');
-    } catch (_) {
-      const textarea = overlay.querySelector('textarea');
-      textarea.focus();
-      textarea.select();
-      showToast('Kopiér kommandoen manuelt med Ctrl+C.', 'info');
-    }
-  });
-  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
-  document.body.appendChild(overlay);
-  overlay.querySelector('.ai-enroll-copy').focus();
+  const result = document.getElementById('aiSupportEnrollmentResult');
+  const name = document.getElementById('aiSupportEnrollmentClientName');
+  const expiry = document.getElementById('aiSupportEnrollmentExpiry');
+  const textarea = document.getElementById('aiSupportEnrollmentCommand');
+  if (!result || !name || !expiry || !textarea) return;
+  name.textContent = clientName;
+  expiry.textContent = `Engangstoken udløber: ${new Date(expiresAt).toLocaleString('da-DK')} (30 minutter)`;
+  textarea.value = command;
+  result.style.display = 'block';
+  textarea.focus();
+  textarea.select();
+}
+
+function showAISupportEnrollmentError(message) {
+  const error = document.getElementById('aiSupportEnrollmentError');
+  if (!error) return;
+  error.textContent = message || '';
+  error.style.display = message ? 'block' : 'none';
+}
+
+async function copyAISupportEnrollmentCommand() {
+  const textarea = document.getElementById('aiSupportEnrollmentCommand');
+  if (!textarea || !textarea.value) return;
+  try {
+    await navigator.clipboard.writeText(textarea.value);
+    showToast('PowerShell-streng kopieret.', 'success');
+  } catch (_) {
+    textarea.focus();
+    textarea.select();
+    showToast('Kopiér strengen manuelt med Ctrl+C.', 'info');
+  }
 }
 
 async function loadAISupportClients() {
@@ -810,6 +818,22 @@ async function loadAISupportClients() {
       .order('created_at', { ascending: false });
     if (error) throw error;
 
+    const logsByClient = new Map();
+    if (data && data.length > 0) {
+      const { data: logs, error: logError } = await supabase
+        .from('audit_logs')
+        .select('device_id, event, severity, details, created_at')
+        .in('device_id', data.map((client) => client.client_id))
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (!logError && logs) {
+        for (const log of logs) {
+          if (!logsByClient.has(log.device_id)) logsByClient.set(log.device_id, []);
+          logsByClient.get(log.device_id).push(log);
+        }
+      }
+    }
+
     list.innerHTML = '';
     if (!data || data.length === 0) {
       if (empty) empty.style.display = 'block';
@@ -818,13 +842,15 @@ async function loadAISupportClients() {
     if (empty) empty.style.display = 'none';
 
     for (const client of data) {
-      const row = document.createElement('div');
-      row.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); margin-bottom: 0.4rem;';
+      const row = document.createElement('details');
+      row.style.cssText = 'padding: 0.35rem 0.75rem; border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); margin-bottom: 0.4rem;';
 
       const dot = document.createElement('span');
       dot.title = client.status === 'ready' ? 'Klar' : 'Revokeret';
       dot.style.cssText = `width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: ${client.status === 'ready' ? '#22c55e' : '#ef4444'};`;
 
+      const summary = document.createElement('summary');
+      summary.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; cursor: pointer; list-style: none;';
       const nameCol = document.createElement('div');
       nameCol.style.cssText = 'flex: 1; min-width: 0; overflow: hidden;';
       const nameEl = document.createElement('div');
@@ -848,7 +874,46 @@ async function loadAISupportClients() {
       badge.style.cssText = `padding: 0.05rem 0.35rem; border-radius: 9999px; font-size: 0.65rem; flex-shrink: 0; background: ${client.status === 'ready' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}; color: ${client.status === 'ready' ? '#22c55e' : '#ef4444'};`;
       badge.textContent = client.status === 'ready' ? 'Klar' : 'Revokeret';
 
-      row.append(dot, nameCol, badge);
+      summary.append(dot, nameCol, badge);
+      row.appendChild(summary);
+
+      const detail = document.createElement('div');
+      detail.style.cssText = 'margin: 0.75rem 0 0.25rem 1.1rem; padding-top: 0.65rem; border-top: 1px solid var(--border, #333); font-size: 0.78rem;';
+      const metadata = document.createElement('div');
+      metadata.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.35rem 1rem; color: var(--text-muted, #aaa);';
+      const metadataItems = [
+        ['Client-ID', client.client_id],
+        ['SSH', `ssh ${client.ssh_user}@${client.ssh_host}:${client.ssh_port}`],
+        ['Fingerprint', client.ssh_key_fingerprint || 'Ikke registreret'],
+        ['Sidst set', client.last_seen ? new Date(client.last_seen).toLocaleString('da-DK') : 'Aldrig'],
+      ];
+      for (const [label, value] of metadataItems) {
+        const item = document.createElement('div');
+        item.textContent = `${label}: ${value}`;
+        metadata.appendChild(item);
+      }
+      detail.appendChild(metadata);
+
+      const logsTitle = document.createElement('div');
+      logsTitle.style.cssText = 'margin-top: 0.75rem; font-weight: 600;';
+      logsTitle.textContent = 'Log';
+      detail.appendChild(logsTitle);
+      const clientLogs = logsByClient.get(client.client_id) || [];
+      if (clientLogs.length === 0) {
+        const noLogs = document.createElement('div');
+        noLogs.style.cssText = 'margin-top: 0.25rem; color: var(--text-muted, #888);';
+        noLogs.textContent = 'Ingen loghændelser endnu.';
+        detail.appendChild(noLogs);
+      } else {
+        for (const log of clientLogs) {
+          const logLine = document.createElement('div');
+          logLine.style.cssText = 'margin-top: 0.25rem; color: var(--text-muted, #aaa);';
+          const detailsText = log.details && typeof log.details === 'object' ? ` · ${JSON.stringify(log.details)}` : '';
+          logLine.textContent = `${new Date(log.created_at).toLocaleString('da-DK')} · ${log.event || 'Hændelse'}${detailsText}`;
+          detail.appendChild(logLine);
+        }
+      }
+      row.appendChild(detail);
 
       // Terminal revoke action with explicit confirmation. Rows are built
       // with DOM APIs (textContent), so client metadata is never injected
@@ -860,8 +925,12 @@ async function loadAISupportClients() {
         revokeBtn.style.flexShrink = '0';
         revokeBtn.title = 'Revokér AI-support klient (kan ikke fortrydes)';
         revokeBtn.textContent = 'Revokér';
-        revokeBtn.addEventListener('click', () => revokeAISupportClient(client));
-        row.appendChild(revokeBtn);
+        revokeBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          revokeAISupportClient(client);
+        });
+        summary.appendChild(revokeBtn);
       }
 
       list.appendChild(row);
