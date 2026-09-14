@@ -334,11 +334,13 @@ Match User $WindowsSshUser
     $hostKeys = Get-ChildItem -LiteralPath (Join-Path $env:ProgramData 'ssh') -Filter 'ssh_host_*_key' -File -ErrorAction SilentlyContinue
     if (-not $hostKeys) { throw 'Windows OpenSSH hostkeys blev ikke oprettet.' }
     $sshDirectory = Join-Path $env:ProgramData 'ssh'
-    & icacls.exe $sshDirectory /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)(F)' '*S-1-5-32-544:(OI)(CI)(F)' 'NT SERVICE\sshd:(OI)(CI)(RX)' | Out-Null
+    & icacls.exe $sshDirectory /remove 'NT SERVICE\sshd' | Out-Null
+    & icacls.exe $sshDirectory /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)(F)' '*S-1-5-32-544:(OI)(CI)(F)' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke beskytte OpenSSH-mappen.' }
     $sshFiles = @($sshdConfig) + @($hostKeys | ForEach-Object { $_.FullName })
     foreach ($sshFile in $sshFiles) {
-        & icacls.exe $sshFile /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' 'NT SERVICE\sshd:R' | Out-Null
+        & icacls.exe $sshFile /remove 'NT SERVICE\sshd' | Out-Null
+        & icacls.exe $sshFile /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Kunne ikke beskytte OpenSSH-filen $sshFile." }
     }
     foreach ($hostKey in $hostKeys) {
