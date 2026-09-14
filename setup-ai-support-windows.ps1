@@ -262,11 +262,24 @@ function Get-SshdStartFailureDetails([string]$SshdConfig) {
     $service = Get-Service -Name sshd -ErrorAction SilentlyContinue
     if ($service) { $details += "service_state=$($service.Status) service_name=$($service.Name)" }
     try {
+        $serviceInfo = Get-CimInstance Win32_Service -Filter "Name='sshd'" -ErrorAction Stop
+        if ($serviceInfo) {
+            $details += "service_start_name=$($serviceInfo.StartName) service_exit_code=$($serviceInfo.ExitCode) service_specific_exit_code=$($serviceInfo.ServiceSpecificExitCode)"
+        }
+    } catch { }
+    try {
         $events = Get-WinEvent -FilterHashtable @{ LogName = 'OpenSSH/Operational'; StartTime = (Get-Date).AddMinutes(-5) } -MaxEvents 5 -ErrorAction Stop |
             ForEach-Object { $_.Message }
         if ($events) { $details += ('events=' + (($events -join ' | ') -replace '\s+', ' ')) }
     } catch { }
-    $effective = (& (Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe') -T -f $SshdConfig 2>&1 | Out-String).Trim()
+    try {
+        $serviceEvents = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Service Control Manager'; StartTime = (Get-Date).AddMinutes(-5) } -MaxEvents 5 -ErrorAction Stop |
+            ForEach-Object { $_.Message }
+        if ($serviceEvents) { $details += ('service_events=' + (($serviceEvents -join ' | ') -replace '\s+', ' ')) }
+    } catch { }
+    $effective = (& (Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe') -T -f $SshdConfig 2>&1 |
+        Where-Object { $_ -match '^(port|listenaddress|hostkey|authorizedkeysfile|forcecommand)\s' } |
+        Out-String).Trim()
     if ($effective) { $details += ('sshd_effective_config=' + ($effective -replace '\s+', ' ')) }
     return ($details -join '; ')
 }
@@ -543,7 +556,7 @@ try {
 }
 catch {
     $message = $_.Exception.Message
-    if ($null -ne $message -and $message.Length -gt 300) { $message = $message.Substring(0, 300) }
+    if ($null -ne $message -and $message.Length -gt 2000) { $message = $message.Substring(0, 2000) + '...' }
     Write-Host "`nAI-support SSH setup fejlede: $message" -ForegroundColor Red
     Write-Host 'Kør setup igen med et nyt engangstoken fra dashboardet.' -ForegroundColor Yellow
     exit 1
