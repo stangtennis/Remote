@@ -272,6 +272,16 @@ if (document.getElementById('logoutBtn')) {
         aiSupportPageLink.classList.add('is-visible');
         aiSupportPageLink.style.display = 'inline-flex';
       }
+      const supportClientDownloadBtn = document.getElementById('supportClientDownloadBtn');
+      if (supportClientDownloadBtn && isAdmin) {
+        supportClientDownloadBtn.classList.add('is-visible');
+        supportClientDownloadBtn.style.display = 'inline-flex';
+      }
+      const portableSupportDownloadBtn = document.getElementById('portableSupportDownloadBtn');
+      if (portableSupportDownloadBtn && isAdmin) {
+        portableSupportDownloadBtn.classList.add('is-visible');
+        portableSupportDownloadBtn.style.display = 'inline-flex';
+      }
 
       // AI-support clients section (Windows -> Ubuntu SSH enrollment list)
       const aiSupportClientsSection = document.getElementById('aiSupportClientsSection');

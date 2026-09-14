@@ -206,13 +206,19 @@
             <a href="#" id="agentRunOnceBtn" class="btn btn-secondary" style="text-decoration: none; text-align: center;">
               <i class="fas fa-play"></i> Quick Connect
             </a>
+            <a href="#" id="supportClientDownloadBtn" class="btn btn-secondary admin-only-action" style="display: none; text-decoration: none; text-align: center;" title="Generér PowerShell-kommando til AI-support klient">
+              <i class="fas fa-terminal"></i> AI-support SSH-klient
+            </a>
+            <a href="#" id="portableSupportDownloadBtn" class="btn btn-secondary admin-only-action" style="display: none; text-decoration: none; text-align: center;" title="Download den portable AI-support klient">
+              <i class="fas fa-life-ring"></i> Portable AI-support
+            </a>
             <a href="agent.html" class="btn btn-secondary" style="text-decoration: none; text-align: center;">
               <i class="fas fa-globe"></i> Web Agent
             </a>
             <!-- Controller link added dynamically for admins -->
           </div>
           <p id="downloadsDescription" style="margin-top: 0.5rem; font-size: 0.875rem; color: #888; text-align: center;">
-             Agent Installer: permanent installation med service + tray • Quick Connect: kør én gang uden installation • Quick Support: midlertidig PIN-godkendt support
+             Agent Installer: permanent installation med service + tray • Quick Connect: kør én gang uden installation • AI-support SSH-klient: persistent Windows → Ubuntu tunnel • Portable AI-support: WebRTC-klient
           </p>
           <p id="latestVersionInfo" style="margin-top: 0.35rem; font-size: 0.82rem; color: #9ca3af; text-align: center;">
             Nyeste version: henter...
@@ -245,10 +251,38 @@
               }
               // Quick Connect (run once)
                var runOnceBtn = document.getElementById('agentRunOnceBtn');
-               if (runOnceBtn) {
-                 runOnceBtn.onclick = function() { signedDownload(agentRunOnceName); return false; };
-                if (isMac) runOnceBtn.innerHTML = '<i class="fas fa-play"></i> Quick Connect (macOS)';
-              }
+                if (runOnceBtn) {
+                  runOnceBtn.onclick = function() { signedDownload(agentRunOnceName); return false; };
+                 if (isMac) runOnceBtn.innerHTML = '<i class="fas fa-play"></i> Quick Connect (macOS)';
+               }
+               var supportBtn = document.getElementById('supportClientDownloadBtn');
+               if (supportBtn) {
+                 supportBtn.onclick = function() {
+                   if (typeof createAISupportEnrollment === 'function') {
+                     createAISupportEnrollment();
+                   } else {
+                     window.location.href = 'ai-support.html';
+                   }
+                   return false;
+                 };
+               }
+               var portableSupportBtn = document.getElementById('portableSupportDownloadBtn');
+               if (portableSupportBtn) {
+                 portableSupportBtn.onclick = async function() {
+                   try {
+                     var response = await fetch('https://updates.hawkeye123.dk/version.json', { cache: 'no-store' });
+                     var data = await response.json();
+                     var supportUrl = data.support_url || data.support_exe_url || '';
+                     var supportName = supportUrl.split('/').pop().split('?')[0];
+                     if (!supportName) throw new Error('support download unavailable');
+                     await signedDownload(supportName);
+                   } catch (error) {
+                     console.error('AI-support download failed:', error);
+                     await showAlert('AI-support klienten kunne ikke hentes lige nu.', { title: 'Download mislykkedes', type: 'error' });
+                   }
+                   return false;
+                 };
+               }
                var versionInfo = document.getElementById('latestVersionInfo');
               if (versionInfo) {
                 fetch('https://updates.hawkeye123.dk/version.json', { cache: 'no-store' })
@@ -264,10 +298,7 @@
                        agentInstallerName = isMac ? 'RemoteDesktopAgent-macOS-' + downloadVersion + '.tar.gz' : 'RemoteDesktopAgent-' + downloadVersion + '-Setup.exe';
                        agentRunOnceName = isMac ? 'RemoteDesktopAgent-macOS-' + downloadVersion + '.tar.gz' : 'RemoteDesktopAgent-RunOnce-' + downloadVersion + '-Setup.exe';
                      }
-                     if (data.support_url) {
-                       supportDownloadName = data.support_url.split('/').pop().split('?')[0];
-                     }
-                     versionInfo.textContent = 'Nyeste version: Agent ' + agentVersion + ' • Controller ' + controllerVersion;
+                      versionInfo.textContent = 'Nyeste version: Agent ' + agentVersion + ' • Controller ' + controllerVersion;
                   })
                   .catch(function() {
                     versionInfo.textContent = 'Nyeste version: kunne ikke hentes lige nu';
@@ -737,7 +768,7 @@
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js?v=6"></script>
-  <script src="js/auth.js?v=12"></script>
+   <script src="js/auth.js?v=13"></script>
   <script src="js/app.js?v=10"></script>
    <script src="js/devices.js?v=26"></script>
   <script src="js/sessions.js?v=8"></script>
