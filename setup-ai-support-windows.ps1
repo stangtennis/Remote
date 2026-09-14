@@ -114,6 +114,7 @@ try {
     else {
         Write-Step 'OpenSSH Client fundet - ingen admin noedvendig'
     }
+    $sshKeygenCommand = Get-Command ssh-keygen.exe -ErrorAction Stop
 
     # ---------- 2. Dedicated ed25519 key ----------
 
@@ -124,10 +125,23 @@ try {
 
     Write-Step 'Opretter dedikeret SSH-noegle'
     New-Item -ItemType Directory -Path $sshKeyDirectory -Force | Out-Null
-    if (-not (Test-Path $sshKey)) {
-        & ssh-keygen.exe -t ed25519 -f $sshKey -N '' -C $ClientId
-        if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke generere SSH-noeglen.' }
+    if ((Test-Path $sshKey) -and -not (Test-Path $sshPublicKey)) {
+        # A previous interrupted keygen can leave only a partial private file.
+        # It is unusable without its public half and safe to remove.
+        Remove-Item -Force $sshKey
     }
+    if (-not (Test-Path $sshKey)) {
+        # Windows PowerShell 5.1 drops an empty native argument when invoked
+        # as `-N ''`. Start-Process preserves the explicit `""` argument.
+        $keygen = Start-Process -FilePath $sshKeygenCommand.Source -ArgumentList @(
+            '-t', 'ed25519', '-f', $sshKey, '-N', '""', '-C', $ClientId
+        ) -Wait -PassThru -NoNewWindow
+        if ($keygen.ExitCode -ne 0) {
+            Remove-Item -Force -ErrorAction SilentlyContinue $sshKey, $sshPublicKey
+            throw 'Kunne ikke generere SSH-noeglen.'
+        }
+    }
+    if (-not (Test-Path $sshPublicKey)) { throw 'SSH-noeglen blev ikke oprettet korrekt.' }
 
     # ---------- 3. SSH host alias ----------
 
