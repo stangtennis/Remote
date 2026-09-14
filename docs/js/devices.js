@@ -810,6 +810,10 @@ async function loadAISupportClients() {
   // not be set yet — avoids a silent pre-role no-op and empty admin lists.
   const roleInfo = await fetchDashboardRole();
   if (!roleInfo.isAdmin) return;
+  const section = document.getElementById('aiSupportClientsSection');
+  if (section) section.style.display = 'block';
+  const supportClientDownloadBtn = document.getElementById('supportClientDownloadBtn');
+  if (supportClientDownloadBtn) supportClientDownloadBtn.style.display = 'inline-flex';
 
   try {
     const { data, error } = await supabase
