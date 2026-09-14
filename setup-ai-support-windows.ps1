@@ -450,6 +450,7 @@ function Build-TunnelArguments([int]$Port) {
 function Write-TunnelRunner([string]$SshPath, [int]$Port) {
     $runner = @"
 `$ErrorActionPreference = 'Stop'
+'AI-support persistent tunnel runner started.' | Set-Content -LiteralPath '$TunnelTaskLogPath' -Encoding ASCII
 `$sshArgs = @(
     '-N', '-T',
     '-o', 'BatchMode=yes',
@@ -467,7 +468,9 @@ function Write-TunnelRunner([string]$SshPath, [int]$Port) {
     '$UbuntuUser@$UbuntuHost'
 )
 & '$SshPath' @sshArgs
-exit `$LASTEXITCODE
+`$exitCode = `$LASTEXITCODE
+"ssh exit code: `$exitCode" | Add-Content -LiteralPath '$TunnelTaskLogPath' -Encoding ASCII
+exit `$exitCode
 "@
     Set-Content -LiteralPath $TunnelRunnerPath -Value $runner -Encoding ASCII
 }
@@ -584,6 +587,8 @@ try {
     }
 
     Write-Step 'Installerer persistent tunnel ved Windows-opstart'
+    & icacls.exe $TunnelKey /setowner '*S-1-5-18' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke sætte SYSTEM som ejer af tunnelnoeglen.' }
     Write-TunnelRunner $sshCommand.Source $tunnelPort
     Set-StateAcl
     $powershellPath = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
