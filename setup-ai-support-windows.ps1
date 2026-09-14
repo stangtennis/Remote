@@ -220,6 +220,43 @@ exit $exitCode
     }
 }
 
+function Set-LocalAccountTokenFilterPolicy {
+    param([string]$PolicyPath)
+
+    try {
+        New-Item -Path $PolicyPath -Force -ErrorAction Stop | Out-Null
+        New-ItemProperty -Path $PolicyPath -Name LocalAccountTokenFilterPolicy -PropertyType DWord -Value 1 -Force -ErrorAction Stop | Out-Null
+        return
+    } catch {
+        # Some Windows security baselines deny an elevated admin token here.
+        # Use Task Scheduler's SYSTEM token, then verify the resulting value.
+    }
+
+    $taskName = "AI-Support-Set-TokenPolicy-$([guid]::NewGuid().ToString('N'))"
+    $registryPath = $PolicyPath -replace '^HKLM:\\', 'HKLM\'
+    $taskAction = New-ScheduledTaskAction -Execute (Join-Path $env:WINDIR 'System32\reg.exe') -Argument "ADD `"$registryPath`" /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f"
+    $taskTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1)
+    $taskPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    try {
+        Register-ScheduledTask -TaskName $taskName -Action $taskAction -Trigger $taskTrigger -Principal $taskPrincipal -Force -ErrorAction Stop | Out-Null
+        Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
+        $policySet = $false
+        for ($wait = 0; $wait -lt 10; $wait++) {
+            Start-Sleep -Seconds 1
+            $current = Get-ItemProperty -Path $PolicyPath -Name LocalAccountTokenFilterPolicy -ErrorAction SilentlyContinue
+            if ($null -ne $current -and [int]$current.LocalAccountTokenFilterPolicy -eq 1) {
+                $policySet = $true
+                break
+            }
+        }
+        if (-not $policySet) { throw 'SYSTEM-tasken satte ikke LocalAccountTokenFilterPolicy.' }
+    } catch {
+        throw "Kunne ikke konfigurere Windows admin-token: $($_.Exception.Message)"
+    } finally {
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+}
+
 function Configure-WindowsSshd {
     $sshdConfig = Join-Path $env:ProgramData 'ssh\sshd_config'
     if (-not (Test-Path $sshdConfig)) {
@@ -274,9 +311,8 @@ Match User $WindowsSshUser
     $config += $matchBlock
     Set-Content -Path $sshdConfig -Value $config -Encoding ascii
     try {
-        New-Item -Path $policyPath -Force -ErrorAction Stop | Out-Null
-        New-ItemProperty -Path $policyPath -Name LocalAccountTokenFilterPolicy -PropertyType DWord -Value 1 -Force -ErrorAction Stop | Out-Null
-    } catch { throw "Kunne ikke konfigurere Windows admin-token: $($_.Exception.Message)" }
+        Set-LocalAccountTokenFilterPolicy $policyPath
+    } catch { throw $_ }
     & (Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe') -t -f $sshdConfig
     if ($LASTEXITCODE -ne 0) { throw 'OpenSSH Server konfigurationen er ugyldig.' }
     Set-Service -Name sshd -StartupType Automatic
