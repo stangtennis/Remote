@@ -214,8 +214,10 @@ exit $exitCode
 '@
     Set-Content -LiteralPath $SupportShellPath -Value $shellContent -Encoding UTF8
     New-Item -ItemType File -Path $ActivityLogPath -Force | Out-Null
-    & icacls.exe $SupportShellPath $ActivityLogPath /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' ("{0}:F" -f $WindowsSshUser) | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke beskytte AI-support logfilerne.' }
+    foreach ($path in @($SupportShellPath, $ActivityLogPath)) {
+        & icacls.exe $path /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' ("{0}:F" -f $WindowsSshUser) | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke beskytte AI-support logfilerne.' }
+    }
 }
 
 function Configure-WindowsSshd {
