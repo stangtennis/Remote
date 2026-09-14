@@ -223,7 +223,10 @@ exit $exitCode
 function Configure-WindowsSshd {
     $sshdConfig = Join-Path $env:ProgramData 'ssh\sshd_config'
     if (-not (Test-Path $sshdConfig)) { throw 'OpenSSH Server konfigurationsfil blev ikke fundet.' }
-    if (-not (Test-Path $SshdConfigBackup)) { Copy-Item -LiteralPath $sshdConfig -Destination $SshdConfigBackup -Force }
+    if (-not (Test-Path $SshdConfigBackup)) {
+        try { Copy-Item -LiteralPath $sshdConfig -Destination $SshdConfigBackup -Force -ErrorAction Stop }
+        catch { throw "Kunne ikke sikkerhedskopiere OpenSSH-konfigurationen: $($_.Exception.Message)" }
+    }
     $policyPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
     $policy = Get-ItemProperty -Path $policyPath -Name LocalAccountTokenFilterPolicy -ErrorAction SilentlyContinue
     if (-not (Test-Path $TokenPolicyBackup)) {
@@ -265,8 +268,10 @@ Match User $WindowsSshUser
     }
     $config += $matchBlock
     Set-Content -Path $sshdConfig -Value $config -Encoding ascii
-    New-Item -Path $policyPath -Force | Out-Null
-    New-ItemProperty -Path $policyPath -Name LocalAccountTokenFilterPolicy -PropertyType DWord -Value 1 -Force | Out-Null
+    try {
+        New-Item -Path $policyPath -Force -ErrorAction Stop | Out-Null
+        New-ItemProperty -Path $policyPath -Name LocalAccountTokenFilterPolicy -PropertyType DWord -Value 1 -Force -ErrorAction Stop | Out-Null
+    } catch { throw "Kunne ikke konfigurere Windows admin-token: $($_.Exception.Message)" }
     & (Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe') -t -f $sshdConfig
     if ($LASTEXITCODE -ne 0) { throw 'OpenSSH Server konfigurationen er ugyldig.' }
     Set-Service -Name sshd -StartupType Automatic
