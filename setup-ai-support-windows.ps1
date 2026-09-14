@@ -115,6 +115,22 @@ function Set-StateAcl {
     }
 }
 
+function Set-SystemPrivateKeyAcl([string]$Path) {
+    $acl = Get-Acl -LiteralPath $Path
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($rule in @($acl.Access)) {
+        [void]$acl.RemoveAccessRule($rule)
+    }
+    $systemSid = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')
+    $administratorsSid = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')
+    $fullControl = [System.Security.AccessControl.FileSystemRights]::FullControl
+    $allow = [System.Security.AccessControl.AccessControlType]::Allow
+    $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($systemSid, $fullControl, $allow))
+    $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($administratorsSid, $fullControl, $allow))
+    $acl.SetOwner($systemSid)
+    Set-Acl -LiteralPath $Path -AclObject $acl
+}
+
 function Get-KeyParts([string]$KeyLine, [string]$Label) {
     $parts = $KeyLine.Trim() -split '\s+'
     if ($parts.Count -lt 2) { throw "$Label er ugyldig." }
@@ -587,8 +603,7 @@ try {
     }
 
     Write-Step 'Installerer persistent tunnel ved Windows-opstart'
-    & icacls.exe $TunnelKey /setowner '*S-1-5-18' | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke sætte SYSTEM som ejer af tunnelnoeglen.' }
+    Set-SystemPrivateKeyAcl $TunnelKey
     Write-TunnelRunner $sshCommand.Source $tunnelPort
     Set-StateAcl
     $powershellPath = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
