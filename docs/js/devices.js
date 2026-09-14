@@ -80,6 +80,12 @@ async function initDevices() {
   if (refreshAISupportClientsBtn) refreshAISupportClientsBtn.addEventListener('click', () => loadAISupportClients());
 
   await loadDevices();
+  const roleInfo = await fetchDashboardRole();
+  const aiSupportPageLink = document.getElementById('aiSupportPageLink');
+  if (aiSupportPageLink && roleInfo.isAdmin) {
+    aiSupportPageLink.classList.add('is-visible');
+    aiSupportPageLink.style.display = 'inline-flex';
+  }
   loadAISupportClients();
   subscribeToDeviceUpdates();
 }

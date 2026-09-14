@@ -47,9 +47,10 @@
       <h1><i class="fas fa-satellite-dish"></i> Fjernskrivebord</h1>
       <div class="header-actions">
         <button id="notificationToggleBtn" class="btn btn-icon" onclick="BrowserNotifications.toggle()" title="Notifikationer"><i class="fas fa-bell"></i></button>
-        <button id="aiSupportCodeBtn" class="btn btn-primary admin-only-action" style="margin-right: 10px; display: none;" onclick="generateAISupportCode()" title="Generér AI-supportkode"><i class="fas fa-robot"></i> Generér AI-kode</button>
-        <button id="quickSupportBtn" class="btn btn-secondary admin-only-action" style="margin-right: 10px; display: none;" onclick="showSupportModal()"><i class="fas fa-life-ring"></i> Quick Support</button>
-        <a href="history.html" class="btn btn-secondary" style="margin-right: 10px;" title="Session-historik"><i class="fas fa-clock-rotate-left"></i> Historik</a>
+         <button id="aiSupportCodeBtn" class="btn btn-primary admin-only-action" style="margin-right: 10px; display: none;" onclick="generateAISupportCode()" title="Generér AI-supportkode"><i class="fas fa-robot"></i> Generér AI-kode</button>
+         <button id="quickSupportBtn" class="btn btn-secondary admin-only-action" style="margin-right: 10px; display: none;" onclick="showSupportModal()"><i class="fas fa-life-ring"></i> Quick Support</button>
+         <a href="ai-support.html" id="aiSupportPageLink" class="btn btn-secondary admin-only-action" style="margin-right: 10px; display: none;" title="Administrér AI-support klienter"><i class="fas fa-robot"></i> AI-support</a>
+         <a href="history.html" class="btn btn-secondary" style="margin-right: 10px;" title="Session-historik"><i class="fas fa-clock-rotate-left"></i> Historik</a>
         <a href="admin.html" id="adminLink" class="btn btn-secondary admin-only-action" style="margin-right: 10px; display: none;"><i class="fas fa-shield-halved"></i> Admin</a>
         <span id="userEmail" class="user-info"></span>
         <button id="logoutBtn" class="btn btn-secondary">Log ud</button>
@@ -205,16 +206,13 @@
             <a href="#" id="agentRunOnceBtn" class="btn btn-secondary" style="text-decoration: none; text-align: center;">
               <i class="fas fa-play"></i> Quick Connect
             </a>
-            <a href="#" id="supportClientDownloadBtn" class="btn btn-secondary admin-only-action" style="display: none; text-decoration: none; text-align: center;" title="Generér PowerShell-kommando til AI-support klient">
-              <i class="fas fa-terminal"></i> AI-support klient
-            </a>
             <a href="agent.html" class="btn btn-secondary" style="text-decoration: none; text-align: center;">
               <i class="fas fa-globe"></i> Web Agent
             </a>
             <!-- Controller link added dynamically for admins -->
           </div>
           <p id="downloadsDescription" style="margin-top: 0.5rem; font-size: 0.875rem; color: #888; text-align: center;">
-             Agent Installer: permanent installation med service + tray • Quick Connect: kør én gang uden installation • AI-support klient: generér PowerShell-kommando til Windows → Ubuntu SSH
+             Agent Installer: permanent installation med service + tray • Quick Connect: kør én gang uden installation • Quick Support: midlertidig PIN-godkendt support
           </p>
           <p id="latestVersionInfo" style="margin-top: 0.35rem; font-size: 0.82rem; color: #9ca3af; text-align: center;">
             Nyeste version: henter...
@@ -251,17 +249,7 @@
                  runOnceBtn.onclick = function() { signedDownload(agentRunOnceName); return false; };
                 if (isMac) runOnceBtn.innerHTML = '<i class="fas fa-play"></i> Quick Connect (macOS)';
               }
-               var supportBtn = document.getElementById('supportClientDownloadBtn');
-               if (supportBtn) {
-                 supportBtn.onclick = function() {
-                   var section = document.getElementById('aiSupportClientsSection');
-                   var input = document.getElementById('aiSupportClientNameInput');
-                   if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                   if (input) input.focus();
-                   return false;
-                 };
-               }
-              var versionInfo = document.getElementById('latestVersionInfo');
+               var versionInfo = document.getElementById('latestVersionInfo');
               if (versionInfo) {
                 fetch('https://updates.hawkeye123.dk/version.json', { cache: 'no-store' })
                   .then(function(res) {
@@ -395,41 +383,6 @@
           <div id="loadingDevices" class="loading" style="display: none;">
             <div class="spinner"></div>
             <p>Indlæser enheder...</p>
-          </div>
-        </section>
-
-        <!-- AI-support Clients Section (admin only, separate from Dine enheder and Quick Support) -->
-        <section id="aiSupportClientsSection" class="devices-section admin-only-action" style="display: none; margin-top: 1.5rem;">
-          <div class="section-header">
-            <h2><i class="fas fa-robot"></i> AI-support klienter</h2>
-            <div style="display: flex; gap: 0.4rem; align-items: center;">
-              <button id="refreshAISupportClientsBtn" class="btn btn-icon" title="Opdater AI-support klienter">
-                <i class="fas fa-sync-alt"></i>
-              </button>
-            </div>
-          </div>
-          <p style="margin: 0 0 0.75rem 0; font-size: 0.78rem; color: var(--text-muted, #888);">
-            Windows-PC'er der forbinder ud til Ubuntu AI-support-værten over SSH. Retning er altid Windows → Ubuntu — der åbnes ingen inbound porte på Windows. Adskilt fra almindelige fjernskrivebords-agenter og Quick Support.
-          </p>
-          <div style="padding: 0.9rem; margin-bottom: 0.85rem; border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); background: rgba(255,255,255,0.025);">
-            <label for="aiSupportClientNameInput" style="display: block; margin-bottom: 0.4rem; font-size: 0.8rem; font-weight: 600;">Ny AI-support klient</label>
-            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-              <input id="aiSupportClientNameInput" type="text" maxlength="64" placeholder="fx Kontor-PC" style="flex: 1; min-width: 180px; padding: 0.55rem 0.7rem; background: var(--surface, #1a1a2e); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); font-size: 0.85rem;">
-              <button id="generateAISupportEnrollmentBtn" class="btn btn-primary btn-sm" type="button"><i class="fas fa-terminal"></i> Generér PowerShell-streng</button>
-            </div>
-            <div id="aiSupportEnrollmentError" role="alert" style="display: none; margin-top: 0.5rem; color: #f87171; font-size: 0.78rem;"></div>
-            <div id="aiSupportEnrollmentResult" style="display: none; margin-top: 0.75rem;">
-              <div style="display: flex; justify-content: space-between; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                <strong>PowerShell-streng til <span id="aiSupportEnrollmentClientName"></span></strong>
-                <span id="aiSupportEnrollmentExpiry" style="font-size: 0.75rem; color: var(--text-muted, #888);"></span>
-              </div>
-              <textarea id="aiSupportEnrollmentCommand" readonly aria-label="PowerShell AI-support enrollment-kommando" style="width: 100%; min-height: 130px; box-sizing: border-box; margin-top: 0.5rem; font-family: monospace; font-size: 0.75rem; padding: 0.6rem; background: var(--background-secondary, #111); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: 6px;"></textarea>
-              <button id="copyAISupportEnrollmentBtn" class="btn btn-secondary btn-sm" type="button" style="margin-top: 0.5rem;"><i class="fas fa-copy"></i> Kopiér PowerShell-streng</button>
-            </div>
-          </div>
-          <div id="aiSupportClientsList"></div>
-          <div id="aiSupportClientsEmpty" style="display: none; text-align: center; padding: 1.25rem; color: var(--text-muted, #888); font-size: 0.85rem; border: 1px dashed var(--border, #333); border-radius: var(--radius-sm, 6px);">
-            Ingen AI-support klienter endnu. Tryk "Tilføj klient" for at generere en PowerShell-kommando.
           </div>
         </section>
 
@@ -784,7 +737,7 @@
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js?v=6"></script>
-  <script src="js/auth.js?v=11"></script>
+  <script src="js/auth.js?v=12"></script>
   <script src="js/app.js?v=10"></script>
   <script src="js/devices.js?v=21"></script>
   <script src="js/sessions.js?v=8"></script>

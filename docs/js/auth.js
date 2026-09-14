@@ -267,10 +267,10 @@ if (document.getElementById('logoutBtn')) {
         aiSupportCodeBtn.classList.add('is-visible');
         aiSupportCodeBtn.style.display = 'inline-flex';
       }
-      const supportClientDownloadBtn = document.getElementById('supportClientDownloadBtn');
-      if (supportClientDownloadBtn && isAdmin) {
-        supportClientDownloadBtn.classList.add('is-visible');
-        supportClientDownloadBtn.style.display = 'inline-flex';
+      const aiSupportPageLink = document.getElementById('aiSupportPageLink');
+      if (aiSupportPageLink && isAdmin) {
+        aiSupportPageLink.classList.add('is-visible');
+        aiSupportPageLink.style.display = 'inline-flex';
       }
 
       // AI-support clients section (Windows -> Ubuntu SSH enrollment list)
