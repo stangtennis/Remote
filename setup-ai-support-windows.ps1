@@ -252,7 +252,18 @@ ssh.exe -tt ai-support-ubuntu "if [ -x $remoteHome/.local/bin/remote-desktop-cli
     # Start-Process joins an argument array before launching the process. Quote
     # values explicitly so names containing spaces remain one Go flag value.
     $agentArguments = '--enroll-token "' + $AgentEnrollmentToken + '" --device-name "' + $safeClientName + '" --install --start'
-    $agentProcess = Start-Process -FilePath $agentPath -Verb RunAs -Wait -PassThru -ArgumentList $agentArguments
+    $agentStart = @{
+        FilePath = $agentPath
+        Wait = $true
+        PassThru = $true
+        ArgumentList = $agentArguments
+    }
+    if (-not (Test-Administrator)) {
+        # Interactive desktop sessions need UAC; elevated remote sessions do
+        # not have a desktop on which a RunAs prompt can be accepted.
+        $agentStart.Verb = 'RunAs'
+    }
+    $agentProcess = Start-Process @agentStart
     if ($agentProcess.ExitCode -ne 0) {
         throw 'Remote Desktop agent enrollment eller service-start fejlede.'
     }
