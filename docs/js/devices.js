@@ -811,9 +811,15 @@ async function loadAISupportClients() {
   const roleInfo = await fetchDashboardRole();
   if (!roleInfo.isAdmin) return;
   const section = document.getElementById('aiSupportClientsSection');
-  if (section) section.style.display = 'block';
+  if (section) {
+    section.classList.add('is-visible');
+    section.style.display = 'block';
+  }
   const supportClientDownloadBtn = document.getElementById('supportClientDownloadBtn');
-  if (supportClientDownloadBtn) supportClientDownloadBtn.style.display = 'inline-flex';
+  if (supportClientDownloadBtn) {
+    supportClientDownloadBtn.classList.add('is-visible');
+    supportClientDownloadBtn.style.display = 'inline-flex';
+  }
 
   try {
     const { data, error } = await supabase
