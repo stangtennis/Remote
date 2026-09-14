@@ -205,8 +205,8 @@
             <a href="#" id="agentRunOnceBtn" class="btn btn-secondary" style="text-decoration: none; text-align: center;">
               <i class="fas fa-play"></i> Quick Connect
             </a>
-            <a href="#" id="supportClientDownloadBtn" class="btn btn-secondary" style="text-decoration: none; text-align: center;">
-              <i class="fas fa-life-ring"></i> AI Supportklient
+            <a href="#" id="supportClientDownloadBtn" class="btn btn-secondary admin-only-action" style="display: none; text-decoration: none; text-align: center;" title="Generér PowerShell-kommando til AI-support klient">
+              <i class="fas fa-terminal"></i> AI-support klient
             </a>
             <a href="agent.html" class="btn btn-secondary" style="text-decoration: none; text-align: center;">
               <i class="fas fa-globe"></i> Web Agent
@@ -214,7 +214,7 @@
             <!-- Controller link added dynamically for admins -->
           </div>
           <p id="downloadsDescription" style="margin-top: 0.5rem; font-size: 0.875rem; color: #888; text-align: center;">
-             Agent Installer: permanent installation med service + tray • Quick Connect: kør én gang uden installation • AI Supportklient: midlertidig PIN-godkendt support
+             Agent Installer: permanent installation med service + tray • Quick Connect: kør én gang uden installation • AI-support klient: generér PowerShell-kommando til Windows → Ubuntu SSH
           </p>
           <p id="latestVersionInfo" style="margin-top: 0.35rem; font-size: 0.82rem; color: #9ca3af; text-align: center;">
             Nyeste version: henter...
@@ -253,12 +253,15 @@
               }
                var supportBtn = document.getElementById('supportClientDownloadBtn');
                if (supportBtn) {
-                  var supportDownloadName = 'RemoteDesktopSupport-v3.1.131-Setup.exe';
-                 supportBtn.onclick = function() { signedDownload(supportDownloadName); return false; };
-                if (isMac) {
-                  supportBtn.style.display = 'none';
-                }
-              }
+                 supportBtn.onclick = function() {
+                   if (typeof createAISupportEnrollment === 'function') {
+                     createAISupportEnrollment();
+                   } else {
+                     alert('AI-support enrollment er ikke klar endnu. Genindlæs siden.');
+                   }
+                   return false;
+                 };
+               }
               var versionInfo = document.getElementById('latestVersionInfo');
               if (versionInfo) {
                 fetch('https://updates.hawkeye123.dk/version.json', { cache: 'no-store' })

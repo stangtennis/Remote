@@ -267,6 +267,11 @@ if (document.getElementById('logoutBtn')) {
         aiSupportCodeBtn.classList.add('is-visible');
         aiSupportCodeBtn.style.display = 'inline-flex';
       }
+      const supportClientDownloadBtn = document.getElementById('supportClientDownloadBtn');
+      if (supportClientDownloadBtn && isAdmin) {
+        supportClientDownloadBtn.classList.add('is-visible');
+        supportClientDownloadBtn.style.display = 'inline-flex';
+      }
 
       // AI-support clients section (Windows -> Ubuntu SSH enrollment list)
       const aiSupportClientsSection = document.getElementById('aiSupportClientsSection');
