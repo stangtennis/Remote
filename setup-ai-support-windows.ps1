@@ -344,6 +344,11 @@ Match User $WindowsSshUser
     if (-not (Test-Path $hostKeygen)) { throw 'Windows OpenSSH ssh-keygen blev ikke fundet.' }
     & $hostKeygen -A | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Windows OpenSSH hostkeys kunne ikke oprettes.' }
+    $sshLogsDirectory = Join-Path $env:ProgramData 'ssh\logs'
+    if (Test-Path $sshLogsDirectory) {
+        $logsBackup = Join-Path $StateDirectory ("openssh-logs-backup-{0}" -f (Get-Date -Format 'yyyyMMddHHmmss'))
+        Move-Item -LiteralPath $sshLogsDirectory -Destination $logsBackup -Force -ErrorAction Stop
+    }
     $hostKeys = Get-ChildItem -LiteralPath (Join-Path $env:ProgramData 'ssh') -Filter 'ssh_host_*_key' -File -ErrorAction SilentlyContinue
     if (-not $hostKeys) { throw 'Windows OpenSSH hostkeys blev ikke oprettet.' }
     $sshDirectory = Join-Path $env:ProgramData 'ssh'
