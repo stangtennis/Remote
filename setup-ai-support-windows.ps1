@@ -1,45 +1,22 @@
 <#
 .SYNOPSIS
-    One-time AI-support client enrollment for Windows.
+    Enroll a Windows PC for persistent SSH-only AI support.
 
 .DESCRIPTION
-    Configures the existing Windows -> Ubuntu SSH AI terminal setup (same
-    model as setup-opencode-windows.ps1), installs the persistent Remote
-    Desktop agent, and registers this PC in the dedicated ai_support_clients
-    list via the device-enrollment Edge Function.
+    Installs a localhost-only Windows OpenSSH server and a persistent reverse
+    SSH tunnel to the trusted Ubuntu AI-support host. No Remote Desktop agent,
+    WebRTC component, controller, or inbound LAN firewall rule is installed.
 
-    SSH direction is ALWAYS Windows client -> trusted Ubuntu AI-support
-    host. This script never installs a Windows SSH server or a general
-    inbound SSH port. The persistent Remote Desktop agent adds its existing
-    program-scoped Windows Firewall rule.
+    The reverse tunnel is:
+      Ubuntu 127.0.0.1:<TunnelPort> -> Windows 127.0.0.1:22
 
-    What it does, in order:
-      1. Installs the Windows OpenSSH Client capability if missing
-         (requires Administrator PowerShell only when the capability is missing).
-      2. Creates a dedicated ed25519 key (~/.ssh/id_ed25519_ai_support).
-      3. Adds the SSH host alias 'ai-support-ubuntu' (IdentitiesOnly,
-         RequestTTY, ServerAliveInterval, StrictHostKeyChecking accept-new).
-      4. Copies the PUBLIC key to Ubuntu (one interactive password prompt
-         at most; passwords are handled by ssh itself and never printed
-         or stored by this script).
-      5. Verifies key-based SSH works (BatchMode, no password fallback).
-      6. Installs a safe wrapper (~/.local bin/ai-support-opencode.cmd)
-         that starts the existing remote-desktop-cli support-watch watcher
-         on Ubuntu and then execs opencode in the remote project.
-      7. Downloads and enrolls the persistent Remote Desktop agent with its
-         separate purpose-scoped one-time token, then installs and starts its
-         Windows service (with a separate UAC prompt). The downloaded binary
-         is SHA-256 verified before elevation. This makes the PC visible and
-         controllable from Ubuntu through remote-desktop-cli ai-connect.
-      8. POSTs the AI-support enrollment token and public metadata to the
-         device-enrollment Edge Function. That token is used exactly once.
-
-    The script never prints or stores passwords or private key material.
-    The enrollment tokens only appear in the command line that invoked it.
+    The Windows side runs the tunnel as a SYSTEM scheduled task at startup.
+    The Ubuntu client key is installed in the dedicated Windows ai-support
+    account. The Windows-to-Ubuntu tunnel key is restricted to forwarding only.
 
 .NOTES
-    Syntax/static validation (run on a machine with PowerShell 5+):
-      powershell -NoProfile -Command "$t=$null;$e=$null;[System.Management.Automation.Language.Parser]::ParseFile('setup-ai-support-windows.ps1',[ref]$t,[ref]$e)|Out-Null;if($e){$e;exit 1}else{'OK'}"
+    Run from an Administrator PowerShell. The enrollment token is one-time and
+    expires after 30 minutes.
 #>
 [CmdletBinding()]
 param(
@@ -48,21 +25,33 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$EnrollmentToken,
     [Parameter(Mandatory = $true)]
-    [string]$AgentEnrollmentToken,
-    [Parameter(Mandatory = $true)]
     [string]$ClientName,
+    [Parameter(Mandatory = $true)]
+    [string]$SupportPublicKeyUrl,
     [string]$UbuntuHost = '192.168.1.92',
     [string]$UbuntuUser = 'dennis',
-    [string]$RemoteProject = '/home/dennis/projekter/aisupport',
-    [int]$Port = 22,
+    [int]$UbuntuPort = 22,
     [string]$ClientId = '',
-    [Parameter(Mandatory = $true)]
-    [string]$AgentDownloadUrl,
-    [Parameter(Mandatory = $true)]
-    [string]$AgentSha256
+    [int]$WindowsSshPort = 22
 )
 
 $ErrorActionPreference = 'Stop'
+$TunnelPortMinimum = 42000
+$TunnelPortMaximum = 42999
+$WindowsSshUser = 'ai-support'
+$TaskName = 'AI-Support-Persistent-Tunnel'
+$StateDirectory = Join-Path $env:ProgramData 'AI-Support'
+$TunnelKey = Join-Path $StateDirectory 'id_ed25519_ai_support_tunnel'
+$BootstrapKey = Join-Path $StateDirectory 'id_ed25519_ai_support_bootstrap'
+$KnownHosts = Join-Path $StateDirectory 'known_hosts'
+$SupportPublicKeyPath = Join-Path $StateDirectory 'support.pub'
+$SupportShellPath = Join-Path $StateDirectory 'ai-support-shell.ps1'
+$ActivityLogPath = Join-Path $StateDirectory 'activity.log'
+$ActivityConfigPath = Join-Path $StateDirectory 'activity-config.json'
+$SshdConfigBackup = Join-Path $StateDirectory 'sshd_config.backup'
+$TokenPolicyBackup = Join-Path $StateDirectory 'token-policy.backup'
+$TunnelPublicKey = "$TunnelKey.pub"
+$BootstrapPublicKey = "$BootstrapKey.pub"
 
 function Write-Step([string]$Message) {
     Write-Host "`n==> $Message" -ForegroundColor Cyan
@@ -74,251 +63,398 @@ function Test-Administrator {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-# ---------- Input validation (no shell interpolation of arbitrary input) ----------
-
-if ($EnrollmentUrl -notmatch '^https://[A-Za-z0-9._:/?=&-]{1,200}$') {
-    throw 'EnrollmentUrl skal vaere en gyldig https-URL.'
-}
-if ([string]::IsNullOrWhiteSpace($EnrollmentToken) -or $EnrollmentToken.Length -gt 200) {
-    throw 'EnrollmentToken mangler eller er ugyldigt.'
-}
-if ([string]::IsNullOrWhiteSpace($AgentEnrollmentToken) -or $AgentEnrollmentToken.Length -gt 200) {
-    throw 'AgentEnrollmentToken mangler eller er ugyldigt.'
-}
-if ($AgentDownloadUrl -notmatch '^https://[A-Za-z0-9._:/?=&-]{1,200}$') {
-    throw 'AgentDownloadUrl skal vaere en gyldig https-URL.'
-}
-if ($AgentSha256 -notmatch '^[A-Fa-f0-9]{64}$') {
-    throw 'AgentSha256 skal vaere en SHA-256 hash.'
-}
-if ($UbuntuHost -notmatch '^[A-Za-z0-9._:-]{1,100}$') {
-    throw 'UbuntuHost indeholder ugyldige tegn.'
-}
-if ($UbuntuUser -notmatch '^[A-Za-z0-9._-]{1,32}$') {
-    throw 'UbuntuUser indeholder ugyldige tegn.'
-}
-if ($RemoteProject -notmatch '^/[A-Za-z0-9/._-]{1,100}$') {
-    throw 'RemoteProject skal vaere en absolut sti med gyldige tegn.'
-}
-if ($Port -lt 1 -or $Port -gt 65535) {
-    throw 'Port skal vaere mellem 1 og 65535.'
-}
-$safeClientName = ($ClientName -replace '[^\p{L}\p{N}\s._-]', '').Trim()
-if (-not $safeClientName -or $safeClientName.Length -gt 64) {
-    throw 'ClientName skal vaere mellem 1 og 64 tegn.'
+function Convert-ToBase64([string]$Value) {
+    return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Value))
 }
 
-# Stable, safe client identifier: ai-<16 lowercase hex>.
-if ($ClientId -notmatch '^(ai-[a-z0-9]{8,32})?$') {
-    throw 'ClientId har et ugyldigt format.'
-}
-if (-not $ClientId) {
-    $bytes = New-Object byte[] 8
-    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+function New-RandomBytes([int]$Count) {
+    $bytes = New-Object byte[] $Count
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
     try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+    return $bytes
+}
+
+function New-Ed25519Key([string]$KeyPath, [string]$Comment, [string]$SshKeygenPath) {
+    if (Test-Path $KeyPath) {
+        if (-not (Test-Path "$KeyPath.pub")) {
+            Remove-Item -Force $KeyPath
+        }
+    }
+    if (-not (Test-Path $KeyPath)) {
+        $keygen = Start-Process -FilePath $SshKeygenPath -ArgumentList @(
+            '-t', 'ed25519', '-f', $KeyPath, '-N', '""', '-C', $Comment
+        ) -Wait -PassThru -NoNewWindow
+        if ($keygen.ExitCode -ne 0) {
+            throw "Kunne ikke generere SSH-noeglen $KeyPath."
+        }
+    }
+    if (-not (Test-Path "$KeyPath.pub")) {
+        throw "SSH-noeglen blev ikke oprettet korrekt: $KeyPath"
+    }
+}
+
+function Set-StateAcl {
+    New-Item -ItemType Directory -Path $StateDirectory -Force | Out-Null
+    & icacls.exe $StateDirectory /inheritance:r /grant:r `
+        '*S-1-5-18:(OI)(CI)(F)' `
+        '*S-1-5-32-544:(OI)(CI)(F)' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke beskytte AI-support state-mappen.' }
+    foreach ($path in @($TunnelKey, $TunnelPublicKey, $BootstrapKey, $BootstrapPublicKey, $KnownHosts, $SupportPublicKeyPath, $SupportShellPath, $ActivityLogPath, $ActivityConfigPath, $SshdConfigBackup, $TokenPolicyBackup)) {
+        if (Test-Path $path) {
+            $aclArgs = @('/inheritance:r', '/grant:r', '*S-1-5-18:F', '*S-1-5-32-544:F')
+            if ($path -in @($SupportShellPath, $ActivityLogPath, $ActivityConfigPath)) {
+                $aclArgs += ("{0}:F" -f $WindowsSshUser)
+            }
+            & icacls.exe $path @aclArgs | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Kunne ikke beskytte filen $path." }
+        }
+    }
+}
+
+function Get-KeyParts([string]$KeyLine, [string]$Label) {
+    $parts = $KeyLine.Trim() -split '\s+'
+    if ($parts.Count -lt 2) { throw "$Label er ugyldig." }
+    if ($parts[0] -notmatch '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521)$') {
+        throw "$Label bruger en ugyldig SSH-nøgletype."
+    }
+    if ($parts[1] -notmatch '^[A-Za-z0-9+/]+={0,2}$') { throw "$Label har ugyldigt format." }
+    return @($parts[0], $parts[1])
+}
+
+function Invoke-UbuntuSsh([string]$IdentityFile, [string]$RemoteCommand, [switch]$BatchMode) {
+    $args = @(
+        '-o', "UserKnownHostsFile=$KnownHosts",
+        '-o', 'StrictHostKeyChecking=accept-new',
+        '-o', 'IdentitiesOnly=yes',
+        '-i', $IdentityFile,
+        '-p', "$UbuntuPort"
+    )
+    if ($BatchMode) { $args += @('-o', 'BatchMode=yes') }
+    $args += @("$UbuntuUser@$UbuntuHost", $RemoteCommand)
+    & $sshCommand.Source @args
+    return $LASTEXITCODE
+}
+
+function Invoke-UbuntuPasswordSsh([string]$RemoteCommand) {
+    $args = @(
+        '-o', "UserKnownHostsFile=$KnownHosts",
+        '-o', 'StrictHostKeyChecking=accept-new',
+        '-o', 'PubkeyAuthentication=no',
+        '-o', 'PreferredAuthentications=password,keyboard-interactive',
+        '-p', "$UbuntuPort",
+        "$UbuntuUser@$UbuntuHost",
+        $RemoteCommand
+    )
+    & $sshCommand.Source @args
+    return $LASTEXITCODE
+}
+
+function Remove-RemoteKey([string]$IdentityFile, [string]$KeyBase64) {
+    $command = "set -eu; test -f ~/.ssh/authorized_keys || exit 0; tmp=\`$(mktemp); awk -v key='$KeyBase64' '\`$2 != key { print }' ~/.ssh/authorized_keys > \`$tmp; mv \`$tmp ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys"
+    $exitCode = Invoke-UbuntuSsh $IdentityFile $command
+    if ($exitCode -ne 0) { throw 'Kunne ikke fjerne bootstrap-noeglen fra Ubuntu.' }
+}
+
+function New-WindowsSupportUser {
+    $existing = Get-LocalUser -Name $WindowsSshUser -ErrorAction SilentlyContinue
+    if (-not $existing) {
+        $randomBytes = New-RandomBytes 32
+        $passwordText = ([Convert]::ToBase64String($randomBytes) + 'A1!').Substring(0, 34)
+        $password = ConvertTo-SecureString $passwordText -AsPlainText -Force
+        New-LocalUser -Name $WindowsSshUser -Password $password -Description 'SSH-only AI support account' -PasswordNeverExpires | Out-Null
+    }
+    $administratorsGroup = ([Security.Principal.SecurityIdentifier]'S-1-5-32-544').Translate([Security.Principal.NTAccount]).Value
+    $isAdministrator = Get-LocalGroupMember -Group $administratorsGroup -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match "\\$WindowsSshUser$" }
+    if (-not $isAdministrator) {
+        Add-LocalGroupMember -Group $administratorsGroup -Member $WindowsSshUser
+    }
+    $supportHome = Join-Path $env:SystemDrive "Users\$WindowsSshUser"
+    $supportSshDirectory = Join-Path $supportHome '.ssh'
+    New-Item -ItemType Directory -Path $supportSshDirectory -Force | Out-Null
+    $authorizedKeys = Join-Path $supportSshDirectory 'authorized_keys'
+    Set-Content -Path $authorizedKeys -Value $SupportKeyLine -Encoding ascii
+    & icacls.exe $supportHome /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)(F)' '*S-1-5-32-544:(OI)(CI)(F)' ("{0}:(OI)(CI)(F)" -f $WindowsSshUser) | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke beskytte Windows AI-support brugerens filer.' }
+    & icacls.exe $authorizedKeys /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' ("{0}:F" -f $WindowsSshUser) | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke beskytte Windows authorized_keys.' }
+}
+
+function Install-SupportShell {
+    $shellContent = @'
+$ErrorActionPreference = 'Continue'
+$logPath = 'C:\ProgramData\AI-Support\activity.log'
+$configPath = 'C:\ProgramData\AI-Support\activity-config.json'
+$command = $env:SSH_ORIGINAL_COMMAND
+$session = $env:SSH_CONNECTION
+$timestamp = (Get-Date).ToUniversalTime().ToString('o')
+$safeCommand = if ([string]::IsNullOrWhiteSpace($command)) { '[interactive shell]' } else { ($command -replace "`r", ' ' -replace "`n", ' ') }
+$localLine = "$timestamp user=$env:USERNAME connection=$session command=$safeCommand"
+Add-Content -LiteralPath $logPath -Encoding UTF8 -Value $localLine
+try {
+    $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+    $eventBody = @{
+        action = 'log-ai-support'
+        client_id = [string]$config.client_id
+        log_token = [string]$config.log_token
+        event = 'AI_SUPPORT_COMMAND'
+        command = $safeCommand.Substring(0, [Math]::Min(4000, $safeCommand.Length))
+    } | ConvertTo-Json -Compress
+    Invoke-RestMethod -Uri ([string]$config.log_url) -Method Post -ContentType 'application/json' -Body $eventBody -TimeoutSec 10 | Out-Null
+} catch { Add-Content -LiteralPath $logPath -Encoding UTF8 -Value "$timestamp log_upload_failed=$($_.Exception.Message)" }
+try {
+    if ([string]::IsNullOrWhiteSpace($command)) {
+        & powershell.exe -NoLogo -NoProfile
+    } else {
+        & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command $command
+    }
+    $exitCode = $LASTEXITCODE
+} finally { }
+exit $exitCode
+'@
+    Set-Content -LiteralPath $SupportShellPath -Value $shellContent -Encoding UTF8
+    New-Item -ItemType File -Path $ActivityLogPath -Force | Out-Null
+    & icacls.exe $SupportShellPath $ActivityLogPath /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' ("{0}:F" -f $WindowsSshUser) | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke beskytte AI-support logfilerne.' }
+}
+
+function Configure-WindowsSshd {
+    $sshdConfig = Join-Path $env:ProgramData 'ssh\sshd_config'
+    if (-not (Test-Path $sshdConfig)) { throw 'OpenSSH Server konfigurationsfil blev ikke fundet.' }
+    if (-not (Test-Path $SshdConfigBackup)) { Copy-Item -LiteralPath $sshdConfig -Destination $SshdConfigBackup -Force }
+    $policyPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+    $policy = Get-ItemProperty -Path $policyPath -Name LocalAccountTokenFilterPolicy -ErrorAction SilentlyContinue
+    if (-not (Test-Path $TokenPolicyBackup)) {
+        if ($null -eq $policy) { 'MISSING' | Set-Content -LiteralPath $TokenPolicyBackup -Encoding ascii }
+        else { ([int]$policy.LocalAccountTokenFilterPolicy).ToString() | Set-Content -LiteralPath $TokenPolicyBackup -Encoding ascii }
+    }
+    $config = Get-Content -Path $sshdConfig -Raw
+    $config = [regex]::Replace($config, '(?ms)\r?\n?# AI_SUPPORT_GLOBAL_BEGIN\r?\n.*?\r?\n# AI_SUPPORT_GLOBAL_END\r?\n?', "`r`n")
+    $config = [regex]::Replace($config, '(?ms)\r?\n?# AI_SUPPORT_MATCH_BEGIN\r?\n.*?\r?\n# AI_SUPPORT_MATCH_END\r?\n?', "`r`n")
+    $config = [regex]::Replace($config, '(?m)^\s*ListenAddress\s+.*\r?\n?', '')
+    $config = [regex]::Replace($config, '(?m)^\s*Port\s+.*\r?\n?', '')
+    $globalBlock = @"
+
+# AI_SUPPORT_GLOBAL_BEGIN
+Port $WindowsSshPort
+ListenAddress 127.0.0.1
+# AI_SUPPORT_GLOBAL_END
+"@
+    $matchBlock = @"
+
+# AI_SUPPORT_MATCH_BEGIN
+Match User $WindowsSshUser
+    AuthorizedKeysFile .ssh/authorized_keys
+    ForceCommand powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:/ProgramData/AI-Support/ai-support-shell.ps1
+    PasswordAuthentication no
+    PubkeyAuthentication yes
+    AuthenticationMethods publickey
+    AllowTcpForwarding no
+    AllowAgentForwarding no
+    X11Forwarding no
+    PermitTunnel no
+# AI_SUPPORT_MATCH_END
+"@
+    $match = [regex]::Match($config, '(?m)^\s*Match\s+')
+    if ($match.Success) {
+        $config = $config.Insert($match.Index, $globalBlock)
+    } else {
+        $config += $globalBlock
+    }
+    $config += $matchBlock
+    Set-Content -Path $sshdConfig -Value $config -Encoding ascii
+    New-Item -Path $policyPath -Force | Out-Null
+    New-ItemProperty -Path $policyPath -Name LocalAccountTokenFilterPolicy -PropertyType DWord -Value 1 -Force | Out-Null
+    & (Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe') -t -f $sshdConfig
+    if ($LASTEXITCODE -ne 0) { throw 'OpenSSH Server konfigurationen er ugyldig.' }
+    Set-Service -Name sshd -StartupType Automatic
+    Restart-Service -Name sshd -Force
+    try {
+        Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue | Disable-NetFirewallRule
+    } catch { }
+    $listener = Get-NetTCPConnection -LocalPort $WindowsSshPort -State Listen -ErrorAction SilentlyContinue |
+        Where-Object { $_.LocalAddress -eq '127.0.0.1' }
+    if (-not $listener) { throw 'OpenSSH Server lytter ikke kun på 127.0.0.1.' }
+}
+
+function Build-TunnelArguments([int]$Port) {
+    return @(
+        '-N', '-T',
+        '-o', 'BatchMode=yes',
+        '-o', 'ExitOnForwardFailure=yes',
+        '-o', 'ServerAliveInterval=30',
+        '-o', 'ServerAliveCountMax=3',
+        '-o', 'ConnectTimeout=15',
+        '-o', "UserKnownHostsFile=$KnownHosts",
+        '-o', 'StrictHostKeyChecking=accept-new',
+        '-o', 'IdentitiesOnly=yes',
+        '-i', $TunnelKey,
+        '-p', "$UbuntuPort",
+        '-R', "127.0.0.1:${Port}:127.0.0.1:${WindowsSshPort}",
+        "$UbuntuUser@$UbuntuHost"
+    )
+}
+
+if (-not (Test-Administrator)) { throw 'Dette setup skal koeres fra en Administrator-PowerShell.' }
+if ($EnrollmentUrl -notmatch '^https://[A-Za-z0-9._:/?=&-]{1,200}$') { throw 'EnrollmentUrl skal vaere en gyldig https-URL.' }
+if ($SupportPublicKeyUrl -notmatch '^https://[A-Za-z0-9._:/?=&-]{1,200}$') { throw 'SupportPublicKeyUrl skal vaere en gyldig https-URL.' }
+if ([string]::IsNullOrWhiteSpace($EnrollmentToken) -or $EnrollmentToken.Length -gt 200) { throw 'EnrollmentToken mangler eller er ugyldigt.' }
+if ($UbuntuHost -notmatch '^[A-Za-z0-9._:-]{1,100}$') { throw 'UbuntuHost indeholder ugyldige tegn.' }
+if ($UbuntuUser -notmatch '^[A-Za-z0-9._-]{1,32}$') { throw 'UbuntuUser indeholder ugyldige tegn.' }
+if ($UbuntuPort -lt 1 -or $UbuntuPort -gt 65535) { throw 'UbuntuPort skal vaere mellem 1 og 65535.' }
+if ($WindowsSshPort -lt 1 -or $WindowsSshPort -gt 65535) { throw 'WindowsSshPort skal vaere mellem 1 og 65535.' }
+$safeClientName = ($ClientName -replace '[^\p{L}\p{N}\s._-]', '').Trim()
+if (-not $safeClientName -or $safeClientName.Length -gt 64) { throw 'ClientName skal vaere mellem 1 og 64 tegn.' }
+if ($ClientId -notmatch '^(ai-[a-z0-9]{8,32})?$') { throw 'ClientId har et ugyldigt format.' }
+if (-not $ClientId) {
+    $bytes = New-RandomBytes 8
     $ClientId = 'ai-' + (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
 }
-
 try {
-
-    # ---------- 1. OpenSSH Client (admin only for this step) ----------
-
     $sshCommand = Get-Command ssh.exe -ErrorAction SilentlyContinue
-    if (-not $sshCommand) {
-        if (-not (Test-Administrator)) {
-            throw 'OpenSSH Client mangler. Aabn en Administrator-PowerShell og koer scriptet igen (kun dette trin kraever admin).'
-        }
+    $sshKeygenCommand = Get-Command ssh-keygen.exe -ErrorAction SilentlyContinue
+    if (-not $sshCommand -or -not $sshKeygenCommand) {
         Write-Step 'Installerer Windows OpenSSH Client'
         Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0 | Out-Null
         $sshCommand = Get-Command ssh.exe -ErrorAction Stop
+        $sshKeygenCommand = Get-Command ssh-keygen.exe -ErrorAction Stop
     }
-    else {
-        Write-Step 'OpenSSH Client fundet - ingen admin noedvendig'
+    $serverCapability = Get-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+    if ($serverCapability.State -ne 'Installed') {
+        Write-Step 'Installerer Windows OpenSSH Server'
+        Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0 | Out-Null
     }
-    $sshKeygenCommand = Get-Command ssh-keygen.exe -ErrorAction Stop
 
-    # ---------- 2. Dedicated ed25519 key ----------
-
-    $sshKeyDirectory = Join-Path $HOME '.ssh'
-    $sshKey = Join-Path $sshKeyDirectory 'id_ed25519_ai_support'
-    $sshPublicKey = "$sshKey.pub"
-    $sshConfig = Join-Path $sshKeyDirectory 'config'
-
-    Write-Step 'Opretter dedikeret SSH-noegle'
-    New-Item -ItemType Directory -Path $sshKeyDirectory -Force | Out-Null
-    if ((Test-Path $sshKey) -and -not (Test-Path $sshPublicKey)) {
-        # A previous interrupted keygen can leave only a partial private file.
-        # It is unusable without its public half and safe to remove.
-        Remove-Item -Force $sshKey
+    New-Item -ItemType Directory -Path $StateDirectory -Force | Out-Null
+    try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
+    Invoke-WebRequest -UseBasicParsing -Uri $SupportPublicKeyUrl -OutFile $SupportPublicKeyPath
+    $supportPublicKey = (Get-Content $SupportPublicKeyPath -Raw).Trim()
+    $supportParts = Get-KeyParts $supportPublicKey 'SupportPublicKey'
+    $supportFingerprint = (& $sshKeygenCommand.Source -lf $SupportPublicKeyPath | Select-Object -First 1)
+    if ($supportFingerprint -notmatch 'SHA256:gZg0wT5MBRnB7G\+RJlDPudJf8tQJc3oKcm1cV7UtwY0') {
+        throw 'Support public key fingerprint matcher ikke den kendte Ubuntu AI-support noegle.'
     }
-    if (-not (Test-Path $sshKey)) {
-        # Windows PowerShell 5.1 drops an empty native argument when invoked
-        # as `-N ''`. Start-Process preserves the explicit `""` argument.
-        $keygen = Start-Process -FilePath $sshKeygenCommand.Source -ArgumentList @(
-            '-t', 'ed25519', '-f', $sshKey, '-N', '""', '-C', $ClientId
-        ) -Wait -PassThru -NoNewWindow
-        if ($keygen.ExitCode -ne 0) {
-            Remove-Item -Force -ErrorAction SilentlyContinue $sshKey, $sshPublicKey
-            throw 'Kunne ikke generere SSH-noeglen.'
+    $SupportKeyLine = "$($supportParts[0]) $($supportParts[1]) ai-support"
+
+    Write-Step 'Opretter dedikeret Windows SSH-supportkonto'
+    New-WindowsSupportUser
+    Install-SupportShell
+
+    Write-Step 'Konfigurerer localhost-only OpenSSH Server'
+    Configure-WindowsSshd
+
+    Write-Step 'Opretter tunnelnoegler'
+    Set-StateAcl
+    New-Ed25519Key $TunnelKey "$ClientId-tunnel" $sshKeygenCommand.Source
+    New-Ed25519Key $BootstrapKey "$ClientId-bootstrap" $sshKeygenCommand.Source
+    Set-StateAcl
+    $tunnelParts = Get-KeyParts ((Get-Content $TunnelPublicKey -Raw).Trim()) 'Tunnel public key'
+    $bootstrapParts = Get-KeyParts ((Get-Content $BootstrapPublicKey -Raw).Trim()) 'Bootstrap public key'
+    $tunnelBase64 = $tunnelParts[1]
+    $bootstrapBase64 = $bootstrapParts[1]
+    $bootstrapKeyLine = "$($bootstrapParts[0]) $bootstrapBase64 $ClientId-bootstrap"
+
+    Write-Step 'Installerer bootstrap- og tunnelnoegler paa Ubuntu'
+    $bootstrapLineEncoded = Convert-ToBase64 $bootstrapKeyLine
+    # The port-specific tunnel key line is installed inside the retry loop.
+    $remoteInstall = "set -eu; umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; tmp=\`$(mktemp); awk -v k='$bootstrapBase64' -v t='$tunnelBase64' '\`$2 != k && \`$2 != t { print }' ~/.ssh/authorized_keys > \`$tmp; printf '%s\n' '$bootstrapLineEncoded' | base64 -d >> \`$tmp; mv \`$tmp ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys"
+    if ((Invoke-UbuntuPasswordSsh $remoteInstall) -ne 0) { throw 'Kunne ikke installere bootstrap-noeglen paa Ubuntu.' }
+
+    $tunnelVerified = $false
+    $result = $null
+    for ($attempt = 1; $attempt -le 5 -and -not $tunnelVerified; $attempt++) {
+        $tunnelPort = Get-Random -Minimum $TunnelPortMinimum -Maximum ($TunnelPortMaximum + 1)
+        $tunnelKeyLine = "command=`"if [ -n \`"`$SSH_ORIGINAL_COMMAND\`" ]; then exit 1; fi; exec /usr/bin/env AI_SUPPORT_CLIENT_ID=$ClientId /usr/bin/sleep infinity`",no-pty,no-agent-forwarding,no-X11-forwarding,no-user-rc,permitlisten=`"127.0.0.1:$tunnelPort`" $($tunnelParts[0]) $tunnelBase64 $ClientId-tunnel"
+        $tunnelLineEncoded = Convert-ToBase64 $tunnelKeyLine
+        $remoteTunnelKey = "set -eu; tmp=\`$(mktemp); awk -v key='$tunnelBase64' '\`$2 != key { print }' ~/.ssh/authorized_keys > \`$tmp; printf '%s\n' '$tunnelLineEncoded' | base64 -d >> \`$tmp; mv \`$tmp ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys"
+        if ((Invoke-UbuntuSsh $BootstrapKey $remoteTunnelKey) -ne 0) { throw 'Kunne ikke konfigurere den begrænsede tunnelnoegle.' }
+
+        Write-Step "Tester reverse SSH tunnel paa port $tunnelPort (forsog $attempt/5)"
+        $tempStdout = Join-Path $StateDirectory 'enrollment-tunnel.out.log'
+        $tempStderr = Join-Path $StateDirectory 'enrollment-tunnel.err.log'
+        $temporaryTunnel = Start-Process -FilePath $sshCommand.Source -ArgumentList (Build-TunnelArguments $tunnelPort) -RedirectStandardOutput $tempStdout -RedirectStandardError $tempStderr -WindowStyle Hidden -PassThru
+        try {
+            Start-Sleep -Seconds 4
+            $checkCommand = "ss -ltn | grep -Eq '[.:]$tunnelPort[[:space:]]'"
+            $checkExit = Invoke-UbuntuSsh $BootstrapKey $checkCommand -BatchMode
+            if ($checkExit -ne 0) { throw "Reverse tunnel kunne ikke verificeres paa Ubuntu port $tunnelPort." }
+
+            $tunnelVerified = $true
+        }
+        catch {
+            if ($attempt -eq 5) { throw }
+            Write-Host 'Porten kunne ikke registreres; vaelger en ny reserveret port.' -ForegroundColor Yellow
+        }
+        finally {
+            if ($temporaryTunnel -and -not $temporaryTunnel.HasExited) { Stop-Process -Id $temporaryTunnel.Id -Force -ErrorAction SilentlyContinue }
         }
     }
-    if (-not (Test-Path $sshPublicKey)) { throw 'SSH-noeglen blev ikke oprettet korrekt.' }
+    if (-not $tunnelVerified) { throw 'AI-support tunnel kunne ikke verificeres.' }
 
-    # ---------- 3. SSH host alias ----------
+    Write-Step 'Installerer persistent tunnel ved Windows-opstart'
+    $taskArgs = (Build-TunnelArguments $tunnelPort) -join ' '
+    $taskAction = New-ScheduledTaskAction -Execute $sshCommand.Source -Argument $taskArgs
+    $taskTrigger = New-ScheduledTaskTrigger -AtStartup
+    $taskSettings = New-ScheduledTaskSettingsSet -Hidden -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
+    $taskPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    Register-ScheduledTask -TaskName $TaskName -Action $taskAction -Trigger $taskTrigger -Settings $taskSettings -Principal $taskPrincipal -Force | Out-Null
 
-    $hostBlock = @"
-Host ai-support-ubuntu
-    HostName $UbuntuHost
-    Port $Port
-    User $UbuntuUser
-    IdentityFile $sshKey
-    IdentitiesOnly yes
-    RequestTTY force
-    ServerAliveInterval 30
-    StrictHostKeyChecking accept-new
-"@
-
-    Write-Step 'Opdaterer SSH-config'
-    $existingConfig = if (Test-Path $sshConfig) { Get-Content $sshConfig -Raw } else { '' }
-    if ($existingConfig -notmatch '(?m)^Host ai-support-ubuntu\s*$') {
-        Add-Content -Path $sshConfig -Value "`n$hostBlock" -Encoding ascii
-    }
-
-    # ---------- 4. Copy PUBLIC key to Ubuntu (existing key-copy model) ----------
-
-    Write-Step 'Kopierer public key til Ubuntu (max. een password-promt, haandteret af ssh selv)'
-    $publicKey = (Get-Content $sshPublicKey -Raw).Trim()
-    # Strict format check: the key is embedded in a single-quoted remote shell
-    # command, so reject anything outside the canonical openssh format.
-    if ($publicKey -notmatch '^ssh-ed25519 [A-Za-z0-9+/]{68}( ai-[a-z0-9]{8,32})?$') {
-        throw 'Public key har et uventet format. Slet noeglen og koer scriptet igen.'
-    }
-    $remoteInstall = "umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; grep -Fqx -- '$publicKey' ~/.ssh/authorized_keys || printf '%s\n' '$publicKey' >> ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys"
-    & ssh.exe -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -i $sshKey -p $Port "$UbuntuUser@$UbuntuHost" $remoteInstall
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Kunne ikke kopiere SSH-noeglen til Ubuntu.'
-    }
-
-    # ---------- 5. Verify key-based SSH (no password fallback) ----------
-
-    Write-Step 'Verificerer SSH-opsaetning'
-    & ssh.exe -o BatchMode=yes ai-support-ubuntu 'echo ai-support-ok'
-    if ($LASTEXITCODE -ne 0) {
-        throw 'SSH-verifikation fejlede (noeglebaseret login virker ikke endnu).'
-    }
-
-    # ---------- 6. Safe opencode wrapper (starts remote support watcher) ----------
-
-    Write-Step 'Opretter ai-support-opencode.cmd wrapper'
-    $binDirectory = Join-Path $HOME 'bin'
-    $wrapper = Join-Path $binDirectory 'ai-support-opencode.cmd'
-    New-Item -ItemType Directory -Path $binDirectory -Force | Out-Null
-    $remoteHome = "/home/$UbuntuUser"
-    $wrapperContent = @"
-@echo off
-setlocal EnableExtensions
-ssh.exe -tt ai-support-ubuntu "if [ -x $remoteHome/.local/bin/remote-desktop-cli ] && ! pgrep -f '[r]emote-desktop-cli support-watch' >/dev/null; then mkdir -p $remoteHome/.local/state/remote-desktop; nohup $remoteHome/.local/bin/remote-desktop-cli support-watch >> $remoteHome/.local/state/remote-desktop/support-watch.log 2>&1 </dev/null & fi; cd '$RemoteProject' && exec $remoteHome/.local/bin/opencode"
-"@
-    Set-Content -Path $wrapper -Value $wrapperContent -Encoding ascii
-
-    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $pathEntries = @($userPath -split ';' | Where-Object { $_ })
-    if ($pathEntries -notcontains $binDirectory) {
-        [Environment]::SetEnvironmentVariable('Path', (($pathEntries + $binDirectory) -join ';'), 'User')
-    }
-
-    # ---------- 7. Public key fingerprint (public key only) ----------
-
-    $fingerprintOutput = (& ssh-keygen.exe -lf $sshPublicKey) | Select-Object -First 1
-    $fingerprint = ''
-    if ($fingerprintOutput -match '(SHA256:[A-Za-z0-9+/=]{43})') {
-        $fingerprint = $Matches[1]
-    }
-
-    # ---------- 8. Persistent Remote Desktop agent enrollment ----------
-
-    Write-Step 'Installerer persistent Remote Desktop agent'
-    try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
-    $agentDirectory = Join-Path $env:TEMP 'RemoteDesktopAISupport'
-    $agentPath = Join-Path $agentDirectory 'remote-agent.exe'
-    New-Item -ItemType Directory -Path $agentDirectory -Force | Out-Null
-    Invoke-WebRequest -UseBasicParsing -Uri $AgentDownloadUrl -OutFile $agentPath
-    if (-not (Test-Path $agentPath)) { throw 'Remote Desktop agent blev ikke downloadet.' }
-    $actualHash = (Get-FileHash -Algorithm SHA256 -Path $agentPath).Hash
-    if ($actualHash -and $actualHash.ToLowerInvariant() -ne $AgentSha256.ToLowerInvariant()) {
-        Remove-Item -Force -ErrorAction SilentlyContinue $agentPath
-        throw 'Remote Desktop agent checksum matcher ikke det forventede artifact.'
-    }
-    # Start-Process joins an argument array before launching the process. Quote
-    # values explicitly so names containing spaces remain one Go flag value.
-    $agentArguments = '--enroll-token "' + $AgentEnrollmentToken + '" --device-name "' + $safeClientName + '" --install --start'
-    $agentStart = @{
-        FilePath = $agentPath
-        Wait = $true
-        PassThru = $true
-        ArgumentList = $agentArguments
-    }
-    if (-not (Test-Administrator)) {
-        # Interactive desktop sessions need UAC; elevated remote sessions do
-        # not have a desktop on which a RunAs prompt can be accepted.
-        $agentStart.Verb = 'RunAs'
-    }
-    $agentProcess = Start-Process @agentStart
-    if ($agentProcess.ExitCode -ne 0) {
-        throw 'Remote Desktop agent enrollment eller service-start fejlede.'
-    }
-    $agentRunning = $false
-    for ($attempt = 0; $attempt -lt 30; $attempt++) {
-        $service = Get-Service -Name 'RemoteDesktopAgent' -ErrorAction SilentlyContinue
-        if ($service -and $service.Status -eq 'Running') {
-            $agentRunning = $true
+    Start-ScheduledTask -TaskName $TaskName
+    $taskReady = $false
+    for ($wait = 0; $wait -lt 12; $wait++) {
+        Start-Sleep -Seconds 2
+        $taskState = (Get-ScheduledTask -TaskName $TaskName).State
+        $checkCommand = "ss -ltn | grep -Eq '[.:]$tunnelPort[[:space:]]'"
+        if ($taskState -eq 'Running' -and (Invoke-UbuntuSsh $BootstrapKey $checkCommand -BatchMode) -eq 0) {
+            $taskReady = $true
             break
         }
-        Start-Sleep -Seconds 1
     }
-    if (-not $agentRunning) {
-        throw 'Remote Desktop agentens Windows Service kører ikke efter enrollment.'
-    }
+    if (-not $taskReady) { throw 'Persistent tunnel-tasken kunne ikke startes eller verificeres.' }
 
-    # ---------- 9. One-time AI-support enrollment POST ----------
-
-    Write-Step 'Registrerer klienten (engangstoken)'
-    try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
+    Write-Step 'Registrerer SSH-only klienten'
     $hostname = $env:COMPUTERNAME
     if ($hostname) { $hostname = $hostname.Substring(0, [Math]::Min(100, $hostname.Length)) }
     $platform = "windows-$($env:PROCESSOR_ARCHITECTURE)".ToLowerInvariant()
-    if ($platform.Length -gt 50) { $platform = $platform.Substring(0, 50) }
-
+    $fingerprintOutput = (& $sshKeygenCommand.Source -lf $TunnelPublicKey | Select-Object -First 1)
+    $fingerprint = if ($fingerprintOutput -match '(SHA256:[A-Za-z0-9+/=]{43})') { $Matches[1] } else { '' }
     $payload = @{
-        action               = 'enroll-ai-support'
-        enrollment_token     = $EnrollmentToken
-        client_id            = $ClientId
-        hostname             = $hostname
-        platform             = $platform
-        ssh_host             = $UbuntuHost
-        ssh_port             = $Port
-        ssh_user             = $UbuntuUser
-        ssh_key_fingerprint  = $fingerprint
+        action                = 'enroll-ai-support'
+        enrollment_token      = $EnrollmentToken
+        client_id             = $ClientId
+        hostname              = $hostname
+        platform              = $platform.Substring(0, [Math]::Min(50, $platform.Length))
+        ssh_host              = $UbuntuHost
+        ssh_port              = $UbuntuPort
+        ssh_user              = $UbuntuUser
+        ssh_key_fingerprint   = $fingerprint
+        tunnel_port           = $tunnelPort
+        windows_ssh_user      = $WindowsSshUser
+        windows_ssh_port      = $WindowsSshPort
     } | ConvertTo-Json
-
     $result = Invoke-RestMethod -Uri $EnrollmentUrl -Method Post -ContentType 'application/json' -Body $payload
-    if (-not $result -or $result.status -ne 'registered') {
-        throw 'Registreringen blev ikke gennemfoert.'
-    }
+    if (-not $result -or $result.status -ne 'registered') { throw 'Registreringen blev ikke gennemfoert.' }
+    if ([string]::IsNullOrWhiteSpace($result.activity_log_token)) { throw 'Registreringen returnerede ingen aktivitetslog-token.' }
+    @{ client_id = $ClientId; log_url = $EnrollmentUrl; log_token = $result.activity_log_token } |
+        ConvertTo-Json -Compress | Set-Content -LiteralPath $ActivityConfigPath -Encoding UTF8
+    & icacls.exe $ActivityConfigPath /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' ("{0}:F" -f $WindowsSshUser) | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke beskytte aktivitetslog-konfigurationen.' }
+
+    Remove-RemoteKey $BootstrapKey $bootstrapBase64
+    Remove-Item -Force -ErrorAction SilentlyContinue $BootstrapKey, $BootstrapPublicKey
+    Set-StateAcl
 
     Write-Host "`nSetup faerdig." -ForegroundColor Green
     Write-Host "AI-support klient registreret: $($result.client_name) ($($result.client_id))"
-    Write-Host 'Fra Ubuntu kan du nu koere: remote-desktop-cli ai-connect <klientnavn>'
-    Write-Host 'For lokal Windows -> Ubuntu terminal: aabn en ny CMD/Windows Terminal, og koer ai-support-opencode'
-    Write-Host "Ubuntu AI-support projekt: $RemoteProject"
-    Write-Host 'Retning: Windows -> Ubuntu SSH + outbound WebRTC-agent. Ingen generel inbound Windows-SSH-port er aabnet.'
-
+    Write-Host "Ubuntu tunnel endpoint: 127.0.0.1:$tunnelPort"
+    Write-Host "Windows SSH endpoint: $WindowsSshUser@127.0.0.1:$WindowsSshPort"
+    Write-Host 'Der er ikke installeret Remote Desktop-agent, WebRTC eller controller.'
+    Write-Host "Tunnel-task: $TaskName"
 }
 catch {
-    # Bounded, generic error output. Never echo the token or key material.
     $message = $_.Exception.Message
     if ($null -ne $message -and $message.Length -gt 300) { $message = $message.Substring(0, 300) }
-    Write-Host "`nAI-support setup fejlede: $message" -ForegroundColor Red
-    Write-Host 'Ret fejlen og koer scriptet igen med et nyt engangstoken fra dashboardet.' -ForegroundColor Yellow
+    Write-Host "`nAI-support SSH setup fejlede: $message" -ForegroundColor Red
+    Write-Host 'Kør setup igen med et nyt engangstoken fra dashboardet.' -ForegroundColor Yellow
     exit 1
 }

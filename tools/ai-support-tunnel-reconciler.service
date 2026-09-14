@@ -1,0 +1,21 @@
+[Unit]
+Description=AI-support SSH tunnel revocation reconciler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Environment=AI_SUPPORT_RECONCILER_CONFIG=/etc/ai-support/tunnel-reconciler.env
+ExecStart=/usr/local/libexec/ai-support-tunnel-reconciler.sh
+Restart=always
+RestartSec=10
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/dennis/.ssh
+ReadWritePaths=/run
+
+[Install]
+WantedBy=multi-user.target

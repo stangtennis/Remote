@@ -37,7 +37,7 @@ to normal authenticated users; approved admins can manage knowledge entries.
 Do not add passwords, access tokens, private keys, or raw command output to the
 knowledge table.
 
-## AI-support clients (Windows -> Ubuntu SSH + Remote Desktop enrollment)
+## AI-support clients (persistent SSH-only enrollment)
 
 This is a dedicated enrollment path that is **distinct** from both the portable
 AI-support EXE (one-click support codes / Quick Support) and the read-only MCP
@@ -51,82 +51,77 @@ helper on the trusted Ubuntu host can work with over SSH.
     clicks *Generér PowerShell-streng*.
 2. The dashboard calls the `device-enrollment` Edge Function with
    `action=create, purpose=ai_support`. The server enforces the admin gate and
-   returns two purpose-scoped tokens:
+   returns one purpose-scoped token:
    `purpose=ai_support` token creation requires `role='admin'` or
    `'super_admin'` in `user_approvals`; approved non-admins receive `403`.
-   One token is for `enroll-ai-support`; the other is for the existing native
-   agent `enroll` path. Ordinary `purpose='agent'` token creation is unchanged.
+   The token is only for `enroll-ai-support`; ordinary `purpose='agent'` token
+   creation is unchanged.
    Only SHA-256 hashes of the one-time tokens are stored (30-minute expiry,
    single use). The raw tokens are shown only in the generated PowerShell
    command.
 3. The generated one-liner downloads `setup-ai-support-windows.ps1` from the
    updates host and runs it with `-EnrollmentUrl`, `-EnrollmentToken`,
-   `-AgentEnrollmentToken`, and `-ClientName` (all safely single-quoted).
+   `-SupportPublicKeyUrl`, and `-ClientName` (all safely single-quoted). The
+   script pins the downloaded public key to the configured Ubuntu fingerprint.
 4. The script (same model as `setup-opencode-windows.ps1`) then:
-    - installs the Windows **OpenSSH Client** capability if missing (requires
-      an Administrator PowerShell only when the capability is missing);
-   - creates a dedicated `id_ed25519_ai_support` key if absent;
-   - configures the SSH host alias `ai-support-ubuntu`
-     (`IdentitiesOnly`, `RequestTTY`, `ServerAliveInterval 30`,
-     `StrictHostKeyChecking accept-new`);
-   - copies the **public** key to the Ubuntu AI-support host and verifies
-     key-based SSH with `BatchMode` (no password fallback);
-    - installs `~/bin/ai-support-opencode.cmd`, a wrapper that starts the
-      existing `remote-desktop-cli support-watch` watcher on Ubuntu and then
-      execs `opencode` in the remote project;
-    - computes the SHA-256 fingerprint of the **public** key;
-    - downloads the current `remote-agent.exe`, exchanges the separate agent
-      token, verifies the pinned SHA-256 artifact, installs the persistent
-      Windows service, and starts it (one UAC prompt);
-    - POSTs `action=enroll-ai-support` to `device-enrollment` **only after SSH
-      verification and agent startup succeed**.
-5. The agent token uses the existing `consume_device_enrollment` RPC and
-   creates the PC in `remote_devices`. Therefore Ubuntu can use
-   `remote-desktop-cli list`, `remote-desktop-cli connect <name>`, or trusted
-   `remote-desktop-cli ai-connect <name>` with `RD_AI_CONTROLLER_KEY`.
+     - installs the Windows **OpenSSH Client and Server** capabilities;
+      - creates the dedicated local `ai-support` account as a local Windows
+        Administrator and installs the Ubuntu operator's public key;
+     - configures Windows OpenSSH Server to listen only on `127.0.0.1`;
+     - creates a forwarding-only tunnel key and installs its restricted
+       `permitlisten` entry on Ubuntu;
+     - starts and verifies `ssh -N -T -R 127.0.0.1:<tunnel-port>:127.0.0.1:22`;
+      - installs `AI-Support-Persistent-Tunnel` as a SYSTEM startup task with
+        keepalives, automatic reconnect, and hidden task visibility;
+      - installs a forced PowerShell shell with local activity logging and
+        uploads a redacted command event for each SSH command;
+     - POSTs `action=enroll-ai-support` only after the tunnel is reachable.
+5. Ubuntu reaches the Windows SSH endpoint through the registered tunnel:
+   `ssh -p <tunnel_port> ai-support@127.0.0.1`.
 6. The AI-support token calls the `consume_ai_support_enrollment`
    `SECURITY DEFINER` RPC (service-role only), which locks the token, requires
    `purpose='ai_support'`, enforces single-use/expiry, validates bounded
    metadata and the `ai-<hex>` client ID format, upserts the client row, marks
    the token used, and writes a redacted audit event
-   (`AI_SUPPORT_CLIENT_ENROLLED`).
+   (`AI_SUPPORT_CLIENT_ENROLLED`). The RPC reserves a unique port in
+   `42000..42999` for each ready client.
 
 ### Revoking a client
 
 - Each `ready` client row in the dashboard's **AI-support klienter** section
-  has a **Revokér** button behind an explicit `confirm()` dialog. It calls the
+  shows its client-specific activity log and has a **Revokér** button behind an explicit `confirm()` dialog. It calls the
   authenticated `SECURITY DEFINER` RPC `revoke_ai_support_client(p_client_id)`.
 - The RPC allows only the approved owner or an admin/super_admin; it sets
   `status='revoked'`, `updated_at=now()`, and inserts a redacted
   `AI_SUPPORT_CLIENT_REVOKED` audit event (public metadata only). Execution is
   granted to `authenticated` only — everything else, including `PUBLIC`, is
   revoked.
-- Revocation is terminal: `consume_ai_support_enrollment` refuses to enroll a
-  revoked `client_id` again ("identity resurrection" is blocked at the
-  database level), and no client role has `UPDATE` access to
+- Revocation is terminal for database enrollment: `consume_ai_support_enrollment`
+  refuses to enroll a revoked `client_id` again ("identity resurrection" is
+  blocked at the database level), and no client role has `UPDATE` access to
   `ai_support_clients`. Re-adding the PC requires a new enrollment with a new
-  client ID.
+  client ID. The Ubuntu `ai-support-tunnel-reconciler` removes revoked tunnel
+  keys and terminates active sessions; the Windows task then remains unable to
+  reconnect because its Ubuntu key authorization is gone.
 
 ### Direction and security properties
 
-- **SSH direction is always Windows client -> trusted Ubuntu AI-support host.**
-  The script never installs a Windows SSH server or a general inbound SSH
-  port. The persistent Remote Desktop agent is a separate outbound-connected
-  WebRTC path and adds its existing program-scoped Windows Firewall rule.
+- **The tunnel is always initiated outbound from Windows to Ubuntu.** Windows
+  OpenSSH Server listens only on `127.0.0.1`; no general inbound Windows SSH
+  port is opened. There is no Remote Desktop agent, WebRTC path, or controller
+  dependency.
 - The `ai_support_clients` table stores only public metadata: client ID,
-  owner, display name, hostname, platform, SSH host/port/user, public-key
-  fingerprint, status (`ready`/`revoked`), and timestamps. **No private keys,
-  no passwords, no raw tokens.**
+  owner, display name, hostname, platform, Ubuntu SSH metadata, tunnel port,
+  Windows SSH user/port, public-key fingerprint, status (`ready`/`revoked`),
+  and timestamps. The log stores redacted command metadata. **No private keys,
+  no passwords, no raw enrollment/log tokens.**
 - RLS allows owners and admins SELECT only; all writes go through the
   service-role RPC. A revoked client cannot be resurrected by re-enrollment.
-- The read-only MCP is unchanged: it gains no SSH control and no write access,
-  but its existing `list_clients`, `client_status`, and `client_history` tools
-  can see the enrolled PC through `remote_devices`.
-- The script never prints or stores passwords or private key material; the
-  one-time enrollment tokens appear only in the invoking command line.
-- The elevated agent binary is downloaded from an immutable, versioned URL and
-  must match the SHA-256 hash embedded in the generated command. Update both
-  values when publishing a new agent release.
+- The read-only MCP is unchanged: it gains no SSH control and no write access.
+- The script never prints passwords or private keys. The private tunnel key is
+  stored locally under `C:\ProgramData\AI-Support` with SYSTEM/Administrators
+  ACLs; it is never sent to Ubuntu or Supabase. The one-time enrollment token
+  appears only in the invoking command line.
 
 ### ⚠️ Known test/deployment limitation: `accept-new` host-key trust
 
@@ -134,10 +129,10 @@ First-connect SSH uses `StrictHostKeyChecking accept-new`, which **trusts the
 Ubuntu host key on first sight**. This is an accepted limitation for the
 current test/deployment environment only — it is vulnerable to a
 machine-in-the-middle on the very first connection to a new host. Before any
-production/non-test rollout, pre-populate `known_hosts` (e.g. via
-`ssh-keyscan` over a trusted path or managed deployment) and switch the alias
-to `StrictHostKeyChecking yes`. Host-key rotation on the Ubuntu host also
-requires manual `known_hosts` cleanup with this setting.
+production/non-test rollout, pre-populate the state directory's `known_hosts`
+(e.g. via `ssh-keyscan` over a trusted path or managed deployment) and change
+the setup/task options to `StrictHostKeyChecking yes`. Host-key rotation on
+the Ubuntu host also requires managed `known_hosts` cleanup with this setting.
 
 ### Deployment
 
@@ -146,17 +141,19 @@ requires manual `known_hosts` cleanup with this setting.
 supabase db push
 supabase functions deploy device-enrollment
 
-# Publish the setup script and the immutable agent artifact to the downloads
+# Install the Ubuntu revocation reconciler as root. The service-role key is
+# read from the shell environment and stored only in a mode-600 root file.
+sudo --preserve-env=SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY \
+  ./tools/install-ai-support-tunnel-reconciler.sh
+
+# Publish the setup script and the Ubuntu operator public key to the downloads
 # host (dashboard one-liners reference both files)
 cp setup-ai-support-windows.ps1 ~/caddy/downloads/setup-ai-support-windows.ps1
-cp builds/remote-agent-v3.1.131.exe ~/caddy/downloads/remote-agent-v3.1.131.exe
+cp ~/.ssh/id_rsa.pub ~/caddy/downloads/ai-support.pub
 
 # Publish the changed dashboard (GitHub Pages serves docs/ from the repo).
-# Required for this change set: docs/js/devices.js (revoke button + role
-# helper), docs/js/auth.js (shared role lookup), and the cache-bust version
-# bump for both scripts in docs/dashboard.html (?v=).
-git add docs/dashboard.html docs/js/devices.js docs/js/auth.js
-git commit -m "Dashboard: AI-support client revoke + admin role ordering"
+git add docs/ai-support.html docs/js/devices.js MCP_SUPPORT.md
+git commit -m "Use persistent SSH-only AI-support tunnels"
 git push origin main
 ```
 

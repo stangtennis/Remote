@@ -14,10 +14,7 @@ function escapeHtml(s) {
 // Single deployment constant for downloadable setup scripts (enrollment
 // one-liners download from here). Change this if the updates host moves.
 const UPDATES_HOST = 'https://updates.hawkeye123.dk';
-// Pin the elevated enrollment binary to the published immutable artifact. A
-// new agent release must update both values before the dashboard is deployed.
-const AI_SUPPORT_AGENT_URL = `${UPDATES_HOST}/remote-agent-v3.1.131.exe`;
-const AI_SUPPORT_AGENT_SHA256 = 'fb73b27685d3e0ea499777f1b5f032edc7210cc1f560ff8800627e2eac46fbe5';
+const AI_SUPPORT_PUBLIC_KEY_URL = `${UPDATES_HOST}/ai-support.pub`;
 
 // Cached data for client-side filtering
 let _allDevices = [];
@@ -668,7 +665,9 @@ async function createDeviceEnrollment() {
       body: JSON.stringify({ action: 'create', device_name: deviceName }),
     });
     const data = await response.json();
-    if (!response.ok || !data.enrollment_token) throw new Error(data.error || 'Kunne ikke oprette enrollment');
+    if (!response.ok || !data.enrollment_token) {
+      throw new Error(data.error || `Serveren afviste enrollment (HTTP ${response.status})`);
+    }
     showEnrollmentCommand(data.enrollment_token, data.device_name, data.expires_at);
   } catch (error) {
     console.error('Create device enrollment failed:', error);
@@ -733,9 +732,8 @@ async function requestRemoteUninstall(device) {
 
 // ==================== AI-SUPPORT CLIENTS (admin) ====================
 //
-// Dedicated Windows->Ubuntu SSH clients for AI support. The same flow also
-// installs the persistent Remote Desktop agent, while keeping the SSH client
-// registry and normal remote_devices enrollment purpose-separated.
+// Dedicated Windows clients for AI support. Enrollment installs a persistent
+// SSH reverse tunnel only; normal remote_devices enrollment is not involved.
 
 async function createAISupportEnrollment() {
   if (!window.__rdIsAdmin) {
@@ -764,8 +762,10 @@ async function createAISupportEnrollment() {
       body: JSON.stringify({ action: 'create', purpose: 'ai_support', device_name: clientName }),
     });
     const data = await response.json();
-    if (!response.ok || !data.enrollment_token || !data.agent_enrollment_token) throw new Error(data.error || 'Kunne ikke oprette enrollment');
-    showAISupportEnrollmentCommand(data.enrollment_token, data.agent_enrollment_token, data.device_name, data.expires_at);
+    if (!response.ok || !data.enrollment_token) {
+      throw new Error(data.error || `Serveren afviste AI-support enrollment (HTTP ${response.status})`);
+    }
+    showAISupportEnrollmentCommand(data.enrollment_token, data.device_name, data.expires_at);
   } catch (error) {
     // Do not log the token; error messages only.
     console.error('Create AI-support enrollment failed:', error.message);
@@ -773,10 +773,10 @@ async function createAISupportEnrollment() {
   }
 }
 
-function showAISupportEnrollmentCommand(token, agentToken, clientName, expiresAt) {
+function showAISupportEnrollmentCommand(token, clientName, expiresAt) {
   const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
   const enrollmentUrl = `${SUPABASE_CONFIG.url}/functions/v1/device-enrollment`;
-  const command = `$ProgressPreference = 'SilentlyContinue'; $dir = Join-Path $env:TEMP 'RemoteDesktopAISupport'; New-Item -ItemType Directory -Force -Path $dir | Out-Null; Invoke-WebRequest -UseBasicParsing -Uri '${UPDATES_HOST}/setup-ai-support-windows.ps1' -OutFile (Join-Path $dir 'setup-ai-support-windows.ps1'); powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir 'setup-ai-support-windows.ps1') -EnrollmentUrl ${quote(enrollmentUrl)} -EnrollmentToken ${quote(token)} -AgentEnrollmentToken ${quote(agentToken)} -AgentDownloadUrl ${quote(AI_SUPPORT_AGENT_URL)} -AgentSha256 ${quote(AI_SUPPORT_AGENT_SHA256)} -ClientName ${quote(clientName)}`;
+  const command = `$ProgressPreference = 'SilentlyContinue'; $dir = Join-Path $env:TEMP 'AISupportSSH'; New-Item -ItemType Directory -Force -Path $dir | Out-Null; Invoke-WebRequest -UseBasicParsing -Uri '${UPDATES_HOST}/setup-ai-support-windows.ps1' -OutFile (Join-Path $dir 'setup-ai-support-windows.ps1'); powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir 'setup-ai-support-windows.ps1') -EnrollmentUrl ${quote(enrollmentUrl)} -EnrollmentToken ${quote(token)} -SupportPublicKeyUrl ${quote(AI_SUPPORT_PUBLIC_KEY_URL)} -ClientName ${quote(clientName)}`;
   const result = document.getElementById('aiSupportEnrollmentResult');
   const name = document.getElementById('aiSupportEnrollmentClientName');
   const expiry = document.getElementById('aiSupportEnrollmentExpiry');
@@ -833,7 +833,8 @@ async function loadAISupportClients() {
   try {
     const { data, error } = await supabase
       .from('ai_support_clients')
-      .select('client_id, client_name, hostname, platform, ssh_host, ssh_port, ssh_user, ssh_key_fingerprint, status, last_seen, created_at')
+      .select('client_id, client_name, hostname, platform, ssh_host, ssh_port, ssh_user, ssh_key_fingerprint, tunnel_port, windows_ssh_user, windows_ssh_port, status, last_seen, created_at')
+      .eq('status', 'ready')
       .order('created_at', { ascending: false });
     if (error) throw error;
 
@@ -880,10 +881,11 @@ async function loadAISupportClients() {
       const parts = [];
       if (client.hostname) parts.push(client.hostname);
       if (client.platform) parts.push(client.platform);
-      parts.push(`ssh ${client.ssh_user}@${client.ssh_host}:${client.ssh_port}`);
+      parts.push(`tunnel ${client.tunnel_port ? `127.0.0.1:${client.tunnel_port}` : 'ikke konfigureret'}`);
+      if (client.windows_ssh_user) parts.push(`ssh ${client.windows_ssh_user}@127.0.0.1:${client.windows_ssh_port || 22}`);
       if (client.ssh_key_fingerprint) parts.push(client.ssh_key_fingerprint);
-      if (client.last_seen) {
-        parts.push(`Set ${new Date(client.last_seen).toLocaleString('da-DK', { dateStyle: 'short', timeStyle: 'short' })}`);
+       if (client.last_seen) {
+         parts.push(`Registreret ${new Date(client.last_seen).toLocaleString('da-DK', { dateStyle: 'short', timeStyle: 'short' })}`);
       }
       subtitle.title = parts.join(' · ');
       subtitle.textContent = parts.join(' · ');
@@ -902,9 +904,11 @@ async function loadAISupportClients() {
       metadata.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.35rem 1rem; color: var(--text-muted, #aaa);';
       const metadataItems = [
         ['Client-ID', client.client_id],
-        ['SSH', `ssh ${client.ssh_user}@${client.ssh_host}:${client.ssh_port}`],
+        ['Ubuntu SSH', `ssh ${client.ssh_user}@${client.ssh_host}:${client.ssh_port}`],
+        ['Tunnel', client.tunnel_port ? `127.0.0.1:${client.tunnel_port}` : 'Ikke konfigureret'],
+        ['Windows SSH', client.windows_ssh_user ? `ssh ${client.windows_ssh_user}@127.0.0.1:${client.windows_ssh_port || 22}` : 'Ikke konfigureret'],
         ['Fingerprint', client.ssh_key_fingerprint || 'Ikke registreret'],
-        ['Sidst set', client.last_seen ? new Date(client.last_seen).toLocaleString('da-DK') : 'Aldrig'],
+        ['Registreret', client.last_seen ? new Date(client.last_seen).toLocaleString('da-DK') : 'Aldrig'],
       ];
       for (const [label, value] of metadataItems) {
         const item = document.createElement('div');
@@ -927,7 +931,9 @@ async function loadAISupportClients() {
         for (const log of clientLogs) {
           const logLine = document.createElement('div');
           logLine.style.cssText = 'margin-top: 0.25rem; color: var(--text-muted, #aaa);';
-          const detailsText = log.details && typeof log.details === 'object' ? ` · ${JSON.stringify(log.details)}` : '';
+           const detailsText = log.event === 'AI_SUPPORT_COMMAND' && typeof log.details?.command === 'string'
+             ? ` · ${log.details.command}`
+             : log.details && typeof log.details === 'object' ? ` · ${JSON.stringify(log.details)}` : '';
           logLine.textContent = `${new Date(log.created_at).toLocaleString('da-DK')} · ${log.event || 'Hændelse'}${detailsText}`;
           detail.appendChild(logLine);
         }
@@ -974,8 +980,8 @@ async function revokeAISupportClient(client) {
   const displayName = client.client_name || client.client_id;
   const confirmed = window.confirm(
     `Revokér AI-support klienten "${displayName}"?\n\n` +
-    'Dette er permanent: klienten kan ikke genaktiveres, og SSH-metadata beholdes kun som historik med status "Revokeret".\n' +
-    'PC\'en skal tilmeldes igen med et nyt klient-ID for at få AI-support.'
+    'Klienten skjules straks fra oversigten. Tunnel, SSH-konto og supportfiler fjernes på Windows, når klienten kan kontaktes.\n' +
+    'Hvis PC\'en er offline, bliver oprydningen prøvet igen automatisk.'
   );
   if (!confirmed) return;
 

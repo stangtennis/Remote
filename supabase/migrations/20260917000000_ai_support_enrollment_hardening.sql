@@ -141,7 +141,7 @@ BEGIN
   END IF;
 
   UPDATE public.ai_support_clients
-  SET status = 'revoked',
+   SET status = 'uninstall_pending',
       updated_at = now()
   WHERE id = v_client.id;
 
@@ -166,4 +166,4 @@ REVOKE ALL ON FUNCTION public.revoke_ai_support_client(TEXT) FROM anon;
 GRANT EXECUTE ON FUNCTION public.revoke_ai_support_client(TEXT) TO authenticated;
 
 COMMENT ON FUNCTION public.revoke_ai_support_client(TEXT) IS
-  'Terminal revoke of an AI-support client. Approved owner or admin only; sets status=revoked and writes a redacted AI_SUPPORT_CLIENT_REVOKED audit event. A revoked client_id cannot be re-enrolled (consume_ai_support_enrollment refuses resurrected identities).';
+  'Terminal revoke of an AI-support client. Approved owner or admin only; sets status=uninstall_pending and writes a redacted audit event. The reconciler removes the client setup and then deletes the registry row.';

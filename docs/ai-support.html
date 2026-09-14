@@ -52,7 +52,7 @@
         </button>
       </div>
       <p style="margin: 0 0 1rem 0; font-size: 0.82rem; color: var(--text-muted, #888);">
-        Administrér Windows-PC'er, der forbinder ud til Ubuntu AI-support over SSH og samtidig installerer Remote Desktop-agenten. Agenten gør PC'en synlig og kontrollerbar fra Ubuntu via <code>remote-desktop-cli ai-connect</code>. Agenten opretter en programbegrænset Windows Firewall-regel; der åbnes ikke en generel Windows-SSH-port. MCP-serveren bruger de samme enheder, statuser og logs.
+         Administrér Windows-PC'er med en persistent SSH-only reverse tunnel til Ubuntu. AI-supportkontoen er lokal Windows Administrator med fulde rettigheder, mens OpenSSH kun bindes til localhost. En skjult SYSTEM scheduled task genopretter tunnelen efter genstart eller netværksudfald. Der installeres ingen Remote Desktop-agent, WebRTC eller controller. Kommandoer logges under hver klient.
       </p>
       <div style="padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--border, #333); border-radius: var(--radius-sm, 6px); background: rgba(255,255,255,0.025);">
         <label for="aiSupportClientNameInput" style="display: block; margin-bottom: 0.4rem; font-size: 0.82rem; font-weight: 600;">Ny AI-support klient</label>
@@ -63,11 +63,12 @@
         <div id="aiSupportEnrollmentError" role="alert" style="display: none; margin-top: 0.5rem; color: #f87171; font-size: 0.78rem;"></div>
         <div id="aiSupportEnrollmentResult" style="display: none; margin-top: 0.75rem;">
           <div style="display: flex; justify-content: space-between; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-            <strong>PowerShell-streng til <span id="aiSupportEnrollmentClientName"></span></strong>
+           <strong>PowerShell-streng til <span id="aiSupportEnrollmentClientName"></span></strong>
             <span id="aiSupportEnrollmentExpiry" style="font-size: 0.75rem; color: var(--text-muted, #888);"></span>
           </div>
           <textarea id="aiSupportEnrollmentCommand" readonly aria-label="PowerShell AI-support enrollment-kommando" style="width: 100%; min-height: 130px; box-sizing: border-box; margin-top: 0.5rem; font-family: monospace; font-size: 0.75rem; padding: 0.6rem; background: var(--background-secondary, #111); color: var(--text, #fff); border: 1px solid var(--border, #333); border-radius: 6px;"></textarea>
-          <button id="copyAISupportEnrollmentBtn" class="btn btn-secondary btn-sm" type="button" style="margin-top: 0.5rem;"><i class="fas fa-copy"></i> Kopiér PowerShell-streng</button>
+           <button id="copyAISupportEnrollmentBtn" class="btn btn-secondary btn-sm" type="button" style="margin-top: 0.5rem;"><i class="fas fa-copy"></i> Kopiér PowerShell-streng</button>
+           <div style="margin-top: 0.4rem; font-size: 0.75rem; color: var(--text-muted, #888);">Kør kommandoen i en Administrator-PowerShell på Windows.</div>
         </div>
       </div>
       <div id="aiSupportClientsList"></div>
@@ -80,7 +81,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js?v=6"></script>
   <script src="js/auth.js?v=12"></script>
-  <script src="js/devices.js?v=23"></script>
-  <script src="js/ai-support-page.js?v=1"></script>
+   <script src="js/devices.js?v=26"></script>
+   <script src="js/ai-support-page.js?v=3"></script>
 </body>
 </html>

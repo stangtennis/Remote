@@ -1,7 +1,7 @@
 // One-time enrollment for an already approved dashboard user.
 // Raw enrollment tokens are returned only to the dashboard that created them;
 // clients exchange them once for stable device credentials. AI-support
-// enrollment mints a separate agent token so the two purposes remain isolated.
+// enrollment is SSH-only and never mints a Remote Desktop agent token.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -94,25 +94,13 @@ serve(async (req) => {
       expires_at: expiresAt,
       purpose: purpose,
     }]
-    let agentEnrollmentToken: string | undefined
-    if (purpose === 'ai_support') {
-      agentEnrollmentToken = randomToken()
-      tokens.push({
-        token_hash: await sha256(agentEnrollmentToken),
-        owner_id: auth.user.id,
-        device_name: deviceName,
-        expires_at: expiresAt,
-        purpose: 'agent',
-      })
-    }
     const { error } = await serviceClient.from('device_enrollment_tokens').insert(tokens)
     if (error) {
       console.error('Enrollment token creation failed:', error)
-      return response(req, { error: 'Could not create enrollment' }, 500)
+      return response(req, { error: `Could not create enrollment (${error.code || 'database_error'})` }, 500)
     }
     return response(req, {
       enrollment_token: token,
-      agent_enrollment_token: agentEnrollmentToken,
       device_name: deviceName,
       expires_at: expiresAt,
       purpose: purpose,
@@ -142,10 +130,10 @@ serve(async (req) => {
     return response(req, { status: 'enrolled', device_id: data[0].device_id, device_name: data[0].device_name, api_key: data[0].api_key })
   }
 
-  // AI-support client registration (Windows -> Ubuntu SSH clients).
+  // AI-support client registration (Windows -> Ubuntu persistent SSH tunnel).
   // Validates strictly bounded metadata, consumes the one-time token via the
-  // service-role RPC, and returns only registration status. Never returns
-  // keys, passwords, or token material.
+  // service-role RPC, and returns registration status plus a client-scoped
+  // activity-log token. Never returns keys, passwords, or private key material.
   if (body.action === 'enroll-ai-support') {
     const token = typeof body.enrollment_token === 'string' ? body.enrollment_token.trim() : ''
     const clientId = typeof body.client_id === 'string' ? body.client_id.trim() : ''
@@ -155,15 +143,20 @@ serve(async (req) => {
     const sshPort = typeof body.ssh_port === 'number' && Number.isInteger(body.ssh_port) ? body.ssh_port : 22
     const sshUser = typeof body.ssh_user === 'string' ? body.ssh_user.trim() : ''
     const fingerprint = typeof body.ssh_key_fingerprint === 'string' ? body.ssh_key_fingerprint.trim() : ''
+    const tunnelPort = typeof body.tunnel_port === 'number' && Number.isInteger(body.tunnel_port) ? body.tunnel_port : 0
+    const windowsSshUser = typeof body.windows_ssh_user === 'string' ? body.windows_ssh_user.trim() : ''
+    const windowsSshPort = typeof body.windows_ssh_port === 'number' && Number.isInteger(body.windows_ssh_port) ? body.windows_ssh_port : 0
     if (!token || token.length > 200 || !/^ai-[a-z0-9]{8,32}$/.test(clientId)) {
       return response(req, { error: 'Invalid enrollment request' }, 400)
     }
-    if (!/^[A-Za-z0-9._:-]{1,100}$/.test(sshHost) || !/^[A-Za-z0-9._-]{1,32}$/.test(sshUser) || sshPort < 1 || sshPort > 65535) {
+    if (!/^[A-Za-z0-9._:-]{1,100}$/.test(sshHost) || !/^[A-Za-z0-9._-]{1,32}$/.test(sshUser) || sshPort < 1 || sshPort > 65535 || tunnelPort < 42000 || tunnelPort > 42999 || !/^[A-Za-z0-9._-]{1,32}$/.test(windowsSshUser) || windowsSshPort < 1 || windowsSshPort > 65535) {
       return response(req, { error: 'Invalid enrollment request' }, 400)
     }
     if (fingerprint && !/^SHA256:[A-Za-z0-9+/=]{43}$/.test(fingerprint)) {
       return response(req, { error: 'Invalid enrollment request' }, 400)
     }
+    const activityLogToken = randomToken()
+    const activityLogTokenHash = await sha256(activityLogToken)
     const { data, error } = await serviceClient.rpc('consume_ai_support_enrollment', {
       p_token_hash: await sha256(token),
       p_client_id: clientId,
@@ -173,12 +166,40 @@ serve(async (req) => {
       p_ssh_port: sshPort,
       p_ssh_user: sshUser,
       p_ssh_key_fingerprint: fingerprint || null,
+      p_tunnel_port: tunnelPort,
+      p_windows_ssh_user: windowsSshUser,
+      p_windows_ssh_port: windowsSshPort,
+      p_activity_log_token_hash: activityLogTokenHash,
     })
     if (error || !data?.[0]) {
       console.error('AI-support enrollment failed:', error)
       return response(req, { error: 'Enrollment token is invalid, expired, or already used' }, 409)
     }
-    return response(req, { status: 'registered', client_id: data[0].client_id, client_name: data[0].client_name })
+    return response(req, {
+      status: 'registered',
+      client_id: data[0].client_id,
+      client_name: data[0].client_name,
+      tunnel_port: data[0].tunnel_port,
+      activity_log_token: activityLogToken,
+    })
+  }
+
+  if (body.action === 'log-ai-support') {
+    const clientId = typeof body.client_id === 'string' ? body.client_id.trim() : ''
+    const logToken = typeof body.log_token === 'string' ? body.log_token.trim() : ''
+    const command = typeof body.command === 'string' ? body.command.trim().slice(0, 4000) : ''
+    if (!/^ai-[a-z0-9]{8,32}$/.test(clientId) || !/^[A-Za-z0-9_-]{20,200}$/.test(logToken) || !command) {
+      return response(req, { error: 'Invalid activity log request' }, 400)
+    }
+    const redactedCommand = command.replace(/((?:password|passwd|token|secret|apikey|api_key|authorization)\s*[=:]\s*)([^\s]+)/gi, '$1[REDACTED]')
+    const { error } = await serviceClient.rpc('append_ai_support_log', {
+      p_client_id: clientId,
+      p_activity_log_token_hash: await sha256(logToken),
+      p_event: 'AI_SUPPORT_COMMAND',
+      p_details: { command: redactedCommand },
+    })
+    if (error) return response(req, { error: 'Activity log credentials are invalid' }, 403)
+    return response(req, { status: 'logged' })
   }
 
   return response(req, { error: 'Unknown action' }, 400)
