@@ -541,18 +541,28 @@ try {
             Write-Host 'Porten kunne ikke registreres; vaelger en ny reserveret port.' -ForegroundColor Yellow
         }
         finally {
-            if ($temporaryTunnel -and -not $temporaryTunnel.HasExited) { Stop-Process -Id $temporaryTunnel.Id -Force -ErrorAction SilentlyContinue }
+            if ($temporaryTunnel -and -not $temporaryTunnel.HasExited) {
+                Stop-Process -Id $temporaryTunnel.Id -Force -ErrorAction SilentlyContinue
+                Wait-Process -Id $temporaryTunnel.Id -Timeout 10 -ErrorAction SilentlyContinue
+            }
         }
     }
     if (-not $tunnelVerified) { throw 'AI-support tunnel kunne ikke verificeres.' }
 
+    # Do not reuse the temporary reverse-forward until Ubuntu has released it.
+    for ($wait = 0; $wait -lt 15; $wait++) {
+        $checkCommand = "ss -ltn | grep -Eq '[.:]$tunnelPort[[:space:]]'"
+        if ((Invoke-UbuntuSsh $BootstrapKey $checkCommand -BatchMode) -ne 0) { break }
+        Start-Sleep -Seconds 1
+    }
+
     Write-Step 'Installerer persistent tunnel ved Windows-opstart'
     $taskArgs = (Build-TunnelArguments $tunnelPort) -join ' '
-    $taskAction = New-ScheduledTaskAction -Execute $sshCommand.Source -Argument $taskArgs
+    $taskAction = New-ScheduledTaskAction -Execute $sshCommand.Source -Argument $taskArgs -WorkingDirectory $StateDirectory
     $taskTrigger = New-ScheduledTaskTrigger -AtStartup
     $taskSettings = New-ScheduledTaskSettingsSet -Hidden -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
     $taskPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-    Register-ScheduledTask -TaskName $TaskName -Action $taskAction -Trigger $taskTrigger -Settings $taskSettings -Principal $taskPrincipal -Force | Out-Null
+    Register-ScheduledTask -TaskName $TaskName -Action $taskAction -Trigger $taskTrigger -Settings $taskSettings -Principal $taskPrincipal -Force -ErrorAction Stop | Out-Null
 
     Start-ScheduledTask -TaskName $TaskName
     $taskReady = $false
@@ -565,7 +575,13 @@ try {
             break
         }
     }
-    if (-not $taskReady) { throw 'Persistent tunnel-tasken kunne ikke startes eller verificeres.' }
+    if (-not $taskReady) {
+        $taskInfo = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction SilentlyContinue
+        $lastResult = if ($taskInfo) { $taskInfo.LastTaskResult } else { 'unknown' }
+        $taskState = (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue).State
+        if (-not $taskState) { $taskState = 'unknown' }
+        throw "Persistent tunnel-tasken kunne ikke startes eller verificeres (state=$taskState, result=$lastResult)."
+    }
 
     Write-Step 'Registrerer SSH-only klienten'
     $hostname = $env:COMPUTERNAME
