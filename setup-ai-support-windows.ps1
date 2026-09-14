@@ -32,7 +32,8 @@ param(
     [string]$UbuntuUser = 'dennis',
     [int]$UbuntuPort = 22,
     [string]$ClientId = '',
-    [int]$WindowsSshPort = 22
+    [int]$WindowsSshPort = 22,
+    [switch]$ConfigureOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -342,7 +343,7 @@ ListenAddress 127.0.0.1
 
 # AI_SUPPORT_MATCH_BEGIN
 Match User $WindowsSshUser
-    AuthorizedKeysFile .ssh/authorized_keys
+    AuthorizedKeysFile C:/Users/$WindowsSshUser/.ssh/authorized_keys
     ForceCommand powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:/ProgramData/AI-Support/ai-support-shell.ps1
     PasswordAuthentication no
     PubkeyAuthentication yes
@@ -376,17 +377,23 @@ Match User $WindowsSshUser
     $hostKeys = Get-ChildItem -LiteralPath (Join-Path $env:ProgramData 'ssh') -Filter 'ssh_host_*_key' -File -ErrorAction SilentlyContinue
     if (-not $hostKeys) { throw 'Windows OpenSSH hostkeys blev ikke oprettet.' }
     $sshDirectory = Join-Path $env:ProgramData 'ssh'
+    & icacls.exe $sshDirectory /reset /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke nulstille OpenSSH-mappens ACL.' }
     & icacls.exe $sshDirectory /remove 'NT SERVICE\sshd' | Out-Null
     & icacls.exe $sshDirectory /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)(F)' '*S-1-5-32-544:(OI)(CI)(F)' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke beskytte OpenSSH-mappen.' }
     $sshFiles = @($sshdConfig) + @($hostKeys | ForEach-Object { $_.FullName })
     foreach ($sshFile in $sshFiles) {
+        & icacls.exe $sshFile /reset | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Kunne ikke nulstille OpenSSH-filen $sshFile." }
         & icacls.exe $sshFile /remove 'NT SERVICE\sshd' | Out-Null
         & icacls.exe $sshFile /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Kunne ikke beskytte OpenSSH-filen $sshFile." }
     }
     foreach ($hostKey in $hostKeys) {
         if (-not (Test-Path $hostKey.FullName)) { throw "OpenSSH hostkey forsvandt: $($hostKey.Name)." }
+        & icacls.exe $hostKey.FullName /setowner '*S-1-5-18' | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Kunne ikke sætte SYSTEM som ejer af OpenSSH hostkey $($hostKey.Name)." }
     }
     $configTest = (& (Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe') -t -f $sshdConfig 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) {
@@ -485,6 +492,11 @@ try {
 
     Write-Step 'Konfigurerer localhost-only OpenSSH Server'
     Configure-WindowsSshd
+
+    if ($ConfigureOnly) {
+        Write-Host "`nSSH-konfigurationstest fuldført på $env:COMPUTERNAME." -ForegroundColor Green
+        exit 0
+    }
 
     Write-Step 'Opretter tunnelnoegler'
     Set-StateAcl
