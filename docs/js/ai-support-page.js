@@ -21,5 +21,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     section.classList.add('is-visible');
     section.style.display = 'block';
   }
+  document.getElementById('generateAISupportEnrollmentBtn')?.addEventListener('click', createAISupportEnrollment);
+  document.getElementById('copyAISupportEnrollmentBtn')?.addEventListener('click', copyAISupportEnrollmentCommand);
+  document.getElementById('refreshAISupportClientsBtn')?.addEventListener('click', loadAISupportClients);
+  document.getElementById('aiSupportClientNameInput')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') createAISupportEnrollment();
+  });
   await loadAISupportClients();
 });
