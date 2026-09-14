@@ -313,6 +313,12 @@ Match User $WindowsSshUser
     try {
         Set-LocalAccountTokenFilterPolicy $policyPath
     } catch { throw $_ }
+    $hostKeygen = Join-Path $env:WINDIR 'System32\OpenSSH\ssh-keygen.exe'
+    if (-not (Test-Path $hostKeygen)) { throw 'Windows OpenSSH ssh-keygen blev ikke fundet.' }
+    & $hostKeygen -A | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Windows OpenSSH hostkeys kunne ikke oprettes.' }
+    $hostKeys = Get-ChildItem -LiteralPath (Join-Path $env:ProgramData 'ssh') -Filter 'ssh_host_*_key' -File -ErrorAction SilentlyContinue
+    if (-not $hostKeys) { throw 'Windows OpenSSH hostkeys blev ikke oprettet.' }
     & (Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe') -t -f $sshdConfig
     if ($LASTEXITCODE -ne 0) { throw 'OpenSSH Server konfigurationen er ugyldig.' }
     Set-Service -Name sshd -StartupType Automatic
