@@ -350,6 +350,10 @@ function Invoke-UbuntuSsh([string]$IdentityFile, [string]$RemoteCommand, [switch
         '-o', "UserKnownHostsFile=$KnownHosts",
         '-o', 'StrictHostKeyChecking=accept-new',
         '-o', 'IdentitiesOnly=yes',
+        '-o', 'ConnectionAttempts=1',
+        '-o', 'ConnectTimeout=15',
+        '-o', 'ServerAliveInterval=10',
+        '-o', 'ServerAliveCountMax=2',
         '-i', $IdentityFile,
         '-p', "$CloudflareLocalPort"
     )
@@ -365,6 +369,8 @@ function Invoke-UbuntuPasswordSsh([string]$RemoteCommand) {
         '-o', 'StrictHostKeyChecking=accept-new',
         '-o', 'PubkeyAuthentication=no',
         '-o', 'PreferredAuthentications=password,keyboard-interactive',
+        '-o', 'ConnectionAttempts=1',
+        '-o', 'ConnectTimeout=15',
         '-p', "$CloudflareLocalPort",
         "$UbuntuUser@127.0.0.1",
         $RemoteCommand
@@ -904,7 +910,17 @@ try {
             Start-Sleep -Seconds 4
             $checkCommand = "ss -ltn | grep -Eq '[.:]$tunnelPort[[:space:]]'"
             $checkExit = Invoke-UbuntuSsh $BootstrapKey $checkCommand -BatchMode
-            if ($checkExit -ne 0) { throw "Reverse tunnel kunne ikke verificeres paa Ubuntu port $tunnelPort." }
+            if ($checkExit -ne 0) {
+                $sshDetails = if (Test-Path -LiteralPath $tempStderr) {
+                    (Get-Content -LiteralPath $tempStderr -Raw -ErrorAction SilentlyContinue).Trim()
+                } else { '' }
+                $cloudflareDetails = if (Test-Path -LiteralPath $CloudflaredErrorLogPath) {
+                    (Get-Content -LiteralPath $CloudflaredErrorLogPath -Raw -ErrorAction SilentlyContinue).Trim()
+                } else { '' }
+                if ($sshDetails.Length -gt 600) { $sshDetails = $sshDetails.Substring($sshDetails.Length - 600) }
+                if ($cloudflareDetails.Length -gt 600) { $cloudflareDetails = $cloudflareDetails.Substring($cloudflareDetails.Length - 600) }
+                throw "Reverse tunnel kunne ikke verificeres paa Ubuntu port $tunnelPort. SSH=$sshDetails Cloudflare=$cloudflareDetails"
+            }
 
             $tunnelVerified = $true
         }
