@@ -23,15 +23,12 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$EnrollmentUrl,
-    [Parameter(Mandatory = $true)]
     [string]$EnrollmentToken,
     [Parameter(Mandatory = $true)]
     [string]$ClientName,
     [Parameter(Mandatory = $true)]
     [string]$SupportPublicKeyUrl,
     [string]$CloudflareAccessHostname = 'ssh.hawkeye123.dk',
-    [string]$CloudflareServiceTokenId,
-    [System.Security.SecureString]$CloudflareServiceTokenSecret,
     [int]$CloudflareLocalPort = 43000,
     [string]$UbuntuUser = 'dennis',
     [string]$ClientId = '',
@@ -58,6 +55,7 @@ $CloudflaredTaskLogPath = Join-Path $StateDirectory 'cloudflared.log'
 $CloudflaredErrorLogPath = Join-Path $StateDirectory 'cloudflared-error.log'
 $CloudflareTokenIdPath = Join-Path $StateDirectory 'cloudflare-service-token-id'
 $CloudflareTokenSecretPath = Join-Path $StateDirectory 'cloudflare-service-token-secret.dpapi'
+$CloudflareTokenClientId = $null
 $TunnelRunnerPath = Join-Path $StateDirectory 'run-persistent-tunnel.ps1'
 $TunnelTaskLogPath = Join-Path $StateDirectory 'persistent-tunnel-ssh.log'
 $SshdConfigBackup = Join-Path $StateDirectory 'sshd_config.backup'
@@ -210,6 +208,46 @@ function Protect-CloudflareTokenSecret([System.Security.SecureString]$SecureSecr
     }
 }
 
+function Issue-CloudflareServiceToken {
+    $requestBody = @{
+        action = 'issue-ai-support-cloudflare-token'
+        enrollment_token = $EnrollmentToken
+        client_id = $ClientId
+    } | ConvertTo-Json -Compress
+    $issued = $null
+    $result = $null
+    $secureSecret = $null
+    $secretText = $null
+    try {
+        try {
+            $issued = Invoke-RestMethod -Uri $EnrollmentUrl -Method Post -ContentType 'application/json' -Body $requestBody
+        } catch {
+            throw 'Cloudflare service-token issuance failed.'
+        }
+        $result = $issued
+        $serviceTokenId = [string]$result.service_token_id
+        $serviceTokenClientId = [string]$result.client_id
+        $secretText = [string]$result.client_secret
+        if ($serviceTokenId -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' -or
+            $serviceTokenClientId -notmatch '^[A-Za-z0-9._:-]{1,200}$' -or
+            [string]::IsNullOrWhiteSpace($secretText) -or $secretText.Length -gt 2000) {
+            throw 'Cloudflare service-token issuance returned an invalid response.'
+        }
+
+        $secureSecret = ConvertTo-SecureString $secretText -AsPlainText -Force
+        Protect-CloudflareTokenSecret $secureSecret
+        Set-Content -LiteralPath $CloudflareTokenIdPath -Value $serviceTokenClientId -Encoding ASCII
+        Set-SystemPrivateKeyAcl $CloudflareTokenIdPath
+        $script:CloudflareTokenClientId = $serviceTokenClientId
+    } finally {
+        if ($secureSecret) { $secureSecret.Dispose() }
+        $secretText = $null
+        $result = $null
+        $issued = $null
+        $requestBody = $null
+    }
+}
+
 function Convert-ProtectedCloudflareSecretToPlainText {
     $protectedBytes = [IO.File]::ReadAllBytes($CloudflareTokenSecretPath)
     $secretBytes = $null
@@ -245,7 +283,7 @@ function Start-CloudflareBridge {
     }
     $secretText = Convert-ProtectedCloudflareSecretToPlainText
     try {
-        $env:TUNNEL_SERVICE_TOKEN_ID = $CloudflareServiceTokenId
+        $env:TUNNEL_SERVICE_TOKEN_ID = $CloudflareTokenClientId
         $env:TUNNEL_SERVICE_TOKEN_SECRET = $secretText
         try {
             $process = Start-Process -FilePath $CloudflaredPath -ArgumentList @(
@@ -743,7 +781,7 @@ exit 1
 if (-not (Test-Administrator)) { throw 'Dette setup skal koeres fra en Administrator-PowerShell.' }
 if ($EnrollmentUrl -notmatch '^https://[A-Za-z0-9._:/?=&-]{1,200}$') { throw 'EnrollmentUrl skal vaere en gyldig https-URL.' }
 if ($SupportPublicKeyUrl -notmatch '^https://[A-Za-z0-9._:/?=&-]{1,200}$') { throw 'SupportPublicKeyUrl skal vaere en gyldig https-URL.' }
-if ([string]::IsNullOrWhiteSpace($EnrollmentToken) -or $EnrollmentToken.Length -gt 200) { throw 'EnrollmentToken mangler eller er ugyldigt.' }
+if (-not $ConfigureOnly -and ([string]::IsNullOrWhiteSpace($EnrollmentToken) -or $EnrollmentToken.Length -gt 200)) { throw 'EnrollmentToken mangler eller er ugyldigt.' }
 if ($CloudflareAccessHostname -notmatch '^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$') { throw 'CloudflareAccessHostname indeholder ugyldige tegn.' }
 if ($CloudflareLocalPort -lt 1024 -or $CloudflareLocalPort -gt 65535) { throw 'CloudflareLocalPort skal vaere mellem 1024 og 65535.' }
 if ($UbuntuUser -notmatch '^[A-Za-z0-9._-]{1,32}$') { throw 'UbuntuUser indeholder ugyldige tegn.' }
@@ -755,10 +793,6 @@ if ($ClientId -notmatch '^(ai-[a-z0-9]{8,32})?$') { throw 'ClientId har et ugyld
 if (-not $ClientId) {
     $bytes = New-RandomBytes 8
     $ClientId = 'ai-' + (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
-}
-if (-not $ConfigureOnly) {
-    if ($CloudflareServiceTokenId -notmatch '^[A-Za-z0-9._:-]{1,200}$') { throw 'Cloudflare service-token client ID mangler eller er ugyldigt.' }
-    if ($null -eq $CloudflareServiceTokenSecret -or $CloudflareServiceTokenSecret.Length -eq 0) { throw 'Cloudflare service-token secret mangler.' }
 }
 try {
     $sshCommand = Get-Command ssh.exe -ErrorAction SilentlyContinue
@@ -829,10 +863,8 @@ try {
     }
 
     Add-Type -AssemblyName System.Security
+    Issue-CloudflareServiceToken
     Install-Cloudflared
-    Set-Content -LiteralPath $CloudflareTokenIdPath -Value $CloudflareServiceTokenId -Encoding ASCII
-    Set-SystemPrivateKeyAcl $CloudflareTokenIdPath
-    Protect-CloudflareTokenSecret $CloudflareServiceTokenSecret
     Set-StateAcl
     Write-Step 'Starter Cloudflare Access TCP bridge'
     $cloudflareBridgeProcess = Start-CloudflareBridge

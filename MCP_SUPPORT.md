@@ -64,6 +64,11 @@ helper on the trusted Ubuntu host can work with over SSH.
 
 ### Exact flow
 
+The enrollment backend automatically mints a separate Cloudflare Access
+Service Token for each Windows machine. Only `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` are configured once as Supabase Edge secrets; no
+Cloudflare Service Token ID or secret is copied to Windows by the user.
+
 1. An approved admin opens the **AI-support klienter** section in
     `docs/ai-support.html` (separate from "Dine enheder" and Quick Support) and
     clicks *Generér PowerShell-streng*.
@@ -78,23 +83,22 @@ helper on the trusted Ubuntu host can work with over SSH.
    single use). The raw tokens are shown only in the generated PowerShell
    command.
 3. The generated one-liner downloads `setup-ai-support-windows.ps1` from the
-   updates host and verifies its pinned SHA-256 before asking for any
-   credential. It then prompts for the Cloudflare Access service-token client
-   ID with `Read-Host` and the secret with `Read-Host -AsSecureString`, and
-   calls the verified script in the same PowerShell process with `-EnrollmentUrl`,
-   `-EnrollmentToken`, `-SupportPublicKeyUrl`, `-ClientName`,
-   `-CloudflareAccessHostname 'ssh.hawkeye123.dk'`,
-   `-CloudflareServiceTokenId`, and `-CloudflareServiceTokenSecret`. The
-   secret is never embedded in the generated command or passed as a CLI value.
-   The script pins the downloaded public key to the configured Ubuntu
-   fingerprint.
+   updates host, verifies its pinned SHA-256, and runs it in the same
+   PowerShell process with only the enrollment token, URLs, client name, and
+   Cloudflare hostname. There are no Cloudflare credential prompts or manual
+   service-token parameters. The script pins the downloaded public key to the
+   configured Ubuntu fingerprint.
 4. The script (same model as `setup-opencode-windows.ps1`) then:
-      - installs the pinned official Windows amd64 `cloudflared` 2026.9.1
+       - exchanges the enrollment token and generated `ai-<hex>` client ID with
+         the enrollment backend for a separate Cloudflare service token for
+         this machine. A retry with the same still-unused enrollment token
+         deletes the prior service token before issuing its replacement;
+       - installs the pinned official Windows amd64 `cloudflared` 2026.9.1
         binary from GitHub, verifies SHA-256
         `2837888cc0f5d58f15b6dc478376de90b4d3ba5241c7947455d1e0a0df429712`,
         and stores it at `C:\ProgramData\AI-Support\cloudflared.exe` with
         SYSTEM/Administrators ACLs;
-      - protects the service-token secret with DPAPI LocalMachine at
+       - protects the newly issued service-token secret with DPAPI LocalMachine at
         `C:\ProgramData\AI-Support` and stores only the non-secret client ID
         separately with SYSTEM/Administrators ACLs;
       - starts `cloudflared access tcp --hostname ssh.hawkeye123.dk --url
@@ -131,24 +135,44 @@ helper on the trusted Ubuntu host can work with over SSH.
    metadata and the `ai-<hex>` client ID format, upserts the client row, marks
    the token used, and writes a redacted audit event
    (`AI_SUPPORT_CLIENT_ENROLLED`). The RPC reserves a unique port in
-   `42000..42999` for each ready client.
+    `42000..42999` for each ready client.
+
+### Cloudflare Access configuration
+
+The Access application for `ssh.hawkeye123.dk` must use the **Service Auth**
+policy with **Include: Any Access Service Token**. Do not select one fixed
+service token: the enrollment backend creates a different token for each
+machine, so the token set is dynamic. This policy permits every Access service
+token in the Cloudflare account to authenticate to this application. Use a
+dedicated Cloudflare account/tenant for AI support, or ensure the account has
+no unrelated service tokens.
+
+The Cloudflare API token configured as `CLOUDFLARE_API_TOKEN` must have
+`Access: Service Tokens Write`, which supports both creating and deleting
+service tokens. `CLOUDFLARE_ACCOUNT_ID` and the API token remain Supabase Edge
+secrets; no Cloudflare secret or manual token copy is part of enrollment.
 
 ### Revoking a client
 
 - Each `ready` client row in the dashboard's **AI-support klienter** section
   shows its client-specific activity log and has a **Revokér** button behind an explicit `confirm()` dialog. It calls the
-  authenticated `SECURITY DEFINER` RPC `revoke_ai_support_client(p_client_id)`.
+  authenticated `device-enrollment` action
+  `revoke-ai-support-cloudflare-token` first. Only after the associated
+  Cloudflare token is deleted does it call the `SECURITY DEFINER` RPC
+  `revoke_ai_support_client(p_client_id)` to mark the client for terminal
+  revocation.
 - The RPC allows only the approved owner or an admin/super_admin; it sets
-  `status='revoked'`, `updated_at=now()`, and inserts a redacted
+  `status='uninstall_pending'`, `updated_at=now()`, and inserts a redacted
   `AI_SUPPORT_CLIENT_REVOKED` audit event (public metadata only). Execution is
   granted to `authenticated` only — everything else, including `PUBLIC`, is
-  revoked.
+  revoked. The Ubuntu `ai-support-tunnel-reconciler` then removes the client
+  setup and completes terminal database cleanup.
 - Revocation is terminal for database enrollment: `consume_ai_support_enrollment`
-  refuses to enroll a revoked `client_id` again ("identity resurrection" is
-  blocked at the database level), and no client role has `UPDATE` access to
-  `ai_support_clients`. Re-adding the PC requires a new enrollment with a new
-  client ID. The Ubuntu `ai-support-tunnel-reconciler` removes revoked tunnel
-  keys and terminates active sessions; the Windows task then remains unable to
+  refuses to enroll a client identity that is not `ready` ("identity
+  resurrection" is blocked at the database level), and no client role has
+  `UPDATE` access to `ai_support_clients`. Re-adding the PC requires a new
+  enrollment with a new client ID. The reconciler removes revoked tunnel keys
+  and terminates active sessions; the Windows task then remains unable to
   reconnect because its Ubuntu key authorization is gone.
 
 ### Direction and security properties
@@ -158,10 +182,14 @@ helper on the trusted Ubuntu host can work with over SSH.
   port is opened. Windows reaches Ubuntu only through the Cloudflare Access
   hostname `ssh.hawkeye123.dk`; the old direct private-IP SSH path is not
   used. There is no Remote Desktop agent, WebRTC path, or controller dependency.
-- The Cloudflare service-token secret is accepted only as a PowerShell
-  `SecureString`, protected with DPAPI `LocalMachine`, and never appears in
-  command-line arguments, the scheduled-task definition, the runner script,
-  enrollment metadata, activity config, logs, Supabase, or this repository.
+- The Cloudflare service-token secret is received only over HTTPS as a
+  one-time issuance response and accepted only as a PowerShell `SecureString`,
+  protected with DPAPI `LocalMachine`, and never appears in command-line
+  arguments, the scheduled-task definition, the runner script, enrollment
+  metadata, activity config, logs, or this repository. Supabase stores only
+  `device_enrollment_tokens.cloudflare_service_token_id`, which is non-secret
+  issuance/retry metadata; the generated service-token secret is not
+  raw-stored there.
   The runner decrypts it only long enough to place it in the environment of its
   child `cloudflared` process and then clears its own environment variables.
   Because the support account is an administrator, a trusted local administrator
@@ -198,10 +226,6 @@ the Ubuntu host also requires managed `known_hosts` cleanup with this setting.
 ### Deployment
 
 ```bash
-# Migration + function
-supabase db push
-supabase functions deploy device-enrollment
-
 # Install the Ubuntu revocation reconciler as root. The service-role key is
 # read from the shell environment and stored only in a mode-600 root file.
 sudo --preserve-env=SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY \
@@ -212,22 +236,26 @@ sudo --preserve-env=SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY \
 cp setup-ai-support-windows.ps1 ~/caddy/downloads/setup-ai-support-windows.ps1
 cp ~/.ssh/id_rsa.pub ~/caddy/downloads/ai-support.pub
 
-# Configure the Cloudflare Access application for ssh.hawkeye123.dk and create
-# a service token with only the required SSH application policy. Keep the ID
-# and secret in the Cloudflare dashboard/secret manager; the enrollment prompt
-# reads them interactively and no credential is stored in Supabase or the repo.
+# Configure the Cloudflare Access application for ssh.hawkeye123.dk. Configure
+# these Supabase Edge secrets once. The API token must have Access: Service
+# Tokens Write on the account.
+supabase secrets set \
+  CLOUDFLARE_API_TOKEN='<cloudflare-api-token>' \
+  CLOUDFLARE_ACCOUNT_ID='<cloudflare-account-id>' \
+  CLOUDFLARE_SERVICE_TOKEN_DURATION='8760h'
 
-# Publish the changed dashboard (GitHub Pages serves docs/ from the repo).
-git add setup-ai-support-windows.ps1 docs/ai-support.html docs/js/devices.js MCP_SUPPORT.md
-git commit -m "Use persistent SSH-only AI-support tunnels"
-git push origin main
+# Migration + function
+supabase db push
+supabase functions deploy device-enrollment
+
+# Publish the changed dashboard through the normal GitHub Pages deployment.
 ```
 
 ### Validation
 
 - Dashboard JS: `node --check docs/js/devices.js`
-- Confirm the generated command contains `Read-Host -AsSecureString` and only
-  passes the secret through the `SecureString` variable.
+- Confirm the generated command contains no `Read-Host` calls or Cloudflare
+  service-token parameters.
 - Confirm `cloudflared.exe` at `C:\ProgramData\AI-Support` has the pinned
   SHA-256 and that the bridge listens only on `127.0.0.1:43000`.
 - Confirm the scheduled task runs as SYSTEM, contains no service-token secret

@@ -15,7 +15,7 @@ function escapeHtml(s) {
 // one-liners download from here). Change this if the updates host moves.
 const UPDATES_HOST = 'https://updates.hawkeye123.dk';
 const AI_SUPPORT_PUBLIC_KEY_URL = `${UPDATES_HOST}/ai-support.pub`;
-const AI_SUPPORT_SETUP_SHA256 = 'bfa392eaa5a373879576ddb238aef3824d78bdee1fbe6a76bb9b5d9817f382bc';
+const AI_SUPPORT_SETUP_SHA256 = '9cbb70f0f156c6e3d91511d7002ad154b66fd053202c6e76b51f902e15107a70';
 
 // Cached data for client-side filtering
 let _allDevices = [];
@@ -780,7 +780,7 @@ async function createAISupportEnrollment() {
 function showAISupportEnrollmentCommand(token, clientName, expiresAt) {
   const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
   const enrollmentUrl = `${SUPABASE_CONFIG.url}/functions/v1/device-enrollment`;
-  const command = `$ProgressPreference = 'SilentlyContinue'; Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $dir = Join-Path $env:TEMP 'AISupportSSH'; New-Item -ItemType Directory -Force -Path $dir | Out-Null; $scriptPath = Join-Path $dir 'setup-ai-support-windows.ps1'; Invoke-WebRequest -UseBasicParsing -Uri '${UPDATES_HOST}/setup-ai-support-windows.ps1' -OutFile $scriptPath; $actualHash = (Get-FileHash -LiteralPath $scriptPath -Algorithm SHA256).Hash.ToLowerInvariant(); if ($actualHash -ne '${AI_SUPPORT_SETUP_SHA256}') { Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue; throw 'AI-support setup-scriptet bestod ikke SHA-256 verifikationen.' }; Unblock-File -LiteralPath $scriptPath; $cfId = Read-Host -Prompt 'Cloudflare Access service-token client ID'; $cfSecret = Read-Host -Prompt 'Cloudflare Access service-token secret' -AsSecureString; & $scriptPath -EnrollmentUrl ${quote(enrollmentUrl)} -EnrollmentToken ${quote(token)} -SupportPublicKeyUrl ${quote(AI_SUPPORT_PUBLIC_KEY_URL)} -ClientName ${quote(clientName)} -CloudflareAccessHostname 'ssh.hawkeye123.dk' -CloudflareServiceTokenId $cfId -CloudflareServiceTokenSecret $cfSecret`;
+  const command = `$ProgressPreference = 'SilentlyContinue'; Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $dir = Join-Path $env:TEMP 'AISupportSSH'; New-Item -ItemType Directory -Force -Path $dir | Out-Null; $scriptPath = Join-Path $dir 'setup-ai-support-windows.ps1'; Invoke-WebRequest -UseBasicParsing -Uri '${UPDATES_HOST}/setup-ai-support-windows.ps1' -OutFile $scriptPath; $actualHash = (Get-FileHash -LiteralPath $scriptPath -Algorithm SHA256).Hash.ToLowerInvariant(); if ($actualHash -ne '${AI_SUPPORT_SETUP_SHA256}') { Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue; throw 'AI-support setup-scriptet bestod ikke SHA-256 verifikationen.' }; Unblock-File -LiteralPath $scriptPath; & $scriptPath -EnrollmentUrl ${quote(enrollmentUrl)} -EnrollmentToken ${quote(token)} -SupportPublicKeyUrl ${quote(AI_SUPPORT_PUBLIC_KEY_URL)} -ClientName ${quote(clientName)} -CloudflareAccessHostname 'ssh.hawkeye123.dk'`;
   const result = document.getElementById('aiSupportEnrollmentResult');
   const name = document.getElementById('aiSupportEnrollmentClientName');
   const expiry = document.getElementById('aiSupportEnrollmentExpiry');
@@ -1012,6 +1012,32 @@ async function revokeAISupportClient(client) {
   if (!confirmed) return;
 
   try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Administrator session expired');
+
+    const cloudflareResponse = await fetch(`${SUPABASE_CONFIG.url}/functions/v1/device-enrollment`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: SUPABASE_CONFIG.anonKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'revoke-ai-support-cloudflare-token',
+        client_id: client.client_id,
+      }),
+    });
+    let cloudflareData = {};
+    try {
+      cloudflareData = await cloudflareResponse.json();
+    } catch (_) {
+      // Keep the error generic when the function did not return JSON.
+    }
+    const cloudflareError = typeof cloudflareData?.error === 'string' ? cloudflareData.error : '';
+    if (!cloudflareResponse.ok || cloudflareData?.status !== 'revoked') {
+      throw new Error(cloudflareError || `Cloudflare-token revocation failed (HTTP ${cloudflareResponse.status})`);
+    }
+
     const { error } = await supabase.rpc('revoke_ai_support_client', {
       p_client_id: client.client_id,
     });
