@@ -300,12 +300,30 @@ const ActivityLog = {
         ? `Omdøbt: ${details.old_name} → ${details.new_name}`
         : 'Enhed omdøbt',
       'DEVICE_DELETED': 'Enhed slettet',
-      'AI_SUPPORT_COMMAND': 'AI kørte kommando på supportklient',
+      'AI_SUPPORT_OPERATION': 'AI-supporthandling registreret',
+      'AI_SUPPORT_COMMAND': 'Ældre AI-supportaktivitet',
       'SUPPORT_SESSION_START': 'Support session startet',
       'SUPPORT_SESSION_END': 'Support session afsluttet'
     };
-    if (event === 'AI_SUPPORT_COMMAND' && typeof details?.command === 'string') {
-      return `AI kørte: ${details.command.slice(0, 220)}`;
+    if (event === 'AI_SUPPORT_OPERATION') {
+      const operationLabels = {
+        interactive_shell: 'Interaktiv supportsession',
+        system_diagnostics: 'Systemdiagnostik',
+        network_diagnostics: 'Netværksdiagnostik',
+        file_inspection: 'Filinspektion',
+        file_change: 'Filændring',
+        service_change: 'Serviceændring',
+        process_change: 'Procesændring',
+        scheduled_task: 'Planlagt opgave',
+        account_change: 'Brugerkontoændring',
+        remote_access: 'Fjernadgang',
+        other_powershell: 'PowerShell-handling',
+        legacy_support_activity: 'Ældre supportaktivitet',
+      };
+      const resultLabels = { success: 'gennemført', failure: 'fejlede', unknown: 'resultat ukendt' };
+      const operation = operationLabels[details?.operation] || 'Supporthandling';
+      const result = resultLabels[details?.result] || 'resultat ukendt';
+      return `${operation}: ${result}`;
     }
     return labels[event] || event;
   },

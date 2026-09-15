@@ -34,6 +34,22 @@ async function sha256(value: string) {
   return [...new Uint8Array(digest)].map((item) => item.toString(16).padStart(2, '0')).join('')
 }
 
+function classifySupportOperation(command: string) {
+  if (!command.trim() || command.trim() === '[interactive shell]') return 'interactive_shell'
+  const patterns: Array<[string, RegExp]> = [
+    ['system_diagnostics', /\b(Get-ComputerInfo|Get-CimInstance|Get-WinEvent|systeminfo|whoami|hostname)\b/i],
+    ['network_diagnostics', /\b(Get-NetTCPConnection|Test-NetConnection|ipconfig|ping|nslookup|Resolve-DnsName)\b/i],
+    ['file_inspection', /\b(Get-ChildItem|Test-Path|Resolve-Path|dir|ls)\b/i],
+    ['file_change', /\b(Set-Content|Add-Content|Copy-Item|Move-Item|New-Item|Remove-Item)\b/i],
+    ['service_change', /\b(Get-Service|Start-Service|Stop-Service|Restart-Service|Set-Service)\b/i],
+    ['process_change', /\b(Get-Process|Start-Process|Stop-Process|Wait-Process)\b/i],
+    ['scheduled_task', /\b(Get-ScheduledTask|Start-ScheduledTask|Stop-ScheduledTask|Register-ScheduledTask|Unregister-ScheduledTask|schtasks)\b/i],
+    ['account_change', /\b(Get-LocalUser|New-LocalUser|Remove-LocalUser|Add-LocalGroupMember|Remove-LocalGroupMember)\b/i],
+    ['remote_access', /\b(ssh|scp|sftp|cloudflared)\b/i],
+  ]
+  return patterns.find(([, pattern]) => pattern.test(command))?.[0] || 'other_powershell'
+}
+
 async function cloudflareRequest(
   method: string,
   url: string,
@@ -403,16 +419,44 @@ serve(async (req) => {
   if (body.action === 'log-ai-support') {
     const clientId = typeof body.client_id === 'string' ? body.client_id.trim() : ''
     const logToken = typeof body.log_token === 'string' ? body.log_token.trim() : ''
-    const command = typeof body.command === 'string' ? body.command.trim().slice(0, 4000) : ''
-    if (!/^ai-[a-z0-9]{8,32}$/.test(clientId) || !/^[A-Za-z0-9_-]{20,200}$/.test(logToken) || !command) {
+    const legacyCommand = typeof body.command === 'string' ? body.command.trim().slice(0, 4000) : ''
+    const event = typeof body.event === 'string' ? body.event.trim() : ''
+    const operation = typeof body.operation === 'string' ? body.operation.trim() : ''
+    const mode = typeof body.mode === 'string' ? body.mode.trim() : ''
+    const result = typeof body.result === 'string' ? body.result.trim() : ''
+    const exitCode = typeof body.exit_code === 'number' && Number.isInteger(body.exit_code) ? body.exit_code : null
+    const durationMs = typeof body.duration_ms === 'number' && Number.isInteger(body.duration_ms) ? body.duration_ms : null
+    if (!/^ai-[a-z0-9]{8,32}$/.test(clientId) || !/^[A-Za-z0-9_-]{20,200}$/.test(logToken) || (!legacyCommand && event !== 'AI_SUPPORT_OPERATION')) {
       return response(req, { error: 'Invalid activity log request' }, 400)
     }
-    const redactedCommand = command.replace(/((?:password|passwd|token|secret|apikey|api_key|authorization)\s*[=:]\s*)([^\s]+)/gi, '$1[REDACTED]')
+    const normalizedOperation = legacyCommand ? classifySupportOperation(legacyCommand) : operation
+    const normalizedMode = legacyCommand
+      ? (legacyCommand === '[interactive shell]' ? 'interactive' : 'command')
+      : mode
+    const normalizedResult = legacyCommand ? 'unknown' : result
+    const validOperations = new Set([
+      'interactive_shell', 'system_diagnostics', 'network_diagnostics', 'file_inspection',
+      'file_change', 'service_change', 'process_change', 'scheduled_task', 'account_change',
+      'remote_access', 'other_powershell',
+    ])
+    if (!validOperations.has(normalizedOperation) || !['interactive', 'command'].includes(normalizedMode) || !['success', 'failure', 'unknown'].includes(normalizedResult)) {
+      return response(req, { error: 'Invalid activity log event' }, 400)
+    }
+    if (exitCode !== null && (exitCode < 0 || exitCode > 255)) return response(req, { error: 'Invalid activity log exit code' }, 400)
+    if (durationMs !== null && (durationMs < 0 || durationMs > 2147483647)) return response(req, { error: 'Invalid activity log duration' }, 400)
     const { error } = await serviceClient.rpc('append_ai_support_log', {
       p_client_id: clientId,
       p_activity_log_token_hash: await sha256(logToken),
-      p_event: 'AI_SUPPORT_COMMAND',
-      p_details: { command: redactedCommand },
+      p_event: 'AI_SUPPORT_OPERATION',
+      p_details: {
+        schema_version: 1,
+        mode: normalizedMode,
+        operation: normalizedOperation,
+        result: normalizedResult,
+        exit_code: exitCode,
+        duration_ms: durationMs,
+        compatibility: legacyCommand ? 'legacy' : 'structured',
+      },
     })
     if (error) return response(req, { error: 'Activity log credentials are invalid' }, 403)
     return response(req, { status: 'logged' })

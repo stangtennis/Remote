@@ -77,12 +77,12 @@ function safeText(value: unknown, maxLength = 500) {
 
 function safeDetails(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  const allowed = ['device_name', 'old_name', 'new_name', 'exit_code', 'duration_ms', 'command_length', 'operation', 'command']
+  const allowed = ['device_name', 'old_name', 'new_name', 'exit_code', 'duration_ms', 'operation', 'mode', 'result', 'compatibility', 'schema_version']
   return Object.fromEntries(
     Object.entries(value)
       .filter(([key]) => allowed.includes(key))
       .map(([key, item]) => {
-        if (typeof item === 'string') return [key, safeText(item, key === 'command' ? 800 : 200)]
+        if (typeof item === 'string') return [key, safeText(item, 200)]
         if (typeof item === 'number' && Number.isFinite(item)) return [key, item]
         if (typeof item === 'boolean') return [key, item]
         return null
@@ -101,7 +101,13 @@ function eventSummary(event: string, details: unknown) {
     SESSION_CREATED: 'Fjernsession startet',
     SESSION_ENDED: 'Fjernsession afsluttet',
     SHELL_EXEC: 'Shell-handling registreret',
-    AI_SUPPORT_COMMAND: 'AI-kommando på supportklient registreret',
+    AI_SUPPORT_OPERATION: 'AI-supporthandling registreret',
+    AI_SUPPORT_COMMAND: 'Ældre AI-supportaktivitet',
+  }
+  if (event === 'AI_SUPPORT_OPERATION' && details && typeof details === 'object') {
+    const operation = safeText((details as Record<string, unknown>).operation, 80)
+    const result = safeText((details as Record<string, unknown>).result, 40)
+    if (operation && result) return `AI-support: ${operation} (${result})`
   }
   if (event === 'DEVICE_RENAMED' && details && typeof details === 'object') {
     const oldName = safeText((details as Record<string, unknown>).old_name, 100)

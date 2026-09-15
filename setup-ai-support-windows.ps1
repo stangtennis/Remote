@@ -442,10 +442,40 @@ $ErrorActionPreference = 'Continue'
 $logPath = 'C:\ProgramData\AI-Support\activity.log'
 $configPath = 'C:\ProgramData\AI-Support\activity-config.json'
 $command = $env:SSH_ORIGINAL_COMMAND
-$session = $env:SSH_CONNECTION
+$mode = if ([string]::IsNullOrWhiteSpace($command)) { 'interactive' } else { 'command' }
+function Get-SupportOperation([string]$Value) {
+    if ([string]::IsNullOrWhiteSpace($Value)) { return 'interactive_shell' }
+    $patterns = @(
+        @{ Name = 'system_diagnostics'; Pattern = '(?i)\b(Get-ComputerInfo|Get-CimInstance|Get-WinEvent|systeminfo|whoami|hostname)\b' },
+        @{ Name = 'network_diagnostics'; Pattern = '(?i)\b(Get-NetTCPConnection|Test-NetConnection|ipconfig|ping|nslookup|Resolve-DnsName)\b' },
+        @{ Name = 'file_inspection'; Pattern = '(?i)\b(Get-ChildItem|Test-Path|Resolve-Path|dir|ls)\b' },
+        @{ Name = 'file_change'; Pattern = '(?i)\b(Set-Content|Add-Content|Copy-Item|Move-Item|New-Item|Remove-Item)\b' },
+        @{ Name = 'service_change'; Pattern = '(?i)\b(Get-Service|Start-Service|Stop-Service|Restart-Service|Set-Service)\b' },
+        @{ Name = 'process_change'; Pattern = '(?i)\b(Get-Process|Start-Process|Stop-Process|Wait-Process)\b' },
+        @{ Name = 'scheduled_task'; Pattern = '(?i)\b(Get-ScheduledTask|Start-ScheduledTask|Stop-ScheduledTask|Register-ScheduledTask|Unregister-ScheduledTask|schtasks)\b' },
+        @{ Name = 'account_change'; Pattern = '(?i)\b(Get-LocalUser|New-LocalUser|Remove-LocalUser|Add-LocalGroupMember|Remove-LocalGroupMember)\b' },
+        @{ Name = 'remote_access'; Pattern = '(?i)\b(ssh|scp|sftp|cloudflared)\b' }
+    )
+    foreach ($item in $patterns) {
+        if ($Value -match $item.Pattern) { return $item.Name }
+    }
+    return 'other_powershell'
+}
+$operation = Get-SupportOperation $command
+$startedAt = Get-Date
+$exitCode = 0
+try {
+    if ([string]::IsNullOrWhiteSpace($command)) {
+        & powershell.exe -NoLogo -NoProfile
+    } else {
+        & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command $command
+    }
+    if ($null -ne $LASTEXITCODE) { $exitCode = [int]$LASTEXITCODE }
+} catch { $exitCode = 1 }
+$durationMs = [int][Math]::Min(2147483647, ((Get-Date) - $startedAt).TotalMilliseconds)
+$result = if ($exitCode -eq 0) { 'success' } else { 'failure' }
 $timestamp = (Get-Date).ToUniversalTime().ToString('o')
-$safeCommand = if ([string]::IsNullOrWhiteSpace($command)) { '[interactive shell]' } else { ($command -replace "`r", ' ' -replace "`n", ' ') }
-$localLine = "$timestamp user=$env:USERNAME connection=$session command=$safeCommand"
+$localLine = "$timestamp event=AI_SUPPORT_OPERATION mode=$mode operation=$operation result=$result exit_code=$exitCode duration_ms=$durationMs"
 Add-Content -LiteralPath $logPath -Encoding UTF8 -Value $localLine
 try {
     $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
@@ -453,19 +483,15 @@ try {
         action = 'log-ai-support'
         client_id = [string]$config.client_id
         log_token = [string]$config.log_token
-        event = 'AI_SUPPORT_COMMAND'
-        command = $safeCommand.Substring(0, [Math]::Min(4000, $safeCommand.Length))
+        event = 'AI_SUPPORT_OPERATION'
+        mode = $mode
+        operation = $operation
+        result = $result
+        exit_code = $exitCode
+        duration_ms = $durationMs
     } | ConvertTo-Json -Compress
     Invoke-RestMethod -Uri ([string]$config.log_url) -Method Post -ContentType 'application/json' -Body $eventBody -TimeoutSec 10 | Out-Null
-} catch { Add-Content -LiteralPath $logPath -Encoding UTF8 -Value "$timestamp log_upload_failed=$($_.Exception.Message)" }
-try {
-    if ([string]::IsNullOrWhiteSpace($command)) {
-        & powershell.exe -NoLogo -NoProfile
-    } else {
-        & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command $command
-    }
-    $exitCode = $LASTEXITCODE
-} finally { }
+} catch { Add-Content -LiteralPath $logPath -Encoding UTF8 -Value "$timestamp event=AI_SUPPORT_LOG_UPLOAD_FAILED reason=backend_unavailable" }
 exit $exitCode
 '@
     Set-Content -LiteralPath $SupportShellPath -Value $shellContent -Encoding UTF8

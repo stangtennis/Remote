@@ -28,8 +28,10 @@ not be implemented by granting the MCP request path write access.
 Both support paths use the same backend history and MCP context:
 
 - Portable AI-support EXE/WebRTC actions are recorded in `support_action_audit`.
-- Persistent SSH commands are recorded as redacted `AI_SUPPORT_COMMAND` events
-  in `audit_logs` under the AI-support client ID.
+- Persistent SSH activity is recorded as structured `AI_SUPPORT_OPERATION`
+  events in `audit_logs` under the AI-support client ID. Logs contain only the
+  operation category, result, exit code, mode, and duration; raw commands are
+  not retained.
 - MCP exposes both client types through `list_clients` and `client_status`,
   merges bounded history through `client_history`, and provides `support_context`
   for status, history, and troubleshooting knowledge.
@@ -123,7 +125,8 @@ Cloudflare Service Token ID or secret is copied to Windows by the user.
         waits for the listener, then runs the reverse SSH tunnel. Its cleanup
         stops only the cloudflared process that it started;
       - installs a forced PowerShell shell with local activity logging and
-        uploads a redacted command event for each SSH command;
+        uploads a structured operation event for each SSH command without
+        retaining the command text;
      - POSTs `action=enroll-ai-support` only after the tunnel is reachable.
 5. Ubuntu reaches the Windows SSH endpoint through the registered tunnel:
    `ssh -p <tunnel_port> ai-support@127.0.0.1`. No Ubuntu private-IP fallback
@@ -202,8 +205,8 @@ secrets; no Cloudflare secret or manual token copy is part of enrollment.
 - The `ai_support_clients` table stores only public metadata: client ID,
   owner, display name, hostname, platform, Ubuntu SSH metadata, tunnel port,
   Windows SSH user/port, public-key fingerprint, status (`ready`/`revoked`),
-  and timestamps. The log stores redacted command metadata. **No private keys,
-  no passwords, no raw enrollment/log tokens.**
+  and timestamps. The log stores bounded operation metadata only. **No private
+  keys, no passwords, no raw commands, no raw enrollment/log tokens.**
 - RLS allows owners and admins SELECT only; all writes go through the
   service-role RPC. A revoked client cannot be resurrected by re-enrollment.
 - The read-only MCP is unchanged: it gains no SSH control and no write access.

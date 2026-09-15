@@ -15,7 +15,7 @@ function escapeHtml(s) {
 // one-liners download from here). Change this if the updates host moves.
 const UPDATES_HOST = 'https://updates.hawkeye123.dk';
 const AI_SUPPORT_PUBLIC_KEY_URL = `${UPDATES_HOST}/ai-support.pub`;
-const AI_SUPPORT_SETUP_SHA256 = '5a2ca6bf45cda9699a7417189d38588b15e739545dacf0dc09d97e1addfce74b';
+const AI_SUPPORT_SETUP_SHA256 = 'cce99bdb12dd7cb7bb5f32801a7965de087ec494e4ef45f459f939e061134337';
 const AI_SUPPORT_SETUP_FALLBACK_URL = 'https://raw.githubusercontent.com/stangtennis/Remote/main/setup-ai-support-windows.ps1';
 
 // Cached data for client-side filtering
@@ -950,10 +950,7 @@ async function loadAISupportClients() {
         for (const log of clientLogs) {
           const logLine = document.createElement('div');
           logLine.className = 'ai-support-log-line';
-          const detailsText = log.event === 'AI_SUPPORT_COMMAND' && typeof log.details?.command === 'string'
-            ? ` · ${log.details.command}`
-            : log.details && typeof log.details === 'object' ? ` · ${JSON.stringify(log.details)}` : '';
-          logLine.textContent = `${new Date(log.created_at).toLocaleString('da-DK')} · ${log.event || 'Hændelse'}${detailsText}`;
+          logLine.textContent = `${new Date(log.created_at).toLocaleString('da-DK')} · ${formatAISupportLog(log)}`;
           logsDetails.appendChild(logLine);
         }
       }
@@ -991,6 +988,38 @@ async function loadAISupportClients() {
     console.error('Failed to load AI-support clients:', error.message);
     showToast('Kunne ikke indlæse AI-support klienter: ' + error.message, 'error');
   }
+}
+
+function formatAISupportLog(log) {
+  const details = log.details && typeof log.details === 'object' && !Array.isArray(log.details) ? log.details : {};
+  if (log.event === 'AI_SUPPORT_OPERATION') {
+    const operationLabels = {
+      interactive_shell: 'Interaktiv supportsession',
+      system_diagnostics: 'Systemdiagnostik',
+      network_diagnostics: 'Netværksdiagnostik',
+      file_inspection: 'Filinspektion',
+      file_change: 'Filændring',
+      service_change: 'Serviceændring',
+      process_change: 'Procesændring',
+      scheduled_task: 'Planlagt opgave',
+      account_change: 'Brugerkontoændring',
+      remote_access: 'Fjernadgang',
+      other_powershell: 'PowerShell-handling',
+      legacy_support_activity: 'Ældre supportaktivitet',
+    };
+    const resultLabels = { success: 'gennemført', failure: 'fejlede', unknown: 'resultat ukendt' };
+    const label = operationLabels[details.operation] || 'Supporthandling';
+    const result = resultLabels[details.result] || 'resultat ukendt';
+    const exitCode = Number.isInteger(details.exit_code) ? ` · exit ${details.exit_code}` : '';
+    const duration = Number.isInteger(details.duration_ms) ? ` · ${details.duration_ms} ms` : '';
+    return `${label} · ${result}${exitCode}${duration}`;
+  }
+  if (log.event === 'AI_SUPPORT_COMMAND') return 'Ældre supportaktivitet';
+  const labels = {
+    AI_SUPPORT_CLIENT_ENROLLED: 'AI-support klient registreret',
+    AI_SUPPORT_CLIENT_REVOKED: 'AI-support klient revokeret',
+  };
+  return labels[log.event] || 'AI-support hændelse';
 }
 
 // Terminal revoke of an AI-support client via the SECURITY DEFINER RPC.
