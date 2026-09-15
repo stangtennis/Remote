@@ -99,17 +99,18 @@ Cloudflare Service Token ID or secret is copied to Windows by the user.
         binary from GitHub, verifies SHA-256
         `2837888cc0f5d58f15b6dc478376de90b4d3ba5241c7947455d1e0a0df429712`,
         and stores it at `C:\ProgramData\AI-Support\cloudflared.exe` with
-        SYSTEM/Administrators ACLs;
-       - protects the newly issued service-token secret with DPAPI LocalMachine at
+         current-user/SYSTEM/Administrators ACLs;
+        - protects the newly issued service-token secret with DPAPI CurrentUser at
         `C:\ProgramData\AI-Support` and stores only the non-secret client ID
-        separately with SYSTEM/Administrators ACLs;
+         separately with current-user/SYSTEM/Administrators ACLs;
       - starts `cloudflared access tcp --hostname ssh.hawkeye123.dk --url
         127.0.0.1:43000` on loopback. Token ID and secret are inherited only
         by that child through `TUNNEL_SERVICE_TOKEN_ID` and
         `TUNNEL_SERVICE_TOKEN_SECRET`, then cleared from the setup process;
       - installs the Windows **OpenSSH Client and Server** capabilities;
-      - creates the dedicated local `ai-support` account as a local Windows
-        Administrator and installs the Ubuntu operator's public key;
+       - does not create a Windows support account; the logged-in Windows user
+         is the SSH user and the Ubuntu operator key is stored in the protected
+         AI-support state directory;
       - configures Windows OpenSSH Server to listen only on `127.0.0.1`;
       - falls back to a hidden SYSTEM `AI-Support-OpenSSH` scheduled task when
         the Windows `sshd` service exits unexpectedly, while keeping the same
@@ -119,17 +120,17 @@ Cloudflare Service Token ID or secret is copied to Windows by the user.
       - performs every bootstrap, password, key, and temporary reverse-tunnel
         SSH call as `dennis@127.0.0.1 -p 43000` through that bridge;
       - starts and verifies `ssh -N -T -R 127.0.0.1:<tunnel-port>:127.0.0.1:<WindowsSshPort>`;
-      - installs `AI-Support-Persistent-Tunnel` as a SYSTEM startup task with
-        keepalives, automatic reconnect, and hidden task visibility. The task
-        decrypts the DPAPI secret, starts its own loopback cloudflared bridge,
-        waits for the listener, then runs the reverse SSH tunnel. Its cleanup
-        stops only the cloudflared process that it started;
+       - installs `AI-Support-Persistent-Tunnel` as a hidden task at the
+         current user's logon with keepalives and automatic reconnect. The task
+         decrypts the CurrentUser DPAPI secret, starts its own loopback
+         cloudflared bridge, waits for the listener, then runs the reverse SSH
+         tunnel. Its cleanup stops only the cloudflared process that it started;
       - installs a forced PowerShell shell with local activity logging and
         uploads a structured operation event for each SSH command without
         retaining the command text;
      - POSTs `action=enroll-ai-support` only after the tunnel is reachable.
 5. Ubuntu reaches the Windows SSH endpoint through the registered tunnel:
-   `ssh -p <tunnel_port> ai-support@127.0.0.1`. No Ubuntu private-IP fallback
+   `ssh -p <tunnel_port> <windows_ssh_user>@127.0.0.1`. No Ubuntu private-IP fallback
    is used by enrollment. The enrollment metadata records the public
    Cloudflare hostname `ssh.hawkeye123.dk` and SSH port `22`.
 6. The AI-support token calls the `consume_ai_support_enrollment`
@@ -187,7 +188,7 @@ secrets; no Cloudflare secret or manual token copy is part of enrollment.
   used. There is no Remote Desktop agent, WebRTC path, or controller dependency.
 - The Cloudflare service-token secret is received only over HTTPS as a
   one-time issuance response and accepted only as a PowerShell `SecureString`,
-  protected with DPAPI `LocalMachine`, and never appears in command-line
+   protected with DPAPI `CurrentUser`, and never appears in command-line
   arguments, the scheduled-task definition, the runner script, enrollment
   metadata, activity config, logs, or this repository. Supabase stores only
   `device_enrollment_tokens.cloudflare_service_token_id`, which is non-secret
@@ -195,9 +196,8 @@ secrets; no Cloudflare secret or manual token copy is part of enrollment.
   raw-stored there.
   The runner decrypts it only long enough to place it in the environment of its
   child `cloudflared` process and then clears its own environment variables.
-  Because the support account is an administrator, a trusted local administrator
-  can still recover machine-protected secrets; this is an explicit deployment
-  tradeoff for administrator-level AI support.
+   The tunnel and shell run with the logged-in user's Windows permissions; the
+   setup does not create or grant a separate administrator account.
 - The cloudflared executable is downloaded only over HTTPS, hash-checked
   against the pinned release value, and protected by SYSTEM/Administrators
   ACLs. Bridge cleanup uses the owned process handle and does not kill
@@ -211,8 +211,8 @@ secrets; no Cloudflare secret or manual token copy is part of enrollment.
   service-role RPC. A revoked client cannot be resurrected by re-enrollment.
 - The read-only MCP is unchanged: it gains no SSH control and no write access.
 - The script never prints passwords or private keys. The private tunnel key is
-  stored locally under `C:\ProgramData\AI-Support` with SYSTEM/Administrators
-  ACLs; it is never sent to Ubuntu or Supabase. The one-time enrollment token
+  stored locally under `C:\ProgramData\AI-Support` with current-user/SYSTEM/
+  Administrators ACLs; it is never sent to Ubuntu or Supabase. The one-time enrollment token
   appears only in the invoking command line.
 - Existing installations can refresh the forced shell without re-enrollment by
   running the pinned setup script with `-RefreshLogging`. This replaces the

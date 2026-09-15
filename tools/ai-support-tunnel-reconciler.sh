@@ -5,6 +5,8 @@ CONFIG_FILE="${AI_SUPPORT_RECONCILER_CONFIG:-/etc/ai-support/tunnel-reconciler.e
 KEYS_FILE="${AI_SUPPORT_AUTHORIZED_KEYS:-/home/dennis/.ssh/authorized_keys}"
 POLL_SECONDS="${AI_SUPPORT_RECONCILE_INTERVAL:-15}"
 OPERATOR_KEY="${AI_SUPPORT_OPERATOR_KEY:-/home/dennis/.ssh/id_rsa}"
+UNINSTALLER_URL="${AI_SUPPORT_UNINSTALLER_URL:-https://updates.hawkeye123.dk/uninstall-ai-support-windows.ps1}"
+UNINSTALLER_SHA256="${AI_SUPPORT_UNINSTALLER_SHA256:-621c7696867880aeea0de694bd72e0912e0d21753e08b671f4978d6d82bf2e81}"
 
 if [[ ! -r "$CONFIG_FILE" ]]; then
   printf 'Missing reconciler config: %s\n' "$CONFIG_FILE" >&2
@@ -21,7 +23,7 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-api_url="${SUPABASE_URL%/}/rest/v1/ai_support_clients?select=client_id,status,tunnel_port,windows_ssh_user,windows_ssh_port"
+api_url="${SUPABASE_URL%/}/rest/v1/ai_support_clients?select=client_id,status,tunnel_port,windows_ssh_user,windows_ssh_port,local_uninstalled_at"
 rpc_url="${SUPABASE_URL%/}/rest/v1/rpc/complete_ai_support_uninstall"
 tmp_json=""
 trap '[[ -n "$tmp_json" ]] && rm -f "$tmp_json"' EXIT
@@ -46,11 +48,12 @@ terminate_client_sessions() {
 remove_client_key() {
   local client_id="$1"
   local marker="${client_id}-tunnel"
+  local bootstrap_marker="${client_id}-bootstrap"
   local temporary
   [[ -f "$KEYS_FILE" ]] || return 0
-  grep -Fq -- "$marker" "$KEYS_FILE" || return 0
+  grep -Fq -- "$marker" "$KEYS_FILE" || grep -Fq -- "$bootstrap_marker" "$KEYS_FILE" || return 0
   temporary="$(mktemp "${KEYS_FILE}.reconcile.XXXXXX")"
-  if ! awk -v marker="$marker" '$NF != marker { print }' "$KEYS_FILE" > "$temporary"; then
+  if ! awk -v marker="$marker" -v bootstrap_marker="$bootstrap_marker" '$NF != marker && $NF != bootstrap_marker { print }' "$KEYS_FILE" > "$temporary"; then
     rm -f "$temporary"
     return 1
   fi
@@ -66,7 +69,7 @@ uninstall_client() {
   [[ "$windows_user" =~ ^[A-Za-z0-9._-]{1,32}$ ]] || return 1
   [[ -r "$OPERATOR_KEY" ]] || return 1
   local cleanup_command
-  cleanup_command="\$task='AI-Support-Persistent-Tunnel'; Stop-ScheduledTask -TaskName \$task -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName \$task -Confirm:\$false -ErrorAction SilentlyContinue; \$sshdTask='AI-Support-OpenSSH'; Stop-ScheduledTask -TaskName \$sshdTask -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName \$sshdTask -Confirm:\$false -ErrorAction SilentlyContinue; Stop-Service -Name sshd -Force -ErrorAction SilentlyContinue; \$backup='C:\\ProgramData\\AI-Support\\sshd_config.backup'; \$config='C:\\ProgramData\\ssh\\sshd_config'; if (Test-Path \$backup) { Copy-Item -LiteralPath \$backup -Destination \$config -Force }; \$policy='HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System'; \$previous='C:\\ProgramData\\AI-Support\\token-policy.backup'; if (Test-Path \$previous) { \$value=(Get-Content -LiteralPath \$previous -Raw).Trim(); if (\$value -eq 'MISSING') { Remove-ItemProperty -Path \$policy -Name LocalAccountTokenFilterPolicy -ErrorAction SilentlyContinue } else { Set-ItemProperty -Path \$policy -Name LocalAccountTokenFilterPolicy -Value ([int]\$value) -Type DWord } }; Remove-LocalUser -Name '$windows_user' -ErrorAction SilentlyContinue; Remove-Item -LiteralPath 'C:\\ProgramData\\AI-Support' -Recurse -Force -ErrorAction SilentlyContinue"
+  cleanup_command="\$url='$UNINSTALLER_URL'; \$path=Join-Path \$env:TEMP 'uninstall-ai-support-windows.ps1'; Invoke-WebRequest -UseBasicParsing -Uri \$url -OutFile \$path; if ((Get-FileHash -LiteralPath \$path -Algorithm SHA256).Hash.ToLowerInvariant() -ne '$UNINSTALLER_SHA256') { throw 'AI-support uninstaller hash mismatch' }; & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File \$path -ClientId '$client_id' -WindowsUser '$windows_user' -Force"
   if ! ssh -n -T -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes -i "$OPERATOR_KEY" \
     -p "$tunnel_port" "$windows_user@127.0.0.1" "$cleanup_command" >/dev/null 2>&1; then
@@ -86,7 +89,7 @@ delete_client_record() {
 }
 
 reconcile_once() {
-  local revoked_clients client_id status tunnel_port windows_user windows_port
+  local revoked_clients client_id status tunnel_port windows_user windows_port local_uninstalled_at
   tmp_json="$(mktemp /run/ai-support-tunnel-reconciler.XXXXXX.json)"
   if ! curl --fail --silent --show-error --connect-timeout 10 --max-time 20 \
     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
@@ -104,11 +107,15 @@ reconcile_once() {
     return 1
   fi
 
-  revoked_clients="$(jq -r '.[] | select(.status == "revoked" or .status == "uninstall_pending") | [.client_id, (.status // ""), (.tunnel_port // ""), (.windows_ssh_user // ""), (.windows_ssh_port // "")] | @tsv' "$tmp_json")"
-  while IFS=$'\t' read -r client_id status tunnel_port windows_user windows_port; do
+  revoked_clients="$(jq -r '.[] | select(.status == "revoked" or .status == "uninstall_pending") | [.client_id, (.status // ""), (.tunnel_port // ""), (.windows_ssh_user // ""), (.windows_ssh_port // ""), (.local_uninstalled_at // "")] | @tsv' "$tmp_json")"
+  while IFS=$'\t' read -r client_id status tunnel_port windows_user windows_port local_uninstalled_at; do
     [[ -n "$client_id" ]] || continue
     [[ "$client_id" =~ ^ai-[a-z0-9]{8,32}$ ]] || continue
-    if [[ "$status" == "uninstall_pending" && -n "$tunnel_port" ]]; then
+    if [[ ("$status" == "revoked" || "$status" == "uninstall_pending") && -z "$local_uninstalled_at" ]]; then
+      if [[ -z "$tunnel_port" || ! "$tunnel_port" =~ ^[0-9]+$ ]]; then
+        logger -t ai-support-tunnel-reconciler "client cleanup skipped because tunnel port is invalid client=$client_id"
+        continue
+      fi
       uninstall_client "$client_id" "$tunnel_port" "$windows_user" || continue
     fi
     remove_client_key "$client_id"

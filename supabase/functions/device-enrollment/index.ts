@@ -197,7 +197,7 @@ serve(async (req) => {
 
     const { data: enrollment, error: enrollmentError } = await serviceClient
       .from('device_enrollment_tokens')
-      .select('id, purpose, used_at, expires_at, cloudflare_service_token_id')
+      .select('id, purpose, used_at, expires_at, cloudflare_service_token_id, cloudflare_issuance_started_at')
       .eq('token_hash', await sha256(token))
       .maybeSingle()
     if (enrollmentError) {
@@ -216,30 +216,62 @@ serve(async (req) => {
       return response(req, { error: 'Cloudflare token issuance is not configured' }, 503)
     }
 
+    const existingClaim = typeof enrollment.cloudflare_issuance_started_at === 'string'
+      ? enrollment.cloudflare_issuance_started_at
+      : ''
+    if (existingClaim && Number.isFinite(new Date(existingClaim).getTime()) &&
+      new Date(existingClaim).getTime() > Date.now() - 10 * 60 * 1000) {
+      return response(req, { error: 'Cloudflare token issuance is already in progress' }, 409)
+    }
+    let claimQuery = serviceClient
+      .from('device_enrollment_tokens')
+      .update({ cloudflare_issuance_started_at: new Date().toISOString() })
+      .eq('id', enrollment.id)
+      .is('used_at', null)
+    claimQuery = existingClaim
+      ? claimQuery.eq('cloudflare_issuance_started_at', existingClaim)
+      : claimQuery.is('cloudflare_issuance_started_at', null)
+    const { data: claimedEnrollment, error: claimError } = await claimQuery.select('id')
+    if (claimError) {
+      console.error('Cloudflare token issuance claim failed', { code: claimError.code || 'database_error' })
+      return response(req, { error: 'Could not start Cloudflare token issuance' }, 500)
+    }
+    if (!claimedEnrollment?.[0]) return response(req, { error: 'Cloudflare token issuance is already in progress' }, 409)
+    let issuanceClaimed = true
+    const releaseIssuanceClaim = async () => {
+      if (!issuanceClaimed) return
+      const { error } = await serviceClient
+        .from('device_enrollment_tokens')
+        .update({ cloudflare_issuance_started_at: null })
+        .eq('id', enrollment.id)
+      if (error) console.error('Cloudflare token issuance claim release failed', { code: error.code || 'database_error' })
+      issuanceClaimed = false
+    }
+
     const serviceTokensUrl = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(cloudflareAccountId)}/access/service_tokens`
     const previousServiceTokenId = typeof enrollment.cloudflare_service_token_id === 'string'
       ? enrollment.cloudflare_service_token_id
       : ''
-    if (previousServiceTokenId) {
-      try {
-        await cloudflareRequest(
-          'DELETE',
-          `${serviceTokensUrl}/${encodeURIComponent(previousServiceTokenId)}`,
-          cloudflareApiToken,
-          'delete_service_token',
-          undefined,
-          true,
-        )
-      } catch {
-        return response(req, { error: 'Could not replace the Cloudflare service token' }, 502)
-      }
-    }
-
     let issuedPayload: any = null
     let clientSecret = ''
     let serviceTokenId = ''
     let serviceTokenClientId = ''
     try {
+      if (previousServiceTokenId) {
+        try {
+          await cloudflareRequest(
+            'DELETE',
+            `${serviceTokensUrl}/${encodeURIComponent(previousServiceTokenId)}`,
+            cloudflareApiToken,
+            'delete_service_token',
+            undefined,
+            true,
+          )
+        } catch {
+          return response(req, { error: 'Could not replace the Cloudflare service token' }, 502)
+        }
+      }
+
       try {
         issuedPayload = await cloudflareRequest(
           'POST',
@@ -289,7 +321,126 @@ serve(async (req) => {
     } finally {
       clientSecret = ''
       issuedPayload = null
+      await releaseIssuanceClaim()
     }
+  }
+
+  // The Windows uninstaller authenticates with the client-scoped activity
+  // token. Request marks the client pending and revokes its Cloudflare token;
+  // complete is accepted only after the local cleanup has finished.
+  if (body.action === 'ai-support-uninstall') {
+    const phase = body.phase === 'complete' ? 'complete' : body.phase === 'rollback' ? 'rollback' : body.phase === 'request' ? 'request' : ''
+    const clientId = typeof body.client_id === 'string' ? body.client_id.trim() : ''
+    const logToken = typeof body.log_token === 'string' ? body.log_token.trim() : ''
+    if (!phase || !/^ai-[a-z0-9]{8,32}$/.test(clientId) || !/^[A-Za-z0-9_-]{20,200}$/.test(logToken)) {
+      return response(req, { error: 'Invalid AI-support uninstall request' }, 400)
+    }
+
+    const { data: client, error: clientError } = await serviceClient
+      .from('ai_support_clients')
+      .select('client_id, status, activity_log_token_hash')
+      .eq('client_id', clientId)
+      .maybeSingle()
+    if (clientError) {
+      console.error('AI-support uninstall client lookup failed', { code: clientError.code || 'database_error' })
+      return response(req, { error: 'Could not find AI-support client' }, 500)
+    }
+    if (!client || client.activity_log_token_hash !== await sha256(logToken)) {
+      return response(req, { error: 'Invalid AI-support uninstall credentials' }, 403)
+    }
+
+    if (phase === 'complete') {
+      if (client.status === 'ready') return response(req, { error: 'AI-support uninstall has not been requested' }, 409)
+      const { error: completeError } = await serviceClient.rpc('mark_ai_support_local_uninstalled', {
+        p_client_id: clientId,
+        p_activity_log_token_hash: client.activity_log_token_hash,
+      })
+      if (completeError) {
+        console.error('AI-support local uninstall report failed', { code: completeError.code || 'database_error' })
+        return response(req, { error: 'Local cleanup could not be reported yet' }, 409)
+      }
+      return response(req, { status: 'local_uninstall_reported' })
+    }
+
+    if (phase === 'rollback') {
+      const { error: rollbackError } = await serviceClient.rpc('rollback_ai_support_local_uninstall', {
+        p_client_id: clientId,
+        p_activity_log_token_hash: client.activity_log_token_hash,
+      })
+      if (rollbackError) {
+        console.error('AI-support local uninstall rollback failed', { code: rollbackError.code || 'database_error' })
+        return response(req, { error: 'Local cleanup rollback failed' }, 409)
+      }
+      return response(req, { status: 'local_uninstall_rolled_back' })
+    }
+
+    let status = client.status
+    if (!['ready', 'revoked', 'uninstall_pending'].includes(status)) {
+      return response(req, { status: 'already_uninstalled' })
+    }
+
+    const { data: enrollments, error: enrollmentError } = await serviceClient
+      .from('device_enrollment_tokens')
+      .select('id, cloudflare_service_token_id')
+      .eq('device_id', clientId)
+      .eq('purpose', 'ai_support')
+      .order('created_at', { ascending: false })
+    if (enrollmentError) {
+      console.error('AI-support uninstall enrollment lookup failed', { code: enrollmentError.code || 'database_error' })
+      return response(req, { error: 'Could not find AI-support enrollment metadata' }, 500)
+    }
+
+    const serviceTokenIds = [...new Set((enrollments || [])
+      .map((enrollment: any) => typeof enrollment.cloudflare_service_token_id === 'string'
+        ? enrollment.cloudflare_service_token_id.trim()
+        : '')
+      .filter(Boolean))]
+    for (const serviceTokenId of serviceTokenIds) {
+      if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(serviceTokenId)) {
+        return response(req, { error: 'Cloudflare service-token metadata is invalid' }, 500)
+      }
+      const cloudflareApiToken = Deno.env.get('CLOUDFLARE_API_TOKEN')?.trim() || ''
+      const cloudflareAccountId = Deno.env.get('CLOUDFLARE_ACCOUNT_ID')?.trim() || ''
+      if (!cloudflareApiToken || !cloudflareAccountId || !/^[A-Za-z0-9_-]{1,100}$/.test(cloudflareAccountId)) {
+        return response(req, { error: 'Cloudflare token revocation is not configured' }, 503)
+      }
+      try {
+        await cloudflareRequest(
+          'DELETE',
+          `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(cloudflareAccountId)}/access/service_tokens/${encodeURIComponent(serviceTokenId)}`,
+          cloudflareApiToken,
+          'delete_service_token_for_uninstall',
+          undefined,
+          true,
+        )
+      } catch {
+        return response(req, { error: 'Could not revoke the Cloudflare service token' }, 502)
+      }
+    }
+    if (serviceTokenIds.length > 0) {
+      const { error: clearError } = await serviceClient
+        .from('device_enrollment_tokens')
+        .update({ cloudflare_service_token_id: null })
+        .eq('device_id', clientId)
+        .eq('purpose', 'ai_support')
+        .not('cloudflare_service_token_id', 'is', null)
+      if (clearError) {
+        console.error('AI-support uninstall token metadata cleanup failed', { code: clearError.code || 'database_error' })
+        return response(req, { error: 'Cloudflare token was revoked but metadata cleanup failed' }, 500)
+      }
+    }
+    if (status === 'ready' || status === 'revoked') {
+      const { data: requestedStatus, error: requestError } = await serviceClient.rpc('request_ai_support_uninstall', {
+        p_client_id: clientId,
+        p_activity_log_token_hash: client.activity_log_token_hash,
+      })
+      if (requestError || !requestedStatus) {
+        console.error('AI-support uninstall request failed', { code: requestError?.code || 'database_error' })
+        return response(req, { error: 'Could not request AI-support uninstall' }, 500)
+      }
+      status = requestedStatus
+    }
+    return response(req, { status: 'uninstall_pending' })
   }
 
   if (body.action === 'revoke-ai-support-cloudflare-token') {
@@ -315,22 +466,24 @@ serve(async (req) => {
       return response(req, { error: 'Only the owner or an admin may revoke this AI-support client' }, 403)
     }
 
-    const { data: enrollment, error: enrollmentError } = await serviceClient
+    const { data: enrollments, error: enrollmentError } = await serviceClient
       .from('device_enrollment_tokens')
-      .select('cloudflare_service_token_id')
+      .select('id, cloudflare_service_token_id')
       .eq('device_id', clientId)
       .eq('purpose', 'ai_support')
-      .maybeSingle()
+      .order('created_at', { ascending: false })
     if (enrollmentError) {
       console.error('Cloudflare token revocation lookup failed', { code: enrollmentError.code || 'database_error' })
       return response(req, { error: 'Could not find AI-support enrollment metadata' }, 500)
     }
 
-    const serviceTokenId = typeof enrollment?.cloudflare_service_token_id === 'string'
-      ? enrollment.cloudflare_service_token_id.trim()
-      : ''
-    if (!serviceTokenId) return response(req, { status: 'revoked' })
-    if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(serviceTokenId)) {
+    const serviceTokenIds = [...new Set((enrollments || [])
+      .map((enrollment: any) => typeof enrollment.cloudflare_service_token_id === 'string'
+        ? enrollment.cloudflare_service_token_id.trim()
+        : '')
+      .filter(Boolean))]
+    if (serviceTokenIds.length === 0) return response(req, { status: 'revoked' })
+    if (serviceTokenIds.some((serviceTokenId) => !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(serviceTokenId))) {
       console.error('Cloudflare token revocation found invalid metadata')
       return response(req, { error: 'Cloudflare service-token metadata is invalid' }, 500)
     }
@@ -342,19 +495,21 @@ serve(async (req) => {
       return response(req, { error: 'Cloudflare token revocation is not configured' }, 503)
     }
 
-    const serviceTokenUrl = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(cloudflareAccountId)}/access/service_tokens/${encodeURIComponent(serviceTokenId)}`
     try {
-      await cloudflareRequest('DELETE', serviceTokenUrl, cloudflareApiToken, 'delete_service_token', undefined, true)
+      for (const serviceTokenId of serviceTokenIds) {
+        const serviceTokenUrl = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(cloudflareAccountId)}/access/service_tokens/${encodeURIComponent(serviceTokenId)}`
+        await cloudflareRequest('DELETE', serviceTokenUrl, cloudflareApiToken, 'delete_service_token', undefined, true)
+      }
     } catch {
       return response(req, { error: 'Could not revoke the Cloudflare service token' }, 502)
     }
 
     const { error: clearError } = await serviceClient
       .from('device_enrollment_tokens')
-      .update({ cloudflare_service_token_id: null })
-      .eq('device_id', clientId)
-      .eq('purpose', 'ai_support')
-      .eq('cloudflare_service_token_id', serviceTokenId)
+        .update({ cloudflare_service_token_id: null })
+        .eq('device_id', clientId)
+        .eq('purpose', 'ai_support')
+        .not('cloudflare_service_token_id', 'is', null)
     if (clearError) {
       console.error('Cloudflare token revocation state update failed', { code: clearError.code || 'database_error' })
       return response(req, { error: 'Cloudflare token was revoked but metadata cleanup failed' }, 500)

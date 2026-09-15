@@ -15,8 +15,10 @@ function escapeHtml(s) {
 // one-liners download from here). Change this if the updates host moves.
 const UPDATES_HOST = 'https://updates.hawkeye123.dk';
 const AI_SUPPORT_PUBLIC_KEY_URL = `${UPDATES_HOST}/ai-support.pub`;
-const AI_SUPPORT_SETUP_SHA256 = '856120908198a97650c1dc1a913867805665da788923e89e47fc742d79be8361';
+const AI_SUPPORT_SETUP_SHA256 = '4dc018dfaca27ff6f9fb45aa7513083023a75967b40c3e49c5151c7c3d8b1657';
 const AI_SUPPORT_SETUP_FALLBACK_URL = 'https://raw.githubusercontent.com/stangtennis/Remote/main/setup-ai-support-windows.ps1';
+const AI_SUPPORT_UNINSTALL_SHA256 = '621c7696867880aeea0de694bd72e0912e0d21753e08b671f4978d6d82bf2e81';
+const AI_SUPPORT_UNINSTALL_FALLBACK_URL = 'https://raw.githubusercontent.com/stangtennis/Remote/main/uninstall-ai-support-windows.ps1';
 
 // Cached data for client-side filtering
 let _allDevices = [];
@@ -839,7 +841,6 @@ async function loadAISupportClients() {
     const { data, error } = await supabase
       .from('ai_support_clients')
       .select('client_id, client_name, hostname, platform, ssh_host, ssh_port, ssh_user, ssh_key_fingerprint, tunnel_port, windows_ssh_user, windows_ssh_port, status, last_seen, created_at')
-      .eq('status', 'ready')
       .order('created_at', { ascending: false });
     if (error) throw error;
 
@@ -848,7 +849,7 @@ async function loadAISupportClients() {
     const readyCount = document.getElementById('aiSupportReadyCount');
     const lastRegistration = document.getElementById('aiSupportLastRegistration');
     if (clientCount) clientCount.textContent = clients.length;
-    if (readyCount) readyCount.textContent = clients.length;
+    if (readyCount) readyCount.textContent = clients.filter((client) => client.status === 'ready').length;
     if (lastRegistration) {
       const latest = clients[0]?.created_at || clients[0]?.last_seen;
       lastRegistration.textContent = latest
@@ -909,7 +910,12 @@ async function loadAISupportClients() {
       const statusDot = document.createElement('span');
       statusDot.className = 'ai-support-status-dot';
       statusDot.setAttribute('aria-hidden', 'true');
-      badge.append(statusDot, document.createTextNode(client.status === 'ready' ? 'Klar' : 'Revokeret'));
+      const statusLabel = client.status === 'ready'
+        ? 'Klar'
+        : client.status === 'uninstall_pending'
+          ? 'Afinstallation afventer'
+          : 'Revokeret';
+      badge.append(statusDot, document.createTextNode(statusLabel));
       cardHead.append(identity, badge);
       card.appendChild(cardHead);
 
@@ -956,9 +962,31 @@ async function loadAISupportClients() {
       }
       card.appendChild(logsDetails);
 
-      // Terminal revoke action with explicit confirmation. Rows are built
-      // with DOM APIs (textContent), so client metadata is never injected
-      // as HTML, and no secrets exist in this table.
+      // Actions are built with DOM APIs (textContent), so client metadata is
+      // never injected as HTML, and no secrets exist in this table.
+      const uninstallBtn = document.createElement('button');
+      uninstallBtn.type = 'button';
+      uninstallBtn.className = 'btn btn-secondary btn-sm';
+      uninstallBtn.title = 'Kopiér komplet AI-support afinstallation til Windows';
+      uninstallBtn.textContent = 'Kopiér afinstallation';
+      uninstallBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        copyAISupportUninstallCommand(client);
+      });
+      const footer = document.createElement('div');
+      footer.className = 'ai-support-client-card-footer';
+      const footerNote = document.createElement('span');
+      footerNote.className = 'ai-support-client-footer-note';
+      const registeredAt = client.created_at || client.last_seen;
+      footerNote.textContent = registeredAt
+        ? `Registreret ${new Date(registeredAt).toLocaleString('da-DK', { dateStyle: 'medium', timeStyle: 'short' })}`
+        : 'Registreringstidspunkt ikke tilgængeligt';
+      const footerActions = document.createElement('div');
+      footerActions.className = 'ai-support-client-footer-actions';
+      footerActions.append(uninstallBtn);
+
+      // Terminal revoke action with explicit confirmation.
       if (client.status === 'ready') {
         const revokeBtn = document.createElement('button');
         revokeBtn.type = 'button';
@@ -970,23 +998,29 @@ async function loadAISupportClients() {
           event.stopPropagation();
           revokeAISupportClient(client);
         });
-        const footer = document.createElement('div');
-        footer.className = 'ai-support-client-card-footer';
-        const footerNote = document.createElement('span');
-        footerNote.className = 'ai-support-client-footer-note';
-        const registeredAt = client.created_at || client.last_seen;
-        footerNote.textContent = registeredAt
-          ? `Registreret ${new Date(registeredAt).toLocaleString('da-DK', { dateStyle: 'medium', timeStyle: 'short' })}`
-          : 'Registreringstidspunkt ikke tilgængeligt';
-        footer.append(footerNote, revokeBtn);
-        card.appendChild(footer);
+        footerActions.append(revokeBtn);
       }
+      footer.append(footerNote, footerActions);
+      card.appendChild(footer);
 
       list.appendChild(card);
     }
   } catch (error) {
     console.error('Failed to load AI-support clients:', error.message);
     showToast('Kunne ikke indlæse AI-support klienter: ' + error.message, 'error');
+  }
+}
+
+async function copyAISupportUninstallCommand(client) {
+  if (!client || typeof client.client_id !== 'string' || !client.client_id) return;
+  const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
+  const scriptPath = "Join-Path $dir 'uninstall-ai-support-windows.ps1'";
+  const command = `$ProgressPreference = 'SilentlyContinue'; Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $dir = Join-Path $env:TEMP 'AISupportSSH'; New-Item -ItemType Directory -Force -Path $dir | Out-Null; $scriptPath = ${scriptPath}; $downloadUrls = @('${UPDATES_HOST}/uninstall-ai-support-windows.ps1?v=${AI_SUPPORT_UNINSTALL_SHA256}', '${AI_SUPPORT_UNINSTALL_FALLBACK_URL}'); $downloaded = $false; $actualHash = ''; foreach ($downloadUrl in $downloadUrls) { try { Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue; if (Get-Command curl.exe -ErrorAction SilentlyContinue) { & curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 1 --output $scriptPath $downloadUrl; if ($LASTEXITCODE -ne 0) { throw 'download failed' } } else { $webClient = New-Object System.Net.WebClient; try { $webClient.DownloadFile($downloadUrl, $scriptPath) } finally { $webClient.Dispose() } }; $actualHash = (Get-FileHash -LiteralPath $scriptPath -Algorithm SHA256).Hash.ToLowerInvariant(); if ($actualHash -eq '${AI_SUPPORT_UNINSTALL_SHA256}') { $downloaded = $true; break } } catch { } }; if (-not $downloaded) { throw "AI-support uninstalleren kunne ikke valideres. Modtaget hash: $actualHash" }; Unblock-File -LiteralPath $scriptPath; & $scriptPath -ClientId ${quote(client.client_id)} -WindowsUser ${quote(client.windows_ssh_user || '')}`;
+  try {
+    await navigator.clipboard.writeText(command);
+    showToast('Komplet AI-support-afinstallation kopieret.', 'success');
+  } catch (_) {
+    showToast('Kunne ikke kopiere afinstallationskommandoen.', 'error');
   }
 }
 
@@ -1018,6 +1052,9 @@ function formatAISupportLog(log) {
   const labels = {
     AI_SUPPORT_CLIENT_ENROLLED: 'AI-support klient registreret',
     AI_SUPPORT_CLIENT_REVOKED: 'AI-support klient revokeret',
+    AI_SUPPORT_CLIENT_UNINSTALL_REQUESTED: 'AI-support afinstallation startet',
+    AI_SUPPORT_CLIENT_LOCAL_UNINSTALLED: 'Lokal AI-support afinstallation gennemført',
+    AI_SUPPORT_CLIENT_UNINSTALLED: 'AI-support klient afinstalleret',
   };
   return labels[log.event] || 'AI-support hændelse';
 }

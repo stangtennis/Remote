@@ -332,6 +332,13 @@
   font-size: 0.7rem;
 }
 
+.ai-support-client-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .ai-support-log-details {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
@@ -401,6 +408,11 @@
   .ai-support-client-card-footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .ai-support-client-footer-actions {
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .ai-support-status-badge {
