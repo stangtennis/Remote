@@ -258,11 +258,7 @@
                var supportBtn = document.getElementById('supportClientDownloadBtn');
                if (supportBtn) {
                  supportBtn.onclick = function() {
-                   if (typeof createAISupportEnrollment === 'function') {
-                     createAISupportEnrollment();
-                   } else {
-                     window.location.href = 'ai-support.html';
-                   }
+                   window.location.href = 'ai-support.html';
                    return false;
                  };
                }
