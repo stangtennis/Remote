@@ -17,15 +17,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  if (section) {
-    section.classList.add('is-visible');
-    section.style.display = 'block';
-  }
   document.getElementById('generateAISupportEnrollmentBtn')?.addEventListener('click', createAISupportEnrollment);
   document.getElementById('copyAISupportEnrollmentBtn')?.addEventListener('click', copyAISupportEnrollmentCommand);
   document.getElementById('refreshAISupportClientsBtn')?.addEventListener('click', loadAISupportClients);
   document.getElementById('aiSupportClientNameInput')?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') createAISupportEnrollment();
   });
+  if (section) {
+    section.classList.add('is-visible');
+    section.style.display = 'block';
+  }
   await loadAISupportClients();
 });
