@@ -178,6 +178,38 @@
   border-top: 1px solid var(--border);
 }
 
+.ai-support-legacy-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding: 0.9rem 1.05rem;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: var(--radius-lg, 16px);
+  background: rgba(120, 53, 15, 0.16);
+}
+
+.ai-support-legacy-panel strong {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--text);
+  font-size: 0.86rem;
+}
+
+.ai-support-legacy-panel p {
+  max-width: 720px;
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.ai-support-legacy-panel code {
+  color: #fcd34d;
+  font: inherit;
+}
+
 .ai-support-command-heading {
   align-items: baseline;
   flex-wrap: wrap;
@@ -397,6 +429,11 @@
   }
 
   .ai-support-enrollment-form {
+    flex-direction: column;
+  }
+
+  .ai-support-legacy-panel {
+    align-items: flex-start;
     flex-direction: column;
   }
 

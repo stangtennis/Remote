@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('generateAISupportEnrollmentBtn')?.addEventListener('click', createAISupportEnrollment);
   document.getElementById('copyAISupportEnrollmentBtn')?.addEventListener('click', copyAISupportEnrollmentCommand);
   document.getElementById('refreshAISupportClientsBtn')?.addEventListener('click', loadAISupportClients);
+  document.getElementById('copyAISupportLegacyCleanupBtn')?.addEventListener('click', copyAISupportLegacyCleanupCommand);
   document.getElementById('aiSupportClientNameInput')?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') createAISupportEnrollment();
   });

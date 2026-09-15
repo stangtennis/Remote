@@ -171,6 +171,19 @@ secrets; no Cloudflare secret or manual token copy is part of enrollment.
   granted to `authenticated` only — everything else, including `PUBLIC`, is
   revoked. The Ubuntu `ai-support-tunnel-reconciler` then removes the client
   setup and completes terminal database cleanup.
+
+### Removing legacy local accounts
+
+- Older Windows enrollments created a local `ai-support` account. The dedicated
+  **Fjern gammel ai-support-bruger** action on the AI-support page downloads a
+  separately pinned PowerShell cleanup script.
+- The cleanup script requires Administrator PowerShell, verifies the exact
+  legacy account description plus a second legacy marker, and refuses to run
+  while the account owns a scheduled task or running process. It removes only
+  the local account and leaves the current-user tunnel, Remote Desktop agent,
+  OpenSSH configuration, and `C:\ProgramData\AI-Support` untouched.
+- The old profile directory is deliberately retained and reported for manual
+  review; the script does not recursively delete user data.
 - Revocation is terminal for database enrollment: `consume_ai_support_enrollment`
   refuses to enroll a client identity that is not `ready` ("identity
   resurrection" is blocked at the database level), and no client role has
