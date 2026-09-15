@@ -53,6 +53,7 @@ $ActivityConfigPath = Join-Path $StateDirectory 'activity-config.json'
 $CloudflaredPath = Join-Path $StateDirectory 'cloudflared.exe'
 $CloudflaredTaskLogPath = Join-Path $StateDirectory 'cloudflared.log'
 $CloudflaredErrorLogPath = Join-Path $StateDirectory 'cloudflared-error.log'
+$EnrollmentSshErrorLogPath = Join-Path $StateDirectory 'enrollment-bootstrap-ssh.err.log'
 $CloudflareTokenIdPath = Join-Path $StateDirectory 'cloudflare-service-token-id'
 $CloudflareTokenSecretPath = Join-Path $StateDirectory 'cloudflare-service-token-secret.dpapi'
 $CloudflareTokenClientId = $null
@@ -119,7 +120,7 @@ function Set-StateAcl {
         '*S-1-5-18:(OI)(CI)(F)' `
         '*S-1-5-32-544:(OI)(CI)(F)' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke beskytte AI-support state-mappen.' }
-    foreach ($path in @($TunnelKey, $TunnelPublicKey, $BootstrapKey, $BootstrapPublicKey, $KnownHosts, $SupportPublicKeyPath, $SupportShellPath, $ActivityLogPath, $ActivityConfigPath, $CloudflaredPath, $CloudflaredTaskLogPath, $CloudflaredErrorLogPath, $CloudflareTokenIdPath, $CloudflareTokenSecretPath, $TunnelRunnerPath, $TunnelTaskLogPath, $SshdConfigBackup, $TokenPolicyBackup)) {
+    foreach ($path in @($TunnelKey, $TunnelPublicKey, $BootstrapKey, $BootstrapPublicKey, $KnownHosts, $SupportPublicKeyPath, $SupportShellPath, $ActivityLogPath, $ActivityConfigPath, $CloudflaredPath, $CloudflaredTaskLogPath, $CloudflaredErrorLogPath, $EnrollmentSshErrorLogPath, $CloudflareTokenIdPath, $CloudflareTokenSecretPath, $TunnelRunnerPath, $TunnelTaskLogPath, $SshdConfigBackup, $TokenPolicyBackup)) {
         if (Test-Path $path) {
             $aclArgs = @('/inheritance:r', '/grant:r', '*S-1-5-18:F', '*S-1-5-32-544:F')
             if ($path -in @($SupportShellPath, $ActivityLogPath, $ActivityConfigPath)) {
@@ -391,8 +392,17 @@ function Invoke-UbuntuPasswordSsh([string]$RemoteCommand) {
         "$UbuntuUser@127.0.0.1",
         $RemoteCommand
     )
-    & $sshCommand.Source @args
+    Remove-Item -LiteralPath $EnrollmentSshErrorLogPath -Force -ErrorAction SilentlyContinue
+    & $sshCommand.Source @args 2> $EnrollmentSshErrorLogPath
     return $LASTEXITCODE
+}
+
+function Get-DiagnosticTail([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return '' }
+    $value = (Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue).Trim()
+    $value = $value -replace '(?i)((?:password|passwd|token|secret|apikey|api_key|authorization)\s*[=:]\s*)[^\s]+', '$1[REDACTED]'
+    if ($value.Length -gt 800) { return $value.Substring($value.Length - 800) }
+    return $value
 }
 
 function Remove-RemoteKey([string]$IdentityFile, [string]$KeyBase64) {
@@ -906,7 +916,12 @@ try {
     $bootstrapLineEncoded = Convert-ToBase64 $bootstrapKeyLine
     # The port-specific tunnel key line is installed inside the retry loop.
     $remoteInstall = "set -eu; umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; tmp=`$(mktemp); awk -v k='$bootstrapBase64' -v t='$tunnelBase64' '{ current = 0; for (i=1; i<NF; i++) if (`$i ~ /^(ssh-|ecdsa-)/) { current = `$(i+1); break } } current != k && current != t { print }' ~/.ssh/authorized_keys > `$tmp; printf '%s\n' '$bootstrapLineEncoded' | base64 -d >> `$tmp; mv `$tmp ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys"
-    if ((Invoke-UbuntuPasswordSsh $remoteInstall) -ne 0) { throw 'Kunne ikke installere bootstrap-noeglen paa Ubuntu.' }
+    $bootstrapExit = Invoke-UbuntuPasswordSsh $remoteInstall
+    if ($bootstrapExit -ne 0) {
+        $sshDetails = Get-DiagnosticTail $EnrollmentSshErrorLogPath
+        $cloudflareDetails = Get-DiagnosticTail $CloudflaredErrorLogPath
+        throw "Kunne ikke installere bootstrap-noeglen paa Ubuntu (exit=$bootstrapExit). SSH=$sshDetails Cloudflare=$cloudflareDetails"
+    }
     $bootstrapInstalled = $true
 
     $tunnelVerified = $false
