@@ -21,18 +21,16 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
     [string]$EnrollmentUrl,
     [string]$EnrollmentToken,
-    [Parameter(Mandatory = $true)]
     [string]$ClientName,
-    [Parameter(Mandatory = $true)]
     [string]$SupportPublicKeyUrl,
     [string]$CloudflareAccessHostname = 'ssh.hawkeye123.dk',
     [int]$CloudflareLocalPort = 43000,
     [string]$UbuntuUser = 'dennis',
     [string]$ClientId = '',
     [int]$WindowsSshPort = 22,
+    [switch]$RefreshLogging,
     [switch]$ConfigureOnly
 )
 
@@ -500,6 +498,7 @@ exit $exitCode
         & icacls.exe $path /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' ("{0}:F" -f $WindowsSshUser) | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'Kunne ikke beskytte AI-support logfilerne.' }
     }
+    Set-Content -LiteralPath $ActivityLogPath -Value '' -Encoding UTF8
 }
 
 function Set-LocalAccountTokenFilterPolicy {
@@ -837,6 +836,12 @@ exit 1
 }
 
 if (-not (Test-Administrator)) { throw 'Dette setup skal koeres fra en Administrator-PowerShell.' }
+if ($RefreshLogging) {
+    if (-not (Test-Path -LiteralPath $StateDirectory) -or -not (Test-Path -LiteralPath $ActivityConfigPath)) { throw 'AI-support state eller aktivitetskonfiguration blev ikke fundet.' }
+    Install-SupportShell
+    Write-Host "`nAI-support logging er opdateret på $env:COMPUTERNAME." -ForegroundColor Green
+    exit 0
+}
 if ($EnrollmentUrl -notmatch '^https://[A-Za-z0-9._:/?=&-]{1,200}$') { throw 'EnrollmentUrl skal vaere en gyldig https-URL.' }
 if ($SupportPublicKeyUrl -notmatch '^https://[A-Za-z0-9._:/?=&-]{1,200}$') { throw 'SupportPublicKeyUrl skal vaere en gyldig https-URL.' }
 if (-not $ConfigureOnly -and ([string]::IsNullOrWhiteSpace($EnrollmentToken) -or $EnrollmentToken.Length -gt 200)) { throw 'EnrollmentToken mangler eller er ugyldigt.' }

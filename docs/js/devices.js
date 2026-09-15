@@ -15,7 +15,7 @@ function escapeHtml(s) {
 // one-liners download from here). Change this if the updates host moves.
 const UPDATES_HOST = 'https://updates.hawkeye123.dk';
 const AI_SUPPORT_PUBLIC_KEY_URL = `${UPDATES_HOST}/ai-support.pub`;
-const AI_SUPPORT_SETUP_SHA256 = 'cce99bdb12dd7cb7bb5f32801a7965de087ec494e4ef45f459f939e061134337';
+const AI_SUPPORT_SETUP_SHA256 = '856120908198a97650c1dc1a913867805665da788923e89e47fc742d79be8361';
 const AI_SUPPORT_SETUP_FALLBACK_URL = 'https://raw.githubusercontent.com/stangtennis/Remote/main/setup-ai-support-windows.ps1';
 
 // Cached data for client-side filtering

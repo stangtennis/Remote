@@ -214,6 +214,10 @@ secrets; no Cloudflare secret or manual token copy is part of enrollment.
   stored locally under `C:\ProgramData\AI-Support` with SYSTEM/Administrators
   ACLs; it is never sent to Ubuntu or Supabase. The one-time enrollment token
   appears only in the invoking command line.
+- Existing installations can refresh the forced shell without re-enrollment by
+  running the pinned setup script with `-RefreshLogging`. This replaces the
+  local shell and clears legacy raw local activity lines; it does not change the
+  tunnel or client identity.
 
 ### ⚠️ Known test/deployment limitation: `accept-new` host-key trust
 
