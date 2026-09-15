@@ -278,8 +278,24 @@ function Stop-CloudflareBridge([System.Diagnostics.Process]$Process) {
 }
 
 function Start-CloudflareBridge {
+    $existingListener = Get-NetTCPConnection -LocalPort $CloudflareLocalPort -State Listen -ErrorAction SilentlyContinue |
+        Where-Object { $_.LocalAddress -eq '127.0.0.1' }
+    foreach ($listener in @($existingListener)) {
+        $existingProcess = Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue
+        $existingPath = if ($existingProcess) {
+            try { $existingProcess.Path } catch { '' }
+        } else { '' }
+        $sameCloudflared = $existingPath -and
+            ([IO.Path]::GetFullPath($existingPath) -ieq [IO.Path]::GetFullPath($CloudflaredPath))
+        if ($sameCloudflared) {
+            Stop-Process -Id $listener.OwningProcess -Force -ErrorAction SilentlyContinue
+            try { Wait-Process -Id $listener.OwningProcess -Timeout 10 -ErrorAction SilentlyContinue } catch { }
+        }
+    }
     if (Test-CloudflareLocalListener) {
-        throw "Cloudflare bridge-port $CloudflareLocalPort er allerede i brug på loopback."
+        $owner = Get-NetTCPConnection -LocalPort $CloudflareLocalPort -State Listen -ErrorAction SilentlyContinue |
+            Where-Object { $_.LocalAddress -eq '127.0.0.1' } | Select-Object -First 1 -ExpandProperty OwningProcess
+        throw "Cloudflare bridge-port $CloudflareLocalPort er allerede i brug på loopback (PID=$owner)."
     }
     $secretText = Convert-ProtectedCloudflareSecretToPlainText
     try {
