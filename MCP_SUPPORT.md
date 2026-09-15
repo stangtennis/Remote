@@ -78,11 +78,30 @@ helper on the trusted Ubuntu host can work with over SSH.
    single use). The raw tokens are shown only in the generated PowerShell
    command.
 3. The generated one-liner downloads `setup-ai-support-windows.ps1` from the
-   updates host and runs it with `-EnrollmentUrl`, `-EnrollmentToken`,
-   `-SupportPublicKeyUrl`, and `-ClientName` (all safely single-quoted). The
-   script pins the downloaded public key to the configured Ubuntu fingerprint.
+   updates host and verifies its pinned SHA-256 before asking for any
+   credential. It then prompts for the Cloudflare Access service-token client
+   ID with `Read-Host` and the secret with `Read-Host -AsSecureString`, and
+   calls the verified script in the same PowerShell process with `-EnrollmentUrl`,
+   `-EnrollmentToken`, `-SupportPublicKeyUrl`, `-ClientName`,
+   `-CloudflareAccessHostname 'ssh.hawkeye123.dk'`,
+   `-CloudflareServiceTokenId`, and `-CloudflareServiceTokenSecret`. The
+   secret is never embedded in the generated command or passed as a CLI value.
+   The script pins the downloaded public key to the configured Ubuntu
+   fingerprint.
 4. The script (same model as `setup-opencode-windows.ps1`) then:
-     - installs the Windows **OpenSSH Client and Server** capabilities;
+      - installs the pinned official Windows amd64 `cloudflared` 2026.9.1
+        binary from GitHub, verifies SHA-256
+        `2837888cc0f5d58f15b6dc478376de90b4d3ba5241c7947455d1e0a0df429712`,
+        and stores it at `C:\ProgramData\AI-Support\cloudflared.exe` with
+        SYSTEM/Administrators ACLs;
+      - protects the service-token secret with DPAPI LocalMachine at
+        `C:\ProgramData\AI-Support` and stores only the non-secret client ID
+        separately with SYSTEM/Administrators ACLs;
+      - starts `cloudflared access tcp --hostname ssh.hawkeye123.dk --url
+        127.0.0.1:43000` on loopback. Token ID and secret are inherited only
+        by that child through `TUNNEL_SERVICE_TOKEN_ID` and
+        `TUNNEL_SERVICE_TOKEN_SECRET`, then cleared from the setup process;
+      - installs the Windows **OpenSSH Client and Server** capabilities;
       - creates the dedicated local `ai-support` account as a local Windows
         Administrator and installs the Ubuntu operator's public key;
       - configures Windows OpenSSH Server to listen only on `127.0.0.1`;
@@ -90,15 +109,22 @@ helper on the trusted Ubuntu host can work with over SSH.
         the Windows `sshd` service exits unexpectedly, while keeping the same
         localhost-only OpenSSH configuration;
       - creates a forwarding-only tunnel key and installs its restricted
-       `permitlisten` entry on Ubuntu;
-     - starts and verifies `ssh -N -T -R 127.0.0.1:<tunnel-port>:127.0.0.1:22`;
+        `permitlisten` entry on Ubuntu through the loopback cloudflared bridge;
+      - performs every bootstrap, password, key, and temporary reverse-tunnel
+        SSH call as `dennis@127.0.0.1 -p 43000` through that bridge;
+      - starts and verifies `ssh -N -T -R 127.0.0.1:<tunnel-port>:127.0.0.1:<WindowsSshPort>`;
       - installs `AI-Support-Persistent-Tunnel` as a SYSTEM startup task with
-        keepalives, automatic reconnect, and hidden task visibility;
+        keepalives, automatic reconnect, and hidden task visibility. The task
+        decrypts the DPAPI secret, starts its own loopback cloudflared bridge,
+        waits for the listener, then runs the reverse SSH tunnel. Its cleanup
+        stops only the cloudflared process that it started;
       - installs a forced PowerShell shell with local activity logging and
         uploads a redacted command event for each SSH command;
      - POSTs `action=enroll-ai-support` only after the tunnel is reachable.
 5. Ubuntu reaches the Windows SSH endpoint through the registered tunnel:
-   `ssh -p <tunnel_port> ai-support@127.0.0.1`.
+   `ssh -p <tunnel_port> ai-support@127.0.0.1`. No Ubuntu private-IP fallback
+   is used by enrollment. The enrollment metadata records the public
+   Cloudflare hostname `ssh.hawkeye123.dk` and SSH port `22`.
 6. The AI-support token calls the `consume_ai_support_enrollment`
    `SECURITY DEFINER` RPC (service-role only), which locks the token, requires
    `purpose='ai_support'`, enforces single-use/expiry, validates bounded
@@ -129,8 +155,22 @@ helper on the trusted Ubuntu host can work with over SSH.
 
 - **The tunnel is always initiated outbound from Windows to Ubuntu.** Windows
   OpenSSH Server listens only on `127.0.0.1`; no general inbound Windows SSH
-  port is opened. There is no Remote Desktop agent, WebRTC path, or controller
-  dependency.
+  port is opened. Windows reaches Ubuntu only through the Cloudflare Access
+  hostname `ssh.hawkeye123.dk`; the old direct private-IP SSH path is not
+  used. There is no Remote Desktop agent, WebRTC path, or controller dependency.
+- The Cloudflare service-token secret is accepted only as a PowerShell
+  `SecureString`, protected with DPAPI `LocalMachine`, and never appears in
+  command-line arguments, the scheduled-task definition, the runner script,
+  enrollment metadata, activity config, logs, Supabase, or this repository.
+  The runner decrypts it only long enough to place it in the environment of its
+  child `cloudflared` process and then clears its own environment variables.
+  Because the support account is an administrator, a trusted local administrator
+  can still recover machine-protected secrets; this is an explicit deployment
+  tradeoff for administrator-level AI support.
+- The cloudflared executable is downloaded only over HTTPS, hash-checked
+  against the pinned release value, and protected by SYSTEM/Administrators
+  ACLs. Bridge cleanup uses the owned process handle and does not kill
+  unrelated cloudflared processes.
 - The `ai_support_clients` table stores only public metadata: client ID,
   owner, display name, hostname, platform, Ubuntu SSH metadata, tunnel port,
   Windows SSH user/port, public-key fingerprint, status (`ready`/`revoked`),
@@ -172,15 +212,27 @@ sudo --preserve-env=SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY \
 cp setup-ai-support-windows.ps1 ~/caddy/downloads/setup-ai-support-windows.ps1
 cp ~/.ssh/id_rsa.pub ~/caddy/downloads/ai-support.pub
 
+# Configure the Cloudflare Access application for ssh.hawkeye123.dk and create
+# a service token with only the required SSH application policy. Keep the ID
+# and secret in the Cloudflare dashboard/secret manager; the enrollment prompt
+# reads them interactively and no credential is stored in Supabase or the repo.
+
 # Publish the changed dashboard (GitHub Pages serves docs/ from the repo).
-git add docs/ai-support.html docs/js/devices.js MCP_SUPPORT.md
+git add setup-ai-support-windows.ps1 docs/ai-support.html docs/js/devices.js MCP_SUPPORT.md
 git commit -m "Use persistent SSH-only AI-support tunnels"
 git push origin main
 ```
 
 ### Validation
 
-- Dashboard JS: `node --check docs/js/devices.js docs/js/auth.js`
+- Dashboard JS: `node --check docs/js/devices.js`
+- Confirm the generated command contains `Read-Host -AsSecureString` and only
+  passes the secret through the `SecureString` variable.
+- Confirm `cloudflared.exe` at `C:\ProgramData\AI-Support` has the pinned
+  SHA-256 and that the bridge listens only on `127.0.0.1:43000`.
+- Confirm the scheduled task runs as SYSTEM, contains no service-token secret
+  in its arguments or runner file, and reconnects after the child SSH process
+  exits.
 - PowerShell parser check (on a Windows/PowerShell machine):
   `powershell -NoProfile -Command "$t=$null;$e=$null;[System.Management.Automation.Language.Parser]::ParseFile('setup-ai-support-windows.ps1',[ref]$t,[ref]$e)|Out-Null;if($e){$e;exit 1}else{'OK'}"`
 - Edge Function: `deno check supabase/functions/device-enrollment/index.ts`

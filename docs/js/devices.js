@@ -15,6 +15,7 @@ function escapeHtml(s) {
 // one-liners download from here). Change this if the updates host moves.
 const UPDATES_HOST = 'https://updates.hawkeye123.dk';
 const AI_SUPPORT_PUBLIC_KEY_URL = `${UPDATES_HOST}/ai-support.pub`;
+const AI_SUPPORT_SETUP_SHA256 = 'bfa392eaa5a373879576ddb238aef3824d78bdee1fbe6a76bb9b5d9817f382bc';
 
 // Cached data for client-side filtering
 let _allDevices = [];
@@ -779,7 +780,7 @@ async function createAISupportEnrollment() {
 function showAISupportEnrollmentCommand(token, clientName, expiresAt) {
   const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
   const enrollmentUrl = `${SUPABASE_CONFIG.url}/functions/v1/device-enrollment`;
-  const command = `$ProgressPreference = 'SilentlyContinue'; $dir = Join-Path $env:TEMP 'AISupportSSH'; New-Item -ItemType Directory -Force -Path $dir | Out-Null; Invoke-WebRequest -UseBasicParsing -Uri '${UPDATES_HOST}/setup-ai-support-windows.ps1' -OutFile (Join-Path $dir 'setup-ai-support-windows.ps1'); powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dir 'setup-ai-support-windows.ps1') -EnrollmentUrl ${quote(enrollmentUrl)} -EnrollmentToken ${quote(token)} -SupportPublicKeyUrl ${quote(AI_SUPPORT_PUBLIC_KEY_URL)} -ClientName ${quote(clientName)}`;
+  const command = `$ProgressPreference = 'SilentlyContinue'; Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $dir = Join-Path $env:TEMP 'AISupportSSH'; New-Item -ItemType Directory -Force -Path $dir | Out-Null; $scriptPath = Join-Path $dir 'setup-ai-support-windows.ps1'; Invoke-WebRequest -UseBasicParsing -Uri '${UPDATES_HOST}/setup-ai-support-windows.ps1' -OutFile $scriptPath; $actualHash = (Get-FileHash -LiteralPath $scriptPath -Algorithm SHA256).Hash.ToLowerInvariant(); if ($actualHash -ne '${AI_SUPPORT_SETUP_SHA256}') { Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue; throw 'AI-support setup-scriptet bestod ikke SHA-256 verifikationen.' }; Unblock-File -LiteralPath $scriptPath; $cfId = Read-Host -Prompt 'Cloudflare Access service-token client ID'; $cfSecret = Read-Host -Prompt 'Cloudflare Access service-token secret' -AsSecureString; & $scriptPath -EnrollmentUrl ${quote(enrollmentUrl)} -EnrollmentToken ${quote(token)} -SupportPublicKeyUrl ${quote(AI_SUPPORT_PUBLIC_KEY_URL)} -ClientName ${quote(clientName)} -CloudflareAccessHostname 'ssh.hawkeye123.dk' -CloudflareServiceTokenId $cfId -CloudflareServiceTokenSecret $cfSecret`;
   const result = document.getElementById('aiSupportEnrollmentResult');
   const name = document.getElementById('aiSupportEnrollmentClientName');
   const expiry = document.getElementById('aiSupportEnrollmentExpiry');
