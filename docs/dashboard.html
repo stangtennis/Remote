@@ -49,7 +49,7 @@
         <button id="notificationToggleBtn" class="btn btn-icon" onclick="BrowserNotifications.toggle()" title="Notifikationer"><i class="fas fa-bell"></i></button>
          <button id="aiSupportCodeBtn" class="btn btn-primary admin-only-action" style="margin-right: 10px; display: none;" onclick="generateAISupportCode()" title="Generér AI-supportkode"><i class="fas fa-robot"></i> Generér AI-kode</button>
          <button id="quickSupportBtn" class="btn btn-secondary admin-only-action" style="margin-right: 10px; display: none;" onclick="showSupportModal()"><i class="fas fa-life-ring"></i> Quick Support</button>
-         <a href="ai-support.html?v=35" id="aiSupportPageLink" class="btn btn-secondary admin-only-action" style="margin-right: 10px; display: none;" title="Administrér AI-support klienter"><i class="fas fa-robot"></i> AI-support</a>
+         <a href="ai-support.html?v=36" id="aiSupportPageLink" class="btn btn-secondary admin-only-action" style="margin-right: 10px; display: none;" title="Administrér AI-support klienter"><i class="fas fa-robot"></i> AI-support</a>
          <a href="history.html" class="btn btn-secondary" style="margin-right: 10px;" title="Session-historik"><i class="fas fa-clock-rotate-left"></i> Historik</a>
         <a href="admin.html" id="adminLink" class="btn btn-secondary admin-only-action" style="margin-right: 10px; display: none;"><i class="fas fa-shield-halved"></i> Admin</a>
         <span id="userEmail" class="user-info"></span>
@@ -258,7 +258,7 @@
                var supportBtn = document.getElementById('supportClientDownloadBtn');
                if (supportBtn) {
                  supportBtn.onclick = function() {
-                     window.location.href = 'ai-support.html?v=35';
+                     window.location.href = 'ai-support.html?v=36';
                    return false;
                  };
                }
