@@ -400,8 +400,10 @@ function Invoke-UbuntuPasswordSsh([string]$RemoteCommand) {
         "$UbuntuUser@127.0.0.1",
         $RemoteCommand
     )
+    Write-Host 'Indtast Ubuntu-adgangskoden, naar SSH beder om den.' -ForegroundColor Yellow
     Remove-Item -LiteralPath $EnrollmentSshErrorLogPath -Force -ErrorAction SilentlyContinue
-    & $sshCommand.Source @args 2> $EnrollmentSshErrorLogPath
+    # Keep stderr attached to the console so the interactive password prompt is visible.
+    & $sshCommand.Source @args
     return $LASTEXITCODE
 }
 
