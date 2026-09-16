@@ -978,7 +978,7 @@ try {
     $taskAction = New-ScheduledTaskAction -Execute $powershellPath -Argument $taskArgs -WorkingDirectory $StateDirectory
     $taskTrigger = New-ScheduledTaskTrigger -AtLogOn -User $WindowsUserIdentity
     $taskSettings = New-ScheduledTaskSettingsSet -Hidden -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
-    $taskPrincipal = New-ScheduledTaskPrincipal -UserId $WindowsUserIdentity -LogonType InteractiveToken -RunLevel Highest
+    $taskPrincipal = New-ScheduledTaskPrincipal -UserId $WindowsUserIdentity -LogonType Interactive -RunLevel Highest
     Register-ScheduledTask -TaskName $TaskName -Action $taskAction -Trigger $taskTrigger -Settings $taskSettings -Principal $taskPrincipal -Force -ErrorAction Stop | Out-Null
     $persistentTaskRegistered = $true
 
