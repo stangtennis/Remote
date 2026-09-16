@@ -974,7 +974,7 @@ try {
     Write-TunnelRunner $sshCommand.Source $tunnelPort
     Set-StateAcl
     $powershellPath = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    $taskArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$TunnelRunnerPath`""
+    $taskArgs = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$TunnelRunnerPath`""
     $taskAction = New-ScheduledTaskAction -Execute $powershellPath -Argument $taskArgs -WorkingDirectory $StateDirectory
     $taskTrigger = New-ScheduledTaskTrigger -AtLogOn -User $WindowsUserIdentity
     $taskSettings = New-ScheduledTaskSettingsSet -Hidden -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
