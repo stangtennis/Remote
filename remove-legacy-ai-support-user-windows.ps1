@@ -94,7 +94,8 @@ if (-not $Force) {
     }
 }
 
-if (-not $PSCmdlet.ShouldProcess($LegacyUserName, 'Fjern gammel lokal AI-support-bruger')) {
+if ((-not $Force -or $WhatIfPreference) -and
+    -not $PSCmdlet.ShouldProcess($LegacyUserName, 'Fjern gammel lokal AI-support-bruger')) {
     return
 }
 
