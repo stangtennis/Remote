@@ -11,14 +11,14 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// forbiddenTools must never be registered by this read-only adapter.
+// forbiddenTools must never be registered by this support adapter.
 var forbiddenTools = []string{
 	"click", "type", "press_key", "key", "scroll", "exec",
 	"upload", "download", "ssh", "connect", "disconnect",
 	"screenshot", "ps", "kill", "sysinfo", "support_connect",
 }
 
-func TestServerRegistersExactlyPhase1Tools(t *testing.T) {
+func TestServerRegistersExpectedTools(t *testing.T) {
 	s := newServer(newCLIRunner(writeFakeCLI(t, "true")))
 
 	listed := s.ListTools()
@@ -33,19 +33,20 @@ func TestServerRegistersExactlyPhase1Tools(t *testing.T) {
 		if tool.Tool.Description == "" {
 			t.Errorf("tool %q should carry a description", name)
 		}
-		if tool.Tool.Annotations.ReadOnlyHint == nil || !*tool.Tool.Annotations.ReadOnlyHint {
-			t.Errorf("tool %q must be marked read-only", name)
+		writeTool := name == toolKnowledgeDraft || name == toolKnowledgePublish
+		if tool.Tool.Annotations.ReadOnlyHint == nil || *tool.Tool.Annotations.ReadOnlyHint == writeTool {
+			t.Errorf("tool %q has incorrect read-only annotation", name)
 		}
 		if tool.Tool.Annotations.DestructiveHint == nil || *tool.Tool.Annotations.DestructiveHint {
 			t.Errorf("tool %q must not be marked destructive", name)
 		}
-		if tool.Tool.Annotations.IdempotentHint == nil || !*tool.Tool.Annotations.IdempotentHint {
-			t.Errorf("tool %q must be marked idempotent", name)
+		if tool.Tool.Annotations.IdempotentHint == nil || *tool.Tool.Annotations.IdempotentHint == writeTool {
+			t.Errorf("tool %q has incorrect idempotent annotation", name)
 		}
 	}
 	for _, name := range forbiddenTools {
 		if _, ok := listed[name]; ok {
-			t.Errorf("read-only adapter must not register %q", name)
+			t.Errorf("support adapter must not register %q", name)
 		}
 	}
 }

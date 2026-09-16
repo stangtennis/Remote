@@ -1,8 +1,8 @@
-// remote-desktop-mcp is a bounded, read-only, local MCP adapter (stdio) that
+// remote-desktop-mcp is a bounded local MCP adapter (stdio) that
 // fronts the existing remote-desktop-cli and the central support MCP context.
 //
 // It deliberately exposes no control transport. Status tools use the CLI;
-// context tools proxy the central read-only MCP endpoint.
+// context tools proxy the central support MCP endpoint.
 package main
 
 import (

@@ -1,6 +1,6 @@
 # remote-desktop-mcp
 
-A bounded, **read-only**, local MCP adapter (stdio) that fronts the existing
+A bounded local MCP adapter (stdio) that fronts the existing
 `remote-desktop-cli` binary and proxies shared support context from the central
 `readonly-mcp` Edge Function. It adds no WebRTC or remote-control logic. CLI
 status lookups use the existing credential loader; context tools authenticate
@@ -8,7 +8,7 @@ to the Edge Function with the same credentials.
 
 Built with `github.com/mark3labs/mcp-go` v0.44.0 over stdio.
 
-## Tools (phase-1 allow-list)
+## Tools (bounded allow-list)
 
 | Tool | CLI used | Behavior |
 |---|---|---|
@@ -19,6 +19,8 @@ Built with `github.com/mark3labs/mcp-go` v0.44.0 over stdio.
 | `support_context` | central `readonly-mcp` | Returns one client's bounded status, history, and optional published troubleshooting knowledge. |
 | `client_history` | central `readonly-mcp` | Returns bounded, redacted history for a remote or persistent SSH AI-support client. |
 | `knowledge_search` | central `readonly-mcp` | Searches the central published support knowledge base. |
+| `knowledge_draft` | central `readonly-mcp` | Creates an unpublished knowledge draft; admin-only at the central endpoint. |
+| `knowledge_publish` | central `readonly-mcp` | Publishes an existing knowledge draft; admin-only at the central endpoint. |
 
 **Never exposed here:** `click`, `type`, `press_key`, `scroll`, `exec`,
 `upload`, `download`, SSH, `connect`/`disconnect`, screenshots, process
@@ -40,8 +42,10 @@ management. The adapter's internal subcommand allow-list is exactly
 - **Bounded output.** Tool results are capped (~8 KiB, 64 KiB capture cap)
   and credential-looking values (`password=`, `token=`, `apikey:`,
   `Bearer ...`) are redacted before anything is returned.
-- **Central context.** The three context tools call the read-only Edge MCP
-  endpoint; they never write support data or execute a client command.
+- **Central context.** Read tools call the central Edge MCP endpoint. The two
+  knowledge write tools only create unpublished drafts or publish an explicitly
+  selected entry; the endpoint enforces approved admin/super_admin access and
+  database RLS.
 
 ## Configuration
 

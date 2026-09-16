@@ -1,6 +1,6 @@
 # AI Support MCP
 
-The project now contains a stateless, read-only MCP endpoint for the AI support client:
+The project now contains a stateless MCP endpoint for the AI support client:
 
 ```text
 https://supabase.hawkeye123.dk/functions/v1/readonly-mcp
@@ -17,11 +17,13 @@ not issue an MCP session ID and does not maintain server-side MCP session state.
 - `client_status`: read the current status of one accessible client.
 - `client_history`: read bounded, redacted audit and support-action history.
 - `knowledge_search`: search published support runbooks and troubleshooting notes.
+- `knowledge_draft`: save a new unpublished support knowledge draft (admin only).
+- `knowledge_publish`: publish an existing knowledge draft (admin only).
 
-The endpoint itself performs no writes. MCP tool calls are read-only with
-respect to the support data. If tool-call telemetry is required, it must be
-collected by the authenticated gateway or client outside this endpoint; it must
-not be implemented by granting the MCP request path write access.
+The endpoint has no arbitrary database or support-control access. The two
+knowledge write tools are the only writes, require an approved `admin` or
+`super_admin`, and are enforced again by `support_knowledge` RLS. Drafts remain
+unpublished until an explicit publish call.
 
 ## Shared AI-support context
 
@@ -35,7 +37,8 @@ Both support paths use the same backend history and MCP context:
 - MCP exposes both client types through `list_clients` and `client_status`,
   merges bounded history through `client_history`, and provides `support_context`
   for status, history, and troubleshooting knowledge.
-- Curated, approved lessons belong in `support_knowledge` and are retrieved by
+- Curated lessons belong in `support_knowledge`, can be saved as drafts through
+  `knowledge_draft`, and are retrieved only after publication by
   `knowledge_search`. Credentials, private keys, screenshots, and unrestricted
   command output are never learning data.
 
@@ -222,7 +225,8 @@ secrets; no Cloudflare secret or manual token copy is part of enrollment.
   keys, no passwords, no raw commands, no raw enrollment/log tokens.**
 - RLS allows owners and admins SELECT only; all writes go through the
   service-role RPC. A revoked client cannot be resurrected by re-enrollment.
-- The read-only MCP is unchanged: it gains no SSH control and no write access.
+- The MCP gains no SSH control. Only the bounded, admin-gated knowledge tools
+  can write, and they cannot change support clients or execute commands.
 - The script never prints passwords or private keys. The private tunnel key is
   stored locally under `C:\ProgramData\AI-Support` with current-user/SYSTEM/
   Administrators ACLs; it is never sent to Ubuntu or Supabase. The one-time enrollment token

@@ -1,9 +1,14 @@
-// Read-only MCP interface for the AI support client.
+// Bounded support MCP interface for the AI support client.
 // Authentication is supplied by the Supabase Edge Function JWT gateway and
 // re-used by the user-scoped Supabase client below, so database RLS remains in force.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import {
+  KNOWLEDGE_CATEGORIES,
+  validateKnowledgeDraftArgs,
+  validateKnowledgePublishArgs,
+} from './knowledge.ts'
 
 // This stateless endpoint implements the current protocol only. Keeping older
 // versions out avoids advertising JSON-RPC features (such as batching) that
@@ -11,6 +16,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const MCP_VERSIONS = ['2025-06-18']
 const MAX_LIMIT = 100
 const MAX_OFFSET = 500
+const MAX_REQUEST_BYTES = 64 * 1024
+const KNOWLEDGE_WRITE_TOOLS = new Set(['knowledge_draft', 'knowledge_publish'])
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': 'https://dashboard.hawkeye123.dk',
@@ -78,17 +85,14 @@ function safeText(value: unknown, maxLength = 500) {
 function safeDetails(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const allowed = ['device_name', 'old_name', 'new_name', 'exit_code', 'duration_ms', 'operation', 'mode', 'result', 'compatibility', 'schema_version']
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([key]) => allowed.includes(key))
-      .map(([key, item]) => {
-        if (typeof item === 'string') return [key, safeText(item, 200)]
-        if (typeof item === 'number' && Number.isFinite(item)) return [key, item]
-        if (typeof item === 'boolean') return [key, item]
-        return null
-      })
-      .filter((entry): entry is [string, string | number | boolean | null] => entry !== null)
-  )
+  const entries: Array<[string, string | number | boolean | null]> = []
+  for (const [key, item] of Object.entries(value)) {
+    if (!allowed.includes(key)) continue
+    if (typeof item === 'string') entries.push([key, safeText(item, 200)])
+    else if (typeof item === 'number' && Number.isFinite(item)) entries.push([key, item])
+    else if (typeof item === 'boolean') entries.push([key, item])
+  }
+  return Object.fromEntries(entries)
 }
 
 function eventSummary(event: string, details: unknown) {
@@ -208,8 +212,37 @@ function toolDefinitions() {
         required: ['query'],
         properties: {
           query: { type: 'string', minLength: 1, maxLength: 200 },
-          category: { type: 'string', enum: ['general', 'installation', 'network', 'windows', 'webrtc', 'security', 'runbook'] },
+          category: { type: 'string', enum: [...KNOWLEDGE_CATEGORIES] },
           limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
+        },
+      },
+    },
+    {
+      name: 'knowledge_draft',
+      description: 'Save a bounded support knowledge draft. Admin approval is required and the entry stays unpublished.',
+      inputSchema: {
+        type: 'object',
+        required: ['title', 'content'],
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string', minLength: 1, maxLength: 200 },
+          summary: { type: 'string', maxLength: 500 },
+          content: { type: 'string', minLength: 1, maxLength: 20000 },
+          category: { type: 'string', enum: [...KNOWLEDGE_CATEGORIES] },
+          tags: { type: 'array', maxItems: 20, items: { type: 'string', minLength: 1, maxLength: 100 } },
+          source: { type: 'string', minLength: 1, maxLength: 300 },
+        },
+      },
+    },
+    {
+      name: 'knowledge_publish',
+      description: 'Publish one existing support knowledge draft. Admin approval is required.',
+      inputSchema: {
+        type: 'object',
+        required: ['id'],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', format: 'uuid' },
         },
       },
     },
@@ -269,7 +302,7 @@ async function supportContext(supabase: any, args: Record<string, unknown>) {
     clientStatus(supabase, { device_id: clientId }),
     clientHistory(supabase, { device_id: clientId, limit: 20, offset: 0 }),
   ])
-  let knowledge = []
+  let knowledge: unknown[] = []
   if (typeof args.knowledge_query === 'string' && args.knowledge_query.trim()) {
     knowledge = await knowledgeSearch(supabase, { query: args.knowledge_query.trim(), limit: 10 })
   }
@@ -358,9 +391,8 @@ async function clientHistory(supabase: any, args: Record<string, unknown>) {
 async function knowledgeSearch(supabase: any, args: Record<string, unknown>) {
   const queryText = typeof args.query === 'string' ? args.query.trim().slice(0, 200) : ''
   if (!queryText) throw new Error('query is required')
-  const categories = ['general', 'installation', 'network', 'windows', 'webrtc', 'security', 'runbook']
   const category = typeof args.category === 'string' && args.category ? args.category : null
-  if (category && !categories.includes(category)) throw new Error('Invalid knowledge category')
+  if (category && !KNOWLEDGE_CATEGORIES.includes(category as typeof KNOWLEDGE_CATEGORIES[number])) throw new Error('Invalid knowledge category')
   const pattern = `%${queryText.replace(/[%_]/g, ' ')}%`
   const columns = ['title', 'summary', 'content']
   const results = await Promise.all(columns.map((column) => {
@@ -394,13 +426,49 @@ async function knowledgeSearch(supabase: any, args: Record<string, unknown>) {
     }))
 }
 
-async function callTool(supabase: any, name: string, args: Record<string, unknown>) {
+function safeKnowledgeMetadata(entry: any) {
+  return {
+    id: entry.id,
+    title: safeText(entry.title, 200),
+    category: safeText(entry.category, 40),
+    is_published: entry.is_published === true,
+    updated_at: entry.updated_at,
+  }
+}
+
+async function knowledgeDraft(supabase: any, args: Record<string, unknown>, userId: string) {
+  const input = validateKnowledgeDraftArgs(args)
+  const { data, error } = await supabase
+    .from('support_knowledge')
+    .insert({ ...input, is_published: false, created_by: userId })
+    .select('id, title, category, is_published, updated_at')
+    .single()
+  if (error) throw error
+  return safeKnowledgeMetadata(data)
+}
+
+async function knowledgePublish(supabase: any, args: Record<string, unknown>) {
+  const { id } = validateKnowledgePublishArgs(args)
+  const { data, error } = await supabase
+    .from('support_knowledge')
+    .update({ is_published: true })
+    .eq('id', id)
+    .select('id, title, category, is_published, updated_at')
+    .maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error('Knowledge entry not found or not accessible')
+  return safeKnowledgeMetadata(data)
+}
+
+async function callTool(supabase: any, name: string, args: Record<string, unknown>, userId: string) {
   switch (name) {
     case 'list_clients': return listClients(supabase, args)
     case 'client_status': return clientStatus(supabase, args)
     case 'client_history': return clientHistory(supabase, args)
     case 'support_context': return supportContext(supabase, args)
     case 'knowledge_search': return knowledgeSearch(supabase, args)
+    case 'knowledge_draft': return knowledgeDraft(supabase, args, userId)
+    case 'knowledge_publish': return knowledgePublish(supabase, args)
     default: throw new Error(`Unknown tool: ${name}`)
   }
 }
@@ -415,7 +483,11 @@ serve(async (req) => {
   let body: JsonRpcRequest
   let parsed: unknown
   try {
-    parsed = await req.json()
+    const rawBody = await req.text()
+    if (new TextEncoder().encode(rawBody).byteLength > MAX_REQUEST_BYTES) {
+      return jsonRpcError(null, -32600, 'Request too large', 413)
+    }
+    parsed = JSON.parse(rawBody)
   } catch {
     return jsonRpcError(null, -32700, 'Parse error', 400)
   }
@@ -448,10 +520,11 @@ serve(async (req) => {
 
   const { data: approval, error: approvalError } = await supabase
     .from('user_approvals')
-    .select('approved')
+    .select('approved, role')
     .eq('user_id', user.id)
     .maybeSingle()
   if (approvalError || approval?.approved !== true) return jsonRpcError(id, -32003, 'Approved user access required', 403)
+  const isAdmin = approval.role === 'admin' || approval.role === 'super_admin'
 
   try {
     if (body.method === 'initialize') {
@@ -476,11 +549,14 @@ serve(async (req) => {
       if (!name || !toolDefinitions().some((tool) => tool.name === name)) {
         return jsonRpcError(id, -32602, 'Unknown or missing tool name')
       }
+      if (KNOWLEDGE_WRITE_TOOLS.has(name) && !isAdmin) {
+        return jsonRpcError(id, -32003, 'Admin access required for knowledge changes', 403)
+      }
       const args = body.params?.arguments && typeof body.params.arguments === 'object'
         ? body.params.arguments as Record<string, unknown>
         : {}
       try {
-        const result = await callTool(supabase, name, args)
+        const result = await callTool(supabase, name, args, user.id)
         return jsonRpc(id, {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
           isError: false,
@@ -491,7 +567,7 @@ serve(async (req) => {
     }
     return jsonRpcError(id, -32601, `Method not found: ${body.method}`)
   } catch (error) {
-    console.error('Read-only MCP request failed:', error)
+    console.error('Support MCP request failed:', error)
     return jsonRpc(id, {
       content: [{ type: 'text', text: 'Tool request failed' }],
       isError: true,

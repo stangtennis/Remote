@@ -7,8 +7,8 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// Read-only tool allow-list. This adapter is read-only: it must never expose
-// click/type/press_key/scroll/exec/upload/download/SSH/connect passthroughs.
+// Tool allow-list. Support and device tools remain read-only; knowledge writes
+// are forwarded only to the central admin-gated MCP endpoint.
 const (
 	toolListDevices        = "list_devices"
 	toolStatus             = "status"
@@ -17,6 +17,8 @@ const (
 	toolSupportContext     = "support_context"
 	toolClientHistory      = "client_history"
 	toolKnowledgeSearch    = "knowledge_search"
+	toolKnowledgeDraft     = "knowledge_draft"
+	toolKnowledgePublish   = "knowledge_publish"
 )
 
 // toolAllowList is the single source of truth for registered tool names.
@@ -28,9 +30,11 @@ var toolAllowList = []string{
 	toolSupportContext,
 	toolClientHistory,
 	toolKnowledgeSearch,
+	toolKnowledgeDraft,
+	toolKnowledgePublish,
 }
 
-// newServer builds the MCP server with exactly the read-only tools.
+// newServer builds the MCP server with the bounded support and knowledge tools.
 func newServer(run *cliRunner, contextClients ...*edgeMCPClient) *server.MCPServer {
 	var contextClient *edgeMCPClient
 	if len(contextClients) > 0 {
@@ -71,6 +75,14 @@ func newServer(run *cliRunner, contextClients ...*edgeMCPClient) *server.MCPServ
 		mcp.NewTool(toolKnowledgeSearch, readOnlyToolDescription("Search the central published AI-support knowledge base."), mcp.WithString("query", mcp.Required()), mcp.WithString("category")),
 		handleEdgeTool(contextClient, "knowledge_search"),
 	)
+	s.AddTool(
+		mcp.NewTool(toolKnowledgeDraft, knowledgeWriteToolDescription("Save a support knowledge draft in the central knowledge base. It remains unpublished and requires admin approval."), mcp.WithString("title", mcp.Required()), mcp.WithString("content", mcp.Required()), mcp.WithString("summary"), mcp.WithString("category"), mcp.WithArray("tags"), mcp.WithString("source")),
+		handleEdgeTool(contextClient, "knowledge_draft"),
+	)
+	s.AddTool(
+		mcp.NewTool(toolKnowledgePublish, knowledgeWriteToolDescription("Publish an existing support knowledge draft. Requires admin approval."), mcp.WithString("id", mcp.Required())),
+		handleEdgeTool(contextClient, "knowledge_publish"),
+	)
 	return s
 }
 
@@ -80,6 +92,15 @@ func readOnlyToolDescription(description string) mcp.ToolOption {
 		mcp.WithReadOnlyHintAnnotation(true)(tool)
 		mcp.WithDestructiveHintAnnotation(false)(tool)
 		mcp.WithIdempotentHintAnnotation(true)(tool)
+	}
+}
+
+func knowledgeWriteToolDescription(description string) mcp.ToolOption {
+	return func(tool *mcp.Tool) {
+		mcp.WithDescription(description)(tool)
+		mcp.WithReadOnlyHintAnnotation(false)(tool)
+		mcp.WithDestructiveHintAnnotation(false)(tool)
+		mcp.WithIdempotentHintAnnotation(false)(tool)
 	}
 }
 
